@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useUIStore } from '@/store/useUIStore';
+import { exportCsv } from '@/utils/exportCsv';
 import { LineChart, Sparkline } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
 
@@ -37,7 +38,7 @@ export default function TeamPerformancePage() {
           <div className="page-sub">Comparative metrics and trends across your team.</div>
         </div>
         <div className="actions">
-          <button className="btn btn-secondary" onClick={() => addToast('Export not implemented', 'info')}>Export CSV</button>
+          <button className="btn btn-secondary" onClick={() => exportCsv('Team_Performance', perf)}>Export CSV</button>
         </div>
       </div>
 

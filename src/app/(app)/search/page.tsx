@@ -6,6 +6,7 @@ import { useStore, effStatus, canView, cabById, userById } from '@/store/useStor
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
+import { exportCsv } from '@/utils/exportCsv';
 import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
 
 export default function SearchPage() {
@@ -185,7 +186,7 @@ export default function SearchPage() {
             <span className="muted" style={{ fontSize: '12.5px' }}>
               {results.length} result{results.length === 1 ? '' : 's'}{q ? ` for “${q}”` : ''} · semantic + keyword search across OCR text
             </span>
-            <button className="btn btn-secondary btn-sm" onClick={() => addToast('Export not implemented', 'info')}>Export results</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => exportCsv('Search_Results', results)}>Export results</button>
           </div>
 
           {!results.length ? (

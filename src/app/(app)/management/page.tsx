@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useStore } from '@/store/useStore';
+import { exportCsv } from '@/utils/exportCsv';
 import { HBarChart, LineChart } from '@/components/ui/Charts';
 import { Table } from '@/components/ui/Table';
 
@@ -248,7 +249,7 @@ export default function ManagementDashboard() {
           <span className="h3">Department drill-down</span>
           <button
             className="btn btn-secondary btn-sm"
-            onClick={() => alert('Export to CSV not implemented')}
+            onClick={() => exportCsv('Organization_Overview_Departments', rows)}
           >
             Export
           </button>

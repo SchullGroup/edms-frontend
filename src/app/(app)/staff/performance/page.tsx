@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react';
 import { useStore, effStatus } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { exportCsv } from '@/utils/exportCsv';
 import { LineChart, DonutChart } from '@/components/ui/Charts';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { Icon } from '@/components/ui/Icons';
@@ -92,7 +93,7 @@ export default function MyPerformancePage() {
       <div className="card">
         <div className="card-head">
           <span className="h3">Recently closed — drill-down</span>
-          <button className="btn btn-secondary btn-sm" onClick={() => addToast('Export not implemented', 'info')}>Export</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => exportCsv('My_Performance_Closed', closed)}>Export</button>
         </div>
         {closed.length > 0 ? (
           <div className="rowlist">

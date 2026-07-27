@@ -23,14 +23,14 @@ export const useNavigation = () => {
           label: 'Workspace',
           items: [
             { route: '/staff', label: 'Dashboard', icon: 'home' },
-            { route: '/tasks', label: 'My Tasks', icon: 'inbox', badge: myOpenTasks },
+            { route: '/staff/tasks', label: 'My Tasks', icon: 'inbox', badge: myOpenTasks },
             { route: '/notifications', label: 'Notifications', icon: 'bell', badge: unreadCount },
           ],
         },
         {
           label: 'Documents',
           items: [
-            { route: '/cabinets', label: 'Cabinets', icon: 'cabinet' },
+            { route: '/staff/browser', label: 'Cabinets', icon: 'cabinet' },
             { route: '/upload', label: 'Upload & Capture', icon: 'upload' },
             { route: '/search', label: 'Search', icon: 'search' },
           ],
@@ -73,14 +73,14 @@ export const useNavigation = () => {
         {
           label: 'Quality',
           items: [
-            { route: '/supervisor/teamperf', label: 'Team Performance', icon: 'trend' },
+            { route: '/supervisor/performance', label: 'Team Performance', icon: 'trend' },
             { route: '/supervisor/exceptions', label: 'Exceptions', icon: 'alert' },
           ],
         },
         {
           label: 'Documents',
           items: [
-            { route: '/cabinets', label: 'Cabinets', icon: 'cabinet' },
+            { route: '/staff/browser', label: 'Cabinets', icon: 'cabinet' },
             { route: '/search', label: 'Search', icon: 'search' },
             { route: '/circulars', label: 'Circulars', icon: 'speaker' },
           ],
@@ -95,7 +95,7 @@ export const useNavigation = () => {
           label: 'Dashboards',
           items: [
             { route: '/management', label: 'Organization Overview', icon: 'grid' },
-            { route: '/management/depts', label: 'Department Comparison', icon: 'chart' },
+            { route: '/management/departments', label: 'Department Comparison', icon: 'chart' },
             { route: '/management/trends', label: 'Trends & Forecast', icon: 'trend' },
           ],
         },
@@ -103,7 +103,7 @@ export const useNavigation = () => {
           label: 'Governance',
           items: [
             { route: '/management/compliance', label: 'Compliance Posture', icon: 'shield' },
-            { route: '/management/perfoverview', label: 'Performance Overview', icon: 'gauge' },
+            { route: '/management/performance', label: 'Performance Overview', icon: 'gauge' },
             { route: '/management/findings', label: 'Findings', icon: 'finding' },
           ],
         },
@@ -154,7 +154,7 @@ export const useNavigation = () => {
           label: 'Operations',
           items: [
             { route: '/platform/tenants', label: 'Tenant Directory', icon: 'building' },
-            { route: '/platform/sysconfig', label: 'Health & Config', icon: 'pulse' },
+            { route: '/platform/sysconfig', label: 'Platform Health', icon: 'pulse' },
           ],
         },
         {
@@ -162,6 +162,12 @@ export const useNavigation = () => {
           items: [
             { route: '/platform/plans', label: 'Plans & Entitlements', icon: 'key' },
             { route: '/platform/billing', label: 'Billing & Usage', icon: 'billing' },
+          ],
+        },
+        {
+          label: 'Release',
+          items: [
+            { route: '/platform/flags', label: 'Feature Flags', icon: 'flag' },
           ],
         },
         {
@@ -179,7 +185,7 @@ export const useNavigation = () => {
           items: [
             { route: '/auditor', label: 'Audit Dashboard', icon: 'gauge' },
             { route: '/auditor/trail', label: 'Audit Trail', icon: 'list' },
-            { route: '/cabinets', label: 'Document Sampling', icon: 'cabinet' },
+            { route: '/staff/browser', label: 'Document Sampling', icon: 'cabinet' },
             { route: '/search', label: 'Search', icon: 'search' },
           ],
         },

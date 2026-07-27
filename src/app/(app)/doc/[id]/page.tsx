@@ -177,35 +177,80 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   };
 
   const handleSign = (fieldIdx: number) => {
-    const clone = JSON.parse(JSON.stringify(doc));
-    const sig = clone.signatures[fieldIdx];
-    sig.signedBy = me.id;
-    sig.signedAt = Date.now();
-    sig.method = 'type'; // Simplification for porting
-    
-    const allSigned = clone.signatures.every((s: any) => s.signedBy);
-    if (allSigned && stage && /sign/i.test(stage.name)) {
-      // Inline advance
-      const idx = clone.workflow.findIndex((s: any) => s.state === 'current');
-      if (idx >= 0) {
-        clone.workflow[idx].state = 'done';
-        clone.workflow[idx].actedAt = Date.now();
-        clone.workflow[idx].comment = 'Signed by ' + me.name;
-        if (idx + 1 < clone.workflow.length) {
-          const next = clone.workflow[idx + 1];
-          next.state = 'current';
-          clone.assignee = next.assignee;
-          clone.status = 'In Progress';
-        } else {
-          clone.status = 'Closed';
-          clone.sealed = true;
+    const sigField = doc.signatures[fieldIdx];
+    if (!sigField) return;
+
+    let signMode: 'type' | 'draw' | 'stamp' = 'type';
+    let typedText = me.name;
+
+    openModal({
+      title: `Sign Document — ${sigField.field || 'Signature Field'}`,
+      size: 'lg',
+      body: (
+        <div>
+          <div className="banner info mb16">
+            <span><Icon name="shield" size={15} /></span> <b>Cryptographic & Tamper-Evident Signatures</b> — Your signature will be timestamped, linked to user ID <b>{me.id}</b> ({me.roleLabel}), and recorded in the audit trail.
+          </div>
+
+          <div className="field mb16">
+            <label>Signer Name / Title</label>
+            <input className="input" defaultValue={typedText} onChange={e => typedText = e.target.value} />
+          </div>
+
+          <div className="card card-pad mb16" style={{ background: '#f8fafe', border: '1px dashed var(--brand-primary-light)', textAlign: 'center' }}>
+            <div className="caption mb8">Signature Preview</div>
+            <div style={{ fontFamily: 'Georgia, cursive, serif', fontSize: '28px', fontStyle: 'italic', color: '#1F3864', padding: '12px 0' }}>
+              {typedText || me.name}
+            </div>
+            <div className="caption" style={{ fontSize: '11px', opacity: 0.7 }}>
+              Digitally signed by {me.name} on {new Date().toLocaleDateString('en-GB')} at {new Date().toLocaleTimeString()}
+            </div>
+          </div>
+
+          <div className="caption" style={{ fontSize: '11px', lineHeight: 1.5, color: '#666' }}>
+            By clicking "Apply Signature", you agree that this electronic signature is the legally binding equivalent of your handwritten signature on this document.
+          </div>
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Apply Signature',
+          kind: 'btn-success',
+          onClick: () => {
+            const clone = JSON.parse(JSON.stringify(doc));
+            const sig = clone.signatures[fieldIdx];
+            sig.signedBy = me.id;
+            sig.signedAt = Date.now();
+            sig.method = signMode;
+            
+            const allSigned = clone.signatures.every((s: any) => s.signedBy);
+            if (allSigned && stage && /sign/i.test(stage.name)) {
+              const idx = clone.workflow.findIndex((s: any) => s.state === 'current');
+              if (idx >= 0) {
+                clone.workflow[idx].state = 'done';
+                clone.workflow[idx].actedAt = Date.now();
+                clone.workflow[idx].comment = 'Signed by ' + me.name;
+                if (idx + 1 < clone.workflow.length) {
+                  const next = clone.workflow[idx + 1];
+                  next.state = 'current';
+                  clone.assignee = next.assignee;
+                  clone.status = 'In Progress';
+                } else {
+                  clone.status = 'Closed';
+                  clone.sealed = true;
+                }
+              }
+            }
+            if (allSigned) clone.sealed = true;
+            updateDocument(clone.id, clone);
+            auditAction('SIGN', doc.id, `Signed field "${sig.field}" via ${signMode} signature`);
+            addToast('Signature applied successfully', 'success');
+            closeModal();
+          }
         }
-      }
-    }
-    if (allSigned) clone.sealed = true;
-    updateDocument(clone.id, clone);
-    auditAction('SIGN', doc.id, `Signed “${sig.field}”`);
-    addToast('Signature applied', 'success');
+      ]
+    });
   };
 
   const actionBtn = (label: string, kind: string, fn: () => void, opts: any = {}) => (

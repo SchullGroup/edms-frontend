@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/Icons';
 import { Table, Column } from '@/components/ui/Table';
 import { Avatar } from '@/components/ui/Avatar';
 import { HBarChart } from '@/components/ui/Charts';
+import { exportCsv } from '@/utils/exportCsv';
 import { effStatus } from '@/utils/helpers';
 
 const TEAM = ['u-chika', 'u-ngozi', 'u-tunde', 'u-amara', 'u-seun'];
@@ -156,7 +157,7 @@ export default function SupervisorDashboard() {
             <span className="h3">Member × status matrix</span>
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => alert('Export CSV (Not implemented)')}
+              onClick={() => exportCsv('Team_Overview_Matrix', matrix)}
             >
               Export
             </button>

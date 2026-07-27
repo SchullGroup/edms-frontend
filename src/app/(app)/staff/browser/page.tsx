@@ -6,6 +6,7 @@ import { useStore, effStatus, cabById, folderName, userById } from '@/store/useS
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
+import { exportCsv } from '@/utils/exportCsv';
 import { Table, Column } from '@/components/ui/Table';
 
 export default function CabinetBrowserPage() {
@@ -163,7 +164,7 @@ export default function CabinetBrowserPage() {
                 addToast(`${selected.length} document(s) routed into their default workflow`, 'success');
                 setSelected([]);
               }}>Route</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => addToast('Export not implemented', 'info')}>Export</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => exportCsv('Cabinet_Selected_Documents', selected)}>Export</button>
               <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setSelected([])}>Clear</button>
             </div>
           )}
