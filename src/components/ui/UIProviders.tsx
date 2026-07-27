@@ -4,17 +4,18 @@ import React, { useEffect } from 'react';
 import { useUIStore } from '@/store/useUIStore';
 
 export const UIProviders = () => {
-  const { toasts, removeToast, modal, closeModal } = useUIStore();
+  const { toasts, removeToast, modal, closeModal, drawer, closeDrawer } = useUIStore();
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && modal) {
-        closeModal();
+      if (e.key === 'Escape') {
+        if (drawer) closeDrawer();
+        else if (modal) closeModal();
       }
     };
     document.addEventListener('keydown', esc);
     return () => document.removeEventListener('keydown', esc);
-  }, [modal, closeModal]);
+  }, [modal, closeModal, drawer, closeDrawer]);
 
   return (
     <>
@@ -73,6 +74,22 @@ export const UIProviders = () => {
               )}
             </div>
           </div>
+        )}
+
+        {drawer && (
+          <>
+            <div className="drawer-backdrop" onClick={closeDrawer} />
+            <div className="drawer" role="dialog" aria-label={drawer.title}>
+              <div className="drawer-head">
+                <span className="h2">{drawer.title}</span>
+                <button className="modal-close" aria-label="Close" onClick={closeDrawer}>
+                  ×
+                </button>
+              </div>
+              <div className="drawer-body">{drawer.body}</div>
+              {drawer.foot && <div className="modal-foot">{drawer.foot}</div>}
+            </div>
+          </>
         )}
       </div>
     </>

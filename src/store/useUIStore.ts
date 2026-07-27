@@ -21,6 +21,12 @@ export interface ModalConfig {
   size?: string;
 }
 
+export interface DrawerConfig {
+  title: string;
+  body: React.ReactNode;
+  foot?: React.ReactNode;
+}
+
 export interface ConfirmConfig {
   title: string;
   message: string;
@@ -37,6 +43,9 @@ interface UIStore {
   openModal: (config: ModalConfig) => void;
   openConfirm: (config: ConfirmConfig) => void;
   closeModal: () => void;
+  drawer: DrawerConfig | null;
+  openDrawer: (config: DrawerConfig) => void;
+  closeDrawer: () => void;
   pageTitle: string;
   setPageTitle: (title: string) => void;
 }
@@ -71,6 +80,9 @@ export const useUIStore = create<UIStore>((set) => ({
     }
   }),
   closeModal: () => set({ modal: null }),
+  drawer: null,
+  openDrawer: (drawer) => set({ drawer }),
+  closeDrawer: () => set({ drawer: null }),
   pageTitle: 'Dashboard',
   setPageTitle: (pageTitle) => set({ pageTitle }),
 }));

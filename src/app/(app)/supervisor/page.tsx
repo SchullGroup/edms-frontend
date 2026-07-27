@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/Icons';
 import { Table, Column } from '@/components/ui/Table';
 import { Avatar } from '@/components/ui/Avatar';
 import { HBarChart } from '@/components/ui/Charts';
+import { StatusBadge, UrgBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
 import { effStatus } from '@/utils/helpers';
 
@@ -16,7 +17,7 @@ const TEAM = ['u-chika', 'u-ngozi', 'u-tunde', 'u-amara', 'u-seun'];
 export default function SupervisorDashboard() {
   const router = useRouter();
   const { documents, users, cabinets } = useStore();
-  const { setPageTitle, openModal, closeModal } = useUIStore();
+  const { setPageTitle, openModal, closeModal, openDrawer, closeDrawer, addToast } = useUIStore();
 
   useEffect(() => {
     setPageTitle('Team Overview');
@@ -61,26 +62,120 @@ export default function SupervisorDashboard() {
     }))
     .filter((c) => c.value > 0);
 
-  const handleRowClick = (r: any) => {
-    // Show drawer/modal for member
+  const handleReassignModal = (doc: any, onDone?: () => void) => {
+    let newAssignee = '';
+    let note = '';
+    const currentAssigneeUser = userById(users, doc.assignee);
+
     openModal({
+      title: `Reassign — ${doc.title.slice(0, 44)}${doc.title.length > 44 ? '…' : ''}`,
+      body: (
+        <div>
+          <div className="field mb12">
+            <label>Current Assignee</label>
+            <input className="input" disabled value={currentAssigneeUser?.name || 'Unassigned'} />
+          </div>
+          <div className="field mb12">
+            <label>New Assignee <span className="req">*</span></label>
+            <select className="input" onChange={e => newAssignee = e.target.value}>
+              <option value="">Select team member...</option>
+              {users.filter(u => u.status === 'Active' && u.id !== doc.assignee).map(u => (
+                <option key={u.id} value={u.id}>{u.name} — {u.roleLabel} ({u.dept})</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Handover Note</label>
+            <input className="input" placeholder="Optional handover note" onChange={e => note = e.target.value} />
+          </div>
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Reassign',
+          kind: 'btn-primary',
+          onClick: () => {
+            if (!newAssignee) {
+              addToast('Please select a new assignee', 'error');
+              return;
+            }
+            const prev = doc.assignee;
+            const newUser = userById(users, newAssignee);
+            useStore.getState().updateDocument(doc.id, { assignee: newAssignee });
+            useStore.getState().auditAction('REASSIGN', doc.id, `Reassigned from ${userById(users, prev)?.name} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`);
+            addToast(`Reassigned to ${newUser?.name}`, 'success');
+            closeModal();
+            if (onDone) onDone();
+          }
+        }
+      ]
+    });
+  };
+
+  const handleRowClick = (r: any) => {
+    const member = userById(users, r.uid);
+    const mDocs = documents.filter((d) => d.assignee === r.uid && d.status !== 'Closed');
+
+    openDrawer({
       title: `${r.name} — open items`,
       body: (
         <div>
           <div className="flex aic g12 mb16">
             <Avatar user={{ name: r.name }} />
             <div>
-              <b>{r.name}</b>
-              <div className="caption">{r.dept}</div>
+              <b style={{ fontSize: '14px', color: 'var(--ink)' }}>{r.name}</b>
+              <div className="caption">{member?.roleLabel || 'Staff Officer'} · {r.dept}</div>
             </div>
           </div>
-          <p>
-            This is a quick summary. To see detailed tasks, navigate to the specific queue or wait
-            for the full drawer port.
-          </p>
+
+          {mDocs.length > 0 ? (
+            <div className="rowlist">
+              {mDocs.map((d: any) => (
+                <div
+                  key={d.id}
+                  className="task-row"
+                  style={{
+                    border: '1px solid var(--border)',
+                    borderRadius: '9px',
+                    marginBottom: '8px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => { closeDrawer(); router.push(`/doc/${d.id}`); }}
+                >
+                  <div className="task-main">
+                    <div className="task-title" style={{ fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}>{d.title}</div>
+                    <div className="task-meta flex aic g8">
+                      <StatusBadge status={effStatus(d)} />
+                      <UrgBadge level={d.urgency} />
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginLeft: '12px', flexShrink: 0 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleReassignModal(d, () => handleRowClick(r));
+                    }}
+                  >
+                    Reassign
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty" style={{ padding: '32px 16px' }}>
+              <Icon name="approve" size={32} />
+              <div className="h3 mt16 mb8">No open items</div>
+              <p className="caption">This member’s queue is clear.</p>
+            </div>
+          )}
         </div>
-      ),
-      actions: [{ label: 'Close', kind: 'btn-secondary' }],
+      )
     });
   };
 
