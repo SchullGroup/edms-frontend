@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 
 export default function AuditorTrailPage() {
+  const router = useRouter();
   const { audit, users, auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
 
@@ -101,7 +103,13 @@ export default function AuditorTrailPage() {
     { key: 'action', label: 'Action', render: a => <span className="kbd">{a.action}</span> },
     { key: 'target', label: 'Target', render: a => (
         a.target && String(a.target).startsWith('doc') ? (
-          <a href={`#/doc/${a.target}`} onClick={e => e.stopPropagation()}>{a.target.toUpperCase()}</a>
+          <button 
+            className="btn btn-ghost btn-sm" 
+            style={{ padding: '2px 6px', fontWeight: 700 }}
+            onClick={(e) => { e.stopPropagation(); router.push(`/doc/${a.target}`); }}
+          >
+            {a.target.toUpperCase()}
+          </button>
         ) : a.target
       ) 
     },

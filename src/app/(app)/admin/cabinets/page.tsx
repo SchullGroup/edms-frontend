@@ -8,7 +8,7 @@ import { Icon } from '@/components/ui/Icons';
 
 export default function CabinetDesignerPage() {
   const { cabinets, documents, updateCabinet, addCabinet, auditAction } = useStore();
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+  const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
   const [activeCabId, setActiveCabId] = useState(cabinets?.[0]?.id);
   const [schema, setSchema] = useState<Record<string, any[]>>({
@@ -91,13 +91,18 @@ export default function CabinetDesignerPage() {
       addToast('Folder contains documents — move them first', 'error');
       return;
     }
-    const confirmed = window.confirm(`Delete folder "${f.name}"? The folder is empty and will be removed from the cabinet structure.`);
-    if (confirmed) {
-      const newFolders = activeCab.folders.filter((x: any) => x.id !== f.id);
-      updateCabinet(activeCab.id, { folders: newFolders });
-      auditAction('FOLDER_DELETE', activeCab.id, 'Deleted ' + f.name);
-      addToast('Folder deleted', 'info');
-    }
+    openConfirm({
+      title: `Delete folder "${f.name}"?`,
+      message: 'The folder is empty and will be removed from the cabinet structure.',
+      confirmLabel: 'Delete folder',
+      danger: true,
+      onConfirm: () => {
+        const newFolders = activeCab.folders.filter((x: any) => x.id !== f.id);
+        updateCabinet(activeCab.id, { folders: newFolders });
+        auditAction('FOLDER_DELETE', activeCab.id, 'Deleted ' + f.name);
+        addToast('Folder deleted', 'info');
+      }
+    });
   };
 
   const handleNewField = () => {
