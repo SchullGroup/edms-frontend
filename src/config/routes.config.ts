@@ -12,7 +12,7 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/platform',
     matchType: 'exact',
-    roles: ['platform'],
+    roles: ['schulltech_admin'],
   },
 
   // 2. WHITELIST: Match the base path, and ONLY explicitly included subroutes
@@ -34,7 +34,7 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/staff',
     matchType: 'prefix',
-    roles: ['staff', 'supervisor', 'management', 'auditor'],
+    roles: ['staff', 'supervisor', 'management', 'internal_auditor'],
     exclude: ['/staff/restricted-example'], // Add explicit exceptions here if needed
   },
 
@@ -42,13 +42,13 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/admin',
     matchType: 'prefix',
-    roles: ['clientadmin'],
+    roles: ['client_admin'],
   },
 
   {
     path: '/auditor',
     matchType: 'prefix',
-    roles: ['auditor'],
+    roles: ['internal_auditor'],
   },
 
   {
@@ -65,6 +65,6 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/upload',
     matchType: 'prefix',
-    roles: ['staff', 'supervisor', 'management', 'clientadmin'],
+    roles: ['staff', 'supervisor', 'management', 'client_admin'],
   },
 ];

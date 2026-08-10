@@ -11,9 +11,9 @@ const QUICK_ACTION: Record<string, { label: string; icon: string; go: string }> 
   staff: { label: 'Upload document', icon: 'upload', go: '/upload' },
   supervisor: { label: 'Approvals', icon: 'approve', go: '/supervisor/approvals' },
   management: { label: 'New report', icon: 'report', go: '/management/reports' },
-  clientadmin: { label: 'Upload document', icon: 'upload', go: '/upload' },
-  platform: { label: 'Provision tenant', icon: 'plus', go: '/platform' },
-  auditor: { label: 'Raise finding', icon: 'plus', go: '/auditor/findings' },
+  client_admin: { label: 'Upload document', icon: 'upload', go: '/upload' },
+  schulltech_admin: { label: 'Provision tenant', icon: 'plus', go: '/platform' },
+  internal_auditor: { label: 'Audit scope', icon: 'search', go: '/auditor' },
 };
 
 export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav: () => void }) => {
@@ -42,7 +42,14 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
   }, [notifOpen]);
   if (!me || !nav) return null;
 
-  const rolePriority = ['platform', 'clientadmin', 'management', 'auditor', 'supervisor', 'staff'];
+  const rolePriority = [
+    'schulltech_admin',
+    'client_admin',
+    'management',
+    'internal_auditor',
+    'supervisor',
+    'staff',
+  ];
   const primaryRole = rolePriority.find((r) => me.roles?.includes(r)) || 'staff';
   const qa = QUICK_ACTION[primaryRole];
   const dateStr = new Date().toLocaleDateString('en-GB', {

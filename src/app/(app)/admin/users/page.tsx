@@ -132,8 +132,8 @@ export default function UsersRolesPage() {
               'Staff Officer': 'staff',
               Supervisor: 'supervisor',
               Management: 'management',
-              'Client Admin': 'clientadmin',
-              'Internal Auditor': 'auditor',
+              'Client Admin': 'client_admin',
+              'Internal Auditor': 'internal_auditor',
             };
             u.role = map[u.roleLabel] || 'staff';
             if (isNew) {

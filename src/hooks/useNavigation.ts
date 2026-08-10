@@ -116,7 +116,7 @@ export const useNavigation = () => {
         },
       ],
     },
-    clientadmin: {
+    client_admin: {
       surface: 'Client Administration',
       home: '/admin',
       sections: [
@@ -146,7 +146,7 @@ export const useNavigation = () => {
         },
       ],
     },
-    platform: {
+    schulltech_admin: {
       surface: 'SchullTech Platform Admin',
       home: '/platform/tenants',
       sections: [
@@ -174,7 +174,7 @@ export const useNavigation = () => {
         },
       ],
     },
-    auditor: {
+    internal_auditor: {
       surface: 'Audit & Compliance',
       home: '/auditor',
       sections: [
@@ -207,7 +207,14 @@ export const useNavigation = () => {
   };
 
   // Map the primary role (or fallback to 'staff')
-  const rolePriority = ['platform', 'clientadmin', 'management', 'auditor', 'supervisor', 'staff'];
+  const rolePriority = [
+    'schulltech_admin',
+    'client_admin',
+    'management',
+    'internal_auditor',
+    'supervisor',
+    'staff',
+  ];
   const primaryRole = rolePriority.find((r) => me.roles?.includes(r)) || 'staff';
 
   return NAV[primaryRole] || NAV['staff'];
