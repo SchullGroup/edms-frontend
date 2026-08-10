@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useUsers, useCreateUser, useUpdateUser } from '@/hooks/useUsers';
+import { useUsers, useCreateUser, useUpdateUser } from '@/apis/hooks/useUsers';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
 

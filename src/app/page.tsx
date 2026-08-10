@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { authService } from '@/services/auth.service';
+import { authService } from '@/apis/services/auth.service';
 import { Icon } from '@/components/ui/Icons';
 import { useMutation } from '@tanstack/react-query';
 

@@ -1,23 +1,19 @@
 import { NextResponse } from 'next/server';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { authServer } from '@/apis/server/auth.server';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    let data;
 
-    const response = await fetch(`${API_URL}/api/v1/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    try {
+      data = await authServer.loginWithBackend(body);
+    } catch (error: any) {
+      return NextResponse.json(error.data || { success: false, message: 'Invalid request' }, { status: error.status || 400 });
+    }
 
-    const data = await response.json();
-
-    if (!response.ok || data.success === false) {
-      return NextResponse.json(data, { status: response.status || 400 });
+    if (data.success === false) {
+      return NextResponse.json(data, { status: 400 });
     }
 
     // Unpack data from the backend's standard ApiResponse wrapper

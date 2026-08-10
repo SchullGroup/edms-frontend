@@ -51,7 +51,7 @@ export interface AppStore extends AppState {
   fetchDocuments: () => Promise<void>;
 }
 
-import { documentsService } from '@/services/documents.service';
+import { documentsService } from '@/apis/services/documents.service';
 
 export const useStore = create<AppStore>()(
   persist(

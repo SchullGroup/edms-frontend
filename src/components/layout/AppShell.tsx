@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import { routeConfig } from '@/config/routes.config';
 import { useStore } from '@/store/useStore';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useUIStore } from '@/store/useUIStore';
-import { authService } from '@/services/auth.service';
+import { authService } from '@/apis/services/auth.service';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -24,6 +25,7 @@ function lighten(hex: string, amt: number) {
 
 export const AppShell = ({ children }: AppShellProps) => {
   const router = useRouter();
+  const pathname = usePathname();
   const { currentUser, branding, prefs } = useStore();
   const { pageTitle } = useUIStore();
   const [collapsed, setCollapsed] = useState(false);
@@ -32,6 +34,41 @@ export const AppShell = ({ children }: AppShellProps) => {
     const val = sessionStorage.getItem('edms-nav-collapsed') === '1';
     setCollapsed(val);
   }, []);
+
+  useEffect(() => {
+    // --- Route Guard Logic ---
+    if (currentUser && pathname && pathname !== '/unauthorized') {
+      let isAllowed = true;
+      let matchedRule = false;
+
+      for (const rule of routeConfig) {
+        let match = false;
+        if (rule.matchType === 'exact') {
+          match = pathname === rule.path;
+        } else if (rule.matchType === 'prefix') {
+          const isExcluded = rule.exclude?.some((ex) => pathname.startsWith(ex));
+          match = pathname.startsWith(rule.path) && !isExcluded;
+        } else if (rule.matchType === 'whitelist') {
+          const isIncluded = rule.include?.some((inc) => pathname.startsWith(inc));
+          match = pathname === rule.path || !!isIncluded;
+        }
+
+        if (match) {
+          matchedRule = true;
+          if (!rule.roles || rule.roles.length === 0) {
+            isAllowed = true;
+          } else {
+            isAllowed = currentUser.roles.some((r) => rule.roles!.includes(r));
+          }
+          break; // Stop at first match
+        }
+      }
+
+      if (matchedRule && !isAllowed) {
+        router.replace('/unauthorized');
+      }
+    }
+  }, [currentUser, pathname, router]);
 
   useEffect(() => {
     if (!currentUser) {

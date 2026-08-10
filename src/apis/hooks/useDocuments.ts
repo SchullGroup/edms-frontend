@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { documentsService, DocumentFilters } from '@/services/documents.service';
+import { documentsService, DocumentFilters } from '@/apis/services/documents.service';
 import { Document, CheckoutLock, DocumentMetadataField } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
 

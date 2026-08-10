@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore, effStatus, canView, cabById, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments } from '@/hooks/useDocuments';
+import { useDocuments } from '@/apis/hooks/useDocuments';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { exportCsv } from '@/utils/exportCsv';

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, userById } from '@/store/useStore';
 import { useNavigation } from '@/hooks/useNavigation';
@@ -23,7 +23,23 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
   const nav = useNavigation();
   const [notifOpen, setNotifOpen] = useState(false);
   const me = currentUser;
+  const notifRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setNotifOpen(false);
+      }
+    };
+
+    if (notifOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [notifOpen]);
   if (!me || !nav) return null;
 
   const rolePriority = ['platform', 'clientadmin', 'management', 'auditor', 'supervisor', 'staff'];
@@ -77,7 +93,7 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
         <Icon name={prefs.theme === 'light' ? 'moon' : 'sun'} />
       </button>
 
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }} ref={notifRef}>
         <button
           className="icon-btn"
           aria-label="Notifications"

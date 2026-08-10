@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useWorkflows, useUpdateWorkflow, useCreateWorkflow } from '@/hooks/useWorkflows';
+import { useWorkflows, useUpdateWorkflow, useCreateWorkflow } from '@/apis/hooks/useWorkflows';
 
 const NODE_TYPES = [
   ['start', 'Start'],

@@ -5,7 +5,7 @@ import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, cabById, folderName, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocument } from '@/hooks/useDocuments';
+import { useDocument } from '@/apis/hooks/useDocuments';
 import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, UrgBadge, ConfBadge } from '@/components/ui/Badges';
 import { Avatar } from '@/components/ui/Avatar';

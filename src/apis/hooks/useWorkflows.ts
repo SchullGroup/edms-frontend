@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { workflowsService } from '@/services/workflows.service';
+import { workflowsService } from '@/apis/services/workflows.service';
 import { WorkflowDefinition } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
 

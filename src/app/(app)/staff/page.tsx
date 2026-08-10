@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments } from '@/hooks/useDocuments';
+import { useDocuments } from '@/apis/hooks/useDocuments';
 import { Icon } from '@/components/ui/Icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TaskRow } from '@/components/ui/TaskRow';
@@ -37,7 +37,7 @@ const Donut = ({ value, color, label }: { value: number; color: string; label: s
         <text
           x="18"
           y="20.35"
-          style={{ fontSize: '9px', fontWeight: 700, fill: 'var(--fg)', textAnchor: 'middle' }}
+          style={{ fontSize: '9px', fontWeight: 700, fill: 'var(--ink)', textAnchor: 'middle' }}
         >
           {value}%
         </text>
