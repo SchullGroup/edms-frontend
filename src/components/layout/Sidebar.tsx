@@ -16,6 +16,23 @@ export const Sidebar = () => {
   const nav = useNavigation();
   const [menuOpen, setMenuOpen] = useState(false);
   const me = currentUser;
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [menuOpen]);
 
   if (!me || !nav) return null;
 
@@ -111,7 +128,7 @@ export const Sidebar = () => {
           <span className="foot-label">Help & support</span>
         </button>
 
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} ref={menuRef}>
           <button
             className="profile-card"
             aria-label="Account menu"

@@ -29,14 +29,18 @@ export const AppShell = ({ children }: AppShellProps) => {
   const { currentUser, branding, prefs } = useStore();
   const { pageTitle } = useUIStore();
   const [collapsed, setCollapsed] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     const val = sessionStorage.getItem('edms-nav-collapsed') === '1';
     setCollapsed(val);
+    setIsMounted(true);
   }, []);
 
   useEffect(() => {
     // --- Route Guard Logic ---
+    if (!isMounted) return;
+    
     if (currentUser && pathname && pathname !== '/unauthorized') {
       let isAllowed = true;
       let matchedRule = false;
@@ -68,9 +72,11 @@ export const AppShell = ({ children }: AppShellProps) => {
         router.replace('/unauthorized');
       }
     }
-  }, [currentUser, pathname, router]);
+  }, [currentUser, pathname, router, isMounted]);
 
   useEffect(() => {
+    if (!isMounted) return;
+    
     if (!currentUser) {
       router.push('/');
       return;
@@ -84,7 +90,7 @@ export const AppShell = ({ children }: AppShellProps) => {
       useStore.getState().setCurrentUser(null);
       router.push('/');
     });
-  }, [currentUser, router]);
+  }, [currentUser, router, isMounted]);
 
   useEffect(() => {
     if (branding && prefs) {
