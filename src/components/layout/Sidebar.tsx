@@ -11,11 +11,11 @@ import { useUIStore } from '@/store/useUIStore';
 export const Sidebar = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const { session, users, branding, setSession, resetData } = useStore();
+  const { currentUser, branding, resetData } = useStore();
   const { openModal, addToast } = useUIStore();
   const nav = useNavigation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const me = session ? userById(users, session) : null;
+  const me = currentUser;
 
   if (!me || !nav) return null;
 
@@ -129,7 +129,7 @@ export const Sidebar = () => {
 
           {menuOpen && (
             <div className="menu up">
-              <div className="menu-head">{me.roleLabel}</div>
+              <div className="menu-head">{me.roles?.[0] || 'User'}</div>
               <button
                 className="menu-item"
                 onClick={() => {
@@ -160,7 +160,7 @@ export const Sidebar = () => {
               <button
                 className="menu-item danger"
                 onClick={() => {
-                  setSession(null);
+                  useStore.getState().setCurrentUser(null);
                   router.push('/');
                 }}
               >

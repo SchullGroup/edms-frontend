@@ -18,15 +18,17 @@ const QUICK_ACTION: Record<string, { label: string; icon: string; go: string }> 
 
 export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav: () => void }) => {
   const router = useRouter();
-  const { session, users, notifications, prefs, setPrefs } = useStore();
+  const { currentUser, notifications, prefs, setPrefs } = useStore();
   const { addToast } = useUIStore();
   const nav = useNavigation();
   const [notifOpen, setNotifOpen] = useState(false);
-  const me = session ? userById(users, session) : null;
+  const me = currentUser;
 
   if (!me || !nav) return null;
 
-  const qa = QUICK_ACTION[me.role];
+  const rolePriority = ['platform', 'clientadmin', 'management', 'auditor', 'supervisor', 'staff'];
+  const primaryRole = rolePriority.find((r) => me.roles?.includes(r)) || 'staff';
+  const qa = QUICK_ACTION[primaryRole];
   const dateStr = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
     day: '2-digit',

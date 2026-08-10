@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, userById } from '@/store/useStore';
+import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { useDocuments } from '@/hooks/useDocuments';
 import { Icon } from '@/components/ui/Icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TaskRow } from '@/components/ui/TaskRow';
@@ -48,28 +49,42 @@ const Donut = ({ value, color, label }: { value: number; color: string; label: s
 
 export default function StaffDashboard() {
   const router = useRouter();
-  const { session, users, documents, notifications } = useStore();
+  const { currentUser, notifications } = useStore();
   const { setPageTitle } = useUIStore();
   const [filter, setFilter] = useState<string | null>(null);
-  const me = session ? userById(users, session) : null;
 
   useEffect(() => {
     setPageTitle('Dashboard');
   }, [setPageTitle]);
 
-  if (!me) return null;
+  const { data: documentsData, isLoading } = useDocuments();
+  const documents = documentsData?.data || [];
 
-  const mine = documents.filter((d) => d.assignee === me.id);
-  const open = mine.filter((d) => d.status !== 'Closed');
+  if (!currentUser) return null;
+
+  // Since we don't have a specific tasks API yet, we mock the assignment logic
+  // by using the documents created by the user, or all docs if none.
+  const mine = documents.filter((d) =>
+    d.createdBy === currentUser.id || documents.length < 5 ? true : d.createdBy === currentUser.id,
+  );
+  const open = mine.filter((d) => d.status !== 'closed');
   const counts: Record<string, number> = {
-    Pending: open.filter((d) => effStatus(d) === 'Pending').length,
-    'In Progress': open.filter((d) => effStatus(d) === 'In Progress').length,
-    Closed: mine.filter((d) => d.status === 'Closed').length,
-    Overdue: open.filter((d) => effStatus(d) === 'Overdue').length,
+    Pending: open.filter((d) => d.status === 'pending').length,
+    'In Progress': open.filter((d) => d.status === 'in_progress').length,
+    Closed: mine.filter((d) => d.status === 'closed').length,
+    Overdue: open.filter((d) => d.urgency === 'critical').length, // Mock logic for SLA
   };
 
-  let list = open.filter((d) => !filter || effStatus(d) === filter);
-  list.sort((a, b) => URG_ORDER[a.urgency] - URG_ORDER[b.urgency] || a.due - b.due);
+  let list = open.filter((d) => {
+    if (!filter) return true;
+    if (filter === 'Overdue') return d.urgency === 'critical';
+    return d.status.toLowerCase().replace('_', ' ') === filter.toLowerCase();
+  });
+  list.sort(
+    (a, b) =>
+      URG_ORDER[a.urgency] - URG_ORDER[b.urgency] ||
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
 
   const tileDefs = [
     { key: 'Pending', cls: 't-pending', icon: 'clock' },
@@ -78,8 +93,8 @@ export default function StaffDashboard() {
     { key: 'Overdue', cls: 't-overdue', icon: 'alert', label: 'Overdue / SLA' },
   ];
 
-  const myNotifs = notifications.filter((n) => n.user === me.id).slice(0, 5);
-  const closedMine = mine.filter((d) => d.status === 'Closed').length;
+  const myNotifs = notifications.filter((n) => n.user === currentUser.id).slice(0, 5);
+  const closedMine = mine.filter((d) => d.status === 'closed').length;
   const slaPct = 86;
 
   const hour = new Date().getHours();
@@ -89,7 +104,7 @@ export default function StaffDashboard() {
     <div>
       <div className="page-head">
         <div>
-          <div className="page-title">{`${greet}, ${me.name.split(' ')[0]}`}</div>
+          <div className="page-title">{`${greet}, ${currentUser.name.split(' ')[0]}`}</div>
           <div className="page-sub">{`You have ${open.length} open item${open.length === 1 ? '' : 's'}${counts.Overdue ? `, ${counts.Overdue} overdue` : ''} · ${fmtDate(Date.now())}`}</div>
         </div>
         <div className="actions">
@@ -135,12 +150,16 @@ export default function StaffDashboard() {
                   Clear filter
                 </button>
               )}
-              <button className="btn btn-secondary btn-sm" onClick={() => router.push('/tasks')}>
+              <button className="btn btn-secondary btn-sm" onClick={() => router.push('/search')}>
                 View all
               </button>
             </div>
           </div>
-          {list.length ? (
+          {isLoading ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-soft)' }}>
+              Loading documents...
+            </div>
+          ) : list.length ? (
             <div className="rowlist">
               {list.slice(0, 8).map((d) => (
                 <TaskRow key={d.id} doc={d} />

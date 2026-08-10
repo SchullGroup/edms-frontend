@@ -1,8 +1,8 @@
 import { useStore, userById } from '@/store/useStore';
 
 export const useNavigation = () => {
-  const { session, users, documents, notifications, circulars, findings } = useStore();
-  const me = session ? userById(users, session) : null;
+  const { currentUser, documents, notifications, circulars, findings } = useStore();
+  const me = currentUser;
 
   if (!me) return null;
 
@@ -166,9 +166,7 @@ export const useNavigation = () => {
         },
         {
           label: 'Release',
-          items: [
-            { route: '/platform/flags', label: 'Feature Flags', icon: 'flag' },
-          ],
+          items: [{ route: '/platform/flags', label: 'Feature Flags', icon: 'flag' }],
         },
         {
           label: 'Governance',
@@ -208,5 +206,9 @@ export const useNavigation = () => {
     },
   };
 
-  return NAV[me.role];
+  // Map the primary role (or fallback to 'staff')
+  const rolePriority = ['platform', 'clientadmin', 'management', 'auditor', 'supervisor', 'staff'];
+  const primaryRole = rolePriority.find((r) => me.roles?.includes(r)) || 'staff';
+
+  return NAV[primaryRole] || NAV['staff'];
 };

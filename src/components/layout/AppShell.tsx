@@ -6,6 +6,7 @@ import { useStore } from '@/store/useStore';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useUIStore } from '@/store/useUIStore';
+import { authService } from '@/services/auth.service';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -23,7 +24,7 @@ function lighten(hex: string, amt: number) {
 
 export const AppShell = ({ children }: AppShellProps) => {
   const router = useRouter();
-  const { session, branding, prefs } = useStore();
+  const { currentUser, branding, prefs } = useStore();
   const { pageTitle } = useUIStore();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -33,10 +34,20 @@ export const AppShell = ({ children }: AppShellProps) => {
   }, []);
 
   useEffect(() => {
-    if (!session) {
+    if (!currentUser) {
       router.push('/');
+      return;
     }
-  }, [session, router]);
+
+    // Verify session in background
+    authService.me().then(res => {
+      // Could optionally update currentUser here if needed
+    }).catch(() => {
+      // interceptor handles the 401, we just need to clear state
+      useStore.getState().setCurrentUser(null);
+      router.push('/');
+    });
+  }, [currentUser, router]);
 
   useEffect(() => {
     if (branding && prefs) {
@@ -60,7 +71,7 @@ export const AppShell = ({ children }: AppShellProps) => {
     sessionStorage.setItem('edms-nav-collapsed', next ? '1' : '0');
   };
 
-  if (!session) return null;
+  if (!currentUser) return null;
 
   return (
     <div className={`shell ${collapsed ? 'nav-collapsed' : ''}`}>
