@@ -8,10 +8,10 @@ export interface RouteRule {
 }
 
 export const routeConfig: RouteRule[] = [
-  // 1. EXACT: Match a single path only (ignoring all subroutes)
+  // 1. PREFIX: Match the base path and ALL subroutes
   {
     path: '/platform',
-    matchType: 'exact',
+    matchType: 'prefix',
     roles: ['schulltech_admin'],
   },
 

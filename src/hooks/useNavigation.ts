@@ -148,12 +148,12 @@ export const useNavigation = () => {
     },
     schulltech_admin: {
       surface: 'SchullTech Platform Admin',
-      home: '/platform/tenants',
+      home: '/platform',
       sections: [
         {
           label: 'Operations',
           items: [
-            { route: '/platform/tenants', label: 'Tenant Directory', icon: 'building' },
+            { route: '/platform', label: 'Tenant Directory', icon: 'building' },
             { route: '/platform/sysconfig', label: 'Platform Health', icon: 'pulse' },
           ],
         },
