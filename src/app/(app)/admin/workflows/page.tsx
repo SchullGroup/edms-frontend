@@ -30,7 +30,6 @@ export default function WorkflowDesignerPage() {
   const [wfId, setWfId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [connectFromId, setConnectFromId] = useState<string | null>(null);
 
   useEffect(() => {
     if (workflows.length > 0 && !wfId) {
@@ -86,21 +85,30 @@ export default function WorkflowDesignerPage() {
           <button
             className="btn btn-primary"
             onClick={() => {
-              createWfMutation.mutate({
-                name: 'New Workflow',
-                description: 'A new sequential workflow',
-                definition: {
-                  stages: [
-                    { id: 'start', name: 'Start Stage', role: 'staff', sla_hours: 24, actions: ['review'] }
-                  ],
-                  transitions: []
-                }
-              }, {
-                onSuccess: (data: any) => {
-                  setWfId(data.id);
-                  addToast('Workflow created', 'success');
-                }
-              });
+              createWfMutation.mutate(
+                {
+                  name: 'New Workflow',
+                  description: 'A new sequential workflow',
+                  definition: {
+                    stages: [
+                      {
+                        id: 'start',
+                        name: 'Start Stage',
+                        role: 'staff',
+                        sla_hours: 24,
+                        actions: ['review'],
+                      },
+                    ],
+                    transitions: [],
+                  },
+                },
+                {
+                  onSuccess: (data: any) => {
+                    setWfId(data.id);
+                    addToast('Workflow created', 'success');
+                  },
+                },
+              );
             }}
           >
             Create Workflow
