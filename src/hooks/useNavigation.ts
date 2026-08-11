@@ -1,8 +1,8 @@
 import { useStore, userById } from '@/store/useStore';
 
 export const useNavigation = () => {
-  const { session, users, documents, notifications, circulars, findings } = useStore();
-  const me = session ? userById(users, session) : null;
+  const { currentUser, documents, notifications, circulars, findings } = useStore();
+  const me = currentUser;
 
   if (!me) return null;
 
@@ -116,7 +116,7 @@ export const useNavigation = () => {
         },
       ],
     },
-    clientadmin: {
+    client_admin: {
       surface: 'Client Administration',
       home: '/admin',
       sections: [
@@ -146,14 +146,14 @@ export const useNavigation = () => {
         },
       ],
     },
-    platform: {
+    schulltech_admin: {
       surface: 'SchullTech Platform Admin',
-      home: '/platform/tenants',
+      home: '/platform',
       sections: [
         {
           label: 'Operations',
           items: [
-            { route: '/platform/tenants', label: 'Tenant Directory', icon: 'building' },
+            { route: '/platform', label: 'Tenant Directory', icon: 'building' },
             { route: '/platform/sysconfig', label: 'Platform Health', icon: 'pulse' },
           ],
         },
@@ -166,9 +166,7 @@ export const useNavigation = () => {
         },
         {
           label: 'Release',
-          items: [
-            { route: '/platform/flags', label: 'Feature Flags', icon: 'flag' },
-          ],
+          items: [{ route: '/platform/flags', label: 'Feature Flags', icon: 'flag' }],
         },
         {
           label: 'Governance',
@@ -176,7 +174,7 @@ export const useNavigation = () => {
         },
       ],
     },
-    auditor: {
+    internal_auditor: {
       surface: 'Audit & Compliance',
       home: '/auditor',
       sections: [
@@ -208,5 +206,16 @@ export const useNavigation = () => {
     },
   };
 
-  return NAV[me.role];
+  // Map the primary role (or fallback to 'staff')
+  const rolePriority = [
+    'schulltech_admin',
+    'client_admin',
+    'management',
+    'internal_auditor',
+    'supervisor',
+    'staff',
+  ];
+  const primaryRole = rolePriority.find((r) => me.roles?.includes(r)) || 'staff';
+
+  return NAV[primaryRole] || NAV['staff'];
 };

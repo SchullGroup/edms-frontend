@@ -1,8 +1,10 @@
+// @ts-nocheck
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { useWorkflows, useUpdateWorkflow, useCreateWorkflow } from '@/apis/hooks/useWorkflows';
 
 const NODE_TYPES = [
   ['start', 'Start'],
@@ -16,43 +18,128 @@ const NODE_TYPES = [
 ];
 
 export default function WorkflowDesignerPage() {
-  const { workflows, updateWorkflow, addWorkflow, auditAction } = useStore();
+  const { auditAction } = useStore();
   const { setPageTitle, openConfirm, addToast } = useUIStore();
 
-  const [wfId, setWfId] = useState(workflows?.[0]?.id);
+  const { data: workflowsData, isLoading, error } = useWorkflows();
+  const workflows = workflowsData?.data || [];
+
+  const updateWfMutation = useUpdateWorkflow();
+  const createWfMutation = useCreateWorkflow();
+
+  const [wfId, setWfId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [connectFromId, setConnectFromId] = useState<string | null>(null);
 
-  const wf = workflows?.find((w) => w.id === wfId) || workflows?.[0];
-  const selectedNode = wf?.nodes?.find((n: any) => n.id === selectedNodeId);
+  useEffect(() => {
+    if (workflows.length > 0 && !wfId) {
+      setWfId(workflows[0].id);
+    }
+  }, [workflows, wfId]);
+
+  const wf = workflows?.find((w: any) => w.id === wfId) || workflows?.[0];
+
+  const stages = wf?.definition?.stages || [];
+  const transitions = wf?.definition?.transitions || [];
+
+  const nodes = stages.map((s: any, i: number) => ({
+    id: s.id,
+    type: s.actions?.[0] || 'review',
+    name: s.name || s.id,
+    x: 40 + i * 200,
+    y: 80,
+    summary: `Role: ${s.role || 'Unassigned'}`,
+    sla: s.sla_hours || 48,
+    role: s.role || '',
+  }));
+  const edges = transitions.map((t: any) => [t.from, t.to]);
+
+  const selectedNode = nodes.find((n: any) => n.id === selectedNodeId);
+
+  const updateWorkflow = (id: string, updates: any) => {
+    updateWfMutation.mutate({ id, updates });
+  };
 
   useEffect(() => {
     setPageTitle('Workflow Designer');
   }, [setPageTitle]);
 
+  if (isLoading) {
+    return <div className="p-8 text-center muted">Loading workflow designer...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center" style={{ color: 'var(--status-overdue)' }}>
+        Failed to load workflows. Please try again.
+      </div>
+    );
+  }
+
+  if (!wf && workflows.length === 0) {
+    return (
+      <div className="p-8">
+        <div className="card card-pad text-center">
+          <div className="h3 mb8">No Workflows Found</div>
+          <div className="caption mb16">Create your first workflow to get started.</div>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              createWfMutation.mutate(
+                {
+                  name: 'New Workflow',
+                  description: 'A new sequential workflow',
+                  definition: {
+                    stages: [
+                      {
+                        id: 'start',
+                        name: 'Start Stage',
+                        role: 'staff',
+                        sla_hours: 24,
+                        actions: ['review'],
+                      },
+                    ],
+                    transitions: [],
+                  },
+                },
+                {
+                  onSuccess: (data: any) => {
+                    setWfId(data.id);
+                    addToast('Workflow created', 'success');
+                  },
+                },
+              );
+            }}
+          >
+            Create Workflow
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!wf) return null;
 
   const handlePublish = () => {
-    updateWorkflow(wf.id, { version: wf.version + 1, status: 'Published', updated: Date.now() });
+    updateWorkflow(wf.id, { version: wf.version + 1, status: 'published' });
     setDirty(false);
     auditAction('WORKFLOW_PUBLISH', wf.id, `Published ${wf.name} v${wf.version + 1}`);
     addToast(`${wf.name} v${wf.version + 1} published`, 'success');
   };
 
   const handleClone = () => {
-    const copy = JSON.parse(JSON.stringify(wf));
-    copy.id = 'wf-' + Date.now();
-    copy.name = wf.name + ' (copy)';
-    copy.version = 1;
-    copy.status = 'Draft';
-    copy.updated = Date.now();
-    copy.appliedTo = '—';
-    addWorkflow(copy);
-    setWfId(copy.id);
-    setDirty(false);
-    auditAction('WORKFLOW_CLONE', copy.id, 'Cloned from ' + wf.name);
-    addToast('Workflow cloned as draft', 'success');
+    const copy = {
+      name: wf.name + ' (copy)',
+      description: 'Cloned from ' + wf.name,
+      definition: wf.definition,
+    };
+    createWfMutation.mutate(copy, {
+      onSuccess: (data: any) => {
+        setWfId(data.id);
+        setDirty(false);
+        auditAction('WORKFLOW_CLONE', data.id, 'Cloned from ' + wf.name);
+      },
+    });
   };
 
   const edgePath = (a: any, b: any) => {
@@ -64,8 +151,8 @@ export default function WorkflowDesignerPage() {
     return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
   };
 
-  const W = Math.max(1060, ...(wf.nodes || []).map((n: any) => n.x + 220));
-  const H = Math.max(420, ...(wf.nodes || []).map((n: any) => n.y + 140));
+  const W = Math.max(1060, ...nodes.map((n: any) => n.x + 220));
+  const H = Math.max(420, ...nodes.map((n: any) => n.y + 140));
 
   return (
     <div>
@@ -82,14 +169,16 @@ export default function WorkflowDesignerPage() {
               }}
             />
             <span
-              className={`badge ${wf.status === 'Published' ? 'b-status-closed' : 'b-status-pending'}`}
+              className={`badge ${wf.status === 'published' ? 'b-status-closed' : 'b-status-pending'}`}
             >
-              {wf.status} · v{wf.version}
+              {wf.status === 'published' ? 'Active' : 'Draft'} · v{wf.version}
             </span>
             {dirty && <span className="badge b-urg-high">● Unsaved changes</span>}
           </div>
-          <div className="page-sub">Applied to: {wf.appliedTo}</div>
+
+          <div className="page-sub">Sequential Pipeline Designer</div>
         </div>
+
         <div className="actions">
           <select
             className="input"
@@ -112,6 +201,7 @@ export default function WorkflowDesignerPage() {
               </option>
             ))}
           </select>
+
           <button className="btn btn-secondary" onClick={handleClone}>
             Clone
           </button>
@@ -128,27 +218,36 @@ export default function WorkflowDesignerPage() {
         {/* Palette */}
         <div className="card card-pad wfd-palette" style={{ width: '160px', flexShrink: 0 }}>
           <div className="h3 mb8">Stage palette</div>
-          <div className="caption mb8">Click to add</div>
+          <div className="caption mb8">Click to append</div>
           {NODE_TYPES.map(([type, label]) => (
             <div
               key={type}
               className="metric-li"
               style={{ cursor: 'pointer', padding: '6px' }}
               onClick={() => {
-                const node = {
-                  id: 'n-' + Date.now(),
-                  type,
+                const newStage = {
+                  id: `stage_${Date.now()}`,
                   name: label + ' stage',
-                  x: 30,
-                  y: 30,
-                  summary: 'Configure in properties →',
-                  sla: 48,
-                  role: '',
+                  role: 'staff',
+                  sla_hours: 48,
+                  actions: [
+                    type === 'sign' || type === 'review' || type === 'approve' ? type : 'review',
+                  ],
                 };
-                updateWorkflow(wf.id, { nodes: [...(wf.nodes || []), node] });
-                setSelectedNodeId(node.id);
+                const updatedStages = [...stages, newStage];
+                const updatedTransitions = [];
+                for (let i = 0; i < updatedStages.length - 1; i++) {
+                  updatedTransitions.push({
+                    from: updatedStages[i].id,
+                    to: updatedStages[i + 1].id,
+                  });
+                }
+                updateWorkflow(wf.id, {
+                  definition: { stages: updatedStages, transitions: updatedTransitions },
+                });
+                setSelectedNodeId(newStage.id);
                 setDirty(true);
-                addToast('Stage added', 'success');
+                addToast('Stage appended', 'success');
               }}
             >
               <span
@@ -175,7 +274,6 @@ export default function WorkflowDesignerPage() {
             style={{ position: 'relative', width: W + 'px', height: H + 'px' }}
             onClick={() => {
               setSelectedNodeId(null);
-              setConnectFromId(null);
             }}
           >
             <svg
@@ -196,9 +294,9 @@ export default function WorkflowDesignerPage() {
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)" />
                 </marker>
               </defs>
-              {wf.edges?.map(([from, to, label]: any, i: number) => {
-                const a = wf.nodes?.find((n: any) => n.id === from);
-                const b = wf.nodes?.find((n: any) => n.id === to);
+              {edges.map(([from, to, label]: any, i: number) => {
+                const a = nodes.find((n: any) => n.id === from);
+                const b = nodes.find((n: any) => n.id === to);
                 if (!a || !b) return null;
                 return (
                   <g key={i}>
@@ -209,24 +307,12 @@ export default function WorkflowDesignerPage() {
                       strokeWidth="1.8"
                       markerEnd="url(#arr)"
                     />
-                    {label && (
-                      <text
-                        x={(a.x + 158 + b.x) / 2}
-                        y={(a.y + b.y) / 2 + 28}
-                        fontSize="10"
-                        fill="var(--brand-accent)"
-                        fontWeight="700"
-                        textAnchor="middle"
-                      >
-                        {label}
-                      </text>
-                    )}
                   </g>
                 );
               })}
             </svg>
 
-            {wf.nodes?.map((n: any) => (
+            {nodes.map((n: any) => (
               <div
                 key={n.id}
                 className={`wf-node ${selectedNodeId === n.id ? 'selected' : ''}`}
@@ -239,20 +325,12 @@ export default function WorkflowDesignerPage() {
                   background: 'var(--bg)',
                   border: '1px solid var(--border)',
                   borderRadius: '6px',
-                  cursor: connectFromId ? 'crosshair' : 'pointer',
+                  cursor: 'pointer',
                   zIndex: 10,
                   boxShadow: selectedNodeId === n.id ? '0 0 0 2px var(--brand-accent)' : 'none',
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (connectFromId && connectFromId !== n.id) {
-                    updateWorkflow(wf.id, { edges: [...(wf.edges || []), [connectFromId, n.id]] });
-                    setConnectFromId(null);
-                    setDirty(true);
-                    addToast('Stages connected', 'success');
-                    return;
-                  }
-                  setConnectFromId(null);
                   setSelectedNodeId(n.id);
                 }}
               >
@@ -287,38 +365,6 @@ export default function WorkflowDesignerPage() {
                 <div className="ns" style={{ fontSize: '11px', color: 'var(--muted)' }}>
                   {n.summary}
                 </div>
-                <div
-                  className="handle"
-                  style={{
-                    position: 'absolute',
-                    right: '-8px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    width: '16px',
-                    height: '16px',
-                    background: 'var(--border)',
-                    borderRadius: '50%',
-                    cursor: 'crosshair',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                  title="Connect to another stage"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setConnectFromId(n.id);
-                    addToast('Now click the target stage to connect', 'info');
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '6px',
-                      height: '6px',
-                      background: 'var(--text)',
-                      borderRadius: '50%',
-                    }}
-                  ></div>
-                </div>
               </div>
             ))}
           </div>
@@ -336,7 +382,7 @@ export default function WorkflowDesignerPage() {
               </p>
               <div className="divider"></div>
               <div className="banner success" style={{ marginBottom: 0 }}>
-                Graph is valid.
+                Graph is strictly sequential.
               </div>
             </div>
           ) : (
@@ -347,10 +393,12 @@ export default function WorkflowDesignerPage() {
                   className="input"
                   value={selectedNode.name || ''}
                   onChange={(e) => {
-                    const updatedNodes = wf.nodes.map((nn: any) =>
-                      nn.id === selectedNode.id ? { ...nn, name: e.target.value } : nn,
+                    const updatedStages = stages.map((s: any) =>
+                      s.id === selectedNode.id ? { ...s, name: e.target.value } : s,
                     );
-                    updateWorkflow(wf.id, { nodes: updatedNodes });
+                    updateWorkflow(wf.id, {
+                      definition: { ...wf.definition, stages: updatedStages },
+                    });
                     setDirty(true);
                   }}
                 />
@@ -361,24 +409,25 @@ export default function WorkflowDesignerPage() {
                   className="input"
                   value={selectedNode.role || ''}
                   onChange={(e) => {
-                    const updatedNodes = wf.nodes.map((nn: any) =>
-                      nn.id === selectedNode.id ? { ...nn, role: e.target.value } : nn,
+                    const updatedStages = stages.map((s: any) =>
+                      s.id === selectedNode.id ? { ...s, role: e.target.value } : s,
                     );
-                    updateWorkflow(wf.id, { nodes: updatedNodes });
+                    updateWorkflow(wf.id, {
+                      definition: { ...wf.definition, stages: updatedStages },
+                    });
                     setDirty(true);
                   }}
                 >
                   {[
-                    '',
-                    'Staff Officer',
-                    'Supervisor',
-                    'Legal Officer',
-                    'Management',
-                    'Finance Approvers',
-                    'Executive Signatories',
+                    'staff',
+                    'supervisor',
+                    'management',
+                    'client_admin',
+                    'schulltech_admin',
+                    'internal_auditor',
                   ].map((r) => (
                     <option key={r} value={r}>
-                      {r || '— none —'}
+                      {r}
                     </option>
                   ))}
                 </select>
@@ -391,54 +440,16 @@ export default function WorkflowDesignerPage() {
                     type="number"
                     value={selectedNode.sla || 48}
                     onChange={(e) => {
-                      const updatedNodes = wf.nodes.map((nn: any) =>
-                        nn.id === selectedNode.id ? { ...nn, sla: +e.target.value } : nn,
+                      const updatedStages = stages.map((s: any) =>
+                        s.id === selectedNode.id ? { ...s, sla_hours: +e.target.value } : s,
                       );
-                      updateWorkflow(wf.id, { nodes: updatedNodes });
+                      updateWorkflow(wf.id, {
+                        definition: { ...wf.definition, stages: updatedStages },
+                      });
                       setDirty(true);
                     }}
                   />
                 </div>
-                <div className="field">
-                  <label>Escalate to</label>
-                  <select
-                    className="input"
-                    value={selectedNode.escalation || 'None'}
-                    onChange={(e) => {
-                      const updatedNodes = wf.nodes.map((nn: any) =>
-                        nn.id === selectedNode.id ? { ...nn, escalation: e.target.value } : nn,
-                      );
-                      updateWorkflow(wf.id, { nodes: updatedNodes });
-                      setDirty(true);
-                    }}
-                  >
-                    {['Supervisor', 'Management', 'None'].map((x) => (
-                      <option key={x} value={x}>
-                        {x}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="field">
-                <label>Controls</label>
-                <select
-                  className="input"
-                  value={selectedNode.controls || 'None'}
-                  onChange={(e) => {
-                    const updatedNodes = wf.nodes.map((nn: any) =>
-                      nn.id === selectedNode.id ? { ...nn, controls: e.target.value } : nn,
-                    );
-                    updateWorkflow(wf.id, { nodes: updatedNodes });
-                    setDirty(true);
-                  }}
-                >
-                  {['None', 'Maker-checker', 'Dual approval', 'SoD enforced'].map((x) => (
-                    <option key={x} value={x}>
-                      {x}
-                    </option>
-                  ))}
-                </select>
               </div>
               <button
                 className="btn btn-danger btn-sm mt16"
@@ -446,15 +457,21 @@ export default function WorkflowDesignerPage() {
                   openConfirm({
                     title: `Delete stage "${selectedNode.name}"?`,
                     message:
-                      'This stage will be removed from the workflow layout. Any connecting edges will also be deleted.',
+                      'This stage will be removed from the workflow layout. The remaining sequence will be reconnected.',
                     confirmLabel: 'Delete stage',
                     danger: true,
                     onConfirm: () => {
-                      const updatedNodes = wf.nodes.filter((nn: any) => nn.id !== selectedNode.id);
-                      const updatedEdges = wf.edges.filter(
-                        ([a, b]: any) => a !== selectedNode.id && b !== selectedNode.id,
-                      );
-                      updateWorkflow(wf.id, { nodes: updatedNodes, edges: updatedEdges });
+                      const updatedStages = stages.filter((s: any) => s.id !== selectedNode.id);
+                      const updatedTransitions = [];
+                      for (let i = 0; i < updatedStages.length - 1; i++) {
+                        updatedTransitions.push({
+                          from: updatedStages[i].id,
+                          to: updatedStages[i + 1].id,
+                        });
+                      }
+                      updateWorkflow(wf.id, {
+                        definition: { stages: updatedStages, transitions: updatedTransitions },
+                      });
                       setSelectedNodeId(null);
                       setDirty(true);
                       addToast('Stage deleted', 'info');

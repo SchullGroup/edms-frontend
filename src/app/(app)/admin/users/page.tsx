@@ -3,13 +3,28 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { useUsers, useCreateUser, useUpdateUser } from '@/apis/hooks/useUsers';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
 
 export default function UsersRolesPage() {
-  const { users, rolesMatrix, policies, updateUser, addUser, updateRoleMatrix, updatePolicyControl, auditAction } = useStore();
+  const { rolesMatrix, policies, updateRoleMatrix, updatePolicyControl, auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
   const [tab, setTab] = useState<'users' | 'roles' | 'groups'>('users');
+
+  const { data: usersData, isLoading } = useUsers();
+  const rawUsers = usersData?.data || [];
+
+  const createUser = useCreateUser();
+  const updateUser = useUpdateUser();
+
+  const users = rawUsers.map((u) => ({
+    ...u,
+    roleLabel: 'Staff', // Mock for now since userRoles requires relation inclusion
+    dept: u.departmentId || 'Unknown',
+    status: u.status === 'active' ? 'Active' : u.status === 'suspended' ? 'Suspended' : 'Inactive',
+    sso: false,
+  }));
 
   useEffect(() => {
     setPageTitle('Users & Roles');
@@ -17,36 +32,88 @@ export default function UsersRolesPage() {
 
   const handleUserModal = (user: any | null) => {
     const isNew = !user;
-    let u = user || { id: 'u-' + Date.now(), name: '', email: '', role: 'staff', roleLabel: 'Staff Officer', dept: 'Operations', status: 'Active', sso: false };
+    let u = user || {
+      id: 'u-' + Date.now(),
+      name: '',
+      email: '',
+      role: 'staff',
+      roleLabel: 'Staff Officer',
+      dept: 'Operations',
+      status: 'Active',
+      sso: false,
+    };
 
     openModal({
       title: isNew ? 'Invite user' : 'Edit user — ' + u.name,
       body: (
         <div className="grid cols-2" style={{ gap: '12px' }}>
           <div className="field">
-            <label>Name <span className="req">*</span></label>
-            <input className="input" defaultValue={u.name} placeholder="Full name" onChange={e => u.name = e.target.value} />
+            <label>
+              Name <span className="req">*</span>
+            </label>
+            <input
+              className="input"
+              defaultValue={u.name}
+              placeholder="Full name"
+              onChange={(e) => (u.name = e.target.value)}
+            />
           </div>
           <div className="field">
-            <label>Email <span className="req">*</span></label>
-            <input className="input" defaultValue={u.email} placeholder="name@firstatlantic.com" onChange={e => u.email = e.target.value} />
+            <label>
+              Email <span className="req">*</span>
+            </label>
+            <input
+              className="input"
+              defaultValue={u.email}
+              placeholder="name@firstatlantic.com"
+              onChange={(e) => (u.email = e.target.value)}
+            />
           </div>
           <div className="field">
             <label>Role</label>
-            <select className="input" defaultValue={u.roleLabel} onChange={e => u.roleLabel = e.target.value}>
-              {rolesMatrix?.map((r: any) => <option key={r.role} value={r.role}>{r.role}</option>)}
+            <select
+              className="input"
+              defaultValue={u.roleLabel}
+              onChange={(e) => (u.roleLabel = e.target.value)}
+            >
+              {rolesMatrix?.map((r: any) => (
+                <option key={r.role} value={r.role}>
+                  {r.role}
+                </option>
+              ))}
             </select>
           </div>
           <div className="field">
             <label>Department</label>
-            <select className="input" defaultValue={u.dept} onChange={e => u.dept = e.target.value}>
-              {['Operations', 'Finance', 'Legal', 'Procurement', 'IT', 'Audit & Compliance', 'Executive'].map(d => <option key={d} value={d}>{d}</option>)}
+            <select
+              className="input"
+              defaultValue={u.dept}
+              onChange={(e) => (u.dept = e.target.value)}
+            >
+              {[
+                'Operations',
+                'Finance',
+                'Legal',
+                'Procurement',
+                'IT',
+                'Audit & Compliance',
+                'Executive',
+              ].map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
             </select>
           </div>
           <div className="field">
             <label>SSO (Okta)</label>
             <label className="check">
-              <input type="checkbox" defaultChecked={u.sso} onChange={e => u.sso = e.target.checked} /> Enrolled in single sign-on
+              <input
+                type="checkbox"
+                defaultChecked={u.sso}
+                onChange={(e) => (u.sso = e.target.checked)}
+              />{' '}
+              Enrolled in single sign-on
             </label>
           </div>
         </div>
@@ -61,41 +128,57 @@ export default function UsersRolesPage() {
               addToast('Name and email are required', 'error');
               return;
             }
-            const map: Record<string, string> = { 'Staff Officer': 'staff', 'Supervisor': 'supervisor', 'Management': 'management', 'Client Admin': 'clientadmin', 'Internal Auditor': 'auditor' };
+            const map: Record<string, string> = {
+              'Staff Officer': 'staff',
+              Supervisor: 'supervisor',
+              Management: 'management',
+              'Client Admin': 'client_admin',
+              'Internal Auditor': 'internal_auditor',
+            };
             u.role = map[u.roleLabel] || 'staff';
             if (isNew) {
-              addUser(u);
+              createUser.mutate({
+                email: u.email,
+                name: u.name,
+                password: 'password', // Default
+                departmentId: u.dept,
+              });
               auditAction('USER_INVITE', u.id, 'Invited ' + u.email);
-              addToast('Invitation sent to ' + u.email, 'success');
             } else {
-              updateUser(u.id, u);
+              updateUser.mutate({
+                id: u.id,
+                updates: { name: u.name, email: u.email },
+              });
               auditAction('USER_EDIT', u.id, 'Updated profile/role');
-              addToast('User updated', 'success');
             }
             closeModal();
-          }
-        }
-      ]
+          },
+        },
+      ],
     });
   };
 
   const handleToggleStatus = (u: any) => {
     if (u.status === 'Active') {
-      const confirmed = window.confirm(`Suspend ${u.name}? The user loses access immediately. In-flight tasks remain assigned and should be reassigned by a supervisor.`);
+      const confirmed = window.confirm(
+        `Suspend ${u.name}? The user loses access immediately. In-flight tasks remain assigned and should be reassigned by a supervisor.`,
+      );
       if (confirmed) {
-        updateUser(u.id, { status: 'Suspended' });
+        updateUser.mutate({ id: u.id, updates: { status: 'suspended' } });
         auditAction('USER_SUSPEND', u.id, 'Suspended');
-        addToast(u.name + ' suspended', 'warning');
       }
     } else {
-      updateUser(u.id, { status: 'Active' });
+      updateUser.mutate({ id: u.id, updates: { status: 'active' } });
       auditAction('USER_ACTIVATE', u.id, 'Re-activated');
-      addToast(u.name + ' re-activated', 'success');
     }
   };
 
   const userCols: Column<any>[] = [
-    { key: 'name', label: 'User', sortable: true, render: u => (
+    {
+      key: 'name',
+      label: 'User',
+      sortable: true,
+      render: (u) => (
         <span className="flex aic g8">
           <div className="avatar">{u.name.charAt(0)}</div>
           <span>
@@ -103,22 +186,66 @@ export default function UsersRolesPage() {
             <div className="caption">{u.email}</div>
           </span>
         </span>
-      ) 
+      ),
     },
     { key: 'roleLabel', label: 'Role', sortable: true },
     { key: 'dept', label: 'Department' },
-    { key: 'sso', label: 'SSO', render: u => u.sso ? <span className="badge b-status-closed">Enrolled</span> : <span className="badge b-status-pending">Pending</span> },
-    { key: 'status', label: 'Status', render: u => <span className={`badge ${u.status === 'Active' ? 'b-status-closed' : 'b-status-overdue'}`}>{u.status}</span> },
-    { key: 'act', label: '', render: u => (
+    {
+      key: 'sso',
+      label: 'SSO',
+      render: (u) =>
+        u.sso ? (
+          <span className="badge b-status-closed">Enrolled</span>
+        ) : (
+          <span className="badge b-status-pending">Pending</span>
+        ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (u) => (
+        <span className={`badge ${u.status === 'Active' ? 'b-status-closed' : 'b-status-overdue'}`}>
+          {u.status}
+        </span>
+      ),
+    },
+    {
+      key: 'act',
+      label: '',
+      render: (u) => (
         <div className="flex g8">
-          <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleUserModal(u); }}>Edit</button>
-          <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleToggleStatus(u); }}>{u.status === 'Active' ? 'Suspend' : 'Activate'}</button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleUserModal(u);
+            }}
+          >
+            Edit
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleStatus(u);
+            }}
+          >
+            {u.status === 'Active' ? 'Suspend' : 'Activate'}
+          </button>
         </div>
-      ) 
+      ),
     },
   ];
 
-  const permCols = [['view', 'View'], ['upload', 'Upload'], ['approve', 'Approve'], ['sign', 'Sign'], ['redact', 'Redact'], ['admin', 'Admin'], ['audit', 'Audit']];
+  const permCols = [
+    ['view', 'View'],
+    ['upload', 'Upload'],
+    ['approve', 'Approve'],
+    ['sign', 'Sign'],
+    ['redact', 'Redact'],
+    ['admin', 'Admin'],
+    ['audit', 'Audit'],
+  ];
 
   return (
     <div>
@@ -129,20 +256,44 @@ export default function UsersRolesPage() {
         </div>
         <div className="actions">
           <button className="btn btn-primary flex aic" onClick={() => handleUserModal(null)}>
-            <span style={{ marginRight: '8px' }}><Icon name="plus" size={15} /></span> Invite user
+            <span style={{ marginRight: '8px' }}>
+              <Icon name="plus" size={15} />
+            </span>{' '}
+            Invite user
           </button>
         </div>
       </div>
 
       <div className="tabs mb16">
-        <button className={`tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>Users</button>
-        <button className={`tab ${tab === 'roles' ? 'active' : ''}`} onClick={() => setTab('roles')}>Roles & permissions</button>
-        <button className={`tab ${tab === 'groups' ? 'active' : ''}`} onClick={() => setTab('groups')}>Groups & SoD</button>
+        <button
+          className={`tab ${tab === 'users' ? 'active' : ''}`}
+          onClick={() => setTab('users')}
+        >
+          Users
+        </button>
+        <button
+          className={`tab ${tab === 'roles' ? 'active' : ''}`}
+          onClick={() => setTab('roles')}
+        >
+          Roles & permissions
+        </button>
+        <button
+          className={`tab ${tab === 'groups' ? 'active' : ''}`}
+          onClick={() => setTab('groups')}
+        >
+          Groups & SoD
+        </button>
       </div>
 
       {tab === 'users' && (
         <div className="card">
-          <Table cols={userCols} rows={users} />
+          {isLoading ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-soft)' }}>
+              Loading users...
+            </div>
+          ) : (
+            <Table cols={userCols} rows={users} />
+          )}
         </div>
       )}
 
@@ -157,22 +308,37 @@ export default function UsersRolesPage() {
               <thead>
                 <tr>
                   <th>Role</th>
-                  {permCols.map(([k, l]) => <th key={k}>{l}</th>)}
+                  {permCols.map(([k, l]) => (
+                    <th key={k}>{l}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {rolesMatrix?.map((r: any) => (
                   <tr key={r.role}>
-                    <td><b>{r.role}</b></td>
+                    <td>
+                      <b>{r.role}</b>
+                    </td>
                     {permCols.map(([k]) => (
                       <td key={k}>
                         <label className="switch">
-                          <input type="checkbox" checked={r.perms[k] || false} onChange={e => {
-                            const newPerms = { ...r.perms, [k]: e.target.checked };
-                            updateRoleMatrix(r.role, newPerms);
-                            auditAction('ROLE_EDIT', r.role, `${e.target.checked ? 'Granted' : 'Revoked'} ${k}`);
-                            addToast(`${r.role}: ${k} ${e.target.checked ? 'granted' : 'revoked'}`, 'info');
-                          }} />
+                          <input
+                            type="checkbox"
+                            checked={r.perms[k] || false}
+                            onChange={(e) => {
+                              const newPerms = { ...r.perms, [k]: e.target.checked };
+                              updateRoleMatrix(r.role, newPerms);
+                              auditAction(
+                                'ROLE_EDIT',
+                                r.role,
+                                `${e.target.checked ? 'Granted' : 'Revoked'} ${k}`,
+                              );
+                              addToast(
+                                `${r.role}: ${k} ${e.target.checked ? 'granted' : 'revoked'}`,
+                                'info',
+                              );
+                            }}
+                          />
                           <i></i>
                         </label>
                       </td>
@@ -192,13 +358,28 @@ export default function UsersRolesPage() {
               <span className="h3">Groups</span>
             </div>
             <div className="card-body" style={{ paddingTop: '6px' }}>
-              {[['Finance Approvers', 4], ['Legal Reviewers', 3], ['Procurement Committee', 5], ['Executive Signatories', 2]].map(([g, n]) => (
+              {[
+                ['Finance Approvers', 4],
+                ['Legal Reviewers', 3],
+                ['Procurement Committee', 5],
+                ['Executive Signatories', 2],
+              ].map(([g, n]) => (
                 <div key={g as string} className="metric-li">
                   <span>{g as string}</span>
                   <span className="caption">{n as number} members</span>
                 </div>
               ))}
-              <button className="btn btn-secondary btn-sm mt16" onClick={() => addToast('Group editor would open here (add/remove members, map to workflow roles)', 'info')}>+ New group</button>
+              <button
+                className="btn btn-secondary btn-sm mt16"
+                onClick={() =>
+                  addToast(
+                    'Group editor would open here (add/remove members, map to workflow roles)',
+                    'info',
+                  )
+                }
+              >
+                + New group
+              </button>
             </div>
           </div>
           <div className="card">
@@ -213,11 +394,22 @@ export default function UsersRolesPage() {
                     <div className="caption">Scope: {c.scope}</div>
                   </span>
                   <label className="switch">
-                    <input type="checkbox" checked={c.enabled} onChange={e => {
-                      updatePolicyControl(c.rule, e.target.checked);
-                      auditAction('CONTROL_TOGGLE', c.rule, e.target.checked ? 'Enabled' : 'Disabled');
-                      addToast('Control ' + (e.target.checked ? 'enabled' : 'disabled'), e.target.checked ? 'success' : 'warning');
-                    }} />
+                    <input
+                      type="checkbox"
+                      checked={c.enabled}
+                      onChange={(e) => {
+                        updatePolicyControl(c.rule, e.target.checked);
+                        auditAction(
+                          'CONTROL_TOGGLE',
+                          c.rule,
+                          e.target.checked ? 'Enabled' : 'Disabled',
+                        );
+                        addToast(
+                          'Control ' + (e.target.checked ? 'enabled' : 'disabled'),
+                          e.target.checked ? 'success' : 'warning',
+                        );
+                      }}
+                    />
                     <i></i>
                   </label>
                 </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, userById } from '@/store/useStore';
 import { useNavigation } from '@/hooks/useNavigation';
@@ -11,22 +11,47 @@ const QUICK_ACTION: Record<string, { label: string; icon: string; go: string }> 
   staff: { label: 'Upload document', icon: 'upload', go: '/upload' },
   supervisor: { label: 'Approvals', icon: 'approve', go: '/supervisor/approvals' },
   management: { label: 'New report', icon: 'report', go: '/management/reports' },
-  clientadmin: { label: 'Upload document', icon: 'upload', go: '/upload' },
-  platform: { label: 'Provision tenant', icon: 'plus', go: '/platform' },
-  auditor: { label: 'Raise finding', icon: 'plus', go: '/auditor/findings' },
+  client_admin: { label: 'Upload document', icon: 'upload', go: '/upload' },
+  schulltech_admin: { label: 'Provision tenant', icon: 'plus', go: '/platform' },
+  internal_auditor: { label: 'Audit scope', icon: 'search', go: '/auditor' },
 };
 
 export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav: () => void }) => {
   const router = useRouter();
-  const { session, users, notifications, prefs, setPrefs } = useStore();
+  const { currentUser, notifications, prefs, setPrefs } = useStore();
   const { addToast } = useUIStore();
   const nav = useNavigation();
   const [notifOpen, setNotifOpen] = useState(false);
-  const me = session ? userById(users, session) : null;
+  const me = currentUser;
+  const notifRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setNotifOpen(false);
+      }
+    };
+
+    if (notifOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [notifOpen]);
   if (!me || !nav) return null;
 
-  const qa = QUICK_ACTION[me.role];
+  const rolePriority = [
+    'schulltech_admin',
+    'client_admin',
+    'management',
+    'internal_auditor',
+    'supervisor',
+    'staff',
+  ];
+  const primaryRole = rolePriority.find((r) => me.roles?.includes(r)) || 'staff';
+  const qa = QUICK_ACTION[primaryRole];
   const dateStr = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
     day: '2-digit',
@@ -75,7 +100,7 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
         <Icon name={prefs.theme === 'light' ? 'moon' : 'sun'} />
       </button>
 
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }} ref={notifRef}>
         <button
           className="icon-btn"
           aria-label="Notifications"

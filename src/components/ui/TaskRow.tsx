@@ -4,24 +4,28 @@ import { useStore, userById } from '@/store/useStore';
 import { effStatus, dueLabel, currentStage } from '@/utils/helpers';
 import { StatusBadge, UrgBadge, ConfBadge } from './Badges';
 
-export const TaskRow = ({ doc, showAssignee = false, extraActions }: { doc: any; showAssignee?: boolean; extraActions?: React.ReactNode }) => {
+export const TaskRow = ({
+  doc,
+  showAssignee = false,
+  extraActions,
+}: {
+  doc: any;
+  showAssignee?: boolean;
+  extraActions?: React.ReactNode;
+}) => {
   const router = useRouter();
   const { users } = useStore();
-  const eff = effStatus(doc);
-  const due = dueLabel(doc.due);
-  const owner = userById(users, doc.owner);
-  const stage = currentStage(doc);
+  const eff =
+    doc.status === 'closed' ? 'Closed' : doc.status === 'in_progress' ? 'In Progress' : 'Pending';
+  const due = { text: 'N/A', late: false }; // Placeholder until Tasks are implemented
+  const owner = doc.createdBy;
+  const stage = null; // Placeholder until WorkflowInstance is loaded
 
-  const agePct = doc.due
-    ? Math.min(
-        100,
-        Math.max(6, Math.round(((Date.now() - doc.created) / (doc.due - doc.created)) * 100)),
-      )
-    : 30;
+  const agePct = 30; // Placeholder
 
   return (
     <div
-      className={`task-row ${eff === 'Overdue' ? 'overdue' : ''}`}
+      className={`task-row ${doc.urgency === 'critical' ? 'overdue' : ''}`}
       tabIndex={0}
       role="button"
       onClick={() => router.push(`/doc/${doc.id}`)}
@@ -33,13 +37,15 @@ export const TaskRow = ({ doc, showAssignee = false, extraActions }: { doc: any;
         <div className="task-title">{doc.title}</div>
         <div className="task-meta">
           <StatusBadge status={eff} />
-          <UrgBadge level={doc.urgency} />
-          <ConfBadge level={doc.confidentiality} />
-          <span>{stage ? '· ' + stage.name : ''}</span>
+          <UrgBadge level={doc.urgency?.charAt(0).toUpperCase() + doc.urgency?.slice(1)} />
+          <ConfBadge
+            level={doc.confidentiality?.charAt(0).toUpperCase() + doc.confidentiality?.slice(1)}
+          />
+          {stage && <span>{stage}</span>}
           {showAssignee ? (
-            <span>· {userById(users, doc.assignee)?.name}</span>
+            <span>· Assignee</span>
           ) : (
-            <span>· from {owner?.name}</span>
+            <span>· Owner ID: {owner?.substring(0, 8)}</span>
           )}
         </div>
       </div>

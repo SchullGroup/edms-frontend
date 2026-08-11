@@ -1,0 +1,138 @@
+// --- API Response Wrappers ---
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T;
+}
+
+export interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PaginatedResponse<T> {
+  success: boolean;
+  message: string;
+  data: T[];
+  pagination: PaginationInfo;
+}
+
+// --- Auth & Users ---
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  status: 'active' | 'inactive' | 'suspended';
+  roles: string[];
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  status: 'active' | 'inactive' | 'suspended';
+  departmentId?: string | null;
+  roles?: { id: string; name: string; description?: string | null }[];
+  preferences?: Record<string, any> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description?: string | null;
+  permissions?: {
+    resource: 'document' | 'cabinet' | 'folder' | 'workflow' | 'audit' | 'user' | 'dashboard';
+    action: 'view' | 'create' | 'edit' | 'delete' | 'route' | 'export' | 'download' | 'print';
+  }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- Documents ---
+
+export interface Document {
+  id: string;
+  title: string;
+  referenceNumber: string;
+  cabinetId: string;
+  folderId?: string | null;
+  documentType?: string | null;
+  status: 'pending' | 'in_progress' | 'on_hold' | 'closed';
+  confidentiality: string; // 'public' | 'internal' | 'confidential' | 'restricted'
+  urgency: string; // 'low' | 'normal' | 'high' | 'critical'
+  isCheckedOut: boolean;
+  archivedAt?: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface DocumentVersion {
+  id: string;
+  documentId: string;
+  versionNumber: number;
+  fileKey: string;
+  fileSize?: number | null;
+  mimeType: string;
+  checksum: string;
+  ocrStatus: 'pending' | 'processing' | 'completed' | 'failed';
+  uploadedBy: string;
+  createdAt: string;
+}
+
+export interface CheckoutLock {
+  id: string;
+  documentId: string;
+  lockedBy: string;
+  lockedAt: string;
+  expectedReturnAt?: string | null;
+}
+
+export interface DocumentMetadataField {
+  fieldId: string;
+  name: string;
+  fieldType: 'text' | 'number' | 'date' | 'select' | 'boolean';
+  isRequired: boolean;
+  options?: string[] | null;
+  displayOrder: number;
+  value?: string | null;
+}
+
+// --- Workflows ---
+
+export interface WorkflowStage {
+  id: string;
+  name: string;
+  role?: string;
+  user_id?: string;
+  sla_hours: number;
+  actions?: ('approve' | 'reject' | 'review' | 'request_changes' | 'close')[];
+}
+
+export interface WorkflowTransition {
+  from: string;
+  to: string;
+}
+
+export interface WorkflowDefinitionJson {
+  stages: WorkflowStage[];
+  transitions: WorkflowTransition[];
+}
+
+export interface WorkflowDefinition {
+  id: string;
+  name: string;
+  description?: string | null;
+  version: number;
+  status: 'draft' | 'published' | 'archived';
+  definition: WorkflowDefinitionJson;
+  createdBy: string;
+  publishedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

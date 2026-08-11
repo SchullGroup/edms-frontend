@@ -1,13 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { AuthUser } from '@/types/models';
 import { SEED, FINDINGS } from './initialData';
 
 export { FINDINGS };
 
-export type AppState = typeof SEED;
+export type AppState = typeof SEED & {
+  isLoading: boolean;
+  error: string | null;
+};
 
 export interface AppStore extends AppState {
-  setSession: (userId: string | null) => void;
+  currentUser: AuthUser | null;
+  setCurrentUser: (user: AuthUser | null) => void;
   resetData: () => void;
   auditAction: (action: string, target: string, detail: string) => void;
   notifyUser: (
@@ -19,7 +24,6 @@ export interface AppStore extends AppState {
   ) => void;
   updateDocumentStatus: (docId: string, status: string) => void;
   updateDocument: (docId: string, updates: any) => void;
-  currentUser?: any;
   setPrefs: (prefs: any) => void;
   updateUser: (userId: string, updates: any) => void;
   addUser: (user: any) => void;
@@ -42,22 +46,29 @@ export interface AppStore extends AppState {
   updateFeatureFlag: (id: string, updates: any) => void;
   updateFinding: (id: string, updates: any) => void;
   addFinding: (f: any) => void;
+
+  // --- Async API Actions (New Pattern) ---
+  fetchDocuments: () => Promise<void>;
 }
+
+import { documentsService } from '@/apis/services/documents.service';
 
 export const useStore = create<AppStore>()(
   persist(
     (set, get) => ({
       ...SEED,
+      isLoading: false,
+      error: null,
       findings: FINDINGS,
-      setSession: (userId) => set({ session: userId }),
+      currentUser: null,
+      setCurrentUser: (user) => set({ currentUser: user }),
       setPrefs: (prefs) => set({ prefs }),
       resetData: () => set(SEED),
       auditAction: (action, target, detail) => {
-        const { session, users, audit } = get();
-        const me = users.find((u) => u.id === session);
+        const { currentUser, audit } = get();
         const newAudit = {
           at: Date.now(),
-          user: me ? me.id : 'system',
+          user: currentUser ? currentUser.id : 'system',
           action,
           target,
           detail,
@@ -100,11 +111,11 @@ export const useStore = create<AppStore>()(
         set({ users: [...users, user] });
       },
       markCircularAck: (circularId) => {
-        const { circulars, session } = get();
-        if (!session) return;
+        const { circulars, currentUser } = get();
+        if (!currentUser) return;
         const newCir = circulars.map((c: any) => 
-          c.id === circularId && !c.ackBy.includes(session) 
-            ? { ...c, ackBy: [...c.ackBy, session] } 
+          c.id === circularId && !c.ackBy.includes(currentUser.id) 
+            ? { ...c, ackBy: [...c.ackBy, currentUser.id] } 
             : c
         );
         set({ circulars: newCir });
@@ -190,6 +201,18 @@ export const useStore = create<AppStore>()(
       addFinding: (f) => {
         const { findings } = get();
         set({ findings: [f, ...(findings || [])] });
+      },
+
+      // --- Async API Actions Implementation ---
+      fetchDocuments: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          // This will call the backend (or simulated mock service)
+          const fetchedDocs = await documentsService.getAll();
+          set({ documents: fetchedDocs as any, isLoading: false });
+        } catch (err: any) {
+          set({ error: err.message || 'Failed to fetch documents', isLoading: false });
+        }
       },
     }),
     {

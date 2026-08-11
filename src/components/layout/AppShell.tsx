@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
+import { routeConfig } from '@/config/routes.config';
 import { useStore } from '@/store/useStore';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useUIStore } from '@/store/useUIStore';
+import { authService } from '@/apis/services/auth.service';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -23,20 +25,72 @@ function lighten(hex: string, amt: number) {
 
 export const AppShell = ({ children }: AppShellProps) => {
   const router = useRouter();
-  const { session, branding, prefs } = useStore();
+  const pathname = usePathname();
+  const { currentUser, branding, prefs } = useStore();
   const { pageTitle } = useUIStore();
   const [collapsed, setCollapsed] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     const val = sessionStorage.getItem('edms-nav-collapsed') === '1';
     setCollapsed(val);
+    setIsMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!session) {
-      router.push('/');
+    // --- Route Guard Logic ---
+    if (!isMounted) return;
+    
+    if (currentUser && pathname && pathname !== '/unauthorized') {
+      let isAllowed = true;
+      let matchedRule = false;
+
+      for (const rule of routeConfig) {
+        let match = false;
+        if (rule.matchType === 'exact') {
+          match = pathname === rule.path;
+        } else if (rule.matchType === 'prefix') {
+          const isExcluded = rule.exclude?.some((ex) => pathname.startsWith(ex));
+          match = pathname.startsWith(rule.path) && !isExcluded;
+        } else if (rule.matchType === 'whitelist') {
+          const isIncluded = rule.include?.some((inc) => pathname.startsWith(inc));
+          match = pathname === rule.path || !!isIncluded;
+        }
+
+        if (match) {
+          matchedRule = true;
+          if (!rule.roles || rule.roles.length === 0) {
+            isAllowed = true;
+          } else {
+            isAllowed = currentUser.roles.some((r) => rule.roles!.includes(r));
+          }
+          break; // Stop at first match
+        }
+      }
+
+      if (matchedRule && !isAllowed) {
+        router.replace('/unauthorized');
+      }
     }
-  }, [session, router]);
+  }, [currentUser, pathname, router, isMounted]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    
+    if (!currentUser) {
+      router.push('/');
+      return;
+    }
+
+    // Verify session in background
+    authService.me().then(res => {
+      // Could optionally update currentUser here if needed
+    }).catch(() => {
+      // interceptor handles the 401, we just need to clear state
+      useStore.getState().setCurrentUser(null);
+      router.push('/');
+    });
+  }, [currentUser, router, isMounted]);
 
   useEffect(() => {
     if (branding && prefs) {
@@ -60,7 +114,7 @@ export const AppShell = ({ children }: AppShellProps) => {
     sessionStorage.setItem('edms-nav-collapsed', next ? '1' : '0');
   };
 
-  if (!session) return null;
+  if (!currentUser) return null;
 
   return (
     <div className={`shell ${collapsed ? 'nav-collapsed' : ''}`}>

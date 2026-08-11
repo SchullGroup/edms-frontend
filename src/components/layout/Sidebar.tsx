@@ -11,11 +11,28 @@ import { useUIStore } from '@/store/useUIStore';
 export const Sidebar = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const { session, users, branding, setSession, resetData } = useStore();
+  const { currentUser, branding, resetData } = useStore();
   const { openModal, addToast } = useUIStore();
   const nav = useNavigation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const me = session ? userById(users, session) : null;
+  const me = currentUser;
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [menuOpen]);
 
   if (!me || !nav) return null;
 
@@ -111,7 +128,7 @@ export const Sidebar = () => {
           <span className="foot-label">Help & support</span>
         </button>
 
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }} ref={menuRef}>
           <button
             className="profile-card"
             aria-label="Account menu"
@@ -129,7 +146,7 @@ export const Sidebar = () => {
 
           {menuOpen && (
             <div className="menu up">
-              <div className="menu-head">{me.roleLabel}</div>
+              <div className="menu-head">{me.roles?.[0] || 'User'}</div>
               <button
                 className="menu-item"
                 onClick={() => {
@@ -160,7 +177,7 @@ export const Sidebar = () => {
               <button
                 className="menu-item danger"
                 onClick={() => {
-                  setSession(null);
+                  useStore.getState().setCurrentUser(null);
                   router.push('/');
                 }}
               >
