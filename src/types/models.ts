@@ -136,3 +136,81 @@ export interface WorkflowDefinition {
   createdAt: string;
   updatedAt: string;
 }
+
+// --- Cabinets ---
+
+export interface CabinetFolder {
+  id: string;
+  name: string;
+}
+
+export interface Cabinet {
+  id: string;
+  name: string;
+  icon?: string | null;
+  folders: CabinetFolder[];
+}
+
+// --- Circulars ---
+
+export interface Circular {
+  id: string;
+  title: string;
+  body: string;
+  published: number;
+  by: string;
+  requiresAck: boolean;
+  ackBy: string[];
+  audience: string;
+  type?: string;
+  urgent?: boolean;
+}
+
+// --- Policies ---
+
+export interface PolicyControl {
+  rule: string;
+  desc: string;
+  enabled: boolean;
+}
+
+export interface PolicyConfidentiality {
+  level: string;
+  requireEncryption: boolean;
+  watermark: boolean;
+  printAllowed: boolean;
+}
+
+export interface PolicyUrgency {
+  level: string;
+  slaHours: number;
+  escalation: string;
+}
+
+export interface Policy {
+  controls: PolicyControl[];
+  confidentiality: PolicyConfidentiality[];
+  urgency: PolicyUrgency[];
+}
+
+// --- Audit ---
+
+export interface AuditLog {
+  at: number;
+  user: string;
+  action: string;
+  target: string;
+  detail: string;
+  tenant: string;
+}
+
+// --- Branding ---
+
+export interface Branding {
+  appName: string;
+  tenantName: string;
+  primary: string;
+  primaryLight: string;
+  accent: string;
+  logoText: string;
+}

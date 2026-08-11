@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api-client';
 import { User, PaginatedResponse, ApiResponse } from '@/types/models';
+import { SEED } from '@/store/initialData';
 
 export interface UserFilters {
   departmentId?: string;
@@ -10,36 +11,48 @@ export interface UserFilters {
 
 export const usersService = {
   getAll: async (params?: UserFilters): Promise<PaginatedResponse<User>> => {
-    const res = await apiClient.get<PaginatedResponse<User>>('/users', { params });
-    return res.data;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    return {
+      success: true,
+      message: 'Fetched users successfully',
+      data: SEED.users as any,
+      pagination: { page: 1, limit: 10, total: SEED.users.length, totalPages: 1 },
+    };
   },
 
   getById: async (id: string): Promise<User> => {
-    const response = await apiClient.get<ApiResponse<User>>(`/users/${id}`);
-    return response.data.data;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const user = SEED.users.find((u) => u.id === id);
+    if (!user) throw new Error('User not found');
+
+    return user as any;
   },
 
   create: async (data: any): Promise<User> => {
-    const response = await apiClient.post<ApiResponse<User>>('/users', data);
-    return response.data.data;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return { ...data, id: `u-${Date.now()}` } as any;
   },
 
   update: async (id: string, updates: Partial<User>): Promise<User> => {
-    const response = await apiClient.patch<ApiResponse<User>>(`/users/${id}`, updates);
-    return response.data.data;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const user = SEED.users.find((u) => u.id === id);
+    return { ...user, ...updates } as any;
   },
 
   delete: async (id: string): Promise<User> => {
-    const response = await apiClient.delete<ApiResponse<User>>(`/users/${id}`);
-    return response.data.data;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const user = SEED.users.find((u) => u.id === id);
+    return user as any;
   },
 
   assignRoles: async (id: string, roleIds: string[]): Promise<User> => {
-    const response = await apiClient.post<ApiResponse<User>>(`/users/${id}/roles`, { roleIds });
-    return response.data.data;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const user = SEED.users.find((u) => u.id === id);
+    return { ...user, roles: roleIds } as any;
   },
 
   removeRole: async (id: string, roleId: string): Promise<void> => {
-    await apiClient.delete(`/users/${id}/roles/${roleId}`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
   },
 };

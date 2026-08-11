@@ -5,14 +5,29 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
+import { useCirculars, useCreateCircular, useUpdateCircular } from '@/apis/hooks/useCirculars';
+import { useUsers } from '@/apis/hooks/useUsers';
 
 export default function CircularsAdminPage() {
-  const { circulars, users, updateCircular, addCircular, auditAction, currentUser } = useStore();
+  const { auditAction, currentUser } = useStore();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+
+  const { data: circularsData, isLoading: isLoadingCirculars } = useCirculars();
+  const { data: usersData } = useUsers();
+
+  const createCircular = useCreateCircular();
+  const updateCircular = useUpdateCircular();
+
+  const circulars = circularsData?.data || [];
+  const users = usersData?.data || [];
 
   useEffect(() => {
     setPageTitle('Circulars Admin');
   }, [setPageTitle]);
+
+  if (isLoadingCirculars) {
+    return <div style={{ padding: '20px' }}>Loading circulars...</div>;
+  }
 
   const handleCompose = (existing?: any) => {
     let title = existing?.title || '';
@@ -26,26 +41,58 @@ export default function CircularsAdminPage() {
       body: (
         <div>
           <div className="field">
-            <label>Title <span className="req">*</span></label>
-            <input className="input" defaultValue={title} placeholder="Circular title" onChange={e => title = e.target.value} />
+            <label>
+              Title <span className="req">*</span>
+            </label>
+            <input
+              className="input"
+              defaultValue={title}
+              placeholder="Circular title"
+              onChange={(e) => (title = e.target.value)}
+            />
           </div>
           <div className="field">
-            <label>Body <span className="req">*</span></label>
-            <textarea className="input" style={{ minHeight: '120px' }} defaultValue={bodyText} placeholder="Write the circular…" onChange={e => bodyText = e.target.value}></textarea>
+            <label>
+              Body <span className="req">*</span>
+            </label>
+            <textarea
+              className="input"
+              style={{ minHeight: '120px' }}
+              defaultValue={bodyText}
+              placeholder="Write the circular…"
+              onChange={(e) => (bodyText = e.target.value)}
+            ></textarea>
           </div>
           <div className="grid cols-2" style={{ gap: '12px' }}>
             <div className="field">
               <label>Audience</label>
-              <select className="input" defaultValue={audience} onChange={e => audience = e.target.value}>
-                {['All Staff', 'Operations', 'Finance', 'Procurement, Finance', 'Supervisors only'].map(a => (
-                  <option key={a} value={a}>{a}</option>
+              <select
+                className="input"
+                defaultValue={audience}
+                onChange={(e) => (audience = e.target.value)}
+              >
+                {[
+                  'All Staff',
+                  'Operations',
+                  'Finance',
+                  'Procurement, Finance',
+                  'Supervisors only',
+                ].map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
                 ))}
               </select>
             </div>
             <div className="field">
               <label>Acknowledgement</label>
               <label className="check">
-                <input type="checkbox" defaultChecked={requiresAck} onChange={e => requiresAck = e.target.checked} /> Require read acknowledgement
+                <input
+                  type="checkbox"
+                  defaultChecked={requiresAck}
+                  onChange={(e) => (requiresAck = e.target.checked)}
+                />{' '}
+                Require read acknowledgement
               </label>
             </div>
           </div>
@@ -62,28 +109,35 @@ export default function CircularsAdminPage() {
               return;
             }
             if (existing) {
-              updateCircular(existing.id, { title, body: bodyText, audience, requiresAck });
-              auditAction('CIRCULAR_EDIT', existing.id, 'Edited ' + title);
-              addToast('Circular updated', 'success');
+              updateCircular.mutate(
+                { id: existing.id, updates: { title, body: bodyText, audience, requiresAck } },
+                {
+                  onSuccess: () => {
+                    auditAction('CIRCULAR_EDIT', existing.id, 'Edited ' + title);
+                    closeModal();
+                  },
+                },
+              );
             } else {
-              const c = { 
-                id: 'cir-' + Date.now(), 
-                title: title.trim(), 
-                body: bodyText.trim(), 
-                published: Date.now(), 
-                by: currentUser?.id, 
-                requiresAck, 
-                ackBy: [], 
-                audience 
+              const c = {
+                title: title.trim(),
+                body: bodyText.trim(),
+                published: Date.now(),
+                by: currentUser?.id,
+                requiresAck,
+                ackBy: [],
+                audience,
               };
-              addCircular(c);
-              auditAction('PUBLISH_CIRCULAR', c.id, 'Published ' + c.title);
-              addToast('Circular published & notifications sent', 'success');
+              createCircular.mutate(c, {
+                onSuccess: (newCirc) => {
+                  auditAction('PUBLISH_CIRCULAR', newCirc.id, 'Published ' + newCirc.title);
+                  closeModal();
+                },
+              });
             }
-            closeModal();
-          }
-        }
-      ]
+          },
+        },
+      ],
     });
   };
 
@@ -105,8 +159,8 @@ export default function CircularsAdminPage() {
             <p className="muted">Everyone has acknowledged.</p>
           )}
           {pending.length > 0 && (
-            <button 
-              className="btn btn-secondary btn-sm mt16" 
+            <button
+              className="btn btn-secondary btn-sm mt16"
               onClick={() => addToast(`Reminders sent to ${pending.length} user(s)`, 'success')}
             >
               Send reminders
@@ -114,36 +168,73 @@ export default function CircularsAdminPage() {
           )}
         </div>
       ),
-      actions: [{ label: 'Close', kind: 'btn-primary' }]
+      actions: [{ label: 'Close', kind: 'btn-primary' }],
     });
   };
 
   const totalUsers = users?.length || 1;
 
   const cols: Column<any>[] = [
-    { key: 'title', label: 'Circular', render: c => (
+    {
+      key: 'title',
+      label: 'Circular',
+      render: (c) => (
         <span>
           <b>{c.title}</b>
           <div className="caption">Audience: {c.audience}</div>
         </span>
-      ) 
+      ),
     },
-    { key: 'published', label: 'Published', sortable: true, render: c => new Date(c.published).toLocaleDateString() },
-    { key: 'ack', label: 'Acknowledgement', render: c => c.requiresAck ? (
-        <div style={{ minWidth: '130px' }}>
-          <div className="caption mb8">{c.ackBy?.length || 0} of {totalUsers} acknowledged</div>
-          <div className={`pbar ${((c.ackBy?.length || 0) / totalUsers) > 0.7 ? 'ok' : 'warn'}`}>
-            <i style={{ width: Math.round(((c.ackBy?.length || 0) / totalUsers) * 100) + '%' }}></i>
+    {
+      key: 'published',
+      label: 'Published',
+      sortable: true,
+      render: (c) => new Date(c.published).toLocaleDateString(),
+    },
+    {
+      key: 'ack',
+      label: 'Acknowledgement',
+      render: (c) =>
+        c.requiresAck ? (
+          <div style={{ minWidth: '130px' }}>
+            <div className="caption mb8">
+              {c.ackBy?.length || 0} of {totalUsers} acknowledged
+            </div>
+            <div className={`pbar ${(c.ackBy?.length || 0) / totalUsers > 0.7 ? 'ok' : 'warn'}`}>
+              <i
+                style={{ width: Math.round(((c.ackBy?.length || 0) / totalUsers) * 100) + '%' }}
+              ></i>
+            </div>
           </div>
-        </div>
-      ) : <span className="badge b-urg-low">FYI only</span>
+        ) : (
+          <span className="badge b-urg-low">FYI only</span>
+        ),
     },
-    { key: 'act', label: '', render: c => (
+    {
+      key: 'act',
+      label: '',
+      render: (c) => (
         <div className="flex g8">
-          <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleCompose(c); }}>Edit</button>
-          <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleTrack(c); }}>Track</button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCompose(c);
+            }}
+          >
+            Edit
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleTrack(c);
+            }}
+          >
+            Track
+          </button>
         </div>
-      ) 
+      ),
     },
   ];
 
@@ -156,7 +247,9 @@ export default function CircularsAdminPage() {
         </div>
         <div className="actions">
           <button className="btn btn-primary" onClick={() => handleCompose()}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}><Icon name="plus" size={15} /></span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '6px' }}>
+              <Icon name="plus" size={15} />
+            </span>
             Compose circular
           </button>
         </div>

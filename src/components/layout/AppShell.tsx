@@ -30,6 +30,13 @@ export const AppShell = ({ children }: AppShellProps) => {
   const { pageTitle } = useUIStore();
   const [collapsed, setCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const unsub = useStore.persist.onFinishHydration(() => setHydrated(true));
+    setHydrated(useStore.persist.hasHydrated());
+    return unsub;
+  }, []);
 
   useEffect(() => {
     const val = sessionStorage.getItem('edms-nav-collapsed') === '1';
@@ -39,8 +46,8 @@ export const AppShell = ({ children }: AppShellProps) => {
 
   useEffect(() => {
     // --- Route Guard Logic ---
-    if (!isMounted) return;
-    
+    if (!isMounted || !hydrated) return;
+
     if (currentUser && pathname && pathname !== '/unauthorized') {
       let isAllowed = true;
       let matchedRule = false;
@@ -75,21 +82,24 @@ export const AppShell = ({ children }: AppShellProps) => {
   }, [currentUser, pathname, router, isMounted]);
 
   useEffect(() => {
-    if (!isMounted) return;
-    
+    if (!isMounted || !hydrated) return;
+
     if (!currentUser) {
       router.push('/');
       return;
     }
 
     // Verify session in background
-    authService.me().then(res => {
-      // Could optionally update currentUser here if needed
-    }).catch(() => {
-      // interceptor handles the 401, we just need to clear state
-      useStore.getState().setCurrentUser(null);
-      router.push('/');
-    });
+    authService
+      .me()
+      .then((res) => {
+        // Could optionally update currentUser here if needed
+      })
+      .catch(() => {
+        // interceptor handles the 401, we just need to clear state
+        useStore.getState().setCurrentUser(null);
+        router.push('/');
+      });
   }, [currentUser, router, isMounted]);
 
   useEffect(() => {
@@ -114,6 +124,7 @@ export const AppShell = ({ children }: AppShellProps) => {
     sessionStorage.setItem('edms-nav-collapsed', next ? '1' : '0');
   };
 
+  if (!hydrated) return null; // Wait for hydration before rendering to prevent flash or bad redirects
   if (!currentUser) return null;
 
   return (
