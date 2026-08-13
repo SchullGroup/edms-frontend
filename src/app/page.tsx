@@ -61,9 +61,9 @@ export default function LoginPage() {
     loginMutation.mutate();
   };
 
-  const autofill = (testEmail: string) => {
+  const autofill = (testEmail: string, testPassword = 'password') => {
     setEmail(testEmail);
-    setPassword('password');
+    setPassword(testPassword);
   };
 
   if (currentUser) return null;
@@ -247,6 +247,63 @@ export default function LoginPage() {
                 className="btn btn-secondary"
                 style={{ fontSize: '12px', padding: '6px 12px' }}
                 onClick={() => autofill('adaeze@schulltech.com')}
+              >
+                Platform Admin
+              </button>
+            </div>
+
+            <div
+              style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                color: 'var(--text-soft)',
+                marginBottom: '12px',
+                marginTop: '16px',
+                textTransform: 'uppercase',
+              }}
+            >
+              Test Accounts (Set 2)
+            </div>
+            <div className="flex g8" style={{ flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => autofill('boyebamiji+staff@schulltech.com', 'Fixture123!')}
+              >
+                Staff
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => autofill('boyebamiji+supervisor@schulltech.com', 'Fixture123!')}
+              >
+                Supervisor
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => autofill('boyebamiji+management@schulltech.com', 'Fixture123!')}
+              >
+                Management
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => autofill('boyebamiji+clientadmin@schulltech.com', 'Fixture123!')}
+              >
+                Client Admin
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => autofill('boyebamiji+auditor@schulltech.com', 'Fixture123!')}
+              >
+                Auditor
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => autofill('boyebamiji+schulltechadmin@schulltech.com', 'Fixture123!')}
               >
                 Platform Admin
               </button>
