@@ -22,12 +22,20 @@ export interface PaginatedResponse<T> {
 
 // --- Auth & Users ---
 
+export type PermissionType =
+  | string
+  | {
+      resource: string;
+      action: string;
+    };
+
 export interface AuthUser {
   id: string;
   email: string;
   name: string;
   status: 'active' | 'inactive' | 'suspended';
   roles: string[];
+  permissions?: PermissionType[];
 }
 
 export interface User {
@@ -37,6 +45,7 @@ export interface User {
   status: 'active' | 'inactive' | 'suspended';
   departmentId?: string | null;
   roles?: { id: string; name: string; description?: string | null }[];
+  permissions?: PermissionType[];
   preferences?: Record<string, any> | null;
   createdAt: string;
   updatedAt: string;

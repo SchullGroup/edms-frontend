@@ -1,7 +1,9 @@
 import { useStore, userById } from '@/store/useStore';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export const useNavigation = () => {
   const { currentUser, documents, notifications, circulars, findings } = useStore();
+  const { hasPermission } = usePermissions();
   const me = currentUser;
 
   if (!me) return null;
@@ -216,6 +218,27 @@ export const useNavigation = () => {
     'staff',
   ];
   const primaryRole = rolePriority.find((r) => me.roles?.includes(r)) || 'staff';
+  const navTemplate = NAV[primaryRole] || NAV['staff'];
 
-  return NAV[primaryRole] || NAV['staff'];
+  // Filter sections and items based on granular permissions if provided
+  const filteredNav = {
+    ...navTemplate,
+    sections: navTemplate.sections
+      .map((section: any) => ({
+        ...section,
+        items: section.items.filter((item: any) => {
+          if (!item.permissions || item.permissions.length === 0) return true;
+          return item.permissions.every((p: any) => {
+            if (typeof p === 'string') {
+              const [res, act] = p.split(':');
+              return hasPermission(res, act || '*');
+            }
+            return hasPermission(p.resource, p.action);
+          });
+        }),
+      }))
+      .filter((section: any) => section.items.length > 0),
+  };
+
+  return filteredNav;
 };

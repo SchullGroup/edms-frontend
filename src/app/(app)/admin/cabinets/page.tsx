@@ -7,17 +7,19 @@ import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
 import { useCabinets, useCreateCabinet, useUpdateCabinet } from '@/apis/hooks/useCabinets';
 import { useDocuments } from '@/apis/hooks/useDocuments';
+import { Spinner } from '@/components/common/Spinner';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 
 export default function CabinetDesignerPage() {
   const { auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
-  const { data: cabinetsData, isLoading: isLoadingCabinets } = useCabinets();
+  const { data: cabinetsResponse, isLoading, isError, refetch } = useCabinets();
   const { data: documentsData } = useDocuments();
   const createCabinet = useCreateCabinet();
   const updateCabinet = useUpdateCabinet();
 
-  const cabinets = cabinetsData?.data || [];
+  const cabinets = cabinetsResponse?.data || [];
   const documents = documentsData?.data || [];
 
   const [activeCabId, setActiveCabId] = useState<string | undefined>(undefined);
@@ -56,9 +58,8 @@ export default function CabinetDesignerPage() {
     setPageTitle('Cabinet Designer');
   }, [setPageTitle]);
 
-  if (isLoadingCabinets) {
-    return <div style={{ padding: '20px' }}>Loading cabinets...</div>;
-  }
+  if (isLoading) return <Spinner text="Loading cabinets..." />;
+  if (isError) return <ErrorMessage message="Failed to load cabinets." retry={refetch} />;
 
   if (!activeCab) return <div style={{ padding: '20px' }}>No cabinets found.</div>;
 

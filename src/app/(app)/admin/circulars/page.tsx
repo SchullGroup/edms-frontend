@@ -6,13 +6,15 @@ import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
 import { useCirculars, useCreateCircular, useUpdateCircular } from '@/apis/hooks/useCirculars';
+import { Spinner } from '@/components/common/Spinner';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { useUsers } from '@/apis/hooks/useUsers';
 
 export default function CircularsAdminPage() {
   const { auditAction, currentUser } = useStore();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
 
-  const { data: circularsData, isLoading: isLoadingCirculars } = useCirculars();
+  const { data: circularsData, isLoading, isError, refetch } = useCirculars();
   const { data: usersData } = useUsers();
 
   const createCircular = useCreateCircular();
@@ -25,9 +27,8 @@ export default function CircularsAdminPage() {
     setPageTitle('Circulars Admin');
   }, [setPageTitle]);
 
-  if (isLoadingCirculars) {
-    return <div style={{ padding: '20px' }}>Loading circulars...</div>;
-  }
+  if (isLoading) return <Spinner text="Loading circulars..." />;
+  if (isError) return <ErrorMessage message="Failed to load circulars." retry={refetch} />;
 
   const handleCompose = (existing?: any) => {
     let title = existing?.title || '';

@@ -1,8 +1,10 @@
+import { PermissionType } from '@/types/models';
+
 export interface RouteRule {
   path: string;
   matchType: 'exact' | 'prefix' | 'whitelist';
   roles?: string[];
-  permissions?: string[];
+  permissions?: PermissionType[];
   exclude?: string[];
   include?: string[];
 }

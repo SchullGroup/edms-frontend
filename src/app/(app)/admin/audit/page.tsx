@@ -5,11 +5,13 @@ import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { useAuditLogs } from '@/apis/hooks/useAudit';
 import { useUsers } from '@/apis/hooks/useUsers';
+import { Spinner } from '@/components/common/Spinner';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 
 export default function TenantAuditPage() {
   const { setPageTitle } = useUIStore();
 
-  const { data: auditData, isLoading: isLoadingAudit } = useAuditLogs();
+  const { data: auditData, isLoading: isLoadingAudit, isError: isErrorAudit, refetch: refetchAudit } = useAuditLogs();
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
 
   const audit = auditData?.data || [];
@@ -24,7 +26,11 @@ export default function TenantAuditPage() {
   }, [setPageTitle]);
 
   if (isLoadingAudit || isLoadingUsers) {
-    return <div style={{ padding: '20px' }}>Loading audit logs...</div>;
+    return <Spinner text="Loading audit logs..." />;
+  }
+  
+  if (isErrorAudit) {
+    return <ErrorMessage message="Failed to load audit logs." retry={refetchAudit} />;
   }
 
   const rows = audit

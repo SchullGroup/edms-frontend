@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { Spinner } from '@/components/common/Spinner';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { Icon } from '@/components/ui/Icons';
 import { useBranding, useUpdateBranding } from '@/apis/hooks/useBranding';
 
@@ -10,7 +12,7 @@ export default function BrandingPage() {
   const { auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
 
-  const { data: brandingData, isLoading } = useBranding();
+  const { data: brandingData, isLoading, isError, refetch } = useBranding();
   const updateBranding = useUpdateBranding();
 
   const defaultB = {
@@ -32,7 +34,7 @@ export default function BrandingPage() {
   }, [brandingData]);
 
   useEffect(() => {
-    setPageTitle('Branding');
+    setPageTitle('Theme & Branding');
   }, [setPageTitle]);
 
   const PRESETS = [
@@ -139,9 +141,8 @@ export default function BrandingPage() {
     });
   };
 
-  if (isLoading) {
-    return <div style={{ padding: '20px' }}>Loading branding...</div>;
-  }
+  if (isLoading) return <Spinner text="Loading branding..." />;
+  if (isError) return <ErrorMessage message="Failed to load branding." retry={refetch} />;
 
   return (
     <div>

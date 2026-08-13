@@ -5,6 +5,8 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { ConfBadge, UrgBadge } from '@/components/ui/Badges';
+import { Spinner } from '@/components/common/Spinner';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 import {
   usePolicies,
   useUpdatePolicyConfidentiality,
@@ -16,7 +18,7 @@ export default function PoliciesPage() {
   const { auditAction } = useStore();
   const { setPageTitle, addToast } = useUIStore();
 
-  const { data: policiesData, isLoading } = usePolicies();
+  const { data: policiesData, isLoading, isError, refetch } = usePolicies();
   const updatePolicyConfidentiality = useUpdatePolicyConfidentiality();
   const updatePolicyUrgency = useUpdatePolicyUrgency();
   const updatePolicyControl = useUpdatePolicyControl();
@@ -30,7 +32,11 @@ export default function PoliciesPage() {
   }, [setPageTitle]);
 
   if (isLoading) {
-    return <div style={{ padding: '20px' }}>Loading policies...</div>;
+    return <Spinner text="Loading policies..." />;
+  }
+
+  if (isError) {
+    return <ErrorMessage message="Failed to load policies." retry={refetch} />;
   }
 
   const handleConfToggle = (level: string, key: string, value: boolean) => {

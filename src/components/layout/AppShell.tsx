@@ -8,6 +8,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useUIStore } from '@/store/useUIStore';
 import { authService } from '@/apis/services/auth.service';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -31,6 +32,7 @@ export const AppShell = ({ children }: AppShellProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const { hasPermission } = usePermissions();
 
   useEffect(() => {
     const unsub = useStore.persist.onFinishHydration(() => setHydrated(true));
@@ -66,11 +68,24 @@ export const AppShell = ({ children }: AppShellProps) => {
 
         if (match) {
           matchedRule = true;
+          // Check role first
           if (!rule.roles || rule.roles.length === 0) {
             isAllowed = true;
           } else {
             isAllowed = currentUser.roles.some((r) => rule.roles!.includes(r));
           }
+
+          // Then check granular permissions if required
+          if (isAllowed && rule.permissions && rule.permissions.length > 0) {
+            isAllowed = rule.permissions.every((p) => {
+              if (typeof p === 'string') {
+                const [res, act] = p.split(':');
+                return hasPermission(res, act || '*');
+              }
+              return hasPermission(p.resource, p.action);
+            });
+          }
+
           break; // Stop at first match
         }
       }
