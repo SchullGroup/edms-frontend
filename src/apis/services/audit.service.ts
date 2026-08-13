@@ -13,4 +13,9 @@ export const auditService = {
       pagination: { page: 1, limit: 10, total: SEED.audit.length, totalPages: 1 },
     };
   },
+
+  logAction: async (action: string, target: string, detail: string): Promise<any> => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return { success: true, message: 'Audit logged successfully' };
+  },
 };

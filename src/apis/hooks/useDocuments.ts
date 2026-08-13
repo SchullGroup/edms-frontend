@@ -52,6 +52,23 @@ export function useDocumentVersions(id: string) {
   });
 }
 
+export function useUpdateDocument() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<Document> }) =>
+      documentsService.update(id, updates),
+    onSuccess: (data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: documentKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to update document', 'error');
+    },
+  });
+}
+
 export function useCheckoutDocument() {
   const queryClient = useQueryClient();
   const { addToast } = useUIStore.getState();

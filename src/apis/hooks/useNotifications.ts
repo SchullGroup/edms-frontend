@@ -27,3 +27,19 @@ export const useMarkAllNotificationsRead = () => {
     },
   });
 };
+
+export const useSendNotification = () => {
+  return useMutation({
+    mutationFn: ({
+      userId,
+      type,
+      message,
+      docId,
+    }: {
+      userId: string;
+      type: string;
+      message: string;
+      docId?: string;
+    }) => notificationsService.send(userId, type, message, docId),
+  });
+};

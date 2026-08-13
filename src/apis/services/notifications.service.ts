@@ -23,4 +23,9 @@ export const notificationsService = {
     await new Promise((resolve) => setTimeout(resolve, 400));
     return { success: true, message: 'All notifications marked as read' };
   },
+
+  send: async (userId: string, type: string, message: string, docId?: string): Promise<any> => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return { success: true, message: 'Notification sent' };
+  },
 };

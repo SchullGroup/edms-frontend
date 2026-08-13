@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { auditService } from '@/apis/services/audit.service';
 
 export const auditKeys = {
@@ -11,5 +11,16 @@ export function useAuditLogs() {
   return useQuery({
     queryKey: auditKeys.list(),
     queryFn: () => auditService.getAll(),
+  });
+}
+
+export function useCreateAuditLog() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ action, target, detail }: { action: string; target: string; detail: string }) =>
+      auditService.logAction(action, target, detail),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: auditKeys.all });
+    },
   });
 }
