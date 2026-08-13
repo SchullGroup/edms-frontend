@@ -29,7 +29,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const { data: policiesData, isLoading: isLoadingPolicies } = usePolicies();
   const cabinets = cabinetsData?.data || [];
   const users = usersData?.data || [];
-  const policies = policiesData?.data;
+  const policies = policiesData;
 
   const updateDocument = useUpdateDocument();
   const createAuditLog = useCreateAuditLog();
@@ -59,10 +59,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     : null;
 
   useEffect(() => {
-    if (doc) {
+    if (doc?.title) {
       setPageTitle(doc.title);
     }
-  }, [doc, setPageTitle]);
+  }, [doc?.title, setPageTitle]);
 
   if (!doc) {
     return (

@@ -4,6 +4,11 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { useDocuments, useUpdateDocument } from '@/apis/hooks/useDocuments';
+import { useUsers } from '@/apis/hooks/useUsers';
+import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useCreateAuditLog } from '@/apis/hooks/useAudit';
+import { Spinner } from '@/components/common/Spinner';
 import { Icon } from '@/components/ui/Icons';
 import { Table, Column } from '@/components/ui/Table';
 import { Avatar } from '@/components/ui/Avatar';
@@ -16,14 +21,28 @@ const TEAM = ['u-chika', 'u-ngozi', 'u-tunde', 'u-amara', 'u-seun'];
 
 export default function SupervisorDashboard() {
   const router = useRouter();
-  const { documents, users, cabinets } = useStore();
   const { setPageTitle, openModal, closeModal, openDrawer, closeDrawer, addToast } = useUIStore();
+
+  const { data: docsData, isLoading: isLoadingDocs } = useDocuments();
+  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const { data: cabsData, isLoading: isLoadingCabs } = useCabinets();
+
+  const documents = docsData?.data || [];
+  const users = usersData?.data || [];
+  const cabinets = cabsData?.data || [];
+
+  const updateDocument = useUpdateDocument();
+  const createAuditLog = useCreateAuditLog();
 
   useEffect(() => {
     setPageTitle('Team Overview');
   }, [setPageTitle]);
 
-  const teamDocs = documents.filter((d) => TEAM.includes(d.assignee) || d.assignee === 'u-david');
+  if (isLoadingDocs || isLoadingUsers || isLoadingCabs) return <Spinner />;
+
+  const teamDocs = documents.filter(
+    (d: any) => TEAM.includes(d.assignee as string) || d.assignee === 'u-david',
+  );
   const count = (arr: any[], st: string) => arr.filter((d) => effStatus(d) === st).length;
 
   const tiles = [
@@ -31,7 +50,7 @@ export default function SupervisorDashboard() {
     { label: 'In Progress', val: count(teamDocs, 'In Progress'), cls: 't-progress', ico: 'pulse' },
     {
       label: 'Closed (30d)',
-      val: teamDocs.filter((d) => d.status === 'Closed').length,
+      val: teamDocs.filter((d) => d.status === 'closed').length,
       cls: 't-closed',
       ico: 'check',
     },
@@ -44,11 +63,11 @@ export default function SupervisorDashboard() {
     return {
       uid,
       name: u?.name || 'Unknown',
-      dept: u?.dept || '',
+      dept: (u as any)?.departmentId || '',
       pending: count(md, 'Pending'),
       progress: count(md, 'In Progress'),
       overdue: count(md, 'Overdue'),
-      closed: md.filter((d) => d.status === 'Closed').length,
+      closed: md.filter((d) => d.status === 'closed').length,
       total: md.length,
     };
   });
@@ -56,7 +75,7 @@ export default function SupervisorDashboard() {
   const byCab = cabinets
     .map((c) => ({
       label: c.name,
-      value: teamDocs.filter((d) => d.cabinet === c.id && d.status !== 'Closed').length,
+      value: teamDocs.filter((d) => d.cabinetId === c.id && d.status !== 'closed').length,
       color: 'var(--brand-primary-light)',
       onClick: () => router.push(`/cabinets?cab=${c.id}`),
     }))
@@ -76,17 +95,28 @@ export default function SupervisorDashboard() {
             <input className="input" disabled value={currentAssigneeUser?.name || 'Unassigned'} />
           </div>
           <div className="field mb12">
-            <label>New Assignee <span className="req">*</span></label>
-            <select className="input" onChange={e => newAssignee = e.target.value}>
+            <label>
+              New Assignee <span className="req">*</span>
+            </label>
+            <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select team member...</option>
-              {users.filter(u => u.status === 'Active' && u.id !== doc.assignee).map(u => (
-                <option key={u.id} value={u.id}>{u.name} — {u.roleLabel} ({u.dept})</option>
-              ))}
+              {users
+                .filter((u) => u.status === 'active' && u.id !== doc.assignee)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} — {(u as any).roleLabel || (u as any).role || u.roles?.[0]} (
+                    {(u as any).departmentId || 'System'})
+                  </option>
+                ))}
             </select>
           </div>
           <div className="field">
             <label>Handover Note</label>
-            <input className="input" placeholder="Optional handover note" onChange={e => note = e.target.value} />
+            <input
+              className="input"
+              placeholder="Optional handover note"
+              onChange={(e) => (note = e.target.value)}
+            />
           </div>
         </div>
       ),
@@ -101,21 +131,27 @@ export default function SupervisorDashboard() {
               return;
             }
             const prev = doc.assignee;
-            const newUser = userById(users, newAssignee);
-            useStore.getState().updateDocument(doc.id, { assignee: newAssignee });
-            useStore.getState().auditAction('REASSIGN', doc.id, `Reassigned from ${userById(users, prev)?.name} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`);
+            const newUser = userById(users, newAssignee as string);
+
+            updateDocument.mutate({ id: doc.id, updates: { assignee: newAssignee } });
+            createAuditLog.mutate({
+              action: 'REASSIGN',
+              target: doc.id,
+              detail: `Reassigned from ${userById(users, prev as string)?.name} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`,
+            });
+
             addToast(`Reassigned to ${newUser?.name}`, 'success');
             closeModal();
             if (onDone) onDone();
-          }
-        }
-      ]
+          },
+        },
+      ],
     });
   };
 
   const handleRowClick = (r: any) => {
     const member = userById(users, r.uid);
-    const mDocs = documents.filter((d) => d.assignee === r.uid && d.status !== 'Closed');
+    const mDocs = documents.filter((d) => d.assignee === r.uid && d.status !== 'closed');
 
     openDrawer({
       title: `${r.name} — open items`,
@@ -125,7 +161,9 @@ export default function SupervisorDashboard() {
             <Avatar user={{ name: r.name }} />
             <div>
               <b style={{ fontSize: '14px', color: 'var(--ink)' }}>{r.name}</b>
-              <div className="caption">{member?.roleLabel || 'Staff Officer'} · {r.dept}</div>
+              <div className="caption">
+                {(member as any)?.roleLabel || 'Staff Officer'} · {r.dept}
+              </div>
             </div>
           </div>
 
@@ -143,12 +181,20 @@ export default function SupervisorDashboard() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
                   }}
-                  onClick={() => { closeDrawer(); router.push(`/doc/${d.id}`); }}
+                  onClick={() => {
+                    closeDrawer();
+                    router.push(`/doc/${d.id}`);
+                  }}
                 >
                   <div className="task-main">
-                    <div className="task-title" style={{ fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}>{d.title}</div>
+                    <div
+                      className="task-title"
+                      style={{ fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}
+                    >
+                      {d.title}
+                    </div>
                     <div className="task-meta flex aic g8">
                       <StatusBadge status={effStatus(d)} />
                       <UrgBadge level={d.urgency} />
@@ -175,7 +221,7 @@ export default function SupervisorDashboard() {
             </div>
           )}
         </div>
-      )
+      ),
     });
   };
 
