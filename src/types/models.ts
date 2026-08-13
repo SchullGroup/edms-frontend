@@ -78,6 +78,8 @@ export interface Document {
   isCheckedOut: boolean;
   archivedAt?: string | null;
   createdBy: string;
+  assignee?: string | null;
+  dueDate?: string | null;
   createdAt: string;
 }
 

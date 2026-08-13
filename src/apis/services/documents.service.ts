@@ -16,6 +16,7 @@ export interface DocumentFilters {
   urgency?: 'low' | 'normal' | 'high' | 'critical';
   documentType?: string;
   createdBy?: string;
+  assignee?: string;
   includeArchived?: 'true' | 'false';
   page?: number;
   limit?: number;

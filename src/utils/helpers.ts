@@ -1,13 +1,14 @@
 export function effStatus(doc: any) {
   if (doc.status === 'Closed') return 'Closed';
   if (doc.status === 'On Hold') return 'On Hold';
-  if (doc.due && Date.now() > doc.due) return 'Overdue';
+  if (doc.dueDate && Date.now() > Date.parse(doc.dueDate)) return 'Overdue';
   return doc.status; // Pending, In Progress
 }
 
-export function dueLabel(ts: number | null) {
+export function dueLabel(ts: string | number | null | undefined) {
   if (!ts) return { text: 'No due date', late: false };
-  const d = Math.round((ts - Date.now()) / 86400000);
+  const ms = typeof ts === 'string' ? Date.parse(ts) : ts;
+  const d = Math.round((ms - Date.now()) / 86400000);
   if (d < 0) return { text: `${Math.abs(d)}d overdue`, late: true };
   if (d === 0) return { text: 'Due today', late: false };
   return { text: `Due in ${d}d`, late: false };
