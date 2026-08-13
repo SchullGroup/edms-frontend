@@ -22,12 +22,20 @@ export interface PaginatedResponse<T> {
 
 // --- Auth & Users ---
 
+export type PermissionType =
+  | string
+  | {
+      resource: string;
+      action: string;
+    };
+
 export interface AuthUser {
   id: string;
   email: string;
   name: string;
   status: 'active' | 'inactive' | 'suspended';
   roles: string[];
+  permissions?: PermissionType[];
 }
 
 export interface User {
@@ -37,6 +45,7 @@ export interface User {
   status: 'active' | 'inactive' | 'suspended';
   departmentId?: string | null;
   roles?: { id: string; name: string; description?: string | null }[];
+  permissions?: PermissionType[];
   preferences?: Record<string, any> | null;
   createdAt: string;
   updatedAt: string;
@@ -69,6 +78,8 @@ export interface Document {
   isCheckedOut: boolean;
   archivedAt?: string | null;
   createdBy: string;
+  assignee?: string | null;
+  dueDate?: string | null;
   createdAt: string;
 }
 
@@ -135,4 +146,82 @@ export interface WorkflowDefinition {
   publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// --- Cabinets ---
+
+export interface CabinetFolder {
+  id: string;
+  name: string;
+}
+
+export interface Cabinet {
+  id: string;
+  name: string;
+  icon?: string | null;
+  folders: CabinetFolder[];
+}
+
+// --- Circulars ---
+
+export interface Circular {
+  id: string;
+  title: string;
+  body: string;
+  published: number;
+  by: string;
+  requiresAck: boolean;
+  ackBy: string[];
+  audience: string;
+  type?: string;
+  urgent?: boolean;
+}
+
+// --- Policies ---
+
+export interface PolicyControl {
+  rule: string;
+  desc: string;
+  enabled: boolean;
+}
+
+export interface PolicyConfidentiality {
+  level: string;
+  requireEncryption: boolean;
+  watermark: boolean;
+  printAllowed: boolean;
+}
+
+export interface PolicyUrgency {
+  level: string;
+  slaHours: number;
+  escalation: string;
+}
+
+export interface Policy {
+  controls: PolicyControl[];
+  confidentiality: PolicyConfidentiality[];
+  urgency: PolicyUrgency[];
+}
+
+// --- Audit ---
+
+export interface AuditLog {
+  at: number;
+  user: string;
+  action: string;
+  target: string;
+  detail: string;
+  tenant: string;
+}
+
+// --- Branding ---
+
+export interface Branding {
+  appName: string;
+  tenantName: string;
+  primary: string;
+  primaryLight: string;
+  accent: string;
+  logoText: string;
 }

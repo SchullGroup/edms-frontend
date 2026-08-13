@@ -4,6 +4,10 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, userById, effStatus } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { useDocuments, useUpdateDocument } from '@/apis/hooks/useDocuments';
+import { useUsers } from '@/apis/hooks/useUsers';
+import { useCreateAuditLog } from '@/apis/hooks/useAudit';
+import { Spinner } from '@/components/common/Spinner';
 import { HBarChart } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
@@ -11,19 +15,30 @@ import { StatusBadge } from '@/components/ui/Badges';
 
 export default function BottlenecksPage() {
   const router = useRouter();
-  const { documents, users, session, auditAction, updateDocument } = useStore();
+  const { currentUser } = useStore();
+  const session = currentUser?.id;
+
+  const { data: docsData, isLoading: isLoadingDocs } = useDocuments();
+  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const documents = docsData?.data || [];
+  const users = usersData?.data || [];
+
+  const updateDocument = useUpdateDocument();
+  const createAuditLog = useCreateAuditLog();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
 
   useEffect(() => {
     setPageTitle('Bottlenecks & Ageing');
   }, [setPageTitle]);
 
+  if (isLoadingDocs || isLoadingUsers) return <Spinner />;
+
   const teamDocs = documents; // mock team docs
-  const open = teamDocs.filter(d => d.status !== 'Closed');
+  const open = teamDocs.filter(d => d.status !== 'closed');
   const aged = open.map(d => ({
     d,
-    ageDays: Math.floor((Date.now() - d.created) / 86400000),
-    stage: (d.workflow.find((s: any) => s.state === 'current') || {}).name || '—',
+    ageDays: Math.floor((Date.now() - (d.createdAt ? new Date(d.createdAt).getTime() : Date.now())) / 86400000),
+    stage: ((d as any).workflow?.find((s: any) => s.state === 'current') || {}).name || '—',
     overdue: effStatus(d) === 'Overdue'
   })).sort((a, b) => b.ageDays - a.ageDays);
 
@@ -49,14 +64,14 @@ export default function BottlenecksPage() {
         <div>
           <div className="field">
             <label>Current assignee</label>
-            <input className="input" disabled value={userById(users, d.assignee)?.name || ''} />
+            <input className="input" disabled value={userById(users, d.assignee as string)?.name || ''} />
           </div>
           <div className="field">
             <label>New assignee</label>
             <select className="input" onChange={e => newAssignee = e.target.value}>
               <option value="">Select user...</option>
-              {users.filter(u => u.status === 'Active' && u.id !== d.assignee).map(u => (
-                <option key={u.id} value={u.id}>{u.name} — {u.roleLabel}</option>
+              {users.filter(u => u.status === 'active' && u.id !== d.assignee).map(u => (
+                <option key={u.id} value={u.id}>{u.name} — {(u as any).roleLabel || (u as any).role || u.roles?.[0]}</option>
               ))}
             </select>
           </div>
@@ -77,10 +92,13 @@ export default function BottlenecksPage() {
               return;
             }
             const prev = d.assignee;
-            updateDocument(d.id, { assignee: newAssignee });
-            const me = userById(users, session || '');
-            const name = userById(users, newAssignee)?.name;
-            auditAction('REASSIGN', d.id, `Reassigned from ${userById(users, prev)?.name} to ${name}`);
+            updateDocument.mutate({ id: d.id, updates: { assignee: newAssignee } });
+            const name = userById(users, newAssignee as string)?.name;
+            createAuditLog.mutate({
+              action: 'REASSIGN',
+              target: d.id,
+              detail: `Reassigned from ${userById(users, prev as string)?.name} to ${name}`
+            });
             addToast('Document reassigned to ' + name, 'success');
             closeModal();
           }
@@ -92,7 +110,7 @@ export default function BottlenecksPage() {
   const cols: Column<any>[] = [
     { key: 'title', label: 'Document', render: r => <b>{r.d.title}</b> },
     { key: 'stage', label: 'Stuck at stage' },
-    { key: 'assignee', label: 'Assignee', render: r => <span>{userById(users, r.d.assignee)?.name}</span> },
+    { key: 'assignee', label: 'Assignee', render: r => <span>{userById(users, r.d.assignee as string)?.name}</span> },
     { key: 'ageDays', label: 'Age', sortable: true, render: r => <span style={r.ageDays > 7 ? { color: 'var(--status-overdue)', fontWeight: 800 } : {}}>{r.ageDays}d</span> },
     { key: 'status', label: 'Status', render: r => <StatusBadge status={effStatus(r.d)} /> },
     { key: 'act', label: '', render: r => <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleReassign(r.d); }}>Reassign</button> },

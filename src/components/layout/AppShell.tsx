@@ -8,6 +8,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useUIStore } from '@/store/useUIStore';
 import { authService } from '@/apis/services/auth.service';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -30,6 +31,14 @@ export const AppShell = ({ children }: AppShellProps) => {
   const { pageTitle } = useUIStore();
   const [collapsed, setCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const { hasPermission } = usePermissions();
+
+  useEffect(() => {
+    const unsub = useStore.persist.onFinishHydration(() => setHydrated(true));
+    setHydrated(useStore.persist.hasHydrated());
+    return unsub;
+  }, []);
 
   useEffect(() => {
     const val = sessionStorage.getItem('edms-nav-collapsed') === '1';
@@ -39,8 +48,8 @@ export const AppShell = ({ children }: AppShellProps) => {
 
   useEffect(() => {
     // --- Route Guard Logic ---
-    if (!isMounted) return;
-    
+    if (!isMounted || !hydrated) return;
+
     if (currentUser && pathname && pathname !== '/unauthorized') {
       let isAllowed = true;
       let matchedRule = false;
@@ -59,11 +68,24 @@ export const AppShell = ({ children }: AppShellProps) => {
 
         if (match) {
           matchedRule = true;
+          // Check role first
           if (!rule.roles || rule.roles.length === 0) {
             isAllowed = true;
           } else {
             isAllowed = currentUser.roles.some((r) => rule.roles!.includes(r));
           }
+
+          // Then check granular permissions if required
+          if (isAllowed && rule.permissions && rule.permissions.length > 0) {
+            isAllowed = rule.permissions.every((p) => {
+              if (typeof p === 'string') {
+                const [res, act] = p.split(':');
+                return hasPermission(res, act || '*');
+              }
+              return hasPermission(p.resource, p.action);
+            });
+          }
+
           break; // Stop at first match
         }
       }
@@ -75,21 +97,24 @@ export const AppShell = ({ children }: AppShellProps) => {
   }, [currentUser, pathname, router, isMounted]);
 
   useEffect(() => {
-    if (!isMounted) return;
-    
+    if (!isMounted || !hydrated) return;
+
     if (!currentUser) {
       router.push('/');
       return;
     }
 
     // Verify session in background
-    authService.me().then(res => {
-      // Could optionally update currentUser here if needed
-    }).catch(() => {
-      // interceptor handles the 401, we just need to clear state
-      useStore.getState().setCurrentUser(null);
-      router.push('/');
-    });
+    authService
+      .me()
+      .then((res) => {
+        // Could optionally update currentUser here if needed
+      })
+      .catch(() => {
+        // interceptor handles the 401, we just need to clear state
+        useStore.getState().setCurrentUser(null);
+        router.push('/');
+      });
   }, [currentUser, router, isMounted]);
 
   useEffect(() => {
@@ -114,6 +139,7 @@ export const AppShell = ({ children }: AppShellProps) => {
     sessionStorage.setItem('edms-nav-collapsed', next ? '1' : '0');
   };
 
+  if (!hydrated) return null; // Wait for hydration before rendering to prevent flash or bad redirects
   if (!currentUser) return null;
 
   return (

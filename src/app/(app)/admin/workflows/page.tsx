@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useWorkflows, useUpdateWorkflow, useCreateWorkflow } from '@/apis/hooks/useWorkflows';
+import { useWorkflows, useUpdateWorkflow, useCreateWorkflow, usePublishWorkflow } from '@/apis/hooks/useWorkflows';
 
 const NODE_TYPES = [
   ['start', 'Start'],
@@ -26,6 +26,7 @@ export default function WorkflowDesignerPage() {
 
   const updateWfMutation = useUpdateWorkflow();
   const createWfMutation = useCreateWorkflow();
+  const publishWfMutation = usePublishWorkflow();
 
   const [wfId, setWfId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -121,10 +122,12 @@ export default function WorkflowDesignerPage() {
   if (!wf) return null;
 
   const handlePublish = () => {
-    updateWorkflow(wf.id, { version: wf.version + 1, status: 'published' });
-    setDirty(false);
-    auditAction('WORKFLOW_PUBLISH', wf.id, `Published ${wf.name} v${wf.version + 1}`);
-    addToast(`${wf.name} v${wf.version + 1} published`, 'success');
+    publishWfMutation.mutate(wf.id, {
+      onSuccess: () => {
+        setDirty(false);
+        auditAction('WORKFLOW_PUBLISH', wf.id, `Published ${wf.name}`);
+      }
+    });
   };
 
   const handleClone = () => {

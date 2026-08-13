@@ -1,15 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
 
 const DEPTS = ['Operations', 'Finance', 'Legal', 'Procurement', 'Audit & Compliance'];
 
 export default function ReportsExportPage() {
-  const { auditAction } = useStore();
+  const createAuditLog = useCreateAuditLog();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
 
   const [type, setType] = useState('Throughput summary');
@@ -29,7 +29,7 @@ export default function ReportsExportPage() {
 
   const handleRunReport = () => {
     addToast('Export simulated', 'success');
-    auditAction('REPORT_EXPORT', 'Reports', `Ran “${type}” (${dept}, ${range})`);
+    createAuditLog.mutate({ action: 'REPORT_EXPORT', target: 'Reports', detail: `Ran “${type}” (${dept}, ${range})` });
   };
 
   const handleScheduleReport = () => {
@@ -60,7 +60,7 @@ export default function ReportsExportPage() {
           label: 'Schedule',
           kind: 'btn-primary',
           onClick: () => {
-            auditAction('REPORT_SCHEDULE', 'Reports', 'Scheduled ' + type);
+            createAuditLog.mutate({ action: 'REPORT_SCHEDULE', target: 'Reports', detail: 'Scheduled ' + type });
             addToast('Report scheduled', 'success');
             closeModal();
           }
@@ -80,7 +80,7 @@ export default function ReportsExportPage() {
           onClick={(e) => { 
             e.stopPropagation(); 
             addToast(`“${r.name}” queued — you’ll be emailed the export`, 'success'); 
-            auditAction('REPORT_RUN', 'Reports', 'Ran ' + r.name); 
+            createAuditLog.mutate({ action: 'REPORT_RUN', target: 'Reports', detail: 'Ran ' + r.name }); 
           }}
         >
           Run now

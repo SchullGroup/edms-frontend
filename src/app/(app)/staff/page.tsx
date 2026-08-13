@@ -5,9 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useDocuments } from '@/apis/hooks/useDocuments';
+import { useNotifications, useMarkNotificationRead } from '@/apis/hooks/useNotifications';
 import { Icon } from '@/components/ui/Icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TaskRow } from '@/components/ui/TaskRow';
+import { Spinner } from '@/components/common/Spinner';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { effStatus, timeAgo, fmtDate } from '@/utils/helpers';
 
 const URG_ORDER: Record<string, number> = { Critical: 0, High: 1, Normal: 2, Low: 3 };
@@ -49,7 +52,7 @@ const Donut = ({ value, color, label }: { value: number; color: string; label: s
 
 export default function StaffDashboard() {
   const router = useRouter();
-  const { currentUser, notifications } = useStore();
+  const { currentUser } = useStore();
   const { setPageTitle } = useUIStore();
   const [filter, setFilter] = useState<string | null>(null);
 
@@ -57,10 +60,19 @@ export default function StaffDashboard() {
     setPageTitle('Dashboard');
   }, [setPageTitle]);
 
-  const { data: documentsData, isLoading } = useDocuments();
-  const documents = documentsData?.data || [];
+  const {
+    data: documentsData,
+    isLoading: isDocsLoading,
+    isError: isDocsError,
+    refetch: refetchDocs,
+  } = useDocuments({ assignee: currentUser?.id });
+  const { data: notifData, isLoading: isNotifLoading } = useNotifications();
+  const markRead = useMarkNotificationRead();
 
   if (!currentUser) return null;
+
+  const documents = documentsData?.data || [];
+  const notifications = notifData?.data || [];
 
   // Since we don't have a specific tasks API yet, we mock the assignment logic
   // by using the documents created by the user, or all docs if none.
@@ -155,9 +167,13 @@ export default function StaffDashboard() {
               </button>
             </div>
           </div>
-          {isLoading ? (
-            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-soft)' }}>
-              Loading documents...
+          {isDocsError ? (
+            <div style={{ padding: '32px' }}>
+              <ErrorMessage message="Failed to load tasks" retry={refetchDocs} />
+            </div>
+          ) : isDocsLoading ? (
+            <div style={{ padding: '32px' }}>
+              <Spinner text="Loading tasks..." />
             </div>
           ) : list.length ? (
             <div className="rowlist">
@@ -206,7 +222,7 @@ export default function StaffDashboard() {
                   key={n.id}
                   className={`notif-item ${n.read ? 'read' : ''}`}
                   onClick={() => {
-                    // Update read status here via store (not implemented yet, just navigate)
+                    markRead.mutate(n.id);
                     if (n.docId) router.push(`/doc/${n.docId}`);
                     else router.push('/notifications');
                   }}

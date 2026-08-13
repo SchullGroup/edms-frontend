@@ -5,32 +5,71 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { ConfBadge, UrgBadge } from '@/components/ui/Badges';
+import { Spinner } from '@/components/common/Spinner';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
+import {
+  usePolicies,
+  useUpdatePolicyConfidentiality,
+  useUpdatePolicyUrgency,
+  useUpdatePolicyControl,
+} from '@/apis/hooks/usePolicies';
 
 export default function PoliciesPage() {
-  const { policies, updatePolicyConfidentiality, updatePolicyUrgency, updatePolicyControl, auditAction } = useStore();
+  const { auditAction } = useStore();
   const { setPageTitle, addToast } = useUIStore();
+
+  const { data: policiesData, isLoading, isError, refetch } = usePolicies();
+  const updatePolicyConfidentiality = useUpdatePolicyConfidentiality();
+  const updatePolicyUrgency = useUpdatePolicyUrgency();
+  const updatePolicyControl = useUpdatePolicyControl();
+
   const [tab, setTab] = useState<'conf' | 'urg' | 'ret' | 'ctl'>('conf');
+
+  const policies = policiesData as any; // type casting to any to handle nested properties from mock data
 
   useEffect(() => {
     setPageTitle('Policies');
   }, [setPageTitle]);
 
+  if (isLoading) {
+    return <Spinner text="Loading policies..." />;
+  }
+
+  if (isError) {
+    return <ErrorMessage message="Failed to load policies." retry={refetch} />;
+  }
+
   const handleConfToggle = (level: string, key: string, value: boolean) => {
-    updatePolicyConfidentiality(level, { [key]: value });
-    auditAction('POLICY_EDIT', 'confidentiality', `${level}: ${key} → ${value}`);
-    addToast(`Policy updated — applies to all ${level} documents`, 'success');
+    updatePolicyConfidentiality.mutate(
+      { level, updates: { [key]: value } },
+      {
+        onSuccess: () => {
+          auditAction('POLICY_EDIT', 'confidentiality', `${level}: ${key} → ${value}`);
+        },
+      },
+    );
   };
 
   const handleUrgSlaChange = (level: string, sla: number) => {
-    updatePolicyUrgency(level, { sla });
-    auditAction('POLICY_EDIT', 'urgency', `${level} SLA → ${sla}h`);
-    addToast('SLA updated', 'success');
+    updatePolicyUrgency.mutate(
+      { level, updates: { sla } },
+      {
+        onSuccess: () => {
+          auditAction('POLICY_EDIT', 'urgency', `${level} SLA → ${sla}h`);
+        },
+      },
+    );
   };
 
   const handleCtrlToggle = (rule: string, enabled: boolean) => {
-    updatePolicyControl(rule, enabled);
-    auditAction('CONTROL_TOGGLE', rule, enabled ? 'Enabled' : 'Disabled');
-    addToast('Control ' + (enabled ? 'enabled' : 'disabled'), enabled ? 'success' : 'warning');
+    updatePolicyControl.mutate(
+      { ruleName: rule, enabled },
+      {
+        onSuccess: () => {
+          auditAction('CONTROL_TOGGLE', rule, enabled ? 'Enabled' : 'Disabled');
+        },
+      },
+    );
   };
 
   const handleRetentionRun = () => {
@@ -39,61 +78,109 @@ export default function PoliciesPage() {
   };
 
   const confCols: Column<any>[] = [
-    { key: 'level', label: 'Level', render: r => <ConfBadge level={r.level} /> },
-    { key: 'desc', label: 'Behaviour', render: r => <span style={{ fontSize: '12px', lineHeight: 1.5 }}>{r.desc}</span> },
-    { key: 'watermark', label: 'Watermark', render: r => (
-        <label className="switch">
-          <input type="checkbox" checked={r.watermark || false} onChange={e => handleConfToggle(r.level, 'watermark', e.target.checked)} />
-          <i></i>
-        </label>
-      ) 
+    { key: 'level', label: 'Level', render: (r) => <ConfBadge level={r.level} /> },
+    {
+      key: 'desc',
+      label: 'Behaviour',
+      render: (r) => <span style={{ fontSize: '12px', lineHeight: 1.5 }}>{r.desc}</span>,
     },
-    { key: 'download', label: 'Download', render: r => (
+    {
+      key: 'watermark',
+      label: 'Watermark',
+      render: (r) => (
         <label className="switch">
-          <input type="checkbox" checked={r.download || false} onChange={e => handleConfToggle(r.level, 'download', e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={r.watermark || false}
+            onChange={(e) => handleConfToggle(r.level, 'watermark', e.target.checked)}
+          />
           <i></i>
         </label>
-      ) 
+      ),
     },
-    { key: 'print', label: 'Print', render: r => (
+    {
+      key: 'download',
+      label: 'Download',
+      render: (r) => (
         <label className="switch">
-          <input type="checkbox" checked={r.print || false} onChange={e => handleConfToggle(r.level, 'print', e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={r.download || false}
+            onChange={(e) => handleConfToggle(r.level, 'download', e.target.checked)}
+          />
           <i></i>
         </label>
-      ) 
+      ),
+    },
+    {
+      key: 'print',
+      label: 'Print',
+      render: (r) => (
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={r.print || false}
+            onChange={(e) => handleConfToggle(r.level, 'print', e.target.checked)}
+          />
+          <i></i>
+        </label>
+      ),
     },
   ];
 
   const urgCols: Column<any>[] = [
-    { key: 'level', label: 'Level', render: r => <UrgBadge level={r.level} /> },
-    { key: 'sla', label: 'Default SLA', render: r => (
-        <input 
-          className="input" 
-          type="number" 
-          value={r.sla} 
-          style={{ width: '90px' }} 
-          onChange={e => handleUrgSlaChange(r.level, +e.target.value)} 
+    { key: 'level', label: 'Level', render: (r) => <UrgBadge level={r.level} /> },
+    {
+      key: 'sla',
+      label: 'Default SLA',
+      render: (r) => (
+        <input
+          className="input"
+          type="number"
+          defaultValue={r.sla}
+          style={{ width: '90px' }}
+          onBlur={(e) => handleUrgSlaChange(r.level, +e.target.value)}
         />
-      ) 
+      ),
     },
-    { key: 'note', label: '', render: () => <span className="caption">hours to breach; escalation per workflow stage</span> },
+    {
+      key: 'note',
+      label: '',
+      render: () => <span className="caption">hours to breach; escalation per workflow stage</span>,
+    },
   ];
 
   const retCols: Column<any>[] = [
-    { key: 'type', label: 'Record type', render: r => <b>{r.type}</b> },
-    { key: 'years', label: 'Retention', render: r => r.years ? `${r.years} years` : <span className="badge b-status-pending">Legal hold</span> },
+    { key: 'type', label: 'Record type', render: (r) => <b>{r.type}</b> },
+    {
+      key: 'years',
+      label: 'Retention',
+      render: (r) =>
+        r.years ? `${r.years} years` : <span className="badge b-status-pending">Legal hold</span>,
+    },
     { key: 'action', label: 'End-of-life action' },
   ];
 
   const ctlCols: Column<any>[] = [
-    { key: 'rule', label: 'Control rule', render: r => <b style={{ fontSize: '12.5px' }}>{r.rule}</b> },
+    {
+      key: 'rule',
+      label: 'Control rule',
+      render: (r) => <b style={{ fontSize: '12.5px' }}>{r.rule}</b>,
+    },
     { key: 'scope', label: 'Scope' },
-    { key: 'enabled', label: 'Enabled', render: r => (
+    {
+      key: 'enabled',
+      label: 'Enabled',
+      render: (r) => (
         <label className="switch">
-          <input type="checkbox" checked={r.enabled || false} onChange={e => handleCtrlToggle(r.rule, e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={r.enabled || false}
+            onChange={(e) => handleCtrlToggle(r.rule, e.target.checked)}
+          />
           <i></i>
         </label>
-      ) 
+      ),
     },
   ];
 
@@ -102,15 +189,25 @@ export default function PoliciesPage() {
       <div className="page-head">
         <div>
           <div className="page-title">Policies</div>
-          <div className="page-sub">Confidentiality behaviour, urgency SLAs, retention schedules and control rules.</div>
+          <div className="page-sub">
+            Confidentiality behaviour, urgency SLAs, retention schedules and control rules.
+          </div>
         </div>
       </div>
 
       <div className="tabs mb16">
-        <button className={`tab ${tab === 'conf' ? 'active' : ''}`} onClick={() => setTab('conf')}>Confidentiality</button>
-        <button className={`tab ${tab === 'urg' ? 'active' : ''}`} onClick={() => setTab('urg')}>Urgency & SLA</button>
-        <button className={`tab ${tab === 'ret' ? 'active' : ''}`} onClick={() => setTab('ret')}>Retention</button>
-        <button className={`tab ${tab === 'ctl' ? 'active' : ''}`} onClick={() => setTab('ctl')}>Controls</button>
+        <button className={`tab ${tab === 'conf' ? 'active' : ''}`} onClick={() => setTab('conf')}>
+          Confidentiality
+        </button>
+        <button className={`tab ${tab === 'urg' ? 'active' : ''}`} onClick={() => setTab('urg')}>
+          Urgency & SLA
+        </button>
+        <button className={`tab ${tab === 'ret' ? 'active' : ''}`} onClick={() => setTab('ret')}>
+          Retention
+        </button>
+        <button className={`tab ${tab === 'ctl' ? 'active' : ''}`} onClick={() => setTab('ctl')}>
+          Controls
+        </button>
       </div>
 
       {tab === 'conf' && (
@@ -129,7 +226,9 @@ export default function PoliciesPage() {
         <div className="card">
           <div className="card-head">
             <span className="h3">Retention schedules</span>
-            <button className="btn btn-secondary btn-sm" onClick={handleRetentionRun}>Run retention job</button>
+            <button className="btn btn-secondary btn-sm" onClick={handleRetentionRun}>
+              Run retention job
+            </button>
           </div>
           <Table cols={retCols} rows={policies?.retention || []} />
         </div>

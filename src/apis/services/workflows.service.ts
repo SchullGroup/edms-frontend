@@ -3,11 +3,10 @@ import { WorkflowDefinition, PaginatedResponse, ApiResponse } from '@/types/mode
 
 export const workflowsService = {
   getAll: async (params?: Record<string, any>): Promise<PaginatedResponse<WorkflowDefinition>> => {
-    // The OpenAPI docs name the paginated response WorkflowListResponse
-    const res = await apiClient.get<PaginatedResponse<WorkflowDefinition>>('/workflows', {
+    const response = await apiClient.get<PaginatedResponse<WorkflowDefinition>>('/workflows', {
       params,
     });
-    return res.data;
+    return response.data;
   },
 
   getById: async (id: string): Promise<WorkflowDefinition> => {

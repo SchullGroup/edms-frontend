@@ -5,7 +5,12 @@ import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, cabById, folderName, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocument } from '@/apis/hooks/useDocuments';
+import { useDocument, useUpdateDocument } from '@/apis/hooks/useDocuments';
+import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useUsers } from '@/apis/hooks/useUsers';
+import { usePolicies } from '@/apis/hooks/usePolicies';
+import { useCreateAuditLog } from '@/apis/hooks/useAudit';
+import { useSendNotification } from '@/apis/hooks/useNotifications';
 import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, UrgBadge, ConfBadge } from '@/components/ui/Badges';
 import { Avatar } from '@/components/ui/Avatar';
@@ -16,9 +21,19 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const resolvedParams = use(params);
   const docId = resolvedParams.id;
 
-  const { currentUser, cabinets, users, policies, auditAction, notifyUser, updateDocument, audit } =
-    useStore();
+  const { currentUser } = useStore();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
+
+  const { data: cabinetsData, isLoading: isLoadingCabs } = useCabinets();
+  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const { data: policiesData, isLoading: isLoadingPolicies } = usePolicies();
+  const cabinets = cabinetsData?.data || [];
+  const users = usersData?.data || [];
+  const policies = policiesData;
+
+  const updateDocument = useUpdateDocument();
+  const createAuditLog = useCreateAuditLog();
+  const sendNotification = useSendNotification();
 
   const [mode, setMode] = useState<'view' | 'redact'>('view');
   const [previewRelease, setPreviewRelease] = useState(false);
@@ -44,10 +59,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     : null;
 
   useEffect(() => {
-    if (doc) {
+    if (doc?.title) {
       setPageTitle(doc.title);
     }
-  }, [doc, setPageTitle]);
+  }, [doc?.title, setPageTitle]);
 
   if (!doc) {
     return (
@@ -64,7 +79,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     );
   }
 
-  if (isLoading) {
+  if (isLoading || isLoadingCabs || isLoadingUsers || isLoadingPolicies) {
     return (
       <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
         <div className="h3" style={{ color: 'var(--text-soft)' }}>
@@ -87,13 +102,17 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <button
             className="btn btn-primary"
             onClick={() => {
-              auditAction('ACCESS_REQUEST', doc.id, 'Requested access');
-              notifyUser(
-                doc.owner,
-                'workflow',
-                `${me?.name} requested access to “${doc.title}”.`,
-                doc.id,
-              );
+              createAuditLog.mutate({
+                action: 'ACCESS_REQUEST',
+                target: doc.id,
+                detail: 'Requested access',
+              });
+              sendNotification.mutate({
+                userId: doc.owner,
+                type: 'workflow',
+                message: `${me?.name} requested access to “${doc.title}”.`,
+                docId: doc.id,
+              });
               addToast('Access request sent', 'info');
             }}
           >
@@ -135,24 +154,24 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       next.state = 'current';
       clone.assignee = next.assignee;
       clone.status = 'In Progress';
-      notifyUser(
-        next.assignee,
-        'task',
-        `“${clone.title}” has reached stage “${next.name}” and is assigned to you.`,
-        clone.id,
-      );
+      sendNotification.mutate({
+        userId: next.assignee,
+        type: 'task',
+        message: `“${clone.title}” has reached stage “${next.name}” and is assigned to you.`,
+        docId: clone.id,
+      });
     } else {
       clone.status = 'Closed';
       clone.closedAt = Date.now();
       clone.sealed = true;
-      notifyUser(
-        clone.owner,
-        'workflow',
-        `“${clone.title}” has completed its workflow and is closed.`,
-        clone.id,
-      );
+      sendNotification.mutate({
+        userId: clone.owner,
+        type: 'workflow',
+        message: `“${clone.title}” has completed its workflow and is closed.`,
+        docId: clone.id,
+      });
     }
-    updateDocument(clone.id, clone);
+    updateDocument.mutate({ id: clone.id, updates: clone });
   };
 
   const returnWorkflow = (reason: string) => {
@@ -167,13 +186,13 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     clone.assignee = prev.assignee;
     clone.status = 'Pending';
     clone.comments.push({ by: me.id, at: Date.now(), text: 'Returned: ' + reason });
-    notifyUser(
-      prev.assignee,
-      'workflow',
-      `“${clone.title}” was returned to stage “${prev.name}”: ${reason}`,
-      clone.id,
-    );
-    updateDocument(clone.id, clone);
+    sendNotification.mutate({
+      userId: prev.assignee,
+      type: 'workflow',
+      message: `“${clone.title}” was returned to stage “${prev.name}”: ${reason}`,
+      docId: clone.id,
+    });
+    updateDocument.mutate({ id: clone.id, updates: clone });
   };
 
   const actApprove = () => {
@@ -183,7 +202,11 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       message: `“${stage ? stage.name : 'Current stage'}” will be marked complete and the file will advance to the next stage. This action is recorded in the audit trail.`,
       onConfirm: () => {
         advanceWorkflow('Approved by ' + me.name);
-        auditAction('APPROVE', doc.id, `Approved stage “${stage ? stage.name : ''}”`);
+        createAuditLog.mutate({
+          action: 'APPROVE',
+          target: doc.id,
+          detail: `Approved stage “${stage ? stage.name : ''}”`,
+        });
         addToast(
           doc.status === 'Closed'
             ? 'Workflow complete — document closed & sealed'
@@ -223,7 +246,11 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           onClick: () => {
             if (!reasonText.trim()) return false;
             returnWorkflow(reasonText.trim());
-            auditAction('REJECT', doc.id, 'Rejected: ' + reasonText.trim());
+            createAuditLog.mutate({
+              action: 'REJECT',
+              target: doc.id,
+              detail: 'Rejected: ' + reasonText.trim(),
+            });
             addToast('Returned to previous stage with reason', 'warning');
           },
         },
@@ -248,7 +275,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     document.body.appendChild(a);
     a.click();
     a.remove();
-    auditAction('DOWNLOAD', doc.id, 'Downloaded a copy');
+    createAuditLog.mutate({ action: 'DOWNLOAD', target: doc.id, detail: 'Downloaded a copy' });
     addToast('Download started (audited)', 'success');
   };
 
@@ -259,7 +286,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         .writeText(url)
         .then(() => addToast('Permission-checked link copied to clipboard', 'success'));
     }
-    auditAction('SHARE', doc.id, 'Generated share link');
+    createAuditLog.mutate({ action: 'SHARE', target: doc.id, detail: 'Generated share link' });
   };
 
   const handleSign = (fieldIdx: number) => {
@@ -354,8 +381,12 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               }
             }
             if (allSigned) clone.sealed = true;
-            updateDocument(clone.id, clone);
-            auditAction('SIGN', doc.id, `Signed field "${sig.field}" via ${signMode} signature`);
+            updateDocument.mutate({ id: clone.id, updates: clone });
+            createAuditLog.mutate({
+              action: 'SIGN',
+              target: doc.id,
+              detail: `Signed field "${sig.field}" via ${signMode} signature`,
+            });
             addToast('Signature applied successfully', 'success');
             closeModal();
           },
@@ -701,8 +732,12 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                   if (!el.value.trim()) return;
                   const clone = JSON.parse(JSON.stringify(doc));
                   clone.comments.push({ by: me.id, at: Date.now(), text: el.value.trim() });
-                  updateDocument(clone.id, clone);
-                  auditAction('COMMENT', doc.id, el.value.trim().slice(0, 80));
+                  updateDocument.mutate({ id: clone.id, updates: clone });
+                  createAuditLog.mutate({
+                    action: 'COMMENT',
+                    target: doc.id,
+                    detail: el.value.trim().slice(0, 80),
+                  });
                   el.value = '';
                   addToast('Comment added', 'success');
                 }}

@@ -2,15 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { Table, Column } from '@/components/ui/Table';
 import { SevBadge } from '@/components/ui/Badges';
 import { Icon } from '@/components/ui/Icons';
 
 export default function ExceptionsPage() {
   const router = useRouter();
-  const { auditAction } = useStore();
+  const createAuditLog = useCreateAuditLog();
   const { setPageTitle, addToast } = useUIStore();
 
   const [rows, setRows] = useState([
@@ -26,7 +26,11 @@ export default function ExceptionsPage() {
 
   const handleAcknowledge = (id: string, docId: string, type: string) => {
     setRows(prev => prev.map(r => r.id === id ? { ...r, status: 'Acknowledged' } : r));
-    auditAction('EXCEPTION_ACK', docId, 'Acknowledged exception: ' + type);
+    createAuditLog.mutate({
+      action: 'EXCEPTION_ACK',
+      target: docId,
+      detail: 'Acknowledged exception: ' + type
+    });
     addToast('Exception acknowledged and logged', 'success');
   };
 
