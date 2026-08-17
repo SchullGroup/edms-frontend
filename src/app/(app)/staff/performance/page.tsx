@@ -137,7 +137,7 @@ export default function MyPerformancePage() {
             {closed.length > 0 ? (
               <div className="rowlist">
                 {closed.map((d: any) => (
-                  <TaskRow key={d.id} doc={d} />
+                  <TaskRow key={d.id} item={d} />
                 ))}
               </div>
             ) : (

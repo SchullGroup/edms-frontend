@@ -144,7 +144,7 @@ export default function ApprovalsQueuePage() {
             {queue.map((d: any) => (
               <TaskRow
                 key={d.id}
-                doc={d}
+                item={d}
                 extraActions={
                   <>
                     <button

@@ -71,7 +71,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <Icon name="doc" size={32} />
           <div className="h3 mt16 mb8">Document not found</div>
           <p className="caption mb16">It may have been moved or deleted.</p>
-          <button className="btn btn-primary btn-sm" onClick={() => router.push('/staff/browser')}>
+          <button className="btn btn-primary btn-sm" onClick={() => router.push('/staff/cabinets')}>
             Browse cabinets
           </button>
         </div>
@@ -414,8 +414,9 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   return (
     <div>
       <div className="crumbs">
-        <a onClick={() => router.push('/staff/browser')}>Cabinets</a> <span className="sep">›</span>
-        <a onClick={() => router.push(`/staff/browser?cab=${doc.cabinet}`)}>
+        <a onClick={() => router.push('/staff/cabinets')}>Cabinets</a>{' '}
+        <span className="sep">›</span>
+        <a onClick={() => router.push(`/staff/cabinets?cab=${doc.cabinet}`)}>
           {cabById(cabinets, doc.cabinet)?.name}
         </a>{' '}
         <span className="sep">›</span>

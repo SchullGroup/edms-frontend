@@ -32,7 +32,7 @@ export const useNavigation = () => {
         {
           label: 'Documents',
           items: [
-            { route: '/staff/browser', label: 'Cabinets', icon: 'cabinet' },
+            { route: '/staff/cabinets', label: 'Cabinets', icon: 'cabinet' },
             { route: '/upload', label: 'Upload & Capture', icon: 'upload' },
             { route: '/search', label: 'Search', icon: 'search' },
           ],
@@ -82,7 +82,7 @@ export const useNavigation = () => {
         {
           label: 'Documents',
           items: [
-            { route: '/staff/browser', label: 'Cabinets', icon: 'cabinet' },
+            { route: '/staff/cabinets', label: 'Cabinets', icon: 'cabinet' },
             { route: '/search', label: 'Search', icon: 'search' },
             { route: '/circulars', label: 'Circulars', icon: 'speaker' },
           ],
@@ -185,7 +185,7 @@ export const useNavigation = () => {
           items: [
             { route: '/auditor', label: 'Audit Dashboard', icon: 'gauge' },
             { route: '/auditor/trail', label: 'Audit Trail', icon: 'list' },
-            { route: '/staff/browser', label: 'Document Sampling', icon: 'cabinet' },
+            { route: '/staff/cabinets', label: 'Document Sampling', icon: 'cabinet' },
             { route: '/search', label: 'Search', icon: 'search' },
           ],
         },

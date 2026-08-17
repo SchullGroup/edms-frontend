@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, effStatus } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments } from '@/apis/hooks/useDocuments';
+import { useTasks } from '@/apis/hooks/useTasks';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { Spinner } from '@/components/common/Spinner';
@@ -26,35 +26,45 @@ export default function MyTasksPage() {
   }, [setPageTitle]);
 
   const {
-    data: documentsData,
+    data: tasksData,
     isLoading,
     isError,
     refetch,
-  } = useDocuments({ assignee: currentUser?.id });
-  const documents = documentsData?.data || [];
+  } = useTasks();
+  const tasks = tasksData?.data || [];
 
   if (!currentUser) return null;
 
-  let list = documents;
-  if (statusF !== 'All') list = list.filter((d) => effStatus(d) === statusF);
-  if (urgF !== 'All') list = list.filter((d) => d.urgency === urgF);
+  let list = tasks;
+  if (statusF !== 'All') {
+    list = list.filter((t) => {
+      const isCompleted = t.status === 'completed';
+      const eff = isCompleted ? 'Closed' : 'Pending';
+      return eff === statusF;
+    });
+  }
+  
+  if (urgF !== 'All') {
+    list = list.filter((t) => t.workflowInstance?.document?.urgency === urgF.toLowerCase());
+  }
 
   if (sortBy === 'urgency') {
     list.sort(
       (a, b) =>
-        URG_ORDER[a.urgency] - URG_ORDER[b.urgency] ||
-        (a.dueDate ? Date.parse(a.dueDate) : 9e15) - (b.dueDate ? Date.parse(b.dueDate) : 9e15),
+        (URG_ORDER[a.workflowInstance?.document?.urgency ? a.workflowInstance.document.urgency.charAt(0).toUpperCase() + a.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) - 
+        (URG_ORDER[b.workflowInstance?.document?.urgency ? b.workflowInstance.document.urgency.charAt(0).toUpperCase() + b.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) ||
+        (a.dueAt ? Date.parse(a.dueAt) : 9e15) - (b.dueAt ? Date.parse(b.dueAt) : 9e15),
     );
   } else if (sortBy === 'due') {
     list.sort(
       (a, b) =>
-        (a.dueDate ? Date.parse(a.dueDate) : 9e15) - (b.dueDate ? Date.parse(b.dueDate) : 9e15),
+        (a.dueAt ? Date.parse(a.dueAt) : 9e15) - (b.dueAt ? Date.parse(b.dueAt) : 9e15),
     );
   } else {
-    list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    // There is no createdAt on Task, so we fallback to dueAt for now or document createdAt.
+    list.sort((a, b) => (b.dueAt ? Date.parse(b.dueAt) : 0) - (a.dueAt ? Date.parse(a.dueAt) : 0));
   }
 
-  const CONF_LEVELS = ['Public', 'Internal', 'Confidential', 'Restricted', 'Top Secret'];
   const URG_LEVELS = ['Critical', 'High', 'Normal', 'Low'];
 
   return (
@@ -116,8 +126,8 @@ export default function MyTasksPage() {
           </div>
         ) : list.length > 0 ? (
           <div className="rowlist">
-            {list.map((d: any) => (
-              <TaskRow key={d.id} doc={d} />
+            {list.map((t: any) => (
+              <TaskRow key={t.id} item={t} />
             ))}
           </div>
         ) : (

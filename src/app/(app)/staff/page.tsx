@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments } from '@/apis/hooks/useDocuments';
+import { useTasks } from '@/apis/hooks/useTasks';
 import { useNotifications, useMarkNotificationRead } from '@/apis/hooks/useNotifications';
 import { Icon } from '@/components/ui/Icons';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -61,41 +61,40 @@ export default function StaffDashboard() {
   }, [setPageTitle]);
 
   const {
-    data: documentsData,
-    isLoading: isDocsLoading,
-    isError: isDocsError,
-    refetch: refetchDocs,
-  } = useDocuments({ assignee: currentUser?.id });
+    data: tasksData,
+    isLoading: isTasksLoading,
+    isError: isTasksError,
+    refetch: refetchTasks,
+  } = useTasks();
   const { data: notifData, isLoading: isNotifLoading } = useNotifications();
   const markRead = useMarkNotificationRead();
 
   if (!currentUser) return null;
 
-  const documents = documentsData?.data || [];
+  const tasks = tasksData?.data || [];
   const notifications = notifData?.data || [];
 
-  // Since we don't have a specific tasks API yet, we mock the assignment logic
-  // by using the documents created by the user, or all docs if none.
-  const mine = documents.filter((d) =>
-    d.createdBy === currentUser.id || documents.length < 5 ? true : d.createdBy === currentUser.id,
-  );
-  const open = mine.filter((d) => d.status !== 'closed');
+  const mine = tasks;
+  const open = mine.filter((t) => t.status !== 'completed');
   const counts: Record<string, number> = {
-    Pending: open.filter((d) => d.status === 'pending').length,
-    'In Progress': open.filter((d) => d.status === 'in_progress').length,
-    Closed: mine.filter((d) => d.status === 'closed').length,
-    Overdue: open.filter((d) => d.urgency === 'critical').length, // Mock logic for SLA
+    Pending: open.filter((t) => t.status === 'pending').length,
+    'In Progress': open.filter((t) => t.status === 'pending').length, // Same as pending for now
+    Closed: mine.filter((t) => t.status === 'completed').length,
+    Overdue: open.filter((t) => t.dueAt && new Date(t.dueAt) < new Date()).length,
   };
 
-  let list = open.filter((d) => {
+  let list = open.filter((t) => {
     if (!filter) return true;
-    if (filter === 'Overdue') return d.urgency === 'critical';
-    return d.status.toLowerCase().replace('_', ' ') === filter.toLowerCase();
+    if (filter === 'Overdue') return t.dueAt && new Date(t.dueAt) < new Date();
+    if (filter === 'Closed') return t.status === 'completed';
+    return t.status === 'pending';
   });
+
   list.sort(
     (a, b) =>
-      URG_ORDER[a.urgency] - URG_ORDER[b.urgency] ||
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      (URG_ORDER[a.workflowInstance?.document?.urgency ? a.workflowInstance.document.urgency.charAt(0).toUpperCase() + a.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) -
+      (URG_ORDER[b.workflowInstance?.document?.urgency ? b.workflowInstance.document.urgency.charAt(0).toUpperCase() + b.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) ||
+      (a.dueAt ? new Date(a.dueAt).getTime() : 9e15) - (b.dueAt ? new Date(b.dueAt).getTime() : 9e15),
   );
 
   const tileDefs = [
@@ -106,7 +105,7 @@ export default function StaffDashboard() {
   ];
 
   const myNotifs = notifications.filter((n) => n.user === currentUser.id).slice(0, 5);
-  const closedMine = mine.filter((d) => d.status === 'closed').length;
+  const closedMine = mine.filter((t) => t.status === 'completed').length;
   const slaPct = 86;
 
   const hour = new Date().getHours();
@@ -167,18 +166,18 @@ export default function StaffDashboard() {
               </button>
             </div>
           </div>
-          {isDocsError ? (
+          {isTasksError ? (
             <div style={{ padding: '32px' }}>
-              <ErrorMessage message="Failed to load tasks" retry={refetchDocs} />
+              <ErrorMessage message="Failed to load tasks" retry={refetchTasks} />
             </div>
-          ) : isDocsLoading ? (
+          ) : isTasksLoading ? (
             <div style={{ padding: '32px' }}>
               <Spinner text="Loading tasks..." />
             </div>
           ) : list.length ? (
             <div className="rowlist">
-              {list.slice(0, 8).map((d) => (
-                <TaskRow key={d.id} doc={d} />
+              {list.slice(0, 8).map((t) => (
+                <TaskRow key={t.id} item={t} />
               ))}
             </div>
           ) : (

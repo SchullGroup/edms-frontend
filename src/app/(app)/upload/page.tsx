@@ -62,56 +62,28 @@ export default function UploadCapturePage() {
     setPageTitle('Upload & Capture');
   }, [setPageTitle]);
 
-  const ingest = (names: string[]) => {
-    const newFiles = names.map((name, i) => {
+  const ingest = (selectedFiles: File[]) => {
+    const newFiles = selectedFiles.map((file, i) => {
       const id = 'f-' + Date.now() + '-' + i;
-      return { id, name, status: 'uploading' as const, progress: 0 };
+      const guessIdx = (file.name.length + i) % IDU_GUESSES.length;
+      return { 
+        id, 
+        name: file.name, 
+        file, // store actual File object
+        status: 'ready' as const, 
+        progress: 0,
+        guess: IDU_GUESSES[guessIdx]
+      };
     });
     setFiles((prev) => [...newFiles, ...prev]);
-
-    newFiles.forEach((fileObj, idx) => {
-      let p = 0;
-      const t = setInterval(() => {
-        p += 18 + Math.random() * 22;
-        if (p >= 100) {
-          clearInterval(t);
-          setFiles((current) =>
-            current.map((f) => {
-              if (f.id === fileObj.id) {
-                return { ...f, progress: 100, status: 'processing' };
-              }
-              return f;
-            }),
-          );
-          setTimeout(() => {
-            setFiles((current) =>
-              current.map((f) => {
-                if (f.id === fileObj.id) {
-                  const guessIdx = (fileObj.name.length + idx) % IDU_GUESSES.length;
-                  return { ...f, status: 'ready', guess: IDU_GUESSES[guessIdx] };
-                }
-                return f;
-              }),
-            );
-          }, 700);
-        } else {
-          setFiles((current) =>
-            current.map((f) => {
-              if (f.id === fileObj.id) {
-                return { ...f, progress: p };
-              }
-              return f;
-            }),
-          );
-        }
-      }, 220);
-    });
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const names = Array.from(e.dataTransfer.files).map((f) => f.name);
-    ingest(names.length ? names : ['dropped-document.pdf']);
+    const filesArray = Array.from(e.dataTransfer.files);
+    if (filesArray.length) {
+      ingest(filesArray);
+    }
   };
 
   return (
@@ -156,7 +128,7 @@ export default function UploadCapturePage() {
         style={{ display: 'none' }}
         ref={fileInputRef}
         onChange={(e) => {
-          if (e.target.files) ingest(Array.from(e.target.files).map((f) => f.name));
+          if (e.target.files) ingest(Array.from(e.target.files));
           e.target.value = '';
         }}
       />
@@ -164,13 +136,19 @@ export default function UploadCapturePage() {
       <div className="flex g8 mt16">
         <button
           className="btn btn-secondary btn-sm"
-          onClick={() => ingest(['Scanned_Agreement_0034.tiff'])}
+          onClick={() => {
+            const f = new File([''], 'Scanned_Agreement_0034.pdf', { type: 'application/pdf' });
+            ingest([f]);
+          }}
         >
           Simulate scanner intake
         </button>
         <button
           className="btn btn-secondary btn-sm"
-          onClick={() => ingest(['FWD_Invoice_MeridianLtd.pdf'])}
+          onClick={() => {
+            const f = new File([''], 'FWD_Invoice_MeridianLtd.pdf', { type: 'application/pdf' });
+            ingest([f]);
+          }}
         >
           Simulate email-in
         </button>
@@ -224,8 +202,14 @@ export default function UploadCapturePage() {
   );
 }
 
+import { useCabinets } from '@/apis/hooks/useCabinets';
+import { documentsService } from '@/apis/services/documents.service';
+import { uploadFile, calculateChecksum } from '@/apis/services/s3.service';
+
 function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
-  const { docTypes, cabinets, session, users, auditAction } = useStore();
+  const { docTypes, session, users } = useStore();
+  const { data: cabinetsData } = useCabinets();
+  const cabinets = cabinetsData?.data || [];
   const { addToast } = useUIStore();
   const guess = file.guess;
   const me = session ? users.find((u) => u.id === session) : null;
@@ -233,74 +217,118 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
   const [title, setTitle] = useState(file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]/g, ' '));
   const [type, setType] = useState(guess.type);
   const [cabFolder, setCabFolder] = useState(`${guess.cab}|${guess.folder}`);
-  const [conf, setConf] = useState('Internal');
-  const [urg, setUrg] = useState('Normal');
+  
+  // Update cabFolder to valid initial value if cabinets data loads
+  useEffect(() => {
+    if (cabinets.length > 0 && !cabinets.find((c: any) => c.id === guess.cab)) {
+      const firstCab = cabinets[0];
+      const firstFolder = firstCab?.folders?.[0];
+      if (firstCab && firstFolder) {
+        setCabFolder(`${firstCab.id}|${firstFolder.id}`);
+      }
+    }
+  }, [cabinets, guess.cab]);
+
+  const [conf, setConf] = useState('internal');
+  const [urg, setUrg] = useState('normal');
   const [due, setDue] = useState(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10));
   const [showErr, setShowErr] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const confCls = guess.conf >= 85 ? 'conf-hi' : guess.conf >= 70 ? 'conf-med' : 'conf-lo';
-  const CONF_LEVELS = ['Public', 'Internal', 'Confidential', 'Restricted', 'Top Secret'];
-  const URG_LEVELS = ['Critical', 'High', 'Normal', 'Low'];
+  const CONF_LEVELS = [
+    { label: 'Public', value: 'public' },
+    { label: 'Internal', value: 'internal' },
+    { label: 'Confidential', value: 'confidential' },
+    { label: 'Restricted', value: 'restricted' }
+  ];
+  const URG_LEVELS = [
+    { label: 'Critical', value: 'critical' },
+    { label: 'High', value: 'high' },
+    { label: 'Normal', value: 'normal' },
+    { label: 'Low', value: 'low' }
+  ];
 
-  const fileDoc = () => {
+  const fileDoc = async () => {
     if (!title.trim()) {
       setShowErr(true);
       return;
     }
     const [cab, folder] = cabFolder.split('|');
-    const id = 'doc-' + Date.now() + Math.floor(Math.random() * 1000);
-
-    const doc = {
-      id,
-      title: title.trim(),
-      type,
-      cabinet: cab,
-      folder,
-      owner: me?.id || 'u-sys',
-      assignee: me?.id || 'u-sys',
-      status: 'Pending',
-      confidentiality: conf,
-      urgency: urg,
-      created: Date.now(),
-      due: due ? new Date(due + 'T17:00:00').getTime() : null,
-      pages: 1 + Math.floor(Math.random() * 9),
-      version: 1,
-      dept: me?.dept,
-      workflow: [
-        {
-          name: 'Capture & Classify',
-          assignee: me?.id,
-          state: 'done',
-          actedAt: Date.now(),
-          sla: 24,
-        },
-        { name: 'Officer Review', assignee: me?.id, state: 'current', sla: 48 },
-        { name: 'Supervisor Approval', assignee: 'u-david', state: 'next', sla: 72 },
-        { name: 'Close & File', assignee: me?.id, state: 'next', sla: 24 },
-      ],
-      metadata: guess.fields,
-      comments: [],
-      redactions: [],
-      signatures: [],
-      sealed: false,
-      locked: null,
-    };
-
-    useStore.setState((state) => ({ documents: [doc as any, ...state.documents] }));
-    auditAction(
-      'UPLOAD',
-      id,
-      `Filed “${doc.title}” to ${cabinets.find((c) => c.id === cab)?.name} (IDU ${guess.conf}%)`,
-    );
-    addToast('Document filed and audit entry recorded', 'success');
-
+    
+    setIsSubmitting(true);
     setFiles((current: any[]) =>
       current.map((f) => {
-        if (f.id === file.id) return { ...f, status: 'filed', docId: id, name: title.trim() };
+        if (f.id === file.id) return { ...f, status: 'uploading', progress: 0 };
         return f;
-      }),
+      })
     );
+
+    try {
+      // 1. Compute checksum
+      const checksum = await calculateChecksum(file.file);
+
+      // 2. Upload to S3
+      const uploadRes = await uploadFile(file.file, {
+        folderName: 'edms-documents',
+        onProgress: (progressEvent) => {
+          setFiles((current: any[]) =>
+            current.map((f) => {
+              if (f.id === file.id) return { ...f, progress: progressEvent.progress };
+              return f;
+            })
+          );
+        }
+      });
+
+      if (uploadRes.type === 'error') {
+        throw new Error(uploadRes.result);
+      }
+
+      setFiles((current: any[]) =>
+        current.map((f) => {
+          if (f.id === file.id) return { ...f, progress: 100, status: 'processing' };
+          return f;
+        })
+      );
+
+      // 3. Create document in backend
+      const createdDoc = await documentsService.create({
+        title: title.trim(),
+        documentType: type,
+        cabinetId: cab,
+        folderId: folder || undefined,
+        confidentiality: conf,
+        urgency: urg,
+        fileUrl: uploadRes.result,
+        mimeType: file.file.type || 'application/pdf',
+        fileSize: file.file.size,
+        checksum: checksum,
+      });
+
+      addToast('Document filed successfully', 'success');
+
+      setFiles((current: any[]) =>
+        current.map((f) => {
+          if (f.id === file.id) return { ...f, status: 'filed', docId: createdDoc.id, name: title.trim() };
+          return f;
+        }),
+      );
+    } catch (err: any) {
+      addToast(err.message || 'Failed to upload document', 'error');
+      // Revert to ready state
+      setFiles((current: any[]) =>
+        current.map((f) => {
+          if (f.id === file.id) return { ...f, status: 'ready' };
+          return f;
+        }),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+
 
   return (
     <div className="idu-card mt16">
@@ -354,11 +382,15 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
             onChange={(e) => setCabFolder(e.target.value)}
           >
             {cabinets.flatMap((c: any) =>
-              c.folders.map((f: any) => (
+              c.folders ? c.folders.map((f: any) => (
                 <option key={`${c.id}|${f.id}`} value={`${c.id}|${f.id}`}>
                   {c.name} › {f.name}
                 </option>
-              )),
+              )) : (
+                <option key={`${c.id}|`} value={`${c.id}|`}>
+                  {c.name}
+                </option>
+              )
             )}
           </select>
         </div>
@@ -377,8 +409,8 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
           </label>
           <select className="input" value={conf} onChange={(e) => setConf(e.target.value)}>
             {CONF_LEVELS.map((l) => (
-              <option key={l} value={l}>
-                {l}
+              <option key={l.value} value={l.value}>
+                {l.label}
               </option>
             ))}
           </select>
@@ -390,8 +422,8 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
           </label>
           <select className="input" value={urg} onChange={(e) => setUrg(e.target.value)}>
             {URG_LEVELS.map((l) => (
-              <option key={l} value={l}>
-                {l}
+              <option key={l.value} value={l.value}>
+                {l.label}
               </option>
             ))}
           </select>
@@ -428,8 +460,8 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
         >
           Discard
         </button>
-        <button className="btn btn-primary btn-sm" onClick={fileDoc}>
-          Accept & file
+        <button className="btn btn-primary btn-sm" onClick={fileDoc} disabled={isSubmitting}>
+          {isSubmitting ? 'Uploading...' : 'Accept & file'}
         </button>
       </div>
     </div>

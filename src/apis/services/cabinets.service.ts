@@ -1,30 +1,28 @@
+import { apiClient } from '@/lib/api-client';
 import { Cabinet, PaginatedResponse, ApiResponse } from '@/types/models';
-import { SEED } from '@/store/initialData';
 
 export const cabinetsService = {
-  getAll: async (): Promise<PaginatedResponse<Cabinet>> => {
-    // TODO: Replace with actual API call when backend is ready
-    // const res = await apiClient.get<PaginatedResponse<Cabinet>>('/cabinets');
-    // return res.data;
-
-    await new Promise((resolve) => setTimeout(resolve, 400)); // Simulate latency
-
-    return {
-      success: true,
-      message: 'Fetched cabinets successfully',
-      data: SEED.cabinets as any,
-      pagination: { page: 1, limit: 10, total: SEED.cabinets.length, totalPages: 1 },
-    };
+  getAll: async (params?: Record<string, any>): Promise<PaginatedResponse<Cabinet>> => {
+    const res = await apiClient.get<PaginatedResponse<Cabinet>>('/cabinets', { params });
+    return res.data;
+  },
+  
+  getById: async (id: string): Promise<Cabinet> => {
+    const res = await apiClient.get<ApiResponse<Cabinet>>(`/cabinets/${id}`);
+    return res.data.data;
   },
 
   create: async (data: any): Promise<Cabinet> => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return { ...data, id: `cab-${Date.now()}` } as Cabinet;
+    const res = await apiClient.post<ApiResponse<Cabinet>>('/cabinets', data);
+    return res.data.data;
   },
 
   update: async (id: string, updates: Partial<Cabinet>): Promise<Cabinet> => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    const cabinet = SEED.cabinets.find((c) => c.id === id);
-    return { ...cabinet, ...updates } as Cabinet;
+    const res = await apiClient.patch<ApiResponse<Cabinet>>(`/cabinets/${id}`, updates);
+    return res.data.data;
   },
+  
+  delete: async (id: string): Promise<void> => {
+    await apiClient.delete(`/cabinets/${id}`);
+  }
 };

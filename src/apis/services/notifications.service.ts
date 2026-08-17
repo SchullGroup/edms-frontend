@@ -1,31 +1,25 @@
+import { apiClient } from '@/lib/api-client';
 import { PaginatedResponse } from '@/types/models';
-import { SEED } from '@/store/initialData';
 
 export const notificationsService = {
-  getAll: async (): Promise<PaginatedResponse<any>> => {
-    // Simulate latency
-    await new Promise((resolve) => setTimeout(resolve, 400));
-
-    return {
-      success: true,
-      message: 'Fetched notifications successfully',
-      data: SEED.notifications as any,
-      pagination: { page: 1, limit: 10, total: SEED.notifications.length, totalPages: 1 },
-    };
+  getAll: async (params?: Record<string, any>): Promise<PaginatedResponse<any>> => {
+    const res = await apiClient.get<PaginatedResponse<any>>('/notifications', { params });
+    return res.data;
   },
 
   markAsRead: async (id: string): Promise<any> => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return { success: true, message: 'Marked as read' };
+    const res = await apiClient.patch(`/notifications/${id}/read`);
+    return res.data;
   },
 
   markAllAsRead: async (): Promise<any> => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return { success: true, message: 'All notifications marked as read' };
+    const res = await apiClient.post('/notifications/mark-all-read');
+    return res.data;
   },
 
   send: async (userId: string, type: string, message: string, docId?: string): Promise<any> => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return { success: true, message: 'Notification sent' };
+    // This might be better as an admin endpoint, but implemented for parity
+    const res = await apiClient.post('/notifications', { userId, type, message, docId });
+    return res.data;
   },
 };

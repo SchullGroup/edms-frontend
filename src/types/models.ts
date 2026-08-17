@@ -148,6 +148,39 @@ export interface WorkflowDefinition {
   updatedAt: string;
 }
 
+export interface WorkflowInstance {
+  id: string;
+  workflowDefinitionId: string;
+  documentId: string;
+  document?: Document;
+  status: 'in_progress' | 'completed' | 'cancelled' | 'on_hold';
+  currentStage?: string | null;
+  stageDueAt?: string | null;
+  startedAt: string;
+  closedAt?: string | null;
+  tasks?: Task[];
+}
+
+export interface Task {
+  id: string;
+  workflowInstanceId: string;
+  stage: string;
+  assigneeId?: string | null;
+  assignedRoleId?: string | null;
+  action?: string | null;
+  status: 'pending' | 'completed' | 'reassigned' | 'delegated' | 'escalated';
+  dueAt?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
+  note?: string | null;
+  workflowInstance: WorkflowInstance;
+}
+
+export interface TaskActionRequest {
+  action: 'approve' | 'reject' | 'review' | 'request_changes' | 'close';
+  note?: string;
+}
+
 // --- Cabinets ---
 
 export interface CabinetFolder {

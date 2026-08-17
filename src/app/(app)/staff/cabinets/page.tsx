@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore, effStatus, cabById, folderName, userById } from '@/store/useStore';
+import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useDocuments } from '@/apis/hooks/useDocuments';
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
@@ -12,7 +14,7 @@ import { Table, Column } from '@/components/ui/Table';
 export default function CabinetBrowserPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { documents, cabinets, session, users, auditAction, updateDocument } = useStore();
+  const { session, users, auditAction, updateDocument } = useStore();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
 
   const [activeCab, setActiveCab] = useState<string | null>(searchParams?.get('cab') || null);
@@ -24,14 +26,14 @@ export default function CabinetBrowserPage() {
     setPageTitle('Cabinet Browser');
   }, [setPageTitle]);
 
-  const docsIn = () => {
-    return documents.filter(d => 
-      (!activeCab || d.cabinet === activeCab) && 
-      (!activeFolder || d.folder === activeFolder)
-    );
-  };
+  const { data: cabinetsData } = useCabinets();
+  const cabinets = cabinetsData?.data || [];
 
-  const docs = docsIn();
+  const { data: documentsData } = useDocuments({ 
+    cabinetId: activeCab || undefined, 
+    folderId: activeFolder || undefined 
+  });
+  const docs = documentsData?.data || [];
 
   const handleMoveModal = () => {
     let selValue = '';
@@ -105,11 +107,8 @@ export default function CabinetBrowserPage() {
                 onClick={() => { setActiveCab(c.id); setActiveFolder(null); setSelected([]); }}
               >
                 <span style={{ marginRight: '8px' }}><Icon name="cabinet" size={15} /></span> {c.name}
-                <span className="caption" style={{ marginLeft: 'auto' }}>
-                  {documents.filter(d => d.cabinet === c.id).length}
-                </span>
               </div>
-              {activeCab === c.id && (
+              {activeCab === c.id && c.folders && (
                 <div className="tree-kids">
                   {c.folders.map((f: any) => (
                     <div 

@@ -166,7 +166,7 @@ export default function WorkloadPage() {
                   {open.map((d: any) => (
                     <TaskRow
                       key={d.id}
-                      doc={d}
+                      item={d}
                       extraActions={
                         <button
                           className="btn btn-secondary btn-sm"
