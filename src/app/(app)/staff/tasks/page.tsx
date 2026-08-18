@@ -25,22 +25,41 @@ export default function MyTasksPage() {
     setPageTitle('My Tasks');
   }, [setPageTitle]);
 
+  // Build backend filters
+  const backendFilters: Record<string, any> = { scope: 'mine' };
+  if (statusF !== 'All') {
+    // Map frontend 'Pending' etc to backend task statuses
+    if (statusF === 'Pending' || statusF === 'Overdue') {
+      backendFilters.status = 'pending';
+    } else if (statusF === 'In Progress') {
+      backendFilters.status = 'in_progress';
+    } else if (statusF === 'Closed') {
+      backendFilters.status = 'completed';
+    } else if (statusF === 'On Hold') {
+      backendFilters.status = 'on_hold';
+    }
+  }
+
   const {
     data: tasksData,
     isLoading,
     isError,
     refetch,
-  } = useTasks();
+  } = useTasks(backendFilters);
   const tasks = tasksData?.data || [];
 
   if (!currentUser) return null;
 
   let list = tasks;
+  // Fallback frontend filtering for status just to be safe with Overdue since backend 'pending' includes overdue
   if (statusF !== 'All') {
-    list = list.filter((t) => {
+    list = list.filter((t: any) => {
       const isCompleted = t.status === 'completed';
-      const eff = isCompleted ? 'Closed' : 'Pending';
-      return eff === statusF;
+      const eff = isCompleted ? 'Closed' : effStatus(t);
+      // Backend handles exact status mapping, but for 'Pending'/'Overdue' split we need to refine:
+      if (statusF === 'Overdue') return eff === 'Overdue';
+      if (statusF === 'Pending') return eff === 'Pending';
+      return true; // Already filtered by backend for other exact matches
     });
   }
   
