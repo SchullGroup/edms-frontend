@@ -2,8 +2,8 @@ import { apiClient } from '@/lib/api-client';
 import { Cabinet, PaginatedResponse, ApiResponse } from '@/types/models';
 
 export const cabinetsService = {
-  getAll: async (params?: Record<string, any>): Promise<PaginatedResponse<Cabinet>> => {
-    const res = await apiClient.get<PaginatedResponse<Cabinet>>('/cabinets', { params });
+  getAll: async (params?: Record<string, any>): Promise<ApiResponse<Cabinet[]>> => {
+    const res = await apiClient.get<ApiResponse<Cabinet[]>>('/cabinets', { params });
     return res.data;
   },
   

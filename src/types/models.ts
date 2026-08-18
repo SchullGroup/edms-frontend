@@ -186,13 +186,35 @@ export interface TaskActionRequest {
 export interface CabinetFolder {
   id: string;
   name: string;
+  cabinetId: string;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  code?: string | null;
+  description?: string | null;
+  managerId?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Cabinet {
   id: string;
   name: string;
+  description?: string | null;
+  departmentId?: string | null;
+  retentionPolicyId?: string | null;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string | null;
+  department?: Department | null;
+  retentionPolicy?: any | null;
   icon?: string | null;
-  folders: CabinetFolder[];
+  _count?: {
+    documents: number;
+    folders: number;
+  };
 }
 
 // --- Circulars ---

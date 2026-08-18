@@ -66,13 +66,13 @@ export default function UploadCapturePage() {
     const newFiles = selectedFiles.map((file, i) => {
       const id = 'f-' + Date.now() + '-' + i;
       const guessIdx = (file.name.length + i) % IDU_GUESSES.length;
-      return { 
-        id, 
-        name: file.name, 
+      return {
+        id,
+        name: file.name,
         file, // store actual File object
-        status: 'ready' as const, 
+        status: 'ready' as const,
         progress: 0,
-        guess: IDU_GUESSES[guessIdx]
+        guess: IDU_GUESSES[guessIdx],
       };
     });
     setFiles((prev) => [...newFiles, ...prev]);
@@ -203,10 +203,11 @@ export default function UploadCapturePage() {
 }
 
 import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { documentsService } from '@/apis/services/documents.service';
 import { uploadFile, calculateChecksum } from '@/apis/services/s3.service';
 
-function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
+function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
   const { docTypes, session, users } = useStore();
   const { data: cabinetsData } = useCabinets();
   const cabinets = cabinetsData?.data || [];
@@ -216,18 +217,19 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
 
   const [title, setTitle] = useState(file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]/g, ' '));
   const [type, setType] = useState(guess.type);
-  const [cabFolder, setCabFolder] = useState(`${guess.cab}|${guess.folder}`);
-  
-  // Update cabFolder to valid initial value if cabinets data loads
+  const [selCab, setSelCab] = useState(guess.cab || '');
+  const { data: folData } = useCabinetFolders(selCab);
+  const folders = folData?.data || [];
+  const [selFol, setSelFol] = useState(guess.folder || '');
+
+  // Update selCab to valid initial value if cabinets data loads
   useEffect(() => {
-    if (cabinets.length > 0 && !cabinets.find((c: any) => c.id === guess.cab)) {
-      const firstCab = cabinets[0];
-      const firstFolder = firstCab?.folders?.[0];
-      if (firstCab && firstFolder) {
-        setCabFolder(`${firstCab.id}|${firstFolder.id}`);
-      }
+    if (cabinets.length > 0 && !selCab) {
+      setSelCab(cabinets[0].id);
+    } else if (cabinets.length > 0 && !cabinets.find((c: any) => c.id === selCab)) {
+      setSelCab(cabinets[0].id);
     }
-  }, [cabinets, guess.cab]);
+  }, [cabinets, selCab]);
 
   const [conf, setConf] = useState('internal');
   const [urg, setUrg] = useState('normal');
@@ -240,13 +242,13 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
     { label: 'Public', value: 'public' },
     { label: 'Internal', value: 'internal' },
     { label: 'Confidential', value: 'confidential' },
-    { label: 'Restricted', value: 'restricted' }
+    { label: 'Restricted', value: 'restricted' },
   ];
   const URG_LEVELS = [
     { label: 'Critical', value: 'critical' },
     { label: 'High', value: 'high' },
     { label: 'Normal', value: 'normal' },
-    { label: 'Low', value: 'low' }
+    { label: 'Low', value: 'low' },
   ];
 
   const fileDoc = async () => {
@@ -254,14 +256,13 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
       setShowErr(true);
       return;
     }
-    const [cab, folder] = cabFolder.split('|');
-    
+
     setIsSubmitting(true);
     setFiles((current: any[]) =>
       current.map((f) => {
         if (f.id === file.id) return { ...f, status: 'uploading', progress: 0 };
         return f;
-      })
+      }),
     );
 
     try {
@@ -276,9 +277,9 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
             current.map((f) => {
               if (f.id === file.id) return { ...f, progress: progressEvent.progress };
               return f;
-            })
+            }),
           );
-        }
+        },
       });
 
       if (uploadRes.type === 'error') {
@@ -289,15 +290,15 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
         current.map((f) => {
           if (f.id === file.id) return { ...f, progress: 100, status: 'processing' };
           return f;
-        })
+        }),
       );
 
       // 3. Create document in backend
       const createdDoc = await documentsService.create({
         title: title.trim(),
         documentType: type,
-        cabinetId: cab,
-        folderId: folder || undefined,
+        cabinetId: selCab,
+        folderId: selFol || undefined,
         confidentiality: conf,
         urgency: urg,
         fileUrl: uploadRes.result,
@@ -310,7 +311,8 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
 
       setFiles((current: any[]) =>
         current.map((f) => {
-          if (f.id === file.id) return { ...f, status: 'filed', docId: createdDoc.id, name: title.trim() };
+          if (f.id === file.id)
+            return { ...f, status: 'filed', docId: createdDoc.id, name: title.trim() };
           return f;
         }),
       );
@@ -327,8 +329,6 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
       setIsSubmitting(false);
     }
   };
-
-
 
   return (
     <div className="idu-card mt16">
@@ -375,23 +375,29 @@ function IDUCard({ file, setFiles }: { file: any, setFiles: any }) {
           </select>
         </div>
         <div className="field">
-          <label>Cabinet › Folder</label>
+          <label>Destination Cabinet</label>
           <select
-            className="input"
-            value={cabFolder}
-            onChange={(e) => setCabFolder(e.target.value)}
+            className="input mb2"
+            value={selCab}
+            onChange={(e) => {
+              setSelCab(e.target.value);
+              setSelFol('');
+            }}
           >
-            {cabinets.flatMap((c: any) =>
-              c.folders ? c.folders.map((f: any) => (
-                <option key={`${c.id}|${f.id}`} value={`${c.id}|${f.id}`}>
-                  {c.name} › {f.name}
-                </option>
-              )) : (
-                <option key={`${c.id}|`} value={`${c.id}|`}>
-                  {c.name}
-                </option>
-              )
-            )}
+            {cabinets.map((c: any) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <label>Destination Folder (Optional)</label>
+          <select className="input" value={selFol} onChange={(e) => setSelFol(e.target.value)}>
+            <option value="">-- No Folder --</option>
+            {folders.map((f: any) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
           </select>
         </div>
         <div className="field">

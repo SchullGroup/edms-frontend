@@ -6,6 +6,7 @@ import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
 import { useCabinets, useCreateCabinet, useUpdateCabinet } from '@/apis/hooks/useCabinets';
+import { useCabinetFolders, useCreateFolder, useDeleteFolder } from '@/apis/hooks/useFolders';
 import { useDocuments } from '@/apis/hooks/useDocuments';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
@@ -23,6 +24,13 @@ export default function CabinetDesignerPage() {
   const documents = documentsData?.data || [];
 
   const [activeCabId, setActiveCabId] = useState<string | undefined>(undefined);
+  const activeCabIdToUse = activeCabId || cabinets?.[0]?.id;
+  const activeCab = cabinets?.find((c: any) => c.id === activeCabIdToUse) || cabinets?.[0];
+
+  const { data: folData } = useCabinetFolders(activeCab?.id);
+  const activeCabFolders = folData?.data || [];
+  const createFolder = useCreateFolder();
+  const deleteFolder = useDeleteFolder();
   const [schema, setSchema] = useState<Record<string, any[]>>({
     'cab-hr': [
       { f: 'Employee', t: 'Text', req: true },
@@ -50,9 +58,6 @@ export default function CabinetDesignerPage() {
       { f: 'Amount', t: 'Number', req: true },
     ],
   });
-
-  const activeCabIdToUse = activeCabId || cabinets?.[0]?.id;
-  const activeCab = cabinets?.find((c: any) => c.id === activeCabIdToUse) || cabinets?.[0];
 
   useEffect(() => {
     setPageTitle('Cabinet Designer');
@@ -126,12 +131,8 @@ export default function CabinetDesignerPage() {
           kind: 'btn-primary',
           onClick: () => {
             if (!name.trim()) return;
-            const newFolders = [
-              ...(activeCab.folders || []),
-              { id: 'f-' + Date.now(), name: name.trim() },
-            ];
-            updateCabinet.mutate(
-              { id: activeCab.id, updates: { folders: newFolders } },
+            createFolder.mutate(
+              { cabinetId: activeCab.id, data: { name: name.trim() } },
               {
                 onSuccess: () => {
                   auditAction('FOLDER_CREATE', activeCab.id, 'Added folder ' + name);
@@ -157,9 +158,8 @@ export default function CabinetDesignerPage() {
       confirmLabel: 'Delete folder',
       danger: true,
       onConfirm: () => {
-        const newFolders = activeCab.folders.filter((x: any) => x.id !== f.id);
-        updateCabinet.mutate(
-          { id: activeCab.id, updates: { folders: newFolders } },
+        deleteFolder.mutate(
+          { id: f.id, cabinetId: activeCab.id },
           {
             onSuccess: () => {
               auditAction('FOLDER_DELETE', activeCab.id, 'Deleted ' + f.name);
@@ -298,7 +298,7 @@ export default function CabinetDesignerPage() {
               </button>
             </div>
             <div className="card-body" style={{ paddingTop: '6px' }}>
-              {activeCab.folders?.map((f: any) => (
+              {activeCabFolders?.map((f: any) => (
                 <div key={f.id} className="metric-li">
                   <span className="flex aic g8">
                     <span style={{ display: 'inline-flex', alignItems: 'center' }}>
@@ -320,6 +320,9 @@ export default function CabinetDesignerPage() {
                   </span>
                 </div>
               ))}
+              {activeCabFolders?.length === 0 && (
+                <div className="empty-state">No folders created yet.</div>
+              )}
             </div>
           </div>
 
