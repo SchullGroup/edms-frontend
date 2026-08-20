@@ -106,4 +106,18 @@ export const documentsService = {
     );
     return response.data.data;
   },
+
+  // Comments & Signatures
+  addComment: async (id: string, text: string): Promise<any> => {
+    const response = await apiClient.post<ApiResponse<any>>(`/documents/${id}/comments`, { text });
+    return response.data.data;
+  },
+
+  addSignature: async (
+    id: string,
+    data: { fieldName: string; method?: string; password: string },
+  ): Promise<any> => {
+    const response = await apiClient.post<ApiResponse<any>>(`/documents/${id}/signatures`, data);
+    return response.data.data;
+  },
 };

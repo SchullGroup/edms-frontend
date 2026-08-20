@@ -3,14 +3,16 @@
 
 import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, cabById, folderName, userById } from '@/store/useStore';
+import { useStore, cabById, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocument, useUpdateDocument } from '@/apis/hooks/useDocuments';
+import { useDocument, useUpdateDocument, useAddDocumentComment, useAddDocumentSignature } from '@/apis/hooks/useDocuments';
 import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { usePolicies } from '@/apis/hooks/usePolicies';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useSendNotification } from '@/apis/hooks/useNotifications';
+import { useTaskAction } from '@/apis/hooks/useTasks';
 import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, UrgBadge, ConfBadge } from '@/components/ui/Badges';
 import { Avatar } from '@/components/ui/Avatar';
@@ -32,6 +34,9 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const policies = policiesData;
 
   const updateDocument = useUpdateDocument();
+  const addDocumentComment = useAddDocumentComment();
+  const addDocumentSignature = useAddDocumentSignature();
+  const taskAction = useTaskAction();
   const createAuditLog = useCreateAuditLog();
   const sendNotification = useSendNotification();
 
@@ -57,6 +62,11 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         assignee: (rawDoc as any).assignee || rawDoc.createdBy,
       }
     : null;
+
+  const { data: activeCabFoldersData } = useCabinetFolders(doc?.cabinet || undefined);
+  const activeCabFolders = activeCabFoldersData?.data || [];
+  const folderObj = activeCabFolders.find((f: any) => f.id === doc?.folder);
+  const folderLabel = folderObj ? folderObj.name : '';
 
   useEffect(() => {
     if (doc?.title) {
@@ -125,9 +135,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
 
   const isMine = doc.assignee === me.id;
   const stage = doc.workflow?.find((s: any) => s.state === 'current');
-  const highConf = ['Restricted', 'Top Secret'].includes(doc.confidentiality);
-  const confPolicy =
-    policies.confidentiality.find((c: any) => c.level === doc.confidentiality) || ({} as any);
+  const highConf = ['Restricted', 'Top Secret', 'confidential', 'restricted'].includes(doc.confidentiality);
+  const confPolicyList = Array.isArray(policiesData) ? policiesData : [];
+  const confPolicyItem = confPolicyList.find((p: any) => p.key === `confidentiality.${doc?.confidentiality?.toLowerCase()}`);
+  const confPolicy = confPolicyItem?.value || { download: true, print: true, watermark: false };
   const lockedByOther = doc.isCheckedOut && doc.checkoutLock?.lockedBy !== me.id;
   const eff =
     doc.status === 'closed' ? 'Closed' : doc.status === 'in_progress' ? 'In Progress' : 'Pending';
@@ -290,14 +301,14 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   };
 
   const handleSign = (fieldIdx: number) => {
-    const sigField = doc.signatures[fieldIdx];
-    if (!sigField) return;
+    const sigField = doc.signatures[fieldIdx] || { field: 'Signature Field' };
 
-    let signMode: 'type' | 'draw' | 'stamp' = 'type';
+    let signMode: 'typed' | 'drawn' | 'stamp' = 'typed';
     let typedText = me.name;
+    let passwordVal = '';
 
     openModal({
-      title: `Sign Document — ${sigField.field || 'Signature Field'}`,
+      title: `Sign Document — ${sigField.field || sigField.fieldName || 'Signature Field'}`,
       size: 'lg',
       body: (
         <div>
@@ -315,6 +326,16 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               className="input"
               defaultValue={typedText}
               onChange={(e) => (typedText = e.target.value)}
+            />
+          </div>
+
+          <div className="field mb16">
+            <label>Re-enter Password to Confirm Signature <span className="req">*</span></label>
+            <input
+              type="password"
+              className="input"
+              placeholder="Enter your account password…"
+              onChange={(e) => (passwordVal = e.target.value)}
             />
           </div>
 
@@ -356,39 +377,28 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           label: 'Apply Signature',
           kind: 'btn-success',
           onClick: () => {
-            const clone = JSON.parse(JSON.stringify(doc));
-            const sig = clone.signatures[fieldIdx];
-            sig.signedBy = me.id;
-            sig.signedAt = Date.now();
-            sig.method = signMode;
-
-            const allSigned = clone.signatures.every((s: any) => s.signedBy);
-            if (allSigned && stage && /sign/i.test(stage.name)) {
-              const idx = clone.workflow.findIndex((s: any) => s.state === 'current');
-              if (idx >= 0) {
-                clone.workflow[idx].state = 'done';
-                clone.workflow[idx].actedAt = Date.now();
-                clone.workflow[idx].comment = 'Signed by ' + me.name;
-                if (idx + 1 < clone.workflow.length) {
-                  const next = clone.workflow[idx + 1];
-                  next.state = 'current';
-                  clone.assignee = next.assignee;
-                  clone.status = 'In Progress';
-                } else {
-                  clone.status = 'Closed';
-                  clone.sealed = true;
-                }
-              }
+            if (!passwordVal.trim()) {
+              addToast('Password re-entry is required to apply signature', 'error');
+              return false;
             }
-            if (allSigned) clone.sealed = true;
-            updateDocument.mutate({ id: clone.id, updates: clone });
-            createAuditLog.mutate({
-              action: 'SIGN',
-              target: doc.id,
-              detail: `Signed field "${sig.field}" via ${signMode} signature`,
-            });
-            addToast('Signature applied successfully', 'success');
-            closeModal();
+            addDocumentSignature.mutate(
+              {
+                id: doc.id,
+                fieldName: sigField.field || sigField.fieldName || 'Signature Field',
+                method: signMode,
+                password: passwordVal,
+              },
+              {
+                onSuccess: () => {
+                  createAuditLog.mutate({
+                    action: 'SIGN',
+                    target: doc.id,
+                    detail: `Signed field "${sigField.field || sigField.fieldName || 'Signature Field'}" via ${signMode} signature`,
+                  });
+                  closeModal();
+                },
+              },
+            );
           },
         },
       ],
@@ -420,7 +430,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           {cabById(cabinets, doc.cabinet)?.name}
         </a>{' '}
         <span className="sep">›</span>
-        <span>{folderName(cabinets, doc.cabinet, doc.folder)}</span> <span className="sep">›</span>
+        <span>{folderLabel}</span> <span className="sep">›</span>
         <span className="cur">{doc.id.toUpperCase()}</span>
       </div>
 
@@ -707,18 +717,24 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             ))}
             <div className="divider"></div>
             <div className="h3 mb8">Minutes & comments</div>
-            {doc.comments?.map((c: any, i: number) => (
-              <div key={i} className="comment">
-                <Avatar user={userById(users, c.by)} />
-                <div>
-                  <div className="by">
-                    {userById(users, c.by).name} · {timeAgo(c.at)}
+            {doc.comments?.map((c: any, i: number) => {
+              const creator = c.creator || userById(users, c.createdBy || c.by);
+              const createdAt = c.createdAt || c.at;
+              return (
+                <div key={c.id || i} className="comment">
+                  <Avatar user={creator} />
+                  <div>
+                    <div className="by">
+                      {creator?.name || 'User'} · {timeAgo(createdAt)}
+                    </div>
+                    <div className="body">{c.text}</div>
                   </div>
-                  <div className="body">{c.text}</div>
                 </div>
-              </div>
-            ))}
-            {doc.comments?.length === 0 && <div className="caption mb8">No comments yet.</div>}
+              );
+            })}
+            {(!doc.comments || doc.comments.length === 0) && (
+              <div className="caption mb8">No comments yet.</div>
+            )}
             <div className="mt8">
               <textarea
                 id="commentInput"
@@ -728,22 +744,28 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               ></textarea>
               <button
                 className="btn btn-primary btn-sm mt8"
+                disabled={addDocumentComment.isPending}
                 onClick={() => {
                   const el = document.getElementById('commentInput') as HTMLTextAreaElement;
-                  if (!el.value.trim()) return;
-                  const clone = JSON.parse(JSON.stringify(doc));
-                  clone.comments.push({ by: me.id, at: Date.now(), text: el.value.trim() });
-                  updateDocument.mutate({ id: clone.id, updates: clone });
-                  createAuditLog.mutate({
-                    action: 'COMMENT',
-                    target: doc.id,
-                    detail: el.value.trim().slice(0, 80),
-                  });
-                  el.value = '';
-                  addToast('Comment added', 'success');
+                  const text = el?.value?.trim();
+                  if (!text) return;
+
+                  addDocumentComment.mutate(
+                    { id: doc.id, text },
+                    {
+                      onSuccess: () => {
+                        createAuditLog.mutate({
+                          action: 'COMMENT',
+                          target: doc.id,
+                          detail: text.slice(0, 80),
+                        });
+                        el.value = '';
+                      },
+                    },
+                  );
                 }}
               >
-                Add comment
+                {addDocumentComment.isPending ? 'Adding...' : 'Add comment'}
               </button>
             </div>
           </div>

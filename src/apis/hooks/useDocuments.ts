@@ -103,3 +103,46 @@ export function useCheckinDocument() {
     },
   });
 }
+
+export function useAddDocumentComment() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) =>
+      documentsService.addComment(id, text),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: documentKeys.detail(id) });
+      addToast('Comment added', 'success');
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to add comment', 'error');
+    },
+  });
+}
+
+export function useAddDocumentSignature() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      fieldName,
+      method,
+      password,
+    }: {
+      id: string;
+      fieldName: string;
+      method?: string;
+      password: string;
+    }) => documentsService.addSignature(id, { fieldName, method, password }),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: documentKeys.detail(id) });
+      addToast('Signature applied successfully', 'success');
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to apply signature', 'error');
+    },
+  });
+}

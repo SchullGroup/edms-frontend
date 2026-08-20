@@ -113,10 +113,10 @@ export const useStore = create<AppStore>()(
       markCircularAck: (circularId) => {
         const { circulars, currentUser } = get();
         if (!currentUser) return;
-        const newCir = circulars.map((c: any) => 
-          c.id === circularId && !c.ackBy.includes(currentUser.id) 
-            ? { ...c, ackBy: [...c.ackBy, currentUser.id] } 
-            : c
+        const newCir = circulars.map((c: any) =>
+          c.id === circularId && !c.ackBy.includes(currentUser.id)
+            ? { ...c, ackBy: [...c.ackBy, currentUser.id] }
+            : c,
         );
         set({ circulars: newCir });
       },
@@ -127,17 +127,23 @@ export const useStore = create<AppStore>()(
       },
       updatePolicyControl: (ruleName, enabled) => {
         const { policies } = get();
-        const newControls = policies.controls.map((c: any) => (c.rule === ruleName ? { ...c, enabled } : c));
+        const newControls = policies.controls.map((c: any) =>
+          c.rule === ruleName ? { ...c, enabled } : c,
+        );
         set({ policies: { ...policies, controls: newControls } });
       },
       updatePolicyConfidentiality: (level, updates) => {
         const { policies } = get();
-        const newConf = policies.confidentiality.map((c: any) => (c.level === level ? { ...c, ...updates } : c));
+        const newConf = policies.confidentiality.map((c: any) =>
+          c.level === level ? { ...c, ...updates } : c,
+        );
         set({ policies: { ...policies, confidentiality: newConf } });
       },
       updatePolicyUrgency: (level, updates) => {
         const { policies } = get();
-        const newUrg = policies.urgency.map((u: any) => (u.level === level ? { ...u, ...updates } : u));
+        const newUrg = policies.urgency.map((u: any) =>
+          u.level === level ? { ...u, ...updates } : u,
+        );
         set({ policies: { ...policies, urgency: newUrg } });
       },
       updateWorkflow: (wfId, updates) => {
@@ -190,12 +196,16 @@ export const useStore = create<AppStore>()(
       },
       updateFeatureFlag: (id, updates) => {
         const { featureFlags } = get();
-        const newFlags = (featureFlags || []).map((f: any) => (f.id === id ? { ...f, ...updates } : f));
+        const newFlags = (featureFlags || []).map((f: any) =>
+          f.id === id ? { ...f, ...updates } : f,
+        );
         set({ featureFlags: newFlags });
       },
       updateFinding: (id, updates) => {
         const { findings } = get();
-        const newFindings = (findings || []).map((f: any) => (f.id === id ? { ...f, ...updates } : f));
+        const newFindings = (findings || []).map((f: any) =>
+          f.id === id ? { ...f, ...updates } : f,
+        );
         set({ findings: newFindings });
       },
       addFinding: (f) => {
@@ -244,6 +254,6 @@ export const docById = (docs: any[], id: string) => docs.find((x) => x.id === id
 export const cabById = (cabs: any[], id: string) => cabs.find((c) => c.id === id);
 export const folderName = (cabs: any[], cabId: string, fId: string) => {
   const c = cabById(cabs, cabId);
-  const f = c && c.folders.find((f: any) => f.id === fId);
+  const f = c && c.folders && c.folders.find((f: any) => f.id === fId);
   return f ? f.name : '';
 };
