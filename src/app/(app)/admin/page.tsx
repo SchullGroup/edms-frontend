@@ -4,12 +4,18 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useStore } from '@/store/useStore';
+import { useUsers } from '@/apis/hooks/useUsers';
+import { useCabinets } from '@/apis/hooks/useCabinets';
 import { Icon } from '@/components/ui/Icons';
 
 export default function AdminDashboard() {
   const router = useRouter();
   const { setPageTitle } = useUIStore();
-  const { users, cabinets } = useStore();
+  const { data: usersData } = useUsers();
+  const { data: cabinetsData } = useCabinets();
+
+  const users = usersData?.data || [];
+  const cabinets = cabinetsData?.data || [];
 
   useEffect(() => {
     setPageTitle('Admin Home');

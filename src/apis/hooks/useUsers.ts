@@ -9,12 +9,27 @@ export const userKeys = {
   list: (filters: UserFilters) => [...userKeys.lists(), filters] as const,
   details: () => [...userKeys.all, 'detail'] as const,
   detail: (id: string) => [...userKeys.details(), id] as const,
+  allPages: (filters: Omit<UserFilters, 'page' | 'limit'>) =>
+    [...userKeys.all, 'allPages', filters] as const,
 };
 
 export function useUsers(filters: UserFilters = {}) {
   return useQuery({
     queryKey: userKeys.list(filters),
     queryFn: () => usersService.getAll(filters),
+  });
+}
+
+/** Complete roster across all pages — for rollups and assignee pickers, where a
+ *  single 20-row page would silently drop people. */
+export function useAllUsers(
+  filters: Omit<UserFilters, 'page' | 'limit'> = {},
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: userKeys.allPages(filters),
+    queryFn: () => usersService.getAllPages(filters),
+    enabled: options?.enabled ?? true,
   });
 }
 

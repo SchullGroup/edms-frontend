@@ -20,12 +20,13 @@ export default function MyPerformancePage() {
     setPageTitle('My Performance');
   }, [setPageTitle]);
 
-  const { data: documentsData, isLoading: docsLoading } = useDocuments({ assignee: currentUser?.id });
+  const { data: documentsData, isLoading: docsLoading } = useDocuments();
   const { data: tasksData, isLoading: tasksLoading } = useTasks({ scope: 'mine' });
 
   if (!currentUser) return null;
 
-  const documents = documentsData?.data || [];
+  const allDocuments = documentsData?.data || [];
+  const documents = allDocuments.filter((d: any) => d.assignee === currentUser.id);
   const tasks = tasksData?.data || [];
   
   const mine = documents;
@@ -46,6 +47,12 @@ export default function MyPerformancePage() {
   
   const totalSla = onTime + breached;
   const slaCompliance = totalSla === 0 ? 100 : Math.round((onTime / totalSla) * 100);
+
+  const closedTasksWithDates = closedTasks.filter((t: any) => t.dueAt && t.completedAt);
+  const avgTurnaroundMs = closedTasksWithDates.length > 0
+    ? closedTasksWithDates.reduce((sum: number, t: any) => sum + (new Date(t.completedAt).getTime() - new Date(t.dueAt).getTime()), 0) / closedTasksWithDates.length
+    : 0;
+  const avgTurnaround = avgTurnaroundMs > 0 ? (avgTurnaroundMs / 86400000).toFixed(1) + ' d' : '0 d';
   
   // Dynamic throughput calculation (last 6 weeks)
   const getWeekLabel = (d: Date) => {
@@ -80,7 +87,7 @@ export default function MyPerformancePage() {
 
   const metrics = [
     { value: `${slaCompliance}%`, label: 'SLA compliance', delta: 'vs last period', dir: 'up' },
-    { value: '1.8 d', label: 'Avg turnaround', delta: '-0.4 d vs last period', dir: 'up' },
+    { value: avgTurnaround, label: 'Avg turnaround', delta: '-0.4 d vs last period', dir: 'up' },
     {
       value: String(closed.length),
       label: 'Items closed',
