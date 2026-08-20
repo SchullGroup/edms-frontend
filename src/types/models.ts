@@ -45,8 +45,11 @@ export interface User {
   status: 'active' | 'inactive' | 'suspended';
   departmentId?: string | null;
   roles?: { id: string; name: string; description?: string | null }[];
+  /** What `GET /users` actually returns — the join rows, not a flat `roles` array. */
+  userRoles?: { userId: string; roleId: string; role: Role }[];
   permissions?: PermissionType[];
   preferences?: Record<string, any> | null;
+  lastLoginAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -148,17 +151,60 @@ export interface WorkflowDefinition {
   updatedAt: string;
 }
 
+export type WorkflowInstanceStatus = 'pending' | 'in_progress' | 'on_hold' | 'closed';
+
 export interface WorkflowInstance {
   id: string;
   workflowDefinitionId: string;
   documentId: string;
   document?: Document;
-  status: 'in_progress' | 'completed' | 'cancelled' | 'on_hold';
+  status: WorkflowInstanceStatus;
   currentStage?: string | null;
   stageDueAt?: string | null;
   startedAt: string;
   closedAt?: string | null;
   tasks?: Task[];
+}
+
+/**
+ * The narrow document projection embedded in a task returned by `GET /tasks`.
+ * The backend selects only these columns — it is not a full `Document`.
+ */
+export interface TaskDocumentSummary {
+  id: string;
+  title: string;
+  status: Document['status'];
+  confidentiality: string;
+  urgency: string;
+  cabinetId: string;
+}
+
+export interface TaskWorkflowInstance {
+  id: string;
+  documentId: string;
+  workflowDefinitionId: string;
+  currentStage: string;
+  status: WorkflowInstanceStatus;
+  stageDueAt?: string | null;
+  startedAt?: string | null;
+  closedAt?: string | null;
+  document: TaskDocumentSummary;
+  workflowDefinition: {
+    id: string;
+    name: string;
+    version: number;
+    status: 'draft' | 'published' | 'archived';
+    definition?: WorkflowDefinitionJson;
+  };
+}
+
+export type TaskStatus = 'pending' | 'completed' | 'reassigned' | 'delegated' | 'escalated';
+
+export interface TaskUserSummary {
+  id: string;
+  name: string;
+  email: string;
+  status?: 'active' | 'inactive' | 'suspended';
 }
 
 export interface Task {
@@ -168,12 +214,16 @@ export interface Task {
   assigneeId?: string | null;
   assignedRoleId?: string | null;
   action?: string | null;
-  status: 'pending' | 'completed' | 'reassigned' | 'delegated' | 'escalated';
+  status: TaskStatus;
   dueAt?: string | null;
   completedAt?: string | null;
   completedBy?: string | null;
   note?: string | null;
-  workflowInstance: WorkflowInstance;
+  createdAt: string;
+  assignee?: TaskUserSummary | null;
+  assignedRole?: { id: string; name: string } | null;
+  completer?: TaskUserSummary | null;
+  workflowInstance: TaskWorkflowInstance;
 }
 
 export interface TaskActionRequest {

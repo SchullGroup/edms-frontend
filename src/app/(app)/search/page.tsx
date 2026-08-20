@@ -5,7 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore, effStatus, canView, cabById, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments } from '@/apis/hooks/useDocuments';
+import { useDocuments, useDocumentSearch } from '@/apis/hooks/useDocuments';
+import { useCabinets } from '@/apis/hooks/useCabinets';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { exportCsv } from '@/utils/exportCsv';
@@ -14,16 +15,20 @@ import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
 export default function SearchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { cabinets, docTypes, savedSearches, users, currentUser } = useStore();
+  const { docTypes, savedSearches } = useStore();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
-  
-  const { data: documentsData, isLoading } = useDocuments();
-  const documents = documentsData?.data || [];
 
-  const me = currentUser;
   const initialQ = searchParams?.get('q') || '';
-  
   const [q, setQ] = useState(initialQ);
+
+  const { data: cabinetsData } = useCabinets();
+  const cabinets = cabinetsData?.data || [];
+
+  const { data: searchData, isLoading: isSearchLoading } = useDocumentSearch(q);
+  const { data: allData, isLoading: isAllLoading } = useDocuments();
+
+  const baseDocuments = q ? (searchData?.data || []) : (allData?.data || []);
+  const isLoading = q ? isSearchLoading : isAllLoading;
   const [facets, setFacets] = useState<Record<string, Set<string>>>({
     cabinet: new Set(),
     type: new Set(),
@@ -49,16 +54,11 @@ export default function SearchPage() {
   }, [setPageTitle]); // only run once and on title change
 
   const matches = (d: any) => {
-    if (q) {
-      const hay = (d.title + ' ' + d.documentType + ' ' + Object.values(d.metadata || {}).join(' ')).toLowerCase();
-      if (!q.toLowerCase().split(/\s+/).every(w => hay.includes(w))) return false;
-    }
     const status = d.status === 'closed' ? 'Closed' : (d.status === 'in_progress' ? 'In Progress' : 'Pending');
     const type = d.documentType;
     const urgency = d.urgency?.charAt(0).toUpperCase() + d.urgency?.slice(1);
     const confidentiality = d.confidentiality?.charAt(0).toUpperCase() + d.confidentiality?.slice(1);
 
-    // Mock cabinet checks since d.cabinetId isn't purely the name
     if (facets.cabinet.size && !facets.cabinet.has(d.cabinetId)) return false;
     if (facets.type.size && !facets.type.has(type)) return false;
     if (facets.status.size && !facets.status.has(status)) return false;
@@ -67,7 +67,7 @@ export default function SearchPage() {
     return true;
   };
 
-  const results = documents.filter(matches);
+  const results = baseDocuments.filter(matches);
 
   const toggleFacet = (key: string, val: string) => {
     const newFacets = { ...facets };
@@ -124,7 +124,7 @@ export default function SearchPage() {
       <div className="facet-group" key={key}>
         <div className="fg-title">{title}</div>
         {opts.map(([val, label]) => {
-          const cnt = documents.filter(d => {
+          const cnt = baseDocuments.filter(d => {
             const saved = new Set(facets[key]);
             facets[key] = new Set();
             

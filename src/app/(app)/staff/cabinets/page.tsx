@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useStore, effStatus, cabById, folderName, userById } from '@/store/useStore';
+import { useStore, effStatus, cabById, userById } from '@/store/useStore';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useDocuments } from '@/apis/hooks/useDocuments';
 import { useWorkflows } from '@/apis/hooks/useWorkflows';
@@ -317,7 +317,7 @@ export default function CabinetBrowserPage() {
               {activeFolder && (
                 <>
                   <span className="sep">›</span>
-                  <span className="cur">{folderName(cabinets, activeCab!, activeFolder)}</span>
+                  <span className="cur">{activeCabFolders.find((f: any) => f.id === activeFolder)?.name || ''}</span>
                 </>
               )}
             </div>
