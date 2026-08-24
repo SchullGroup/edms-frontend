@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { documentsService, DocumentFilters } from '@/apis/services/documents.service';
 import { Document, CheckoutLock, DocumentMetadataField } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
+import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 
 export const documentKeys = {
   all: ['documents'] as const,
@@ -17,6 +18,18 @@ export function useDocuments(filters: DocumentFilters = {}) {
   return useQuery({
     queryKey: documentKeys.list(filters),
     queryFn: () => documentsService.getAll(filters),
+  });
+}
+
+/**
+ * INTERIM STOPGAP for pages that need the full document set (management
+ * dashboards). Loops every page — see fetchAllPages.ts for why this exists
+ * and why it should be replaced once the backend has aggregation endpoints.
+ */
+export function useAllDocuments(filters: Omit<DocumentFilters, 'page' | 'limit'> = {}) {
+  return useQuery({
+    queryKey: [...documentKeys.list(filters), 'all'],
+    queryFn: () => fetchAllPages(documentsService.getAll, filters),
   });
 }
 

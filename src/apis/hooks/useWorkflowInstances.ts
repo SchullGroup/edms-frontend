@@ -1,10 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { workflowInstancesService } from '../services/workflowInstances.service';
+import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 
 export const useWorkflowInstances = (params?: Record<string, any>) => {
   return useQuery({
     queryKey: ['workflowInstances', params],
     queryFn: () => workflowInstancesService.getAll(params),
+  });
+};
+
+/**
+ * INTERIM STOPGAP for pages that need the full workflow-instance set
+ * (management dashboards). Loops every page — see fetchAllPages.ts for why
+ * this exists and why it should be replaced once the backend has
+ * aggregation endpoints.
+ */
+export const useAllWorkflowInstances = (params: Record<string, any> = {}) => {
+  return useQuery({
+    queryKey: ['workflowInstances', 'all', params],
+    queryFn: () => fetchAllPages(workflowInstancesService.getAll, params),
   });
 };
 

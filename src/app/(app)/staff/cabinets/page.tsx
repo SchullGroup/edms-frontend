@@ -317,7 +317,9 @@ export default function CabinetBrowserPage() {
               {activeFolder && (
                 <>
                   <span className="sep">›</span>
-                  <span className="cur">{activeCabFolders.find((f: any) => f.id === activeFolder)?.name || ''}</span>
+                  <span className="cur">
+                    {activeCabFolders.find((f: any) => f.id === activeFolder)?.name || ''}
+                  </span>
                 </>
               )}
             </div>
