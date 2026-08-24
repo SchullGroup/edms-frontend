@@ -6,13 +6,16 @@ import { useUIStore } from '@/store/useUIStore';
 export const cabinetKeys = {
   all: ['cabinets'] as const,
   lists: () => [...cabinetKeys.all, 'list'] as const,
-  list: () => [...cabinetKeys.lists()] as const,
+  list: (params: Record<string, any> = {}) => [...cabinetKeys.lists(), params] as const,
 };
 
-export function useCabinets() {
+// GET /cabinets is not paginated (verified against the live backend — no
+// `pagination` key in the response), so a single useCabinets() call already
+// returns the full set. No useAllCabinets/fetchAllPages needed here.
+export function useCabinets(params: Record<string, any> = {}) {
   return useQuery({
-    queryKey: cabinetKeys.list(),
-    queryFn: () => cabinetsService.getAll(),
+    queryKey: cabinetKeys.list(params),
+    queryFn: () => cabinetsService.getAll(params),
   });
 }
 

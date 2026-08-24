@@ -51,7 +51,7 @@ export interface User {
   preferences?: Record<string, any> | null;
   lastLoginAt?: string | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt: string | null;
 }
 
 export interface Role {
@@ -231,22 +231,24 @@ export interface TaskActionRequest {
   note?: string;
 }
 
+// --- Departments ---
+
+export interface Department {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  children?: Department[];
+  parent?: Department | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
 // --- Cabinets ---
 
 export interface CabinetFolder {
   id: string;
   name: string;
   cabinetId: string;
-}
-
-export interface Department {
-  id: string;
-  name: string;
-  code?: string | null;
-  description?: string | null;
-  managerId?: string | null;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface Cabinet {
@@ -263,7 +265,7 @@ export interface Cabinet {
   icon?: string | null;
   _count?: {
     documents: number;
-    folders: number;
+    folders?: number;
   };
 }
 
