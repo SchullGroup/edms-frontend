@@ -1,65 +1,39 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
-import { useStore } from '@/store/useStore';
+import { useDepartments } from '@/apis/hooks/useDepartments';
+import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useAllDocuments } from '@/apis/hooks/useDocuments';
+import { useAllTasks } from '@/apis/hooks/useTasks';
+import { useAllWorkflowInstances } from '@/apis/hooks/useWorkflowInstances';
 import { exportCsv } from '@/utils/exportCsv';
 import { HBarChart, LineChart } from '@/components/ui/Charts';
-import { Table } from '@/components/ui/Table';
+import { Table, Column } from '@/components/ui/Table';
+import { Spinner } from '@/components/common/Spinner';
+import {
+  buildDepartmentIndex,
+  buildCabinetDepartmentIndex,
+  documentDepartmentId,
+  taskDepartmentId,
+  departmentName,
+  bucketByMonth,
+  taskSlaRate,
+} from '@/apis/utils/managementAggregation';
 
-const DEPTS = ['Operations', 'Finance', 'Legal', 'Procurement', 'Audit & Compliance'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
-
-// Deterministic mock org data (per dept per month)
-const ORG: Record<string, any> = {
-  Operations: {
-    inflow: [140, 152, 149, 163, 171, 168, 88],
-    closed: [131, 149, 141, 158, 166, 162, 79],
-    sla: 87,
-    pending: 34,
-    progress: 22,
-    findings: 1,
-  },
-  Finance: {
-    inflow: [118, 121, 130, 127, 138, 145, 71],
-    closed: [112, 118, 124, 121, 130, 139, 66],
-    sla: 91,
-    pending: 26,
-    progress: 17,
-    findings: 1,
-  },
-  Legal: {
-    inflow: [42, 45, 39, 51, 48, 53, 24],
-    closed: [38, 43, 36, 46, 44, 47, 20],
-    sla: 74,
-    pending: 12,
-    progress: 9,
-    findings: 0,
-  },
-  Procurement: {
-    inflow: [66, 71, 74, 69, 82, 88, 41],
-    closed: [61, 66, 70, 63, 74, 80, 35],
-    sla: 82,
-    pending: 18,
-    progress: 11,
-    findings: 1,
-  },
-  'Audit & Compliance': {
-    inflow: [21, 19, 24, 22, 26, 25, 12],
-    closed: [19, 18, 22, 20, 24, 22, 10],
-    sla: 95,
-    pending: 5,
-    progress: 4,
-    findings: 0,
-  },
-};
-const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+interface DeptRow {
+  deptId: string;
+  dept: string;
+  pending: number;
+  progress: number;
+  closed: number;
+  sla: number;
+}
 
 export default function ManagementDashboard() {
   const router = useRouter();
   const { setPageTitle } = useUIStore();
-  const { findings } = useStore();
 
   const [st, setSt] = useState({ dept: 'All', range: 7 });
 
@@ -67,57 +41,93 @@ export default function ManagementDashboard() {
     setPageTitle('Organization Overview');
   }, [setPageTitle]);
 
-  const depts = st.dept === 'All' ? DEPTS : [st.dept];
+  const { data: departmentsRes, isLoading: loadingDepts } = useDepartments();
+  const { data: cabinetsRes, isLoading: loadingCabinets } = useCabinets();
+  const { data: documents = [], isLoading: loadingDocs } = useAllDocuments();
+  const { data: tasksPage, isLoading: loadingTasks } = useAllTasks();
+  const { data: instances = [], isLoading: loadingInstances } = useAllWorkflowInstances();
 
-  const inflowVals = MONTHS.slice(-st.range).map((_, i) =>
-    sum(depts.map((d) => ORG[d].inflow[ORG[d].inflow.length - st.range + i])),
+  const departments = departmentsRes?.data ?? [];
+  const cabinets = cabinetsRes?.data ?? [];
+  const tasks = tasksPage?.items ?? [];
+
+  const isLoading =
+    loadingDepts || loadingCabinets || loadingDocs || loadingTasks || loadingInstances;
+
+  const departmentIndex = useMemo(() => buildDepartmentIndex(departments), [departments]);
+  const cabinetIndex = useMemo(() => buildCabinetDepartmentIndex(cabinets), [cabinets]);
+  const deptOptions = useMemo(() => Array.from(departmentIndex.values()), [departmentIndex]);
+
+  const scopedDept = st.dept === 'All' ? null : st.dept;
+  const inScope = (deptId: string | null) => !scopedDept || deptId === scopedDept;
+
+  const scopedDocuments = useMemo(
+    () => documents.filter((d) => inScope(documentDepartmentId(d, cabinetIndex))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [documents, cabinetIndex, scopedDept],
   );
-  const closedVals = MONTHS.slice(-st.range).map((_, i) =>
-    sum(depts.map((d) => ORG[d].closed[ORG[d].closed.length - st.range + i])),
+  const scopedTasks = useMemo(
+    () => tasks.filter((t) => inScope(taskDepartmentId(t, cabinetIndex))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasks, cabinetIndex, scopedDept],
+  );
+  const scopedInstances = useMemo(
+    () =>
+      instances.filter((wi) => {
+        const cabinetId = wi.document?.cabinetId;
+        const deptId = cabinetId ? (cabinetIndex.get(cabinetId) ?? null) : null;
+        return inScope(deptId);
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [instances, cabinetIndex, scopedDept],
   );
 
-  const totFiles = sum(inflowVals);
-  const totClosed = sum(closedVals);
-  const slaAvg = Math.round(depts.reduce((a, d) => a + ORG[d].sla, 0) / depts.length);
-  const openFindings = findings.filter((f) => f.status !== 'Closed').length;
+  const inflow = bucketByMonth(scopedDocuments, (d) => d.createdAt, st.range);
+  const closedInstances = scopedInstances.filter((wi) => wi.closedAt);
+  const closed = bucketByMonth(closedInstances, (wi) => wi.closedAt, st.range);
+
+  const totFiles = inflow.values.reduce((a, b) => a + b, 0);
+  const totClosed = closed.values.reduce((a, b) => a + b, 0);
+  const slaRate = taskSlaRate(scopedTasks);
+
+  const avgTurnaroundDays = useMemo(() => {
+    if (closedInstances.length === 0) return null;
+    const totalDays = closedInstances.reduce((sum, wi) => {
+      const start = new Date(wi.startedAt).getTime();
+      const end = new Date(wi.closedAt as string).getTime();
+      return sum + (end - start) / 86400000;
+    }, 0);
+    return totalDays / closedInstances.length;
+  }, [closedInstances]);
 
   const kpis = [
+    { v: totFiles.toLocaleString(), l: 'Total files (period)', to: '/management/trends' },
+    { v: totClosed.toLocaleString(), l: 'Closed (period)', to: '/management/trends' },
     {
-      v: totFiles.toLocaleString(),
-      l: 'Total files (period)',
-      d: '+6.2%',
-      dir: 'up',
-      to: '/management/trends',
+      v: avgTurnaroundDays !== null ? `${avgTurnaroundDays.toFixed(1)} d` : '—',
+      l: 'Avg turnaround',
+      to: '/management/performance',
     },
-    { v: totClosed.toLocaleString(), l: 'Closed', d: '+7.8%', dir: 'up', to: '/management/trends' },
-    { v: '2.1 d', l: 'Avg turnaround', d: '-0.3 d', dir: 'up', to: '/management/perfoverview' },
-    {
-      v: slaAvg + '%',
-      l: 'SLA compliance',
-      d: slaAvg >= 85 ? '+1.9%' : '-2.1%',
-      dir: slaAvg >= 85 ? 'up' : 'down',
-      to: '/management/depts',
-    },
-    {
-      v: String(openFindings),
-      l: 'Open findings',
-      d: openFindings > 2 ? '+1' : '-1',
-      dir: openFindings > 2 ? 'down' : 'up',
-      to: '/management/compliance',
-    },
+    { v: `${slaRate}%`, l: 'SLA compliance', to: '/management/departments' },
   ];
 
-  const rows = depts.map((d) => ({
-    dept: d,
-    pending: ORG[d].pending,
-    progress: ORG[d].progress,
-    closed: sum(ORG[d].closed.slice(-st.range)),
-    sla: ORG[d].sla,
-    findings: ORG[d].findings,
-  }));
+  const rows: DeptRow[] = deptOptions
+    .filter((d) => !scopedDept || d.id === scopedDept)
+    .map((d) => {
+      const deptDocs = documents.filter((doc) => documentDepartmentId(doc, cabinetIndex) === d.id);
+      const deptTasks = tasks.filter((t) => taskDepartmentId(t, cabinetIndex) === d.id);
+      return {
+        deptId: d.id,
+        dept: d.name,
+        pending: deptDocs.filter((doc) => doc.status === 'pending').length,
+        progress: deptDocs.filter((doc) => doc.status === 'in_progress').length,
+        closed: deptDocs.filter((doc) => doc.status === 'closed').length,
+        sla: taskSlaRate(deptTasks),
+      };
+    });
 
-  const cols = [
-    { key: 'dept', label: 'Department', render: (r: any) => <b>{r.dept}</b> },
+  const cols: Column<DeptRow>[] = [
+    { key: 'dept', label: 'Department', render: (r) => <b>{r.dept}</b> },
     { key: 'pending', label: 'Pending', num: true, sortable: true },
     { key: 'progress', label: 'In Progress', num: true, sortable: true },
     { key: 'closed', label: 'Closed', num: true, sortable: true },
@@ -126,7 +136,7 @@ export default function ManagementDashboard() {
       label: 'SLA %',
       num: true,
       sortable: true,
-      render: (r: any) => (
+      render: (r) => (
         <span
           style={{
             fontWeight: 800,
@@ -137,8 +147,9 @@ export default function ManagementDashboard() {
         </span>
       ),
     },
-    { key: 'findings', label: 'Findings', num: true },
   ];
+
+  if (isLoading) return <Spinner />;
 
   return (
     <div>
@@ -146,7 +157,7 @@ export default function ManagementDashboard() {
         <div>
           <div className="page-title">Organization Overview</div>
           <div className="page-sub">
-            Org-wide throughput, SLA posture and findings — click any widget to drill down.
+            Org-wide throughput and SLA posture — click any widget to drill down.
           </div>
         </div>
         <div className="actions">
@@ -159,9 +170,9 @@ export default function ManagementDashboard() {
               onChange={(e) => setSt({ ...st, dept: e.target.value })}
             >
               <option value="All">All departments</option>
-              {DEPTS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+              {deptOptions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
                 </option>
               ))}
             </select>
@@ -183,7 +194,7 @@ export default function ManagementDashboard() {
         </div>
       </div>
 
-      <div className="grid cols-5 mb16">
+      <div className="grid cols-4 mb16">
         {kpis.map((k, i) => (
           <div
             key={i}
@@ -196,10 +207,6 @@ export default function ManagementDashboard() {
           >
             <div className="kv">{k.v}</div>
             <div className="kl">{k.l}</div>
-            <div className={`kd ${k.dir}`}>
-              {k.dir === 'up' ? '▲ ' : '▼ '}
-              {k.d}
-            </div>
           </div>
         ))}
       </div>
@@ -208,14 +215,16 @@ export default function ManagementDashboard() {
         <div className="card">
           <div className="card-head">
             <span className="h3">Inflow vs closure</span>
-            <span className="caption">{st.dept === 'All' ? 'All departments' : st.dept}</span>
+            <span className="caption">
+              {st.dept === 'All' ? 'All departments' : departmentName(st.dept, departmentIndex)}
+            </span>
           </div>
           <div className="card-body">
             <LineChart
-              labels={MONTHS.slice(-st.range)}
+              labels={inflow.labels}
               series={[
-                { name: 'Inflow', color: 'var(--status-pending)', values: inflowVals },
-                { name: 'Closed', color: 'var(--status-closed)', values: closedVals },
+                { name: 'Inflow', color: 'var(--status-pending)', values: inflow.values },
+                { name: 'Closed', color: 'var(--status-closed)', values: closed.values },
               ]}
             />
           </div>
@@ -227,19 +236,25 @@ export default function ManagementDashboard() {
             <span className="caption">Target ≥ 85%</span>
           </div>
           <div className="card-body">
-            <HBarChart
-              items={depts.map((d) => ({
-                label: d,
-                value: ORG[d].sla,
-                color:
-                  ORG[d].sla >= 85
-                    ? 'var(--status-closed)'
-                    : ORG[d].sla >= 80
-                      ? 'var(--status-pending)'
-                      : 'var(--status-overdue)',
-                onClick: () => router.push('/management/depts'),
-              }))}
-            />
+            {rows.length > 0 ? (
+              <HBarChart
+                items={rows.map((r) => ({
+                  label: r.dept,
+                  value: r.sla,
+                  color:
+                    r.sla >= 85
+                      ? 'var(--status-closed)'
+                      : r.sla >= 80
+                        ? 'var(--status-pending)'
+                        : 'var(--status-overdue)',
+                  onClick: () => router.push('/management/departments'),
+                }))}
+                max={100}
+                unit="%"
+              />
+            ) : (
+              <p className="muted">No departments yet.</p>
+            )}
           </div>
         </div>
       </div>
@@ -254,7 +269,7 @@ export default function ManagementDashboard() {
             Export
           </button>
         </div>
-        <Table cols={cols as any} rows={rows} onRow={() => router.push('/management/depts')} />
+        <Table cols={cols} rows={rows} onRow={() => router.push('/management/departments')} />
       </div>
     </div>
   );

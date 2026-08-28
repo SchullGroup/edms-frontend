@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tasksService, TaskFilters } from '../services/tasks.service';
 import { TaskActionRequest } from '@/types/models';
+import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 
 export const taskKeys = {
   all: ['tasks'] as const,
