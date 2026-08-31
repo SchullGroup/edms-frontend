@@ -26,7 +26,7 @@ export const fmtDateTime = (timestamp: number | string | Date) => {
   return new Date(timestamp).toLocaleString();
 };
 
-export function fmtDate(ts: number | null) {
+export function fmtDate(ts: number | string | null | undefined) {
   if (!ts) return '—';
   return new Date(ts).toLocaleDateString('en-GB', {
     day: '2-digit',

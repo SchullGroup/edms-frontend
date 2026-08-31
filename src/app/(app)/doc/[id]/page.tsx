@@ -1,11 +1,10 @@
-// @ts-nocheck
 'use client';
 
 import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, cabById, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocument, useUpdateDocument, useAddDocumentComment, useAddDocumentSignature } from '@/apis/hooks/useDocuments';
+import { useDocument, useAddDocumentComment, useAddDocumentSignature } from '@/apis/hooks/useDocuments';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { useUsers } from '@/apis/hooks/useUsers';
@@ -13,10 +12,14 @@ import { usePolicies } from '@/apis/hooks/usePolicies';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useSendNotification } from '@/apis/hooks/useNotifications';
 import { useTaskAction } from '@/apis/hooks/useTasks';
+import { useWorkflowInstances, useWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
 import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, UrgBadge, ConfBadge } from '@/components/ui/Badges';
-import { Avatar } from '@/components/ui/Avatar';
-import { timeAgo, fmtDateTime, fmtDate } from '@/utils/helpers';
+import { fmtDateTime, fmtDate } from '@/utils/helpers';
+import { DocumentViewerPanel } from '@/components/documents/DocumentViewerPanel';
+import { DocumentDetailsPanel } from '@/components/documents/DocumentDetailsPanel';
+import { WorkflowActivityPanel } from '@/components/workflowInstances/WorkflowActivityPanel';
+import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/components/documents/types';
 
 export default function DocumentDetail({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -31,41 +34,49 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const { data: policiesData, isLoading: isLoadingPolicies } = usePolicies();
   const cabinets = cabinetsData?.data || [];
   const users = usersData?.data || [];
-  const policies = policiesData;
 
-  const updateDocument = useUpdateDocument();
   const addDocumentComment = useAddDocumentComment();
   const addDocumentSignature = useAddDocumentSignature();
-  const taskAction = useTaskAction();
   const createAuditLog = useCreateAuditLog();
   const sendNotification = useSendNotification();
+  const taskAction = useTaskAction();
 
   const [mode, setMode] = useState<'view' | 'redact'>('view');
   const [previewRelease, setPreviewRelease] = useState(false);
-  const [page, setPage] = useState(1);
   const [zoom, setZoom] = useState(1);
   const [showMenu, setShowMenu] = useState(false);
 
   const { data: rawDoc, isLoading } = useDocument(docId);
   const me = currentUser;
 
-  // Enhance the raw doc with fallback arrays so the UI doesn't break for missing features
-  const doc = rawDoc
+  // `comments`/`signatures`/`sealed`/`legalHold` have no backing endpoint at
+  // all (confirmed live: POST /documents/{id}/comments and /signatures both
+  // 404) — always empty/false in practice. See types.ts for why these stay
+  // explicitly typed instead of just disappearing behind @ts-nocheck.
+  const doc: DocumentWithUiExtras | null = rawDoc
     ? {
         ...rawDoc,
-        signatures: (rawDoc as any).signatures || [],
-        comments: (rawDoc as any).comments || [],
-        workflow: (rawDoc as any).workflow || [],
-        pages: (rawDoc as any).pages || 1,
-        version: (rawDoc as any).currentVersion?.versionNumber || 1,
-        owner: rawDoc.createdBy,
-        assignee: (rawDoc as any).assignee || rawDoc.createdBy,
+        signatures: (rawDoc as { signatures?: DocumentSignatureFieldUI[] }).signatures || [],
+        comments: (rawDoc as { comments?: DocumentWithUiExtras['comments'] }).comments || [],
+        sealed: (rawDoc as { sealed?: boolean }).sealed || false,
+        legalHold: (rawDoc as { legalHold?: boolean }).legalHold || false,
       }
     : null;
 
-  const { data: activeCabFoldersData } = useCabinetFolders(doc?.cabinet || undefined);
+  // "Who owns this right now" isn't a Document field on the real API — it only
+  // exists as the assignee of whichever task is currently active in the
+  // document's workflow instance. `GET /workflow-instances?documentId=` gives
+  // the instance id; the single-instance GET is what actually embeds `tasks[]`
+  // and the stage definitions (verified against the live backend — the list
+  // response doesn't carry either).
+  const { data: instancesData } = useWorkflowInstances({ documentId: doc?.id }, { enabled: !!doc?.id });
+  const instanceSummary = instancesData?.data?.[0];
+  const { data: workflowInstance } = useWorkflowInstance(instanceSummary?.id);
+  const currentTask = workflowInstance?.tasks?.find((t) => t.status === 'pending');
+
+  const { data: activeCabFoldersData } = useCabinetFolders(doc?.cabinetId);
   const activeCabFolders = activeCabFoldersData?.data || [];
-  const folderObj = activeCabFolders.find((f: any) => f.id === doc?.folder);
+  const folderObj = activeCabFolders.find((f) => f.id === doc?.folderId);
   const folderLabel = folderObj ? folderObj.name : '';
 
   useEffect(() => {
@@ -73,6 +84,16 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       setPageTitle(doc.title);
     }
   }, [doc?.title, setPageTitle]);
+
+  if (isLoading || isLoadingCabs || isLoadingUsers || isLoadingPolicies) {
+    return (
+      <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
+        <div className="h3" style={{ color: 'var(--text-soft)' }}>
+          Loading document {docId.toUpperCase()}...
+        </div>
+      </div>
+    );
+  }
 
   if (!doc) {
     return (
@@ -84,16 +105,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <button className="btn btn-primary btn-sm" onClick={() => router.push('/staff/cabinets')}>
             Browse cabinets
           </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoading || isLoadingCabs || isLoadingUsers || isLoadingPolicies) {
-    return (
-      <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
-        <div className="h3" style={{ color: 'var(--text-soft)' }}>
-          Loading document {docId.toUpperCase()}...
         </div>
       </div>
     );
@@ -118,9 +129,9 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                 detail: 'Requested access',
               });
               sendNotification.mutate({
-                userId: doc.owner,
+                userId: doc.createdBy,
                 type: 'workflow',
-                message: `${me?.name} requested access to “${doc.title}”.`,
+                message: `Someone requested access to “${doc.title}”.`,
                 docId: doc.id,
               });
               addToast('Access request sent', 'info');
@@ -133,11 +144,39 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const isMine = doc.assignee === me.id;
-  const stage = doc.workflow?.find((s: any) => s.state === 'current');
-  const highConf = ['Restricted', 'Top Secret', 'confidential', 'restricted'].includes(doc.confidentiality);
-  const confPolicyList = Array.isArray(policiesData) ? policiesData : [];
-  const confPolicyItem = confPolicyList.find((p: any) => p.key === `confidentiality.${doc?.confidentiality?.toLowerCase()}`);
+  // "Mine" and "can act" are governed by the current task's assignee, not any
+  // field on the document itself — the real Document type has no assignee.
+  const isMine =
+    !!currentTask &&
+    (currentTask.assigneeId === me.id ||
+      (!!currentTask.assignedRole?.name && me.roles?.includes(currentTask.assignedRole.name)));
+  const stageDef = workflowInstance?.workflowDefinition?.definition?.stages?.find(
+    (s) => s.id === workflowInstance?.currentStage,
+  );
+  const stage = stageDef ? { name: stageDef.name || stageDef.id } : null;
+  const currentStageActorName = currentTask?.assignee?.name || currentTask?.assignedRole?.name || 'Unassigned';
+
+  // `fileKey` is documented as a full S3 URL for anything actually uploaded
+  // through this app — the backend just stores whatever `fileUrl` the client
+  // sent at creation time under that column name. Fixture/seed documents are
+  // the exception (their fileKey is a fake *relative* path, e.g.
+  // "fixtures/invoice-2.pdf", since they were seeded straight into the DB,
+  // never actually uploaded) — an <iframe>/<img> given a relative src
+  // resolves it against the current page, not S3, so it silently loads this
+  // app's own route instead of erroring. Guard against that explicitly rather
+  // than trusting every fileKey to be absolute, and percent-encode whatever's
+  // left (spaces, non-ASCII characters) so the URL survives being embedded in
+  // an attribute intact.
+  const rawFileKey = doc.currentVersion?.fileKey;
+  const isAbsoluteFileUrl = !!rawFileKey && /^https?:\/\//i.test(rawFileKey);
+  const fileUrl = isAbsoluteFileUrl ? encodeURI(rawFileKey as string) : undefined;
+  const fileMimeType = doc.currentVersion?.mimeType || '';
+
+  const highConf = ['restricted', 'confidential'].includes(doc.confidentiality.toLowerCase());
+  const confPolicyList: any[] = Array.isArray(policiesData) ? policiesData : [];
+  const confPolicyItem = confPolicyList.find(
+    (p) => p.key === `confidentiality.${doc.confidentiality.toLowerCase()}`,
+  );
   const confPolicy = confPolicyItem?.value || { download: true, print: true, watermark: false };
   const lockedByOther = doc.isCheckedOut && doc.checkoutLock?.lockedBy !== me.id;
   const eff =
@@ -147,88 +186,42 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     ? 'Document is closed'
     : lockedByOther
       ? `Checked out by another user`
-      : !isMine
-        ? `Assigned to ${userById(users, doc.assignee)?.name || 'another user'}`
-        : null;
-  const canAct = !closed && !lockedByOther && isMine && mode === 'view';
-
-  const advanceWorkflow = (comment?: string) => {
-    const clone = JSON.parse(JSON.stringify(doc));
-    const idx = clone.workflow.findIndex((s: any) => s.state === 'current');
-    if (idx < 0) return;
-    clone.workflow[idx].state = 'done';
-    clone.workflow[idx].actedAt = Date.now();
-    if (comment) clone.workflow[idx].comment = comment;
-
-    if (idx + 1 < clone.workflow.length) {
-      const next = clone.workflow[idx + 1];
-      next.state = 'current';
-      clone.assignee = next.assignee;
-      clone.status = 'In Progress';
-      sendNotification.mutate({
-        userId: next.assignee,
-        type: 'task',
-        message: `“${clone.title}” has reached stage “${next.name}” and is assigned to you.`,
-        docId: clone.id,
-      });
-    } else {
-      clone.status = 'Closed';
-      clone.closedAt = Date.now();
-      clone.sealed = true;
-      sendNotification.mutate({
-        userId: clone.owner,
-        type: 'workflow',
-        message: `“${clone.title}” has completed its workflow and is closed.`,
-        docId: clone.id,
-      });
-    }
-    updateDocument.mutate({ id: clone.id, updates: clone });
-  };
-
-  const returnWorkflow = (reason: string) => {
-    const clone = JSON.parse(JSON.stringify(doc));
-    const idx = clone.workflow.findIndex((s: any) => s.state === 'current');
-    if (idx <= 0) return;
-    clone.workflow[idx].state = 'next';
-    const prev = clone.workflow[idx - 1];
-    prev.state = 'current';
-    prev.actedAt = null;
-    prev.comment = null;
-    clone.assignee = prev.assignee;
-    clone.status = 'Pending';
-    clone.comments.push({ by: me.id, at: Date.now(), text: 'Returned: ' + reason });
-    sendNotification.mutate({
-      userId: prev.assignee,
-      type: 'workflow',
-      message: `“${clone.title}” was returned to stage “${prev.name}”: ${reason}`,
-      docId: clone.id,
-    });
-    updateDocument.mutate({ id: clone.id, updates: clone });
-  };
+      : !currentTask
+        ? 'No action is pending on this document'
+        : !isMine
+          ? `Assigned to ${currentStageActorName}`
+          : null;
+  const canAct = !closed && !lockedByOther && !!currentTask && isMine && mode === 'view';
 
   const actApprove = () => {
+    if (!currentTask) return;
     openConfirm({
       title: 'Approve this stage?',
       confirmLabel: 'Approve',
       message: `“${stage ? stage.name : 'Current stage'}” will be marked complete and the file will advance to the next stage. This action is recorded in the audit trail.`,
       onConfirm: () => {
-        advanceWorkflow('Approved by ' + me.name);
-        createAuditLog.mutate({
-          action: 'APPROVE',
-          target: doc.id,
-          detail: `Approved stage “${stage ? stage.name : ''}”`,
-        });
-        addToast(
-          doc.status === 'Closed'
-            ? 'Workflow complete — document closed & sealed'
-            : 'Approved — advanced to next stage',
-          'success',
+        taskAction.mutate(
+          { id: currentTask.id, actionReq: { action: 'approve', note: 'Approved by ' + me.name } },
+          {
+            onSuccess: () => {
+              createAuditLog.mutate({
+                action: 'APPROVE',
+                target: doc.id,
+                detail: `Approved stage “${stage ? stage.name : ''}”`,
+              });
+              addToast('Approved — advanced to next stage', 'success');
+            },
+          },
         );
       },
     });
   };
 
+  // "Reject" in this UI means "send it back with a reason" (SLA restarts on the
+  // previous stage) — that's the real `request_changes` action, not `reject`
+  // (which the API uses to terminate the workflow outright).
   const actReject = () => {
+    if (!currentTask) return;
     let reasonText = '';
     openModal({
       title: 'Reject / return to previous stage',
@@ -256,13 +249,22 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           kind: 'btn-danger',
           onClick: () => {
             if (!reasonText.trim()) return false;
-            returnWorkflow(reasonText.trim());
-            createAuditLog.mutate({
-              action: 'REJECT',
-              target: doc.id,
-              detail: 'Rejected: ' + reasonText.trim(),
-            });
-            addToast('Returned to previous stage with reason', 'warning');
+            taskAction.mutate(
+              {
+                id: currentTask.id,
+                actionReq: { action: 'request_changes', note: reasonText.trim() },
+              },
+              {
+                onSuccess: () => {
+                  createAuditLog.mutate({
+                    action: 'REJECT',
+                    target: doc.id,
+                    detail: 'Rejected: ' + reasonText.trim(),
+                  });
+                  addToast('Returned to previous stage with reason', 'warning');
+                },
+              },
+            );
           },
         },
       ],
@@ -306,9 +308,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     let signMode: 'typed' | 'drawn' | 'stamp' = 'typed';
     let typedText = me.name;
     let passwordVal = '';
+    const fieldLabel = sigField.field || sigField.fieldName || 'Signature Field';
 
     openModal({
-      title: `Sign Document — ${sigField.field || sigField.fieldName || 'Signature Field'}`,
+      title: `Sign Document — ${fieldLabel}`,
       size: 'lg',
       body: (
         <div>
@@ -317,7 +320,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               <Icon name="shield" size={15} />
             </span>{' '}
             <b>Cryptographic & Tamper-Evident Signatures</b> — Your signature will be timestamped,
-            linked to user ID <b>{me.id}</b> ({me.roleLabel}), and recorded in the audit trail.
+            linked to user ID <b>{me.id}</b> ({me.roles?.[0] || 'User'}), and recorded in the audit
+            trail.
           </div>
 
           <div className="field mb16">
@@ -330,7 +334,9 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           </div>
 
           <div className="field mb16">
-            <label>Re-enter Password to Confirm Signature <span className="req">*</span></label>
+            <label>
+              Re-enter Password to Confirm Signature <span className="req">*</span>
+            </label>
             <input
               type="password"
               className="input"
@@ -384,7 +390,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             addDocumentSignature.mutate(
               {
                 id: doc.id,
-                fieldName: sigField.field || sigField.fieldName || 'Signature Field',
+                fieldName: fieldLabel,
                 method: signMode,
                 password: passwordVal,
               },
@@ -393,7 +399,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                   createAuditLog.mutate({
                     action: 'SIGN',
                     target: doc.id,
-                    detail: `Signed field "${sigField.field || sigField.fieldName || 'Signature Field'}" via ${signMode} signature`,
+                    detail: `Signed field "${fieldLabel}" via ${signMode} signature`,
                   });
                   closeModal();
                 },
@@ -405,7 +411,12 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     });
   };
 
-  const actionBtn = (label: string, kind: string, fn: () => void, opts: any = {}) => (
+  const actionBtn = (
+    label: string,
+    kind: string,
+    fn: () => void,
+    opts: { icon?: string; sm?: boolean; always?: boolean } = {},
+  ) => (
     <button
       className={`btn ${kind} ${opts.sm ? 'btn-sm' : ''}`}
       disabled={!canAct && !opts.always}
@@ -424,10 +435,9 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   return (
     <div>
       <div className="crumbs">
-        <a onClick={() => router.push('/staff/cabinets')}>Cabinets</a>{' '}
-        <span className="sep">›</span>
-        <a onClick={() => router.push(`/staff/cabinets?cab=${doc.cabinet}`)}>
-          {cabById(cabinets, doc.cabinet)?.name}
+        <a onClick={() => router.push('/staff/cabinets')}>Cabinets</a> <span className="sep">›</span>
+        <a onClick={() => router.push(`/staff/cabinets?cab=${doc.cabinetId}`)}>
+          {cabById(cabinets, doc.cabinetId)?.name}
         </a>{' '}
         <span className="sep">›</span>
         <span>{folderLabel}</span> <span className="sep">›</span>
@@ -441,12 +451,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           </div>
           <div className="flex g8 mt8 wrap">
             <StatusBadge status={eff} />
-            <ConfBadge
-              level={doc.confidentiality?.charAt(0).toUpperCase() + doc.confidentiality?.slice(1)}
-            />
-            <UrgBadge level={doc.urgency?.charAt(0).toUpperCase() + doc.urgency?.slice(1)} />
+            <ConfBadge level={doc.confidentiality.charAt(0).toUpperCase() + doc.confidentiality.slice(1)} />
+            <UrgBadge level={doc.urgency.charAt(0).toUpperCase() + doc.urgency.slice(1)} />
             <span className="caption" style={{ alignSelf: 'center' }}>
-              v{doc.version} · {fmtDate(doc.createdAt)}
+              v{doc.currentVersion?.versionNumber ?? 1} · {fmtDate(doc.createdAt)}
             </span>
           </div>
         </div>
@@ -497,7 +505,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                     onClick={() => {
                       setShowMenu(false);
                       if (doc.signatures.length) handleSign(0);
-                      else addToast('No fields', 'info');
+                      else addToast('No signature fields on this document', 'info');
                     }}
                   >
                     <span>
@@ -540,7 +548,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <span>
             <Icon name="lock" size={15} />
           </span>{' '}
-          Read-only: checked out by {userById(users, doc.locked).name} since {fmtDate(doc.created)}.
+          Read-only: checked out by {userById(users, doc.checkoutLock?.lockedBy)?.name} since{' '}
+          {fmtDate(doc.checkoutLock?.lockedAt)}.
         </div>
       )}
       {doc.sealed && closed && (
@@ -565,9 +574,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         <div className="card card-pad mb16">
           <div className="flex jcb aic wrap g12">
             <div>
-              <div className="h3">
-                Marked regions: {doc.redactions?.filter((r: any) => !r.released).length || 0}
-              </div>
+              <div className="h3">Marked regions: 0</div>
               <div className="caption">AI suggestions and manual regions, each with a reason.</div>
             </div>
             <div className="flex g8 wrap">
@@ -592,184 +599,54 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       )}
 
       <div className="doc-layout">
-        {/* Viewer Area */}
-        <div className="viewer doc-viewer-col">
-          <div className="viewer-bar">
-            <button className="icon-btn" onClick={() => setPage(Math.max(1, page - 1))}>
-              ‹
-            </button>
-            <span className="tnum">
-              Page {page} / {doc.pages}
-            </span>
-            <button className="icon-btn" onClick={() => setPage(Math.min(doc.pages, page + 1))}>
-              ›
-            </button>
-            <span style={{ width: '14px' }}></span>
-            <button className="icon-btn" onClick={() => setZoom(Math.max(0.6, zoom - 0.15))}>
-              −
-            </button>
-            <span className="tnum">{Math.round(zoom * 100)}%</span>
-            <button className="icon-btn" onClick={() => setZoom(Math.min(1.6, zoom + 0.15))}>
-              +
-            </button>
-          </div>
-          <div className="viewer-page-wrap">
-            <div
-              className="doc-page"
-              style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }}
-            >
-              {(confPolicy.watermark || highConf) && (
-                <div className="watermark">
-                  <span>
-                    {doc.confidentiality} · {me.name}
-                  </span>
-                </div>
-              )}
-              <h4>{doc.title}</h4>
-              <p>
-                Ref: {doc.id.toUpperCase()} · Version {doc.version} · Page {page} of {doc.pages}
-              </p>
-              <p>
-                This is a rendered preview of the captured document. The OCR text layer sits beneath
-                this page, enabling in-document search, semantic indexing and accessible reading.
-                Annotations, signature fields and redaction regions render as overlays.
-              </p>
+        <DocumentViewerPanel
+          documentTitle={doc.title}
+          confidentiality={doc.confidentiality}
+          fileUrl={fileUrl}
+          rawFileKey={rawFileKey}
+          fileMimeType={fileMimeType}
+          showWatermark={confPolicy.watermark || highConf}
+          watermarkText={`${doc.confidentiality} · ${me.name}`}
+          zoom={zoom}
+          onZoomChange={setZoom}
+          signatures={doc.signatures}
+          sealed={doc.sealed}
+          lockedByOther={lockedByOther}
+          onSignatureFieldClick={handleSign}
+          getSignerName={(userId) => userById(users, userId)?.name || 'User'}
+        />
 
-              {/* Signatures */}
-              {doc.signatures
-                ?.filter((s: any) => s.page === page)
-                .map((s: any, i: number) => (
-                  <div
-                    key={i}
-                    className={`sig-field ${s.signedBy ? 'signed' : ''}`}
-                    style={{ left: s.x + '%', top: s.y + '%', width: s.w + '%', height: s.h + '%' }}
-                    onClick={() => {
-                      if (!s.signedBy && !doc.sealed && !lockedByOther) handleSign(i);
-                    }}
-                  >
-                    {s.signedBy ? userById(users, s.signedBy).name : '✎ ' + s.field}
-                  </div>
-                ))}
-            </div>
-          </div>
-        </div>
+        <DocumentDetailsPanel
+          documentId={doc.id}
+          documentType={doc.documentType}
+          cabinetId={doc.cabinetId}
+          ownerName={userById(users, doc.createdBy)?.name || 'System'}
+          assigneeName={currentTask ? currentStageActorName : 'Unassigned'}
+          createdAtLabel={fmtDateTime(doc.createdAt)}
+          metadata={doc.metadata || []}
+        />
 
-        {/* Metadata Panel */}
-        <div className="card">
-          <div className="card-head">
-            <span className="h3">Details</span>
-          </div>
-          <div className="card-body" style={{ paddingTop: '6px' }}>
-            <div className="meta-row">
-              <span className="k">Document ID</span>
-              <span className="v">{doc.id.substring(0, 8).toUpperCase()}</span>
-            </div>
-            <div className="meta-row">
-              <span className="k">Type</span>
-              <span className="v">{doc.documentType}</span>
-            </div>
-            <div className="meta-row">
-              <span className="k">Cabinet</span>
-              <span className="v">{doc.cabinetId ? doc.cabinetId.substring(0, 8) : 'Unknown'}</span>
-            </div>
-            <div className="meta-row">
-              <span className="k">Owner</span>
-              <span className="v">{userById(users, doc.owner)?.name || 'System'}</span>
-            </div>
-            <div className="meta-row">
-              <span className="k">Assignee</span>
-              <span className="v">{userById(users, doc.assignee)?.name || 'Unassigned'}</span>
-            </div>
-            <div className="meta-row">
-              <span className="k">Created</span>
-              <span className="v">{fmtDateTime(doc.createdAt)}</span>
-            </div>
-            {Object.entries((doc as any).metadata || {}).map(([k, v]) => (
-              <div key={k} className="meta-row">
-                <span className="k">{k}</span>
-                <span className="v">{String(v)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Workflow Panel */}
-        <div className="card">
-          <div className="card-head">
-            <span className="h3">Workflow & Activity</span>
-          </div>
-          <div className="card-body">
-            {doc.workflow?.map((s: any, i: number) => (
-              <div key={i} className={`wf-stage ${s.state}`}>
-                <div className="wf-dot">{s.state === 'done' ? '✓' : String(i + 1)}</div>
-                <div className="wf-info" style={{ flex: 1 }}>
-                  <div className="nm">{s.name}</div>
-                  <div className="who">
-                    {userById(users, s.assignee).name}{' '}
-                    {s.actedAt
-                      ? `· ${fmtDate(s.actedAt)}`
-                      : s.state === 'current'
-                        ? '· in progress'
-                        : ''}
-                  </div>
-                </div>
-              </div>
-            ))}
-            <div className="divider"></div>
-            <div className="h3 mb8">Minutes & comments</div>
-            {doc.comments?.map((c: any, i: number) => {
-              const creator = c.creator || userById(users, c.createdBy || c.by);
-              const createdAt = c.createdAt || c.at;
-              return (
-                <div key={c.id || i} className="comment">
-                  <Avatar user={creator} />
-                  <div>
-                    <div className="by">
-                      {creator?.name || 'User'} · {timeAgo(createdAt)}
-                    </div>
-                    <div className="body">{c.text}</div>
-                  </div>
-                </div>
-              );
-            })}
-            {(!doc.comments || doc.comments.length === 0) && (
-              <div className="caption mb8">No comments yet.</div>
-            )}
-            <div className="mt8">
-              <textarea
-                id="commentInput"
-                className="input"
-                placeholder="Add a comment or minute…"
-                style={{ minHeight: '54px' }}
-              ></textarea>
-              <button
-                className="btn btn-primary btn-sm mt8"
-                disabled={addDocumentComment.isPending}
-                onClick={() => {
-                  const el = document.getElementById('commentInput') as HTMLTextAreaElement;
-                  const text = el?.value?.trim();
-                  if (!text) return;
-
-                  addDocumentComment.mutate(
-                    { id: doc.id, text },
-                    {
-                      onSuccess: () => {
-                        createAuditLog.mutate({
-                          action: 'COMMENT',
-                          target: doc.id,
-                          detail: text.slice(0, 80),
-                        });
-                        el.value = '';
-                      },
-                    },
-                  );
-                }}
-              >
-                {addDocumentComment.isPending ? 'Adding...' : 'Add comment'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <WorkflowActivityPanel
+          workflowInstance={workflowInstance}
+          currentStageActorName={currentStageActorName}
+          comments={doc.comments}
+          getCommentAuthor={(c) => c.creator || userById(users, c.createdBy)}
+          isAddingComment={addDocumentComment.isPending}
+          onAddComment={(text) => {
+            addDocumentComment.mutate(
+              { id: doc.id, text },
+              {
+                onSuccess: () => {
+                  createAuditLog.mutate({
+                    action: 'COMMENT',
+                    target: doc.id,
+                    detail: text.slice(0, 80),
+                  });
+                },
+              },
+            );
+          }}
+        />
       </div>
     </div>
   );

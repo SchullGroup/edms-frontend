@@ -1,29 +1,95 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useUsers, useCreateUser, useUpdateUser } from '@/apis/hooks/useUsers';
+import { useRoles, useCreateRole, useSetRolePermissions } from '@/apis/hooks/useRoles';
+import { useDepartments } from '@/apis/hooks/useDepartments';
+import { usePolicies, useUpdatePolicyControl } from '@/apis/hooks/usePolicies';
+import { buildDepartmentIndex, departmentName } from '@/apis/utils/managementAggregation';
 import { Table, Column } from '@/components/ui/Table';
+import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
+import { Role } from '@/types/models';
+
+const USERS_PAGE_SIZE = 10;
+
+const PERMISSION_RESOURCES: { value: string; label: string }[] = [
+  { value: 'document', label: 'Documents' },
+  { value: 'cabinet', label: 'Cabinets' },
+  { value: 'folder', label: 'Folders' },
+  { value: 'workflow', label: 'Workflows' },
+  { value: 'audit', label: 'Audit' },
+  { value: 'user', label: 'Users' },
+  { value: 'dashboard', label: 'Dashboard' },
+];
+
+const PERMISSION_ACTIONS: { value: string; label: string }[] = [
+  { value: 'view', label: 'View' },
+  { value: 'create', label: 'Create' },
+  { value: 'edit', label: 'Edit' },
+  { value: 'delete', label: 'Delete' },
+  { value: 'route', label: 'Route' },
+  { value: 'export', label: 'Export' },
+  { value: 'download', label: 'Download' },
+  { value: 'print', label: 'Print' },
+];
 
 export default function UsersRolesPage() {
-  const { rolesMatrix, policies, updateRoleMatrix, updatePolicyControl, auditAction } = useStore();
+  const { auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
   const [tab, setTab] = useState<'users' | 'roles' | 'groups'>('users');
+  const [permResource, setPermResource] = useState<string>('document');
 
-  const { data: usersData, isLoading } = useUsers();
+  const [page, setPage] = useState(1);
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'inactive' | 'suspended'>('');
+
+  const { data: usersData, isLoading } = useUsers({
+    page,
+    limit: USERS_PAGE_SIZE,
+    departmentId: departmentFilter || undefined,
+    status: statusFilter || undefined,
+  });
   const rawUsers = usersData?.data || [];
+
+  // The role picker in the invite/edit modal is reachable from any tab (the
+  // header button isn't tab-scoped), so keep it enabled once that modal's
+  // been opened even if the admin isn't on the Roles tab — but don't fetch
+  // it just for sitting on Users or Groups & SoD, which never render it.
+  const [modalNeedsRoles, setModalNeedsRoles] = useState(false);
+  const { data: roles } = useRoles({ enabled: tab === 'roles' || modalNeedsRoles });
+  const setRolePermissions = useSetRolePermissions();
+  const createRole = useCreateRole();
+
+  const { data: departmentsData } = useDepartments();
+  const departmentIndex = useMemo(
+    () => buildDepartmentIndex(departmentsData?.data || []),
+    [departmentsData],
+  );
+  const departmentList = useMemo(() => Array.from(departmentIndex.values()), [departmentIndex]);
+
+  // Segregation-of-duties controls only render on the Groups & SoD tab.
+  const { data: policiesData } = usePolicies({ enabled: tab === 'groups' });
+  const policies = policiesData as any;
+  const updatePolicyControl = useUpdatePolicyControl();
 
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
 
+  const roleLabel = (u: any) => {
+    const names =
+      u.userRoles?.map((ur: any) => ur.role?.name).filter(Boolean) ??
+      u.roles?.map((r: any) => r.name);
+    return names?.length ? names.join(', ') : 'Unassigned';
+  };
+
   const users = rawUsers.map((u) => ({
     ...u,
-    roleLabel: 'Staff', // Mock for now since userRoles requires relation inclusion
-    dept: u.departmentId || 'Unknown',
+    roleLabel: roleLabel(u),
+    dept: departmentName(u.departmentId, departmentIndex),
     status: u.status === 'active' ? 'Active' : u.status === 'suspended' ? 'Suspended' : 'Inactive',
-    sso: false,
   }));
 
   useEffect(() => {
@@ -31,16 +97,15 @@ export default function UsersRolesPage() {
   }, [setPageTitle]);
 
   const handleUserModal = (user: any | null) => {
+    setModalNeedsRoles(true);
     const isNew = !user;
-    let u = user || {
-      id: 'u-' + Date.now(),
-      name: '',
-      email: '',
-      role: 'staff',
-      roleLabel: 'Staff Officer',
-      dept: 'Operations',
-      status: 'Active',
-      sso: false,
+    const existingRoleId = user?.userRoles?.[0]?.roleId ?? user?.roles?.[0]?.id ?? '';
+    let u = {
+      id: user?.id,
+      name: user?.name || '',
+      email: user?.email || '',
+      roleId: existingRoleId,
+      departmentId: user?.departmentId || departmentList[0]?.id || '',
     };
 
     openModal({
@@ -72,13 +137,14 @@ export default function UsersRolesPage() {
           <div className="field">
             <label>Role</label>
             <select
-              className="input"
-              defaultValue={u.roleLabel}
-              onChange={(e) => (u.roleLabel = e.target.value)}
+              className="input capitalize"
+              defaultValue={u.roleId}
+              onChange={(e) => (u.roleId = e.target.value)}
             >
-              {rolesMatrix?.map((r: any) => (
-                <option key={r.role} value={r.role}>
-                  {r.role}
+              <option value="">Unassigned</option>
+              {roles?.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name.replace('_', ' ')}
                 </option>
               ))}
             </select>
@@ -87,34 +153,15 @@ export default function UsersRolesPage() {
             <label>Department</label>
             <select
               className="input"
-              defaultValue={u.dept}
-              onChange={(e) => (u.dept = e.target.value)}
+              defaultValue={u.departmentId}
+              onChange={(e) => (u.departmentId = e.target.value)}
             >
-              {[
-                'Operations',
-                'Finance',
-                'Legal',
-                'Procurement',
-                'IT',
-                'Audit & Compliance',
-                'Executive',
-              ].map((d) => (
-                <option key={d} value={d}>
-                  {d}
+              {departmentList.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
                 </option>
               ))}
             </select>
-          </div>
-          <div className="field">
-            <label>SSO (Okta)</label>
-            <label className="check">
-              <input
-                type="checkbox"
-                defaultChecked={u.sso}
-                onChange={(e) => (u.sso = e.target.checked)}
-              />{' '}
-              Enrolled in single sign-on
-            </label>
           </div>
         </div>
       ),
@@ -128,28 +175,33 @@ export default function UsersRolesPage() {
               addToast('Name and email are required', 'error');
               return;
             }
-            const map: Record<string, string> = {
-              'Staff Officer': 'staff',
-              Supervisor: 'supervisor',
-              Management: 'management',
-              'Client Admin': 'client_admin',
-              'Internal Auditor': 'internal_auditor',
-            };
-            u.role = map[u.roleLabel] || 'staff';
             if (isNew) {
-              createUser.mutate({
-                email: u.email,
-                name: u.name,
-                password: 'password', // Default
-                departmentId: u.dept,
-              });
-              auditAction('USER_INVITE', u.id, 'Invited ' + u.email);
+              createUser.mutate(
+                {
+                  email: u.email,
+                  name: u.name,
+                  password: 'password', // Default
+                  departmentId: u.departmentId || undefined,
+                  roleIds: u.roleId ? [u.roleId] : undefined,
+                },
+                {
+                  onSuccess: (newUser: any) => {
+                    auditAction('USER_INVITE', newUser.id, 'Invited ' + u.email);
+                  },
+                },
+              );
             } else {
-              updateUser.mutate({
-                id: u.id,
-                updates: { name: u.name, email: u.email },
-              });
-              auditAction('USER_EDIT', u.id, 'Updated profile/role');
+              updateUser.mutate(
+                {
+                  id: u.id,
+                  updates: { name: u.name, email: u.email, departmentId: u.departmentId } as any,
+                },
+                {
+                  onSuccess: () => {
+                    auditAction('USER_EDIT', u.id, 'Updated profile/role');
+                  },
+                },
+              );
             }
             closeModal();
           },
@@ -191,16 +243,6 @@ export default function UsersRolesPage() {
     { key: 'roleLabel', label: 'Role', sortable: true },
     { key: 'dept', label: 'Department' },
     {
-      key: 'sso',
-      label: 'SSO',
-      render: (u) =>
-        u.sso ? (
-          <span className="badge b-status-closed">Enrolled</span>
-        ) : (
-          <span className="badge b-status-pending">Pending</span>
-        ),
-    },
-    {
       key: 'status',
       label: 'Status',
       render: (u) => (
@@ -237,15 +279,86 @@ export default function UsersRolesPage() {
     },
   ];
 
-  const permCols = [
-    ['view', 'View'],
-    ['upload', 'Upload'],
-    ['approve', 'Approve'],
-    ['sign', 'Sign'],
-    ['redact', 'Redact'],
-    ['admin', 'Admin'],
-    ['audit', 'Audit'],
-  ];
+  const handleNewRole = () => {
+    setModalNeedsRoles(true);
+    const form = { name: '', description: '' };
+    openModal({
+      title: 'New role',
+      body: (
+        <div className="grid" style={{ gap: '12px' }}>
+          <div className="field">
+            <label>
+              Role name <span className="req">*</span>
+            </label>
+            <input
+              className="input"
+              placeholder="e.g. finance_reviewer"
+              maxLength={100}
+              onChange={(e) => (form.name = e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label>Description</label>
+            <input
+              className="input"
+              placeholder="Optional — what this role is for"
+              maxLength={500}
+              onChange={(e) => (form.description = e.target.value)}
+            />
+          </div>
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Create role',
+          kind: 'btn-primary',
+          onClick: () => {
+            const name = form.name.trim();
+            if (!name) {
+              addToast('Role name is required', 'error');
+              return false;
+            }
+            return createRole
+              .mutateAsync({ name, description: form.description.trim() || undefined })
+              .then((created) => {
+                auditAction('ROLE_CREATE', created.name, `Created role ${name}`);
+                setTab('roles');
+                closeModal();
+              })
+              .catch(() => false);
+          },
+        },
+      ],
+    });
+  };
+
+  const roleHasPermission = (role: Role, resource: string, action: string) =>
+    !!role.permissions?.some((p) => p.resource === resource && p.action === action);
+
+  const toggleRolePermission = (role: Role, resource: string, action: string, checked: boolean) => {
+    const current = role.permissions || [];
+    const next = checked
+      ? [...current, { resource, action } as NonNullable<Role['permissions']>[number]]
+      : current.filter((p) => !(p.resource === resource && p.action === action));
+
+    setRolePermissions.mutate(
+      { id: role.id, permissions: next },
+      {
+        onSuccess: () => {
+          auditAction(
+            'ROLE_EDIT',
+            role.name,
+            `${checked ? 'Granted' : 'Revoked'} ${resource}:${action}`,
+          );
+          addToast(
+            `${role.name}: ${resource}:${action} ${checked ? 'granted' : 'revoked'}`,
+            'info',
+          );
+        },
+      },
+    );
+  };
 
   return (
     <div>
@@ -255,12 +368,21 @@ export default function UsersRolesPage() {
           <div className="page-sub">Manage users, permissions, groups and SoD rules.</div>
         </div>
         <div className="actions">
-          <button className="btn btn-primary flex aic" onClick={() => handleUserModal(null)}>
-            <span style={{ marginRight: '8px' }}>
-              <Icon name="plus" size={15} />
-            </span>{' '}
-            Invite user
-          </button>
+          {tab === 'roles' ? (
+            <button className="btn btn-primary flex aic" onClick={handleNewRole}>
+              <span style={{ marginRight: '8px' }}>
+                <Icon name="plus" size={15} />
+              </span>{' '}
+              New role
+            </button>
+          ) : (
+            <button className="btn btn-primary flex aic" onClick={() => handleUserModal(null)}>
+              <span style={{ marginRight: '8px' }}>
+                <Icon name="plus" size={15} />
+              </span>{' '}
+              Invite user
+            </button>
+          )}
         </div>
       </div>
 
@@ -287,12 +409,60 @@ export default function UsersRolesPage() {
 
       {tab === 'users' && (
         <div className="card">
+          <div className="card-head">
+            <span className="h3">{usersData?.pagination?.total ?? 0} users</span>
+            <div className="flex aic g8">
+              <select
+                className="input"
+                style={{ width: 'auto', height: '32px' }}
+                aria-label="Filter by department"
+                value={departmentFilter}
+                onChange={(e) => {
+                  setDepartmentFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All departments</option>
+                {departmentList.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="input"
+                style={{ width: 'auto', height: '32px' }}
+                aria-label="Filter by status"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as typeof statusFilter);
+                  setPage(1);
+                }}
+              >
+                <option value="">All statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </div>
+          </div>
           {isLoading ? (
             <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-soft)' }}>
               Loading users...
             </div>
           ) : (
-            <Table cols={userCols} rows={users} />
+            <>
+              <Table cols={userCols} rows={users} />
+              {usersData?.pagination && (
+                <Pagination
+                  page={usersData.pagination.page}
+                  totalPages={usersData.pagination.totalPages}
+                  total={usersData.pagination.total}
+                  limit={usersData.pagination.limit}
+                  onPageChange={setPage}
+                />
+              )}
+            </>
           )}
         </div>
       )}
@@ -301,43 +471,47 @@ export default function UsersRolesPage() {
         <div className="card">
           <div className="card-head">
             <span className="h3">Permission matrix</span>
-            <span className="caption">Changes apply immediately and are audited</span>
+            <span className="flex aic g8">
+              <span className="caption">Resource</span>
+              <select
+                className="input"
+                style={{ width: 'auto', height: '32px' }}
+                value={permResource}
+                onChange={(e) => setPermResource(e.target.value)}
+              >
+                {PERMISSION_RESOURCES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </span>
           </div>
           <div className="tbl-wrap">
             <table className="tbl pm-grid">
               <thead>
                 <tr>
                   <th>Role</th>
-                  {permCols.map(([k, l]) => (
-                    <th key={k}>{l}</th>
+                  {PERMISSION_ACTIONS.map((a) => (
+                    <th key={a.value}>{a.label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rolesMatrix?.map((r: any) => (
-                  <tr key={r.role}>
+                {roles?.map((r) => (
+                  <tr key={r.id}>
                     <td>
-                      <b>{r.role}</b>
+                      <b>{r.name}</b>
                     </td>
-                    {permCols.map(([k]) => (
-                      <td key={k}>
+                    {PERMISSION_ACTIONS.map((a) => (
+                      <td key={a.value}>
                         <label className="switch">
                           <input
                             type="checkbox"
-                            checked={r.perms[k] || false}
-                            onChange={(e) => {
-                              const newPerms = { ...r.perms, [k]: e.target.checked };
-                              updateRoleMatrix(r.role, newPerms);
-                              auditAction(
-                                'ROLE_EDIT',
-                                r.role,
-                                `${e.target.checked ? 'Granted' : 'Revoked'} ${k}`,
-                              );
-                              addToast(
-                                `${r.role}: ${k} ${e.target.checked ? 'granted' : 'revoked'}`,
-                                'info',
-                              );
-                            }}
+                            checked={roleHasPermission(r, permResource, a.value)}
+                            onChange={(e) =>
+                              toggleRolePermission(r, permResource, a.value, e.target.checked)
+                            }
                           />
                           <i></i>
                         </label>
@@ -398,15 +572,17 @@ export default function UsersRolesPage() {
                       type="checkbox"
                       checked={c.enabled}
                       onChange={(e) => {
-                        updatePolicyControl(c.rule, e.target.checked);
-                        auditAction(
-                          'CONTROL_TOGGLE',
-                          c.rule,
-                          e.target.checked ? 'Enabled' : 'Disabled',
-                        );
-                        addToast(
-                          'Control ' + (e.target.checked ? 'enabled' : 'disabled'),
-                          e.target.checked ? 'success' : 'warning',
+                        updatePolicyControl.mutate(
+                          { ruleName: c.rule, enabled: e.target.checked },
+                          {
+                            onSuccess: () => {
+                              auditAction(
+                                'CONTROL_TOGGLE',
+                                c.rule,
+                                e.target.checked ? 'Enabled' : 'Disabled',
+                              );
+                            },
+                          },
                         );
                       }}
                     />

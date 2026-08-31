@@ -1,5 +1,20 @@
 import { apiClient } from '@/lib/api-client';
-import { ApiResponse, PaginatedResponse, Task, TaskActionRequest, TaskStatus } from '@/types/models';
+import {
+  ApiResponse,
+  PaginatedResponse,
+  Task,
+  TaskActionRequest,
+  TaskSlaStatsResponse,
+  TaskStatus,
+} from '@/types/models';
+
+export interface TaskStatsParams {
+  groupBy?: 'department';
+  departmentId?: string;
+  /** ISO date — filters on `completedAt`. */
+  from?: string;
+  to?: string;
+}
 
 /** Mirrors `listTasksQuerySchema` on the backend, which is `.strict()` — any key
  *  not listed here is rejected with a 400. */
@@ -58,6 +73,14 @@ export const tasksService = {
 
   getById: async (id: string): Promise<Task> => {
     const response = await apiClient.get<ApiResponse<Task>>(`/tasks/${id}`);
+    return response.data.data;
+  },
+
+  // Completed-task SLA rollup by department (`GET /tasks/stats`).
+  getStats: async (params?: TaskStatsParams): Promise<TaskSlaStatsResponse> => {
+    const response = await apiClient.get<ApiResponse<TaskSlaStatsResponse>>('/tasks/stats', {
+      params,
+    });
     return response.data.data;
   },
 

@@ -11,7 +11,13 @@ export interface ModalAction {
   label: string;
   kind?: string;
   disabled?: boolean;
-  onClick?: () => boolean | void;
+  /**
+   * Return a Promise to keep the modal open (with a loading state on this
+   * button) until it settles. The modal closes on resolve and stays open on
+   * reject so the user can see the error and retry. Returning `false`
+   * (sync or resolved) also keeps the modal open.
+   */
+  onClick?: () => boolean | void | Promise<boolean | void>;
 }
 
 export interface ModalConfig {
@@ -32,7 +38,8 @@ export interface ConfirmConfig {
   message: string;
   confirmLabel?: string;
   danger?: boolean;
-  onConfirm: () => void;
+  /** Return a Promise (e.g. `mutateAsync(...)`) to show a loading state on the confirm button until it settles. */
+  onConfirm: () => void | Promise<void>;
 }
 
 interface UIStore {
@@ -68,13 +75,12 @@ export const useUIStore = create<UIStore>((set) => ({
       body: React.createElement('div', { style: { marginBottom: '16px' } }, config.message),
       actions: [
         { label: 'Cancel' },
-        { 
-          label: config.confirmLabel || 'Confirm', 
-          kind: config.danger ? 'btn-danger' : 'btn-primary', 
-          onClick: () => {
-            config.onConfirm();
-            set({ modal: null });
-          } 
+        {
+          label: config.confirmLabel || 'Confirm',
+          kind: config.danger ? 'btn-danger' : 'btn-primary',
+          // Returned as-is: if this is a Promise, UIProviders shows a loading
+          // state on the button and only closes the modal once it resolves.
+          onClick: () => config.onConfirm(),
         }
       ]
     }

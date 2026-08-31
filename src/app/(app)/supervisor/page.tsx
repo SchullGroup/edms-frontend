@@ -2,9 +2,8 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments, useUpdateDocument } from '@/apis/hooks/useDocuments';
+import { useAllTasks, useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
@@ -15,84 +14,92 @@ import { Avatar } from '@/components/ui/Avatar';
 import { HBarChart } from '@/components/ui/Charts';
 import { StatusBadge, UrgBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
-import { effStatus } from '@/utils/helpers';
-
-const TEAM = ['u-chika', 'u-ngozi', 'u-tunde', 'u-amara', 'u-seun'];
+import { Task } from '@/types/models';
 
 export default function SupervisorDashboard() {
   const router = useRouter();
   const { setPageTitle, openModal, closeModal, openDrawer, closeDrawer, addToast } = useUIStore();
 
-  const { data: docsData, isLoading: isLoadingDocs } = useDocuments();
+  // No backend concept of "my team" exists yet, so this shows the first 5
+  // users returned by the API against tenant-wide tasks — not a real
+  // reporting-line relationship. Consistent with workload/bottlenecks.
+  const { data: tasksResult, isLoading: isLoadingTasks } = useAllTasks({});
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
   const { data: cabsData, isLoading: isLoadingCabs } = useCabinets();
 
-  const documents = docsData?.data || [];
+  const tasks = tasksResult?.items || [];
   const users = usersData?.data || [];
   const cabinets = cabsData?.data || [];
 
-  const updateDocument = useUpdateDocument();
+  const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
 
   useEffect(() => {
     setPageTitle('Team Overview');
   }, [setPageTitle]);
 
-  if (isLoadingDocs || isLoadingUsers || isLoadingCabs) return <Spinner />;
+  if (isLoadingTasks || isLoadingUsers || isLoadingCabs) return <Spinner />;
 
-  const teamDocs = documents.filter(
-    (d: any) => TEAM.includes(d.assignee as string) || d.assignee === 'u-david',
-  );
-  const count = (arr: any[], st: string) => arr.filter((d) => effStatus(d) === st).length;
+  const team = users.slice(0, 5);
+  const teamIds = new Set(team.map((u) => u.id));
+  const teamTasks = tasks.filter((t: Task) => !!t.assigneeId && teamIds.has(t.assigneeId));
+
+  const isOverdue = (t: Task): boolean =>
+    !!(t.status === 'pending' && t.dueAt && new Date(t.dueAt) < new Date());
+  // Tasks have no separate "in progress" state — pending covers both, same
+  // convention used on the staff dashboard.
+  const countPending = (arr: Task[]) => arr.filter((t) => t.status === 'pending').length;
+  const countClosed = (arr: Task[]) => arr.filter((t) => t.status === 'completed').length;
+  const countOverdue = (arr: Task[]) => arr.filter(isOverdue).length;
 
   const tiles = [
-    { label: 'Pending', val: count(teamDocs, 'Pending'), cls: 't-pending', ico: 'clock' },
-    { label: 'In Progress', val: count(teamDocs, 'In Progress'), cls: 't-progress', ico: 'pulse' },
-    {
-      label: 'Closed (30d)',
-      val: teamDocs.filter((d) => d.status === 'closed').length,
-      cls: 't-closed',
-      ico: 'check',
-    },
-    { label: 'Overdue / SLA', val: count(teamDocs, 'Overdue'), cls: 't-overdue', ico: 'alert' },
+    { label: 'Pending', val: countPending(teamTasks), cls: 't-pending', ico: 'clock' },
+    { label: 'In Progress', val: countPending(teamTasks), cls: 't-progress', ico: 'pulse' },
+    { label: 'Closed (30d)', val: countClosed(teamTasks), cls: 't-closed', ico: 'check' },
+    { label: 'Overdue / SLA', val: countOverdue(teamTasks), cls: 't-overdue', ico: 'alert' },
   ];
 
-  const matrix = TEAM.map((uid) => {
-    const u = userById(users, uid);
-    const md = documents.filter((d) => d.assignee === uid);
+  const matrix = team.map((u) => {
+    const mt = tasks.filter((t: Task) => t.assigneeId === u.id);
     return {
-      uid,
-      name: u?.name || 'Unknown',
+      uid: u.id,
+      name: u.name,
       dept: (u as any)?.departmentId || '',
-      pending: count(md, 'Pending'),
-      progress: count(md, 'In Progress'),
-      overdue: count(md, 'Overdue'),
-      closed: md.filter((d) => d.status === 'closed').length,
-      total: md.length,
+      pending: countPending(mt),
+      progress: countPending(mt),
+      overdue: countOverdue(mt),
+      closed: countClosed(mt),
+      total: mt.length,
     };
   });
 
   const byCab = cabinets
     .map((c) => ({
       label: c.name,
-      value: teamDocs.filter((d) => d.cabinetId === c.id && d.status !== 'closed').length,
+      value: teamTasks.filter(
+        (t: Task) => t.workflowInstance?.document?.cabinetId === c.id && t.status === 'pending',
+      ).length,
       color: 'var(--brand-primary-light)',
       onClick: () => router.push(`/cabinets?cab=${c.id}`),
     }))
     .filter((c) => c.value > 0);
 
-  const handleReassignModal = (doc: any, onDone?: () => void) => {
+  const handleReassignModal = (t: Task, onDone?: () => void) => {
     let newAssignee = '';
     let note = '';
-    const currentAssigneeUser = userById(users, doc.assignee);
+    const title = t.workflowInstance?.document?.title || 'this document';
 
     openModal({
-      title: `Reassign — ${doc.title.slice(0, 44)}${doc.title.length > 44 ? '…' : ''}`,
+      title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
       body: (
         <div>
           <div className="field mb12">
             <label>Current Assignee</label>
-            <input className="input" disabled value={currentAssigneeUser?.name || 'Unassigned'} />
+            <input
+              className="input"
+              disabled
+              value={t.assignee?.name || t.assignedRole?.name || 'Unassigned'}
+            />
           </div>
           <div className="field mb12">
             <label>
@@ -101,11 +108,10 @@ export default function SupervisorDashboard() {
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select team member...</option>
               {users
-                .filter((u) => u.status === 'active' && u.id !== doc.assignee)
+                .filter((u) => u.status === 'active' && u.id !== t.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} — {(u as any).roleLabel || (u as any).role || u.roles?.[0]} (
-                    {(u as any).departmentId || 'System'})
+                    {u.name} ({(u as any).departmentId || 'System'})
                   </option>
                 ))}
             </select>
@@ -130,28 +136,33 @@ export default function SupervisorDashboard() {
               addToast('Please select a new assignee', 'error');
               return;
             }
-            const prev = doc.assignee;
-            const newUser = userById(users, newAssignee as string);
+            const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
+            const newUser = users.find((u) => u.id === newAssignee);
 
-            updateDocument.mutate({ id: doc.id, updates: { assignee: newAssignee } });
-            createAuditLog.mutate({
-              action: 'REASSIGN',
-              target: doc.id,
-              detail: `Reassigned from ${userById(users, prev as string)?.name} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`,
-            });
-
-            addToast(`Reassigned to ${newUser?.name}`, 'success');
-            closeModal();
-            if (onDone) onDone();
+            reassignTask.mutate(
+              { id: t.id, assigneeId: newAssignee, note: note || undefined },
+              {
+                onSuccess: () => {
+                  createAuditLog.mutate({
+                    action: 'REASSIGN',
+                    target: t.workflowInstance?.documentId || t.id,
+                    detail: `Reassigned from ${prevName} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`,
+                  });
+                  addToast(`Reassigned to ${newUser?.name}`, 'success');
+                  closeModal();
+                  if (onDone) onDone();
+                },
+              },
+            );
           },
         },
       ],
     });
   };
 
-  const handleRowClick = (r: any) => {
-    const member = userById(users, r.uid);
-    const mDocs = documents.filter((d) => d.assignee === r.uid && d.status !== 'closed');
+  const handleRowClick = (r: { name: string; uid: string; dept: string }) => {
+    const member = users.find((u) => u.id === r.uid);
+    const mTasks = tasks.filter((t: Task) => t.assigneeId === r.uid && t.status === 'pending');
 
     openDrawer({
       title: `${r.name} — open items`,
@@ -162,56 +173,59 @@ export default function SupervisorDashboard() {
             <div>
               <b style={{ fontSize: '14px', color: 'var(--ink)' }}>{r.name}</b>
               <div className="caption">
-                {(member as any)?.roleLabel || 'Staff Officer'} · {r.dept}
+                {member?.email || ''} · {r.dept}
               </div>
             </div>
           </div>
 
-          {mDocs.length > 0 ? (
+          {mTasks.length > 0 ? (
             <div className="rowlist">
-              {mDocs.map((d: any) => (
-                <div
-                  key={d.id}
-                  className="task-row"
-                  style={{
-                    border: '1px solid var(--border)',
-                    borderRadius: '9px',
-                    marginBottom: '8px',
-                    padding: '12px 14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => {
-                    closeDrawer();
-                    router.push(`/doc/${d.id}`);
-                  }}
-                >
-                  <div className="task-main">
-                    <div
-                      className="task-title"
-                      style={{ fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}
-                    >
-                      {d.title}
-                    </div>
-                    <div className="task-meta flex aic g8">
-                      <StatusBadge status={effStatus(d)} />
-                      <UrgBadge level={d.urgency} />
-                    </div>
-                  </div>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ marginLeft: '12px', flexShrink: 0 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleReassignModal(d, () => handleRowClick(r));
+              {mTasks.map((t: Task) => {
+                const doc = t.workflowInstance?.document;
+                return (
+                  <div
+                    key={t.id}
+                    className="task-row"
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: '9px',
+                      marginBottom: '8px',
+                      padding: '12px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => {
+                      closeDrawer();
+                      if (doc?.id) router.push(`/doc/${doc.id}`);
                     }}
                   >
-                    Reassign
-                  </button>
-                </div>
-              ))}
+                    <div className="task-main">
+                      <div
+                        className="task-title"
+                        style={{ fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}
+                      >
+                        {doc?.title || 'Unknown document'}
+                      </div>
+                      <div className="task-meta flex aic g8">
+                        <StatusBadge status={isOverdue(t) ? 'Overdue' : 'Pending'} />
+                        {doc?.urgency && <UrgBadge level={doc.urgency} />}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ marginLeft: '12px', flexShrink: 0 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleReassignModal(t, () => handleRowClick(r));
+                      }}
+                    >
+                      Reassign
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="empty" style={{ padding: '32px 16px' }}>
