@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { STAGE_ACTIONS } from './constants';
+import { Combobox } from '@/components/ui/Combobox';
 
 export interface StagePropertiesPanelProps {
   selectedStage: any | null;
@@ -16,7 +17,7 @@ export interface StagePropertiesPanelProps {
   roles: { id: string; name: string }[];
   roleDraft: string;
   onRoleChange: (role: string) => void;
-  users: { id: string; name: string }[];
+  users: { id: string; name: string; email?: string }[];
   userDraft: string;
   onUserChange: (userId: string) => void;
   slaDraft: number;
@@ -112,13 +113,14 @@ export function StagePropertiesPanel({
                 ))}
               </select>
             ) : (
-              <select className="input" value={userDraft} onChange={(e) => onUserChange(e.target.value)}>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              <Combobox
+                options={users.map((u) => ({ value: u.id, label: u.name, hint: u.email }))}
+                value={userDraft}
+                onChange={(v) => onUserChange(v as string)}
+                placeholder="Select a person…"
+                searchPlaceholder="Search people…"
+                emptyText="No people match"
+              />
             )}
           </div>
 

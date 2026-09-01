@@ -46,6 +46,7 @@ const paths: Record<string, string> = {
   chevR: 'm9 5 7 7-7 7',
   chevD: 'm5 9 7 7 7-7',
   menu: 'M4 6h16M4 12h16M4 18h16',
+  moreV: 'M12 5v.01M12 12v.01M12 19v.01',
   moon: 'M20 13A8 8 0 1 1 11 4a6.5 6.5 0 0 0 9 9Z',
   sun: 'M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0-5v2m0 14v2M3 12h2m14 0h2M5.6 5.6l1.4 1.4m10 10 1.4 1.4m0-12.8-1.4 1.4m-10 10-1.4 1.4',
   logout: 'M15 4h5v16h-5M10 8l-4 4 4 4m-4-4h11',

@@ -4,7 +4,13 @@ import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, cabById, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocument, useAddDocumentComment, useAddDocumentSignature } from '@/apis/hooks/useDocuments';
+import {
+  useDocument,
+  useAddDocumentComment,
+  useAddDocumentSignature,
+  useCheckoutDocument,
+  useCheckinDocument,
+} from '@/apis/hooks/useDocuments';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { useUsers } from '@/apis/hooks/useUsers';
@@ -40,6 +46,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const createAuditLog = useCreateAuditLog();
   const sendNotification = useSendNotification();
   const taskAction = useTaskAction();
+  const checkoutDocument = useCheckoutDocument();
+  const checkinDocument = useCheckinDocument();
 
   const [mode, setMode] = useState<'view' | 'redact'>('view');
   const [previewRelease, setPreviewRelease] = useState(false);
@@ -89,7 +97,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     return (
       <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
         <div className="h3" style={{ color: 'var(--text-soft)' }}>
-          Loading document {docId.toUpperCase()}...
+          Loading document...
         </div>
       </div>
     );
@@ -156,20 +164,14 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const stage = stageDef ? { name: stageDef.name || stageDef.id } : null;
   const currentStageActorName = currentTask?.assignee?.name || currentTask?.assignedRole?.name || 'Unassigned';
 
-  // `fileKey` is documented as a full S3 URL for anything actually uploaded
-  // through this app — the backend just stores whatever `fileUrl` the client
-  // sent at creation time under that column name. Fixture/seed documents are
-  // the exception (their fileKey is a fake *relative* path, e.g.
-  // "fixtures/invoice-2.pdf", since they were seeded straight into the DB,
-  // never actually uploaded) — an <iframe>/<img> given a relative src
-  // resolves it against the current page, not S3, so it silently loads this
-  // app's own route instead of erroring. Guard against that explicitly rather
-  // than trusting every fileKey to be absolute, and percent-encode whatever's
-  // left (spaces, non-ASCII characters) so the URL survives being embedded in
-  // an attribute intact.
   const rawFileKey = doc.currentVersion?.fileKey;
-  const isAbsoluteFileUrl = !!rawFileKey && /^https?:\/\//i.test(rawFileKey);
-  const fileUrl = isAbsoluteFileUrl ? encodeURI(rawFileKey as string) : undefined;
+  // The API now returns a ready-to-use pre-signed URL on the current version —
+  // pass it through untouched (it's already encoded; re-encoding risks breaking
+  // the signature). Fall back to `fileKey` only when it's itself an absolute
+  // URL, which happens with seed/fixture data.
+  const signedFileUrl = doc.currentVersion?.fileUrl?.trim() || undefined;
+  const fileKeyIsUrl = !!rawFileKey && /^https?:\/\//i.test(rawFileKey);
+  const fileUrl = signedFileUrl ?? (fileKeyIsUrl ? encodeURI(rawFileKey as string) : undefined);
   const fileMimeType = doc.currentVersion?.mimeType || '';
 
   const highConf = ['restricted', 'confidential'].includes(doc.confidentiality.toLowerCase());
@@ -179,6 +181,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   );
   const confPolicy = confPolicyItem?.value || { download: true, print: true, watermark: false };
   const lockedByOther = doc.isCheckedOut && doc.checkoutLock?.lockedBy !== me.id;
+  const lockedByMe = doc.isCheckedOut && doc.checkoutLock?.lockedBy === me.id;
+  const checkoutBusy = checkoutDocument.isPending || checkinDocument.isPending;
   const eff =
     doc.status === 'closed' ? 'Closed' : doc.status === 'in_progress' ? 'In Progress' : 'Pending';
   const closed = doc.status === 'closed';
@@ -276,20 +280,97 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       addToast(`Download is disabled for ${doc.confidentiality} documents`, 'error');
       return;
     }
-    const blob = new Blob(
-      [
-        `SchullTech EDMS export\n\n${doc.title}\nStatus: ${doc.status}\nConfidentiality: ${doc.confidentiality}\n\n(Original binary would download in production.)`,
-      ],
-      { type: 'text/plain' },
-    );
+
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = doc.title.replace(/[^\w]+/g, '_') + '.txt';
+    if (fileUrl) {
+      // Real pre-signed URL — hand it straight to the browser. The `download`
+      // hint is honoured for same-origin responses and ignored cross-origin
+      // (S3), where the tab opens the file instead; either way it's the file.
+      a.href = fileUrl;
+      a.rel = 'noreferrer';
+      a.target = '_blank';
+      a.download = doc.title.replace(/[^\w]+/g, '_');
+    } else {
+      const blob = new Blob(
+        [
+          `SchullTech EDMS export\n\n${doc.title}\nStatus: ${doc.status}\nConfidentiality: ${doc.confidentiality}\n\n(No file is attached to this version.)`,
+        ],
+        { type: 'text/plain' },
+      );
+      a.href = URL.createObjectURL(blob);
+      a.download = doc.title.replace(/[^\w]+/g, '_') + '.txt';
+    }
     document.body.appendChild(a);
     a.click();
     a.remove();
     createAuditLog.mutate({ action: 'DOWNLOAD', target: doc.id, detail: 'Downloaded a copy' });
     addToast('Download started (audited)', 'success');
+  };
+
+  const actCheckout = () => {
+    let returnAt = '';
+    openModal({
+      title: 'Check out document',
+      body: (
+        <div>
+          <div className="banner info">
+            While checked out, the file is read-only for everyone else until you check it back in.
+          </div>
+          <div className="field">
+            <label>Expected return (optional)</label>
+            <input
+              type="datetime-local"
+              className="input"
+              onChange={(e) => (returnAt = e.target.value)}
+            />
+          </div>
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Check out',
+          kind: 'btn-primary',
+          onClick: () =>
+            checkoutDocument
+              .mutateAsync({
+                id: doc.id,
+                expectedReturnAt: returnAt ? new Date(returnAt).toISOString() : undefined,
+              })
+              .then(() => {
+                createAuditLog.mutate({
+                  action: 'CHECKOUT',
+                  target: doc.id,
+                  detail: 'Checked out for editing',
+                });
+                closeModal();
+              })
+              .catch(() => false),
+        },
+      ],
+    });
+  };
+
+  const actCheckin = () => {
+    openConfirm({
+      title: 'Check in document?',
+      confirmLabel: 'Check in',
+      message:
+        'This releases your lock so others can edit again. Upload any new version first — check-in does not do that for you.',
+      onConfirm: () =>
+        checkinDocument
+          .mutateAsync(doc.id)
+          .then(() => {
+            createAuditLog.mutate({
+              action: 'CHECKIN',
+              target: doc.id,
+              detail: 'Checked in',
+            });
+          })
+          .catch(() => {
+            /* hook surfaces the error toast */
+          }),
+    });
   };
 
   const actShare = () => {
@@ -435,7 +516,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   return (
     <div>
       <div className="crumbs">
-        <a onClick={() => router.push('/staff/cabinets')}>Cabinets</a> <span className="sep">›</span>
+        <a onClick={() => router.push('/staff/cabinets')}>Cabinets</a>{' '}
+        <span className="sep">›</span>
         <a onClick={() => router.push(`/staff/cabinets?cab=${doc.cabinetId}`)}>
           {cabById(cabinets, doc.cabinetId)?.name}
         </a>{' '}
@@ -451,7 +533,9 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           </div>
           <div className="flex g8 mt8 wrap">
             <StatusBadge status={eff} />
-            <ConfBadge level={doc.confidentiality.charAt(0).toUpperCase() + doc.confidentiality.slice(1)} />
+            <ConfBadge
+              level={doc.confidentiality.charAt(0).toUpperCase() + doc.confidentiality.slice(1)}
+            />
             <UrgBadge level={doc.urgency.charAt(0).toUpperCase() + doc.urgency.slice(1)} />
             <span className="caption" style={{ alignSelf: 'center' }}>
               v{doc.currentVersion?.versionNumber ?? 1} · {fmtDate(doc.createdAt)}
@@ -471,6 +555,30 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             >
               <Icon name="download" size={14} /> Download
             </button>
+            {lockedByMe ? (
+              <button
+                className="btn btn-secondary"
+                onClick={actCheckin}
+                disabled={checkoutBusy}
+              >
+                <Icon name="lock" size={14} /> Check in
+              </button>
+            ) : (
+              <button
+                className="btn btn-secondary"
+                onClick={actCheckout}
+                disabled={checkoutBusy || closed || lockedByOther}
+                title={
+                  closed
+                    ? 'Document is closed'
+                    : lockedByOther
+                      ? 'Checked out by another user'
+                      : 'Check out for editing'
+                }
+              >
+                <Icon name="key" size={14} /> Check out
+              </button>
+            )}
             <div style={{ position: 'relative' }}>
               <button className="btn btn-secondary" onClick={() => setShowMenu(!showMenu)}>
                 More ▾
@@ -552,6 +660,18 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           {fmtDate(doc.checkoutLock?.lockedAt)}.
         </div>
       )}
+      {lockedByMe && (
+        <div className="banner info">
+          <span>
+            <Icon name="key" size={15} />
+          </span>{' '}
+          You have this checked out since {fmtDate(doc.checkoutLock?.lockedAt)}
+          {doc.checkoutLock?.expectedReturnAt
+            ? ` — due back ${fmtDate(doc.checkoutLock.expectedReturnAt)}`
+            : ''}
+          . Check it in when you&apos;re done so others can edit.
+        </div>
+      )}
       {doc.sealed && closed && (
         <div className="banner success">
           <span>
@@ -598,7 +718,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
-      <div className="doc-layout">
+      <div className="flex gap-4">
         <DocumentViewerPanel
           documentTitle={doc.title}
           confidentiality={doc.confidentiality}
@@ -616,37 +736,39 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           getSignerName={(userId) => userById(users, userId)?.name || 'User'}
         />
 
-        <DocumentDetailsPanel
-          documentId={doc.id}
-          documentType={doc.documentType}
-          cabinetId={doc.cabinetId}
-          ownerName={userById(users, doc.createdBy)?.name || 'System'}
-          assigneeName={currentTask ? currentStageActorName : 'Unassigned'}
-          createdAtLabel={fmtDateTime(doc.createdAt)}
-          metadata={doc.metadata || []}
-        />
+        <div className="flex flex-col gap-4">
+          <DocumentDetailsPanel
+            documentId={doc.id}
+            documentType={doc.documentType}
+            cabinetId={doc.cabinetId}
+            ownerName={userById(users, doc.createdBy)?.name || 'System'}
+            assigneeName={currentTask ? currentStageActorName : 'Unassigned'}
+            createdAtLabel={fmtDateTime(doc.createdAt)}
+            metadata={doc.metadata || []}
+          />
 
-        <WorkflowActivityPanel
-          workflowInstance={workflowInstance}
-          currentStageActorName={currentStageActorName}
-          comments={doc.comments}
-          getCommentAuthor={(c) => c.creator || userById(users, c.createdBy)}
-          isAddingComment={addDocumentComment.isPending}
-          onAddComment={(text) => {
-            addDocumentComment.mutate(
-              { id: doc.id, text },
-              {
-                onSuccess: () => {
-                  createAuditLog.mutate({
-                    action: 'COMMENT',
-                    target: doc.id,
-                    detail: text.slice(0, 80),
-                  });
+          <WorkflowActivityPanel
+            workflowInstance={workflowInstance}
+            currentStageActorName={currentStageActorName}
+            comments={doc.comments}
+            getCommentAuthor={(c) => c.creator || userById(users, c.createdBy)}
+            isAddingComment={addDocumentComment.isPending}
+            onAddComment={(text) => {
+              addDocumentComment.mutate(
+                { id: doc.id, text },
+                {
+                  onSuccess: () => {
+                    createAuditLog.mutate({
+                      action: 'COMMENT',
+                      target: doc.id,
+                      detail: text.slice(0, 80),
+                    });
+                  },
                 },
-              },
-            );
-          }}
-        />
+              );
+            }}
+          />
+        </div>
       </div>
     </div>
   );

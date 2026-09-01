@@ -144,6 +144,12 @@ export interface DocumentVersion {
   documentId: string;
   versionNumber: number;
   fileKey: string;
+  /**
+   * Short-lived pre-signed download URL for `fileKey`, minted by the backend.
+   * Observed on `currentVersion` from `GET /documents/{id}` (expires ~15 min).
+   * Not guaranteed on version-list responses, so treat as optional.
+   */
+  fileUrl?: string | null;
   fileSize?: number | null;
   mimeType: string;
   checksum: string;

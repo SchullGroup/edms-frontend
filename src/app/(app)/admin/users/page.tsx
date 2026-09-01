@@ -439,7 +439,7 @@ export default function UsersRolesPage() {
                   setPage(1);
                 }}
               >
-                <option value="">All statuses</option>
+                <option value="">--Select Status--</option>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
                 <option value="suspended">Suspended</option>

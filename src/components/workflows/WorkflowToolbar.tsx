@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from '@/components/ui/Icons';
 import { Copy, MoreVertical } from 'lucide-react';
 
@@ -60,16 +61,37 @@ export function WorkflowToolbar({
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuPopRef = useRef<HTMLDivElement>(null);
+  const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
+
+  const syncMenuRect = useCallback(() => {
+    if (menuBtnRef.current) setMenuRect(menuBtnRef.current.getBoundingClientRect());
+  }, []);
 
   useEffect(() => {
+    if (!menuOpen) return;
+    syncMenuRect();
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
+      const t = event.target as Node;
+      if (menuRef.current?.contains(t) || menuPopRef.current?.contains(t)) return;
+      setMenuOpen(false);
     };
-    if (menuOpen) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [menuOpen]);
+    const onReflow = () => syncMenuRect();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', onReflow, true);
+    window.addEventListener('resize', onReflow);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', onReflow, true);
+      window.removeEventListener('resize', onReflow);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen, syncMenuRect]);
 
   // Flashes a brief "Saved" confirmation whenever a save that was in flight
   // completes, rather than leaving success entirely silent.
@@ -145,6 +167,7 @@ export function WorkflowToolbar({
           <div ref={menuRef} style={{ position: 'relative' }}>
             <button
               type="button"
+              ref={menuBtnRef}
               className="btn btn-secondary btn-sm"
               style={{ width: '32px', padding: 0, justifyContent: 'center' }}
               onClick={() => setMenuOpen((v) => !v)}
@@ -154,8 +177,21 @@ export function WorkflowToolbar({
             >
               <MoreVertical />
             </button>
-            {menuOpen && (
-              <div className="menu" style={{ minWidth: '190px' }} role="menu">
+            {menuOpen &&
+              menuRect &&
+              typeof document !== 'undefined' &&
+              createPortal(
+              <div
+                className="menu"
+                ref={menuPopRef}
+                style={{
+                  position: 'fixed',
+                  top: menuRect.bottom + 8,
+                  right: Math.max(8, window.innerWidth - menuRect.right),
+                  minWidth: '190px',
+                }}
+                role="menu"
+              >
                 <button
                   className="menu-item"
                   role="menuitem"
@@ -194,7 +230,8 @@ export function WorkflowToolbar({
                     </button>
                   </>
                 )}
-              </div>
+              </div>,
+              document.body,
             )}
           </div>
         </div>

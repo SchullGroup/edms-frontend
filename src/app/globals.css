@@ -1,4 +1,16 @@
 /* ============================================================
+   Tailwind CSS v4 — utilities + theme only.
+
+   Preflight (Tailwind's global reset) is intentionally NOT imported
+   so it doesn't override this hand-built design system. To enable the
+   full framework instead, replace the three lines below with:
+       @import 'tailwindcss';
+   ============================================================ */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* ============================================================
    SchullTech EDMS — Design System v2 (modern light + dark)
    Light: soft neutral shell, white cards, ink CTAs
    Dark: deep charcoal, violet accents, translucent chips
@@ -317,6 +329,27 @@ textarea.input { height: auto; padding: 10px 12px; min-height: 76px; resize: ver
 .input:focus { border-color: var(--focus); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 13%, transparent); }
 .input.invalid { border-color: var(--status-overdue); }
 .input:disabled { background: var(--surface); color: var(--muted); }
+/* ---------- Combobox (search + select; single or multi) ---------- */
+.combobox { position: relative; }
+.combobox.is-disabled { opacity: .6; pointer-events: none; }
+.combobox-control { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; text-align: left; }
+.combobox-placeholder { color: var(--muted); }
+.combobox-caret { display: inline-flex; color: var(--muted); flex-shrink: 0; }
+.combobox-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.combobox-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 99px; padding: 3px 6px 3px 10px; font-size: 12px; font-weight: 600; }
+.combobox-chip button { display: inline-flex; align-items: center; justify-content: center; border: 0; background: none; color: var(--muted); cursor: pointer; padding: 2px; border-radius: 99px; }
+.combobox-chip button:hover { background: var(--border-strong); color: var(--ink); }
+.combobox-pop { z-index: 1000; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-overlay); padding: 8px; }
+.combobox-search { margin-bottom: 6px; flex-shrink: 0; }
+.combobox-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.combobox-opt { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; font-size: 13px; color: var(--ink); cursor: pointer; }
+.combobox-opt:hover { background: var(--surface); }
+.combobox-opt.is-selected { background: color-mix(in srgb, var(--focus) 12%, transparent); }
+.combobox-opt-check { width: 14px; display: inline-flex; flex-shrink: 0; color: var(--brand-primary-light); }
+.combobox-opt-label { display: flex; flex-direction: column; line-height: 1.3; }
+.combobox-opt-hint { font-size: 11px; color: var(--muted); }
+.combobox-empty { padding: 10px; font-size: 12px; color: var(--muted); text-align: center; }
+
 .check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .check input { width: 15px; height: 15px; accent-color: var(--focus); }
 input[type="checkbox"] { accent-color: var(--focus); }

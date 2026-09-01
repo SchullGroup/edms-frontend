@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
+import { Combobox } from '@/components/ui/Combobox';
 import {
   useCabinets,
   useCabinet,
@@ -18,10 +20,10 @@ import {
   useRevokeCabinetAccess,
 } from '@/apis/hooks/useCabinets';
 import { useCabinetFolders, useCreateFolder, useDeleteFolder } from '@/apis/hooks/useFolders';
-import { useDocuments } from '@/apis/hooks/useDocuments';
+import { useDocuments, useDocument } from '@/apis/hooks/useDocuments';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { useRoles } from '@/apis/hooks/useRoles';
-import { useAllUsers } from '@/apis/hooks/useUsers';
+import { useAllUsers, useUser } from '@/apis/hooks/useUsers';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { CabinetAccessPermission } from '@/types/models';
@@ -44,7 +46,8 @@ const ACCESS_PERMISSIONS: { value: CabinetAccessPermission; label: string }[] = 
 ];
 
 export default function CabinetDesignerPage() {
-  const { auditAction } = useStore();
+  const router = useRouter();
+  const { auditAction, currentUser } = useStore();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
   const { data: cabinetsResponse, isLoading, isError, refetch } = useCabinets();
@@ -54,11 +57,29 @@ export default function CabinetDesignerPage() {
   const updateCabinet = useUpdateCabinet();
   const deleteCabinet = useDeleteCabinet();
 
-  const cabinets = cabinetsResponse?.data || [];
+  const allCabinets = cabinetsResponse?.data || [];
   const documents = documentsData?.data || [];
   const departments = departmentsData?.data || [];
 
+  // Admins see every cabinet. Everyone else sees only cabinets scoped to their
+  // own department, plus "general" cabinets that aren't scoped to any (departmentId null).
+  const roleNames = (currentUser?.roles || []).map((r: any) =>
+    typeof r === 'string' ? r : r?.name,
+  );
+  const isAdmin = roleNames.some((r) => r === 'client_admin' || r === 'schulltech_admin');
+  const { data: me } = useUser(currentUser?.id || '');
+  const myDepartmentId = me?.departmentId ?? null;
+
+  const cabinets = useMemo(
+    () =>
+      isAdmin
+        ? allCabinets
+        : allCabinets.filter((c: any) => !c.departmentId || c.departmentId === myDepartmentId),
+    [allCabinets, isAdmin, myDepartmentId],
+  );
+
   const [activeCabId, setActiveCabId] = useState<string | undefined>(undefined);
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const activeCabIdToUse = activeCabId || cabinets?.[0]?.id;
   const activeCab = cabinets?.find((c: any) => c.id === activeCabIdToUse) || cabinets?.[0];
 
@@ -87,6 +108,10 @@ export default function CabinetDesignerPage() {
   useEffect(() => {
     setPageTitle('Cabinet Designer');
   }, [setPageTitle]);
+
+  useEffect(() => {
+    setOpenFolderId(null);
+  }, [activeCab?.id]);
 
   if (isLoading) return <Spinner text="Loading cabinets..." />;
   if (isError) return <ErrorMessage message="Failed to load cabinets." retry={refetch} />;
@@ -430,20 +455,25 @@ export default function CabinetDesignerPage() {
   };
 
   const handleGrantAccess = () => {
+    const roleOptions = roles.map((r) => ({ value: r.id, label: r.name.replace(/_/g, ' ') }));
+    const userOptions = users.map((u) => ({ value: u.id, label: u.name, hint: u.email }));
+
     const form: {
       permission: CabinetAccessPermission;
       targetType: 'role' | 'user';
-      roleId: string;
-      userId: string;
+      roleIds: string[];
+      userIds: string[];
     } = {
       permission: 'view',
       targetType: 'role',
-      roleId: roles[0]?.id ?? '',
-      userId: users[0]?.id ?? '',
+      roleIds: [],
+      userIds: [],
     };
 
     const Body = () => {
       const [targetType, setTargetType] = useState<'role' | 'user'>(form.targetType);
+      const [roleIds, setRoleIds] = useState<string[]>(form.roleIds);
+      const [userIds, setUserIds] = useState<string[]>(form.userIds);
       return (
         <div className="grid" style={{ gap: '12px' }}>
           <div className="field">
@@ -471,41 +501,34 @@ export default function CabinetDesignerPage() {
                 form.targetType = v;
               }}
             >
-              <option value="role">A role</option>
-              <option value="user">A specific user</option>
+              <option value="role">Roles</option>
+              <option value="user">Specific users</option>
             </select>
           </div>
-          {targetType === 'role' ? (
-            <div className="field">
-              <label>Role</label>
-              <select
-                className="input capitalize"
-                defaultValue={form.roleId}
-                onChange={(e) => (form.roleId = e.target.value)}
-              >
-                {roles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
+          <div className="field">
+            <label>{targetType === 'role' ? 'Roles' : 'Users'}</label>
+            <Combobox
+              multiple
+              options={targetType === 'role' ? roleOptions : userOptions}
+              value={targetType === 'role' ? roleIds : userIds}
+              onChange={(v) => {
+                const arr = v as string[];
+                if (targetType === 'role') {
+                  setRoleIds(arr);
+                  form.roleIds = arr;
+                } else {
+                  setUserIds(arr);
+                  form.userIds = arr;
+                }
+              }}
+              placeholder={targetType === 'role' ? 'Select roles…' : 'Select users…'}
+              searchPlaceholder={targetType === 'role' ? 'Search roles…' : 'Search users…'}
+            />
+            <div className="help">
+              The API grants to one {targetType} per call — picking several sends a request for
+              each.
             </div>
-          ) : (
-            <div className="field">
-              <label>User</label>
-              <select
-                className="input"
-                defaultValue={form.userId}
-                onChange={(e) => (form.userId = e.target.value)}
-              >
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} — {u.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          </div>
         </div>
       );
     };
@@ -519,24 +542,29 @@ export default function CabinetDesignerPage() {
           label: 'Grant access',
           kind: 'btn-primary',
           onClick: () => {
-            const target =
-              form.targetType === 'role'
-                ? { roleId: form.roleId }
-                : { userId: form.userId };
-            if (!target.roleId && !target.userId) {
-              addToast(`Select a ${form.targetType} first`, 'error');
+            const ids = form.targetType === 'role' ? form.roleIds : form.userIds;
+            if (ids.length === 0) {
+              addToast(`Select at least one ${form.targetType}`, 'error');
               return false;
             }
-            return grantAccess
-              .mutateAsync({
-                cabinetId: activeCab.id,
-                data: { permission: form.permission, ...target },
-              })
+            return Promise.all(
+              ids.map((id) =>
+                grantAccess.mutateAsync({
+                  cabinetId: activeCab.id,
+                  data: {
+                    permission: form.permission,
+                    ...(form.targetType === 'role' ? { roleId: id } : { userId: id }),
+                  },
+                }),
+              ),
+            )
               .then(() => {
                 auditAction(
                   'CABINET_ACCESS_GRANT',
                   activeCab.id,
-                  `Granted ${form.permission} to ${form.targetType}`,
+                  `Granted ${form.permission} to ${ids.length} ${form.targetType}${
+                    ids.length === 1 ? '' : 's'
+                  }`,
                 );
                 closeModal();
               })
@@ -571,6 +599,24 @@ export default function CabinetDesignerPage() {
             auditAction('CABINET_ACCESS_REVOKE', activeCab.id, `Revoked ${g.permission}`);
           })
           .catch(() => {}),
+    });
+  };
+
+  const handleOpenDocument = (doc: any) => {
+    openModal({
+      title: doc.title,
+      size: 'xl',
+      body: <DocumentPreviewBody documentId={doc.id} />,
+      actions: [
+        { label: 'Close' },
+        {
+          label: 'Open full page',
+          kind: 'btn-secondary',
+          onClick: () => {
+            router.push(`/doc/${doc.id}`);
+          },
+        },
+      ],
     });
   };
 
@@ -640,7 +686,7 @@ export default function CabinetDesignerPage() {
       </div>
 
       <div className="cab-layout" style={{ display: 'flex', gap: '16px' }}>
-        <div className="card tree" style={{ width: '220px', flexShrink: 0 }}>
+        <div className="card tree" style={{ width: '300px', flexShrink: 0 }}>
           {cabinets?.map((c: any) => (
             <div
               key={c.id}
@@ -703,24 +749,51 @@ export default function CabinetDesignerPage() {
               ) : (
                 <>
                   {activeCabFolders?.map((f: any) => (
-                    <div key={f.id} className="metric-li">
-                      <span className="flex aic g8">
-                        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                          <Icon name="folder" size={14} />
+                    <div key={f.id}>
+                      <div
+                        className="metric-li"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => setOpenFolderId((cur) => (cur === f.id ? null : f.id))}
+                      >
+                        <span className="flex aic g8">
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              color: 'var(--muted)',
+                              transform: openFolderId === f.id ? 'rotate(90deg)' : 'none',
+                              transition: 'transform .12s',
+                            }}
+                          >
+                            <Icon name="chevR" size={12} />
+                          </span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                            <Icon name="folder" size={14} />
+                          </span>
+                          {f.name}
                         </span>
-                        {f.name}
-                      </span>
-                      <span className="flex aic g8">
-                        <span className="caption">
-                          {documents?.filter((d: any) => d.folderId === f.id).length} docs
+                        <span className="flex aic g8">
+                          <span className="caption">
+                            {documents?.filter((d: any) => d.folderId === f.id).length} docs
+                          </span>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteFolder(f);
+                            }}
+                          >
+                            Delete
+                          </button>
                         </span>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => handleDeleteFolder(f)}
-                        >
-                          Delete
-                        </button>
-                      </span>
+                      </div>
+                      {openFolderId === f.id && (
+                        <FolderDocuments
+                          cabinetId={activeCab.id}
+                          folderId={f.id}
+                          onOpenDocument={handleOpenDocument}
+                        />
+                      )}
                     </div>
                   ))}
                   {activeCabFolders?.length === 0 && (
@@ -765,6 +838,129 @@ export default function CabinetDesignerPage() {
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Documents inside one folder. Kept as its own component so the
+ * `useDocuments({ folderId })` query only runs while the folder is expanded
+ * (and unmounts when it collapses), rather than one query per folder always.
+ */
+function FolderDocuments({
+  cabinetId,
+  folderId,
+  onOpenDocument,
+}: {
+  cabinetId: string;
+  folderId: string;
+  onOpenDocument: (doc: any) => void;
+}) {
+  const { data, isLoading } = useDocuments({ cabinetId, folderId });
+  const docs = data?.data || [];
+
+  if (isLoading) {
+    return (
+      <div className="caption" style={{ padding: '8px 0 8px 34px' }}>
+        Loading documents…
+      </div>
+    );
+  }
+  if (docs.length === 0) {
+    return (
+      <div className="caption" style={{ padding: '8px 0 8px 34px' }}>
+        No documents in this folder.
+      </div>
+    );
+  }
+  return (
+    <div style={{ padding: '2px 0 8px 34px' }}>
+      {docs.map((d: any) => (
+        <div
+          key={d.id}
+          className="metric-li"
+          style={{ cursor: 'pointer' }}
+          onClick={() => onOpenDocument(d)}
+        >
+          <span className="flex aic g8">
+            <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <Icon name="doc" size={14} />
+            </span>
+            {d.title}
+          </span>
+          <span className="caption">
+            {d.confidentiality} · v{d.currentVersion?.versionNumber ?? 1}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Inline file preview for the "open a document" modal. */
+function DocumentPreviewBody({ documentId }: { documentId: string }) {
+  const { data: doc, isLoading } = useDocument(documentId);
+
+  if (isLoading) return <div className="caption">Loading document…</div>;
+  if (!doc) return <div className="caption">Document not found.</div>;
+
+  // Same handling as the full document page: prefer the backend's pre-signed
+  // URL, and fall back to `fileKey` only when it's itself an absolute URL
+  // (fixture/seed docs carry a relative fileKey that an <iframe>/<img> would
+  // resolve against this app's own origin).
+  const rawFileKey = doc.currentVersion?.fileKey;
+  const signedFileUrl = doc.currentVersion?.fileUrl?.trim() || undefined;
+  const fileKeyIsUrl = !!rawFileKey && /^https?:\/\//i.test(rawFileKey);
+  const fileUrl = signedFileUrl ?? (fileKeyIsUrl ? encodeURI(rawFileKey as string) : undefined);
+  const mime = doc.currentVersion?.mimeType || '';
+  const isPdf = mime === 'application/pdf';
+  const isImage = mime.startsWith('image/');
+
+  return (
+    <div>
+      <div className="flex g8 wrap" style={{ marginBottom: '12px' }}>
+        <span className="badge b-urg-low">{doc.status}</span>
+        <span className="badge b-urg-low">{doc.confidentiality}</span>
+        <span className="badge b-urg-low">{doc.urgency}</span>
+        <span className="caption" style={{ alignSelf: 'center' }}>
+          v{doc.currentVersion?.versionNumber ?? 1}
+        </span>
+      </div>
+      <div
+        style={{
+          border: '1px solid var(--border)',
+          borderRadius: '10px',
+          overflow: 'hidden',
+          background: 'var(--surface)',
+        }}
+      >
+        {!fileUrl ? (
+          <div className="empty-state" style={{ padding: '40px 16px' }}>
+            {rawFileKey
+              ? "This document's file location isn't a real URL — likely seed/fixture data."
+              : 'No file attached to this document.'}
+          </div>
+        ) : isPdf ? (
+          <iframe
+            src={fileUrl}
+            title={doc.title}
+            style={{ width: '100%', height: '70vh', border: 'none', display: 'block' }}
+          />
+        ) : isImage ? (
+          <img
+            src={fileUrl}
+            alt={doc.title}
+            style={{ display: 'block', maxWidth: '100%', margin: '0 auto' }}
+          />
+        ) : (
+          <div className="empty-state" style={{ padding: '40px 16px' }}>
+            {mime || 'This file type'} can’t be previewed inline.{' '}
+            <a href={fileUrl} target="_blank" rel="noreferrer">
+              Open file
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );
