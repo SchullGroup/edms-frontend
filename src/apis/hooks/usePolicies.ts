@@ -7,10 +7,11 @@ export const policyKeys = {
   details: () => [...policyKeys.all, 'detail'] as const,
 };
 
-export function usePolicies() {
+export function usePolicies(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: policyKeys.details(),
     queryFn: () => policiesService.getPolicies(),
+    enabled: options?.enabled ?? true,
   });
 }
 

@@ -1,25 +1,24 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useStore, userById } from '@/store/useStore';
+import React, { useEffect } from 'react';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments, useUpdateDocument } from '@/apis/hooks/useDocuments';
+import { useTasks, useTaskAction, useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { Spinner } from '@/components/common/Spinner';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { Icon } from '@/components/ui/Icons';
 
-export default function ApprovalsQueuePage() {
-  const { currentUser } = useStore();
-  const session = currentUser?.id;
+const URG_ORDER: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3 };
 
-  const { data: docsData, isLoading: isLoadingDocs } = useDocuments();
+export default function ApprovalsQueuePage() {
+  const { data: tasksData, isLoading: isLoadingTasks } = useTasks({ scope: 'mine', status: 'pending' });
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
-  const documents = docsData?.data || [];
+  const tasks = tasksData?.data || [];
   const users = usersData?.data || [];
 
-  const updateDocument = useUpdateDocument();
+  const taskAction = useTaskAction();
+  const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
 
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
@@ -28,65 +27,60 @@ export default function ApprovalsQueuePage() {
     setPageTitle('Approvals Queue');
   }, [setPageTitle]);
 
-  if (isLoadingDocs || isLoadingUsers) return <Spinner />;
+  if (isLoadingTasks || isLoadingUsers) return <Spinner />;
 
-  const queue = documents
-    .filter((d) => d.assignee === session && d.status !== 'closed')
-    .sort((a, b) => {
-      const u = { Critical: 0, High: 1, Normal: 2, Low: 3 };
-      return (u[a.urgency as keyof typeof u] || 2) - (u[b.urgency as keyof typeof u] || 2);
-    });
+  const queue = [...tasks].sort((a: any, b: any) => {
+    const ua = URG_ORDER[a.workflowInstance?.document?.urgency] ?? 2;
+    const ub = URG_ORDER[b.workflowInstance?.document?.urgency] ?? 2;
+    return ua - ub;
+  });
 
-  const handleApprove = (d: any) => {
+  const handleApprove = (t: any) => {
+    const title = t.workflowInstance?.document?.title || 'this document';
     openConfirm({
-      title: `Approve “${d.title.slice(0, 40)}…”?`,
+      title: `Approve “${title.slice(0, 40)}…”?`,
       message:
         'The current stage completes and the file advances. Your decision is recorded in the immutable audit trail.',
       confirmLabel: 'Approve',
       onConfirm: () => {
-        // Mock workflow advance
-        updateDocument.mutate({
-          id: d.id,
-          updates: {
-            workflow: d.workflow.map((s: any) =>
-              s.state === 'current' ? { ...s, state: 'past' } : s,
-            ),
-          } as any,
-        });
-        createAuditLog.mutate({
-          action: 'APPROVE',
-          target: d.id,
-          detail: 'Approved via approvals queue',
-        });
-        addToast('Approved', 'success');
+        taskAction.mutate(
+          { id: t.id, actionReq: { action: 'approve' } },
+          {
+            onSuccess: () => {
+              createAuditLog.mutate({
+                action: 'APPROVE',
+                target: t.workflowInstance?.documentId || t.id,
+                detail: 'Approved via approvals queue',
+              });
+              addToast('Approved', 'success');
+            },
+          },
+        );
       },
     });
   };
 
-  const handleReassign = (d: any) => {
+  const handleReassign = (t: any) => {
     let newAssignee = '';
     let note = '';
+    const title = t.workflowInstance?.document?.title || 'this document';
     openModal({
-      title: `Reassign — ${d.title.slice(0, 44)}${d.title.length > 44 ? '…' : ''}`,
+      title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
       body: (
         <div>
           <div className="field">
             <label>Current assignee</label>
-            <input
-              className="input"
-              disabled
-              value={userById(users, d.assignee as string)?.name || ''}
-            />
+            <input className="input" disabled value={t.assignee?.name || t.assignedRole?.name || ''} />
           </div>
           <div className="field">
             <label>New assignee</label>
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select user...</option>
               {users
-                .filter((u) => u.status === 'active' && u.id !== d.assignee)
+                .filter((u) => u.status === 'active' && u.id !== t.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} — {(u as any).roleLabel || (u as any).role || u.roles?.[0]}
+                    {u.name}
                   </option>
                 ))}
             </select>
@@ -111,16 +105,22 @@ export default function ApprovalsQueuePage() {
               addToast('Please select a new assignee', 'error');
               return;
             }
-            const prev = d.assignee;
-            updateDocument.mutate({ id: d.id, updates: { assignee: newAssignee } });
-            addToast('Document ' + d.title + ' reassigned', 'success');
-            createAuditLog.mutate({
-              action: 'REASSIGN',
-              target: d.id,
-              detail: `Reassigned from ${userById(users, prev as string)?.name} to ${userById(users, newAssignee as string)?.name}`,
-            });
-            addToast(`Reassigned to ${userById(users, newAssignee as string)?.name}`, 'success');
-            closeModal();
+            const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
+            const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
+            reassignTask.mutate(
+              { id: t.id, assigneeId: newAssignee, note: note || undefined },
+              {
+                onSuccess: () => {
+                  createAuditLog.mutate({
+                    action: 'REASSIGN',
+                    target: t.workflowInstance?.documentId || t.id,
+                    detail: `Reassigned from ${prevName} to ${newName}`,
+                  });
+                  addToast(`Reassigned to ${newName}`, 'success');
+                  closeModal();
+                },
+              },
+            );
           },
         },
       ],
@@ -141,17 +141,17 @@ export default function ApprovalsQueuePage() {
       <div className="card">
         {queue.length > 0 ? (
           <div className="rowlist">
-            {queue.map((d: any) => (
+            {queue.map((t: any) => (
               <TaskRow
-                key={d.id}
-                item={d}
+                key={t.id}
+                item={t}
                 extraActions={
                   <>
                     <button
                       className="btn btn-success btn-sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleApprove(d);
+                        handleApprove(t);
                       }}
                     >
                       Approve
@@ -160,7 +160,7 @@ export default function ApprovalsQueuePage() {
                       className="btn btn-secondary btn-sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleReassign(d);
+                        handleReassign(t);
                       }}
                     >
                       Reassign

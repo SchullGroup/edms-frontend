@@ -4,18 +4,23 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useWorkflows, useUpdateWorkflow, useCreateWorkflow, usePublishWorkflow } from '@/apis/hooks/useWorkflows';
+import {
+  useWorkflows,
+  useUpdateWorkflow,
+  useCreateWorkflow,
+  usePublishWorkflow,
+  useArchiveWorkflow,
+} from '@/apis/hooks/useWorkflows';
+import { useRoles } from '@/apis/hooks/useRoles';
+import { useAllUsers } from '@/apis/hooks/useUsers';
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { Icon } from '@/components/ui/Icons';
+import { WorkflowToolbar } from '@/components/workflows/WorkflowToolbar';
+import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
+import { StagePropertiesPanel } from '@/components/workflows/StagePropertiesPanel';
+import { DEFAULT_WORKFLOW_DEFINITION, rebuildTransitions } from '@/components/workflows/constants';
 
-const NODE_TYPES = [
-  ['start', 'Start'],
-  ['review', 'Review'],
-  ['approval', 'Approval'],
-  ['sign', 'Sign'],
-  ['condition', 'Condition'],
-  ['parallel', 'Parallel'],
-  ['notify', 'Notify'],
-  ['close', 'Close'],
-];
+const SAVE_DEBOUNCE_MS = 500;
 
 export default function WorkflowDesignerPage() {
   const { auditAction } = useStore();
@@ -23,14 +28,33 @@ export default function WorkflowDesignerPage() {
 
   const { data: workflowsData, isLoading, error } = useWorkflows();
   const workflows = workflowsData?.data || [];
+  const { data: roles } = useRoles();
+  const { data: usersResult } = useAllUsers();
+  const users = usersResult?.items || [];
 
   const updateWfMutation = useUpdateWorkflow();
   const createWfMutation = useCreateWorkflow();
   const publishWfMutation = usePublishWorkflow();
+  const archiveWfMutation = useArchiveWorkflow();
 
-  const [wfId, setWfId] = useState<string | null>(null);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [wfId, setWfId] = useState(null);
+  const [selectedStageId, setSelectedStageId] = useState(null);
+  // There's no real delete-workflow endpoint on the backend — only archive.
+  // Archived workflows drop out of the switcher by default so archiving
+  // reads as "gone" day-to-day, without pretending it's actually deleted.
+  const [showArchived, setShowArchived] = useState(false);
+
+  // Local drafts decouple typing from the network round-trip: they update
+  // instantly on every keystroke, but nothing is written back until an
+  // explicit Save. They only resync from server data when the *selection*
+  // changes or a save actually lands, never on every keystroke.
+  const [nameDraft, setNameDraft] = useState('');
+  const [stageNameDraft, setStageNameDraft] = useState('');
+  const [assigneeMode, setAssigneeMode] = useState('role');
+  const [roleDraft, setRoleDraft] = useState('');
+  const [userDraft, setUserDraft] = useState('');
+  const [slaDraft, setSlaDraft] = useState(48);
+  const [actionsDraft, setActionsDraft] = useState([]);
 
   useEffect(() => {
     if (workflows.length > 0 && !wfId) {
@@ -38,28 +62,51 @@ export default function WorkflowDesignerPage() {
     }
   }, [workflows, wfId]);
 
-  const wf = workflows?.find((w: any) => w.id === wfId) || workflows?.[0];
-
+  const wf = workflows?.find((w) => w.id === wfId) || workflows?.[0];
   const stages = wf?.definition?.stages || [];
-  const transitions = wf?.definition?.transitions || [];
+  const switcherWorkflows = showArchived ? workflows : workflows.filter((w) => w.status !== 'archived' || w.id === wf?.id);
+  const archivedCount = workflows.filter((w) => w.status === 'archived').length;
 
-  const nodes = stages.map((s: any, i: number) => ({
-    id: s.id,
-    type: s.actions?.[0] || 'review',
-    name: s.name || s.id,
-    x: 40 + i * 200,
-    y: 80,
-    summary: `Role: ${s.role || 'Unassigned'}`,
-    sla: s.sla_hours || 48,
-    role: s.role || '',
-  }));
-  const edges = transitions.map((t: any) => [t.from, t.to]);
+  useEffect(() => {
+    setNameDraft(wf?.name || '');
+  }, [wf?.id, wf?.name]);
 
-  const selectedNode = nodes.find((n: any) => n.id === selectedNodeId);
+  const selectedStage = stages.find((s) => s.id === selectedStageId);
 
-  const updateWorkflow = (id: string, updates: any) => {
+  const resetStageDrafts = (stage) => {
+    setStageNameDraft(stage?.name || '');
+    setAssigneeMode(stage?.user_id ? 'person' : 'role');
+    setRoleDraft(stage?.role || '');
+    setUserDraft(stage?.user_id || '');
+    setSlaDraft(stage?.sla_hours ?? 48);
+    setActionsDraft(stage?.actions || []);
+  };
+
+  useEffect(() => {
+    resetStageDrafts(selectedStage);
+  }, [selectedStageId]);
+
+  const updateWorkflow = (id, updates) => {
     updateWfMutation.mutate({ id, updates });
   };
+
+  // Editing a name or a stage's properties never saves on its own — only an
+  // explicit Save commits it. The one thing that still saves automatically
+  // is dragging a stage to reorder it, and even that is debounced so a
+  // flurry of quick drags collapses into one write instead of one per drop.
+  const debouncedReorder = useDebouncedCallback((id, updates) => {
+    updateWorkflow(id, updates);
+  }, SAVE_DEBOUNCE_MS);
+
+  const nameDirty = nameDraft !== (wf?.name || '');
+  const stageDirty =
+    !!selectedStage &&
+    (stageNameDraft !== (selectedStage.name || '') ||
+      JSON.stringify(actionsDraft) !== JSON.stringify(selectedStage.actions || []) ||
+      slaDraft !== (selectedStage.sla_hours ?? 48) ||
+      (assigneeMode === 'role'
+        ? roleDraft !== (selectedStage.role || '') || !!selectedStage.user_id
+        : userDraft !== (selectedStage.user_id || '') || !!selectedStage.role));
 
   useEffect(() => {
     setPageTitle('Workflow Designer');
@@ -77,42 +124,27 @@ export default function WorkflowDesignerPage() {
     );
   }
 
+  const handleCreateWorkflow = () => {
+    createWfMutation.mutate(
+      { name: 'New workflow', description: 'A new sequential workflow', definition: DEFAULT_WORKFLOW_DEFINITION },
+      {
+        onSuccess: (data) => {
+          setWfId(data.id);
+          setSelectedStageId(null);
+          addToast('Workflow created', 'success');
+        },
+      },
+    );
+  };
+
   if (!wf && workflows.length === 0) {
     return (
       <div className="p-8">
         <div className="card card-pad text-center">
-          <div className="h3 mb8">No Workflows Found</div>
+          <div className="h3 mb8">No workflows yet</div>
           <div className="caption mb16">Create your first workflow to get started.</div>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              createWfMutation.mutate(
-                {
-                  name: 'New Workflow',
-                  description: 'A new sequential workflow',
-                  definition: {
-                    stages: [
-                      {
-                        id: 'start',
-                        name: 'Start Stage',
-                        role: 'staff',
-                        sla_hours: 24,
-                        actions: ['review'],
-                      },
-                    ],
-                    transitions: [],
-                  },
-                },
-                {
-                  onSuccess: (data: any) => {
-                    setWfId(data.id);
-                    addToast('Workflow created', 'success');
-                  },
-                },
-              );
-            }}
-          >
-            Create Workflow
+          <button className="btn btn-primary" onClick={handleCreateWorkflow}>
+            Create workflow
           </button>
         </div>
       </div>
@@ -124,369 +156,204 @@ export default function WorkflowDesignerPage() {
   const handlePublish = () => {
     publishWfMutation.mutate(wf.id, {
       onSuccess: () => {
-        setDirty(false);
         auditAction('WORKFLOW_PUBLISH', wf.id, `Published ${wf.name}`);
-      }
+      },
+    });
+  };
+
+  // There's no real delete endpoint for a workflow — archive is the closest
+  // the API has, so it's framed here as the practical "remove this" action:
+  // archived workflows drop out of the switcher (see switcherWorkflows) and
+  // can no longer be routed to, but stay reversible and auditable rather
+  // than gone.
+  const handleArchive = () => {
+    openConfirm({
+      title: `Archive "${wf.name}"?`,
+      message:
+        "There's no permanent delete for a workflow — archive is the closest thing. It'll drop out of this list and can no longer be routed to for new documents. Files already in flight are unaffected, and it can be found again via \"Show archived\".",
+      confirmLabel: 'Archive',
+      danger: true,
+      onConfirm: () =>
+        archiveWfMutation.mutateAsync(wf.id).then(() => {
+          auditAction('WORKFLOW_ARCHIVE', wf.id, `Archived ${wf.name}`);
+        }),
     });
   };
 
   const handleClone = () => {
-    const copy = {
-      name: wf.name + ' (copy)',
-      description: 'Cloned from ' + wf.name,
-      definition: wf.definition,
-    };
+    const copy = { name: wf.name + ' (copy)', description: 'Cloned from ' + wf.name, definition: wf.definition };
     createWfMutation.mutate(copy, {
-      onSuccess: (data: any) => {
+      onSuccess: (data) => {
         setWfId(data.id);
-        setDirty(false);
+        setSelectedStageId(null);
         auditAction('WORKFLOW_CLONE', data.id, 'Cloned from ' + wf.name);
       },
     });
   };
 
-  const edgePath = (a: any, b: any) => {
-    const x1 = a.x + 158,
-      y1 = a.y + 34,
-      x2 = b.x,
-      y2 = b.y + 34;
-    const mx = (x1 + x2) / 2;
-    return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+  const handleAddStage = () => {
+    if (updateWfMutation.isPending) return;
+    const newStage = {
+      id: `stage_${Date.now()}`,
+      name: 'New stage',
+      role: roles?.[0]?.name || 'staff',
+      sla_hours: 48,
+      actions: ['review'],
+    };
+    const updatedStages = [...stages, newStage];
+    updateWorkflow(wf.id, { definition: { stages: updatedStages, transitions: rebuildTransitions(updatedStages) } });
+    setSelectedStageId(newStage.id);
+    addToast('Stage added — configure it on the right', 'success');
   };
 
-  const W = Math.max(1060, ...nodes.map((n: any) => n.x + 220));
-  const H = Math.max(420, ...nodes.map((n: any) => n.y + 140));
+  const handleReorderStages = (updatedStages) => {
+    debouncedReorder(wf.id, { definition: { stages: updatedStages, transitions: rebuildTransitions(updatedStages) } });
+  };
+
+  const handleDeleteStage = (stage) => {
+    openConfirm({
+      title: `Delete stage "${stage.name}"?`,
+      message: 'This stage will be removed. The remaining sequence will be reconnected.',
+      confirmLabel: 'Delete stage',
+      danger: true,
+      onConfirm: () => {
+        const updatedStages = stages.filter((s) => s.id !== stage.id);
+        // Returning the mutation promise lets the confirm button show a
+        // loading state and keeps the modal open until the delete actually
+        // completes (or failed and can be retried).
+        return updateWfMutation
+          .mutateAsync({
+            id: wf.id,
+            updates: { definition: { stages: updatedStages, transitions: rebuildTransitions(updatedStages) } },
+          })
+          .then(() => {
+            if (selectedStageId === stage.id) setSelectedStageId(null);
+            addToast('Stage deleted', 'info');
+          });
+      },
+    });
+  };
+
+  // Selecting a different stage discards whatever's still sitting unsaved
+  // in the properties panel — confirm first so that isn't a silent loss.
+  const selectStage = (id) => {
+    if (id === selectedStageId) return;
+    if (stageDirty && !window.confirm('Discard unsaved changes to this stage?')) return;
+    setSelectedStageId(id);
+  };
+
+  const toggleAction = (action) => {
+    if (!selectedStage) return;
+    setActionsDraft((prev) => (prev.includes(action) ? prev.filter((a) => a !== action) : [...prev, action]));
+  };
+
+  const handleAssigneeModeChange = (mode) => {
+    if (!selectedStage) return;
+    setAssigneeMode(mode);
+    if (mode === 'role') {
+      setRoleDraft(roleDraft || roles?.[0]?.name || 'staff');
+    } else {
+      setUserDraft(userDraft || users[0]?.id || '');
+    }
+  };
+
+  const handleSaveName = () => {
+    if (!nameDirty) return;
+    updateWorkflow(wf.id, { name: nameDraft });
+  };
+
+  const handleSaveStage = () => {
+    if (!selectedStage || !stageDirty) return;
+    const patch =
+      assigneeMode === 'role'
+        ? { name: stageNameDraft, actions: actionsDraft, sla_hours: slaDraft, role: roleDraft, user_id: undefined }
+        : { name: stageNameDraft, actions: actionsDraft, sla_hours: slaDraft, user_id: userDraft, role: undefined };
+    const updatedStages = stages.map((s) => (s.id === selectedStage.id ? { ...s, ...patch } : s));
+    updateWorkflow(wf.id, { definition: { ...wf.definition, stages: updatedStages } });
+  };
+
+  const handleDiscardStage = () => {
+    resetStageDrafts(selectedStage);
+  };
+
+  const assigneeSummary = (s) => {
+    if (s.user_id) {
+      const u = users.find((u) => u.id === s.user_id);
+      return u ? u.name : 'Assigned person';
+    }
+    return s.role ? s.role.replace(/_/g, ' ') : 'Unassigned';
+  };
 
   return (
     <div>
-      <div className="page-head">
-        <div>
-          <div className="flex aic g8 wrap">
-            <input
-              className="input"
-              value={wf.name}
-              style={{ width: '240px', fontWeight: 700 }}
-              onChange={(e) => {
-                updateWorkflow(wf.id, { name: e.target.value });
-                setDirty(true);
-              }}
-            />
-            <span
-              className={`badge ${wf.status === 'published' ? 'b-status-closed' : 'b-status-pending'}`}
-            >
-              {wf.status === 'published' ? 'Active' : 'Draft'} · v{wf.version}
-            </span>
-            {dirty && <span className="badge b-urg-high">● Unsaved changes</span>}
-          </div>
+      <WorkflowToolbar
+        workflow={wf}
+        stageCount={stages.length}
+        nameDraft={nameDraft}
+        onNameChange={setNameDraft}
+        nameDirty={nameDirty}
+        onSaveName={handleSaveName}
+        saving={updateWfMutation.isPending}
+        switcherWorkflows={switcherWorkflows}
+        archivedCount={archivedCount}
+        showArchived={showArchived}
+        onToggleShowArchived={() => setShowArchived((v) => !v)}
+        onSwitchWorkflow={(id) => {
+          if ((nameDirty || stageDirty) && !window.confirm('You have unsaved changes. Switch workflow anyway?')) return;
+          setWfId(id);
+          setSelectedStageId(null);
+        }}
+        onCreateNew={handleCreateWorkflow}
+        onClone={handleClone}
+        onArchive={handleArchive}
+        onPublish={handlePublish}
+        creating={createWfMutation.isPending}
+        archiving={archiveWfMutation.isPending}
+        publishing={publishWfMutation.isPending}
+      />
 
-          <div className="page-sub">Sequential Pipeline Designer</div>
-        </div>
-
-        <div className="actions">
-          <select
-            className="input"
-            style={{ width: 'auto', height: '34px' }}
-            value={wf.id}
-            onChange={(e) => {
-              if (
-                dirty &&
-                !window.confirm('You have unsaved layout changes. Switch workflow anyway?')
-              )
-                return;
-              setWfId(e.target.value);
-              setSelectedNodeId(null);
-              setDirty(false);
-            }}
-          >
-            {workflows?.map((w: any) => (
-              <option key={w.id} value={w.id}>
-                {w.name} (v{w.version})
-              </option>
-            ))}
-          </select>
-
-          <button className="btn btn-secondary" onClick={handleClone}>
-            Clone
-          </button>
-          <button className="btn btn-primary" onClick={handlePublish}>
-            Publish
-          </button>
-        </div>
-      </div>
-
-      <div
-        className="wfd-layout"
-        style={{ display: 'flex', gap: '16px', height: 'calc(100vh - 180px)' }}
-      >
-        {/* Palette */}
-        <div className="card card-pad wfd-palette" style={{ width: '160px', flexShrink: 0 }}>
-          <div className="h3 mb8">Stage palette</div>
-          <div className="caption mb8">Click to append</div>
-          {NODE_TYPES.map(([type, label]) => (
-            <div
-              key={type}
-              className="metric-li"
-              style={{ cursor: 'pointer', padding: '6px' }}
-              onClick={() => {
-                const newStage = {
-                  id: `stage_${Date.now()}`,
-                  name: label + ' stage',
-                  role: 'staff',
-                  sla_hours: 48,
-                  actions: [
-                    type === 'sign' || type === 'review' || type === 'approve' ? type : 'review',
-                  ],
-                };
-                const updatedStages = [...stages, newStage];
-                const updatedTransitions = [];
-                for (let i = 0; i < updatedStages.length - 1; i++) {
-                  updatedTransitions.push({
-                    from: updatedStages[i].id,
-                    to: updatedStages[i + 1].id,
-                  });
-                }
-                updateWorkflow(wf.id, {
-                  definition: { stages: updatedStages, transitions: updatedTransitions },
-                });
-                setSelectedNodeId(newStage.id);
-                setDirty(true);
-                addToast('Stage appended', 'success');
-              }}
-            >
-              <span
-                className={`sw node-sw-${type}`}
-                style={{
-                  width: '12px',
-                  height: '12px',
-                  borderRadius: '3px',
-                  display: 'inline-block',
-                  marginRight: '8px',
-                }}
-              ></span>
-              {label}
-            </div>
-          ))}
-        </div>
-
-        {/* Canvas */}
-        <div
-          className="wfd-canvas card"
-          style={{ flexGrow: 1, overflow: 'auto', position: 'relative' }}
-        >
-          <div
-            style={{ position: 'relative', width: W + 'px', height: H + 'px' }}
-            onClick={() => {
-              setSelectedNodeId(null);
-            }}
-          >
-            <svg
-              width={W}
-              height={H}
-              style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-            >
-              <defs>
-                <marker
-                  id="arr"
-                  viewBox="0 0 10 10"
-                  refX="9"
-                  refY="5"
-                  markerWidth="7"
-                  markerHeight="7"
-                  orient="auto-start-reverse"
-                >
-                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)" />
-                </marker>
-              </defs>
-              {edges.map(([from, to, label]: any, i: number) => {
-                const a = nodes.find((n: any) => n.id === from);
-                const b = nodes.find((n: any) => n.id === to);
-                if (!a || !b) return null;
-                return (
-                  <g key={i}>
-                    <path
-                      d={edgePath(a, b)}
-                      fill="none"
-                      stroke="var(--muted)"
-                      strokeWidth="1.8"
-                      markerEnd="url(#arr)"
-                    />
-                  </g>
-                );
-              })}
-            </svg>
-
-            {nodes.map((n: any) => (
-              <div
-                key={n.id}
-                className={`wf-node ${selectedNodeId === n.id ? 'selected' : ''}`}
-                style={{
-                  position: 'absolute',
-                  left: n.x,
-                  top: n.y,
-                  width: '150px',
-                  padding: '8px',
-                  background: 'var(--bg)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  zIndex: 10,
-                  boxShadow: selectedNodeId === n.id ? '0 0 0 2px var(--brand-accent)' : 'none',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedNodeId(n.id);
-                }}
-              >
-                <div
-                  className="nt"
-                  style={{
-                    fontSize: '10px',
-                    color: 'var(--muted)',
-                    fontWeight: 600,
-                    marginBottom: '4px',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  <span
-                    className={`sw node-sw-${n.type}`}
-                    style={{
-                      width: '9px',
-                      height: '9px',
-                      borderRadius: '3px',
-                      display: 'inline-block',
-                      marginRight: '4px',
-                    }}
-                  ></span>
-                  {n.type}
-                </div>
-                <div
-                  className="nn"
-                  style={{ fontSize: '13px', fontWeight: 600, marginBottom: '4px' }}
-                >
-                  {n.name}
-                </div>
-                <div className="ns" style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                  {n.summary}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Properties Panel */}
-        <div className="card wfd-props" style={{ width: '280px', flexShrink: 0, overflow: 'auto' }}>
+      <div className="wfd-layout">
+        <div className="card">
           <div className="card-head">
-            <span className="h3">Stage properties</span>
+            <span className="h3">Stages</span>
+            <button className="btn btn-secondary btn-sm" onClick={handleAddStage} disabled={updateWfMutation.isPending}>
+              <Icon name="plus" size={14} /> Add stage
+            </button>
           </div>
-          {!selectedNode ? (
-            <div className="card-body">
-              <p className="muted" style={{ lineHeight: 1.6, fontSize: '12.5px' }}>
-                Select a stage on the canvas to configure it, or add a stage type from the palette.
-              </p>
-              <div className="divider"></div>
-              <div className="banner success" style={{ marginBottom: 0 }}>
-                Graph is strictly sequential.
-              </div>
-            </div>
-          ) : (
-            <div className="card-body">
-              <div className="field">
-                <label>Stage name</label>
-                <input
-                  className="input"
-                  value={selectedNode.name || ''}
-                  onChange={(e) => {
-                    const updatedStages = stages.map((s: any) =>
-                      s.id === selectedNode.id ? { ...s, name: e.target.value } : s,
-                    );
-                    updateWorkflow(wf.id, {
-                      definition: { ...wf.definition, stages: updatedStages },
-                    });
-                    setDirty(true);
-                  }}
-                />
-              </div>
-              <div className="field">
-                <label>Assignee role</label>
-                <select
-                  className="input"
-                  value={selectedNode.role || ''}
-                  onChange={(e) => {
-                    const updatedStages = stages.map((s: any) =>
-                      s.id === selectedNode.id ? { ...s, role: e.target.value } : s,
-                    );
-                    updateWorkflow(wf.id, {
-                      definition: { ...wf.definition, stages: updatedStages },
-                    });
-                    setDirty(true);
-                  }}
-                >
-                  {[
-                    'staff',
-                    'supervisor',
-                    'management',
-                    'client_admin',
-                    'schulltech_admin',
-                    'internal_auditor',
-                  ].map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid cols-2" style={{ gap: '10px' }}>
-                <div className="field">
-                  <label>SLA (hours)</label>
-                  <input
-                    className="input"
-                    type="number"
-                    value={selectedNode.sla || 48}
-                    onChange={(e) => {
-                      const updatedStages = stages.map((s: any) =>
-                        s.id === selectedNode.id ? { ...s, sla_hours: +e.target.value } : s,
-                      );
-                      updateWorkflow(wf.id, {
-                        definition: { ...wf.definition, stages: updatedStages },
-                      });
-                      setDirty(true);
-                    }}
-                  />
-                </div>
-              </div>
-              <button
-                className="btn btn-danger btn-sm mt16"
-                onClick={() => {
-                  openConfirm({
-                    title: `Delete stage "${selectedNode.name}"?`,
-                    message:
-                      'This stage will be removed from the workflow layout. The remaining sequence will be reconnected.',
-                    confirmLabel: 'Delete stage',
-                    danger: true,
-                    onConfirm: () => {
-                      const updatedStages = stages.filter((s: any) => s.id !== selectedNode.id);
-                      const updatedTransitions = [];
-                      for (let i = 0; i < updatedStages.length - 1; i++) {
-                        updatedTransitions.push({
-                          from: updatedStages[i].id,
-                          to: updatedStages[i + 1].id,
-                        });
-                      }
-                      updateWorkflow(wf.id, {
-                        definition: { stages: updatedStages, transitions: updatedTransitions },
-                      });
-                      setSelectedNodeId(null);
-                      setDirty(true);
-                      addToast('Stage deleted', 'info');
-                    },
-                  });
-                }}
-              >
-                Delete stage
-              </button>
-            </div>
-          )}
+          <div className="card-body" style={{ padding: 0 }}>
+            <WorkflowCanvas
+              stages={stages}
+              selectedStageId={selectedStageId}
+              onSelect={selectStage}
+              onReorder={handleReorderStages}
+              assigneeSummary={assigneeSummary}
+              disabled={updateWfMutation.isPending}
+            />
+          </div>
         </div>
+
+        <StagePropertiesPanel
+          selectedStage={selectedStage}
+          saving={updateWfMutation.isPending}
+          dirty={stageDirty}
+          nameDraft={stageNameDraft}
+          onNameChange={setStageNameDraft}
+          actionsDraft={actionsDraft}
+          onToggleAction={toggleAction}
+          assigneeMode={assigneeMode}
+          onAssigneeModeChange={handleAssigneeModeChange}
+          roles={roles || []}
+          roleDraft={roleDraft}
+          onRoleChange={setRoleDraft}
+          users={users}
+          userDraft={userDraft}
+          onUserChange={setUserDraft}
+          slaDraft={slaDraft}
+          onSlaChange={setSlaDraft}
+          onSave={handleSaveStage}
+          onDiscard={handleDiscardStage}
+          onDelete={() => handleDeleteStage(selectedStage)}
+        />
       </div>
     </div>
   );

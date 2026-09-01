@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { foldersService } from '@/apis/services/folders.service';
-import { CabinetFolder } from '@/types/models';
+import { CreateFolderRequest, UpdateFolderRequest } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
 
 export const folderKeys = {
@@ -17,12 +17,20 @@ export function useCabinetFolders(cabinetId?: string) {
   });
 }
 
+export function useFolder(id?: string) {
+  return useQuery({
+    queryKey: folderKeys.detail(id || ''),
+    queryFn: () => foldersService.getById(id as string),
+    enabled: !!id,
+  });
+}
+
 export function useCreateFolder() {
   const queryClient = useQueryClient();
   const { addToast } = useUIStore.getState();
 
   return useMutation({
-    mutationFn: ({ cabinetId, data }: { cabinetId: string; data: Partial<CabinetFolder> }) =>
+    mutationFn: ({ cabinetId, data }: { cabinetId: string; data: CreateFolderRequest }) =>
       foldersService.create(cabinetId, data),
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: folderKeys.byCabinet(variables.cabinetId) });
@@ -39,7 +47,7 @@ export function useUpdateFolder() {
   const { addToast } = useUIStore.getState();
 
   return useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<CabinetFolder> }) =>
+    mutationFn: ({ id, updates }: { id: string; updates: UpdateFolderRequest }) =>
       foldersService.update(id, updates),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: folderKeys.byCabinet(data.cabinetId) });
@@ -57,14 +65,20 @@ export function useDeleteFolder() {
   const { addToast } = useUIStore.getState();
 
   return useMutation({
-    mutationFn: ({ id, cabinetId }: { id: string; cabinetId: string }) =>
-      foldersService.delete(id),
+    mutationFn: ({ id }: { id: string; cabinetId: string }) => foldersService.delete(id),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: folderKeys.byCabinet(variables.cabinetId) });
       addToast('Folder deleted successfully', 'success');
     },
     onError: (err: any) => {
-      addToast(err.response?.data?.message || 'Failed to delete folder', 'error');
+      // 409 = the folder still contains documents.
+      addToast(
+        err.response?.data?.message ||
+          (err.response?.status === 409
+            ? 'This folder still contains documents'
+            : 'Failed to delete folder'),
+        'error',
+      );
     },
   });
 }

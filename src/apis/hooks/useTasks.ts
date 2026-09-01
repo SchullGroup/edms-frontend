@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { tasksService, TaskFilters } from '../services/tasks.service';
+import { tasksService, TaskFilters, TaskStatsParams } from '../services/tasks.service';
 import { TaskActionRequest } from '@/types/models';
 import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 
@@ -42,6 +42,14 @@ export const useTask = (id: string) => {
     queryKey: taskKeys.detail(id),
     queryFn: () => tasksService.getById(id),
     enabled: !!id,
+  });
+};
+
+export const useTaskStats = (params?: TaskStatsParams, options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: [...taskKeys.all, 'stats', params ?? {}],
+    queryFn: () => tasksService.getStats(params),
+    enabled: options?.enabled ?? true,
   });
 };
 

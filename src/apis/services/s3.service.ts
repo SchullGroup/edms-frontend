@@ -22,25 +22,25 @@ export interface S3UploadOptions {
 /**
  * Sanitizes a filename by replacing spaces and special characters with underscores
  * to prevent URL encoding issues in S3 links
- * 
+ *
  * @param {string} fileName - The original filename
  * @returns {string} Sanitized filename safe for S3 URLs
  * @example
  *   sanitizeFileName("IFT 212 COMPUTER ORGANIZATION.pdf")
  *   // Returns: "IFT_212_COMPUTER_ORGANIZATION.pdf"
  */
-const sanitizeFileName = (fileName: string): string => {
+export const sanitizeFileName = (fileName: string): string => {
   // Get file extension
   const lastDotIndex = fileName.lastIndexOf('.');
   const name = lastDotIndex !== -1 ? fileName.substring(0, lastDotIndex) : fileName;
   const extension = lastDotIndex !== -1 ? fileName.substring(lastDotIndex) : '';
-  
+
   // Replace spaces and special characters (except hyphens and underscores) with underscores
   const sanitizedName = name
-    .replace(/\s+/g, '_')  // Replace spaces with underscores
-    .replace(/[^a-zA-Z0-9_-]/g, '_')  // Replace special chars with underscores
-    .replace(/_+/g, '_');  // Replace multiple consecutive underscores with single underscore
-  
+    .replace(/\s+/g, '_') // Replace spaces with underscores
+    .replace(/[^a-zA-Z0-9_-]/g, '_') // Replace special chars with underscores
+    .replace(/_+/g, '_'); // Replace multiple consecutive underscores with single underscore
+
   return sanitizedName + extension;
 };
 
@@ -59,7 +59,7 @@ const convertToBase64 = (file: File): Promise<string> => {
 
 /**
  * Calculates the SHA-256 checksum of a file
- * 
+ *
  * @param {File} file - The file to calculate the checksum for
  * @returns {Promise<string>} Hex string of the SHA-256 checksum
  */
@@ -151,9 +151,7 @@ export const uploadToS3 = async (
     const response = await axios.post(convertToUrlAPI, payload, {
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
-          const progress = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );  
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           onProgress({
             progress,
             loaded: progressEvent.loaded,
@@ -267,7 +265,7 @@ export const uploadImageToS3 = async (
   file: File,
   options: S3UploadOptions
 ): Promise<UploadResult> => {
-  const { folderName, onProgress, maxFileSize = 3000000 } = options; // Default 3MB
+  const { folderName, onProgress, maxFileSize = 25000000 } = options; // Default 25MB
   const originalFileName = file.name;
   const fileName = sanitizeFileName(file.name);
   const fileFormat = file.type.slice(6); // Extract format (e.g., "jpeg", "png")
@@ -275,10 +273,8 @@ export const uploadImageToS3 = async (
   // Validate file size
   if (file.size > maxFileSize) {
     return {
-      type: "error",
-      result: `File size must be less than ${Math.round(
-        maxFileSize / 1024 / 1024
-      )}MB`,
+      type: 'error',
+      result: `File size must be less than ${Math.round(maxFileSize / 1024 / 1024)}MB`,
       fileName: originalFileName,
       fileSize: file.size,
     };
@@ -286,18 +282,18 @@ export const uploadImageToS3 = async (
 
   // Validate file type (images only)
   const allowedImageTypes = [
-    "image/jpeg",
-    "image/jpg",
-    "image/png",
-    "image/gif",
-    "image/webp",
-    "image/svg+xml",
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
   ];
 
   if (!allowedImageTypes.includes(file.type)) {
     return {
-      type: "error",
-      result: "Please select a valid image file (JPEG, PNG, GIF, WebP, or SVG)",
+      type: 'error',
+      result: 'Please select a valid image file (JPEG, PNG, GIF, WebP, or SVG)',
       fileName: originalFileName,
       fileSize: file.size,
     };
@@ -309,9 +305,9 @@ export const uploadImageToS3 = async (
 
     // Prepare API endpoint (using your original image upload endpoint)
     const convertToUrlAPI = `https://qerhd0lxje.execute-api.us-east-1.amazonaws.com/prod/upload-image?fileName=${encodeURIComponent(
-      fileName
+      fileName,
     )}&projectFolder=${encodeURIComponent(
-      folderName
+      folderName,
     )}&fileFormat=${encodeURIComponent(fileFormat)}`;
 
     const payload = { file: base64 };
@@ -320,9 +316,7 @@ export const uploadImageToS3 = async (
     const response = await axios.post(convertToUrlAPI, payload, {
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
-          const progress = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           onProgress({
             progress,
             loaded: progressEvent.loaded,
@@ -336,27 +330,24 @@ export const uploadImageToS3 = async (
     // Check if upload was successful
     if (response.data?.uploadResult?.Location) {
       return {
-        type: "success",
+        type: 'success',
         result: response.data.uploadResult.Location,
         fileName: originalFileName,
         fileSize: file.size,
       };
     } else {
       return {
-        type: "error",
-        result: "Upload failed: No URL returned from server",
+        type: 'error',
+        result: 'Upload failed: No URL returned from server',
         fileName: originalFileName,
         fileSize: file.size,
       };
     }
   } catch (error) {
-    console.error("S3 image upload error:", error);
+    console.error('S3 image upload error:', error);
     return {
-      type: "error",
-      result:
-        error instanceof Error
-          ? error.message
-          : "Upload failed due to network error",
+      type: 'error',
+      result: error instanceof Error ? error.message : 'Upload failed due to network error',
       fileName: originalFileName,
       fileSize: file.size,
     };

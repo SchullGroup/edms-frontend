@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { authService } from '@/apis/services/auth.service';
-import { Icon } from '@/components/ui/Icons';
 import { useMutation } from '@tanstack/react-query';
 
 export default function LoginPage() {
@@ -268,42 +267,49 @@ export default function LoginPage() {
               <button
                 className="btn btn-secondary"
                 style={{ fontSize: '12px', padding: '6px 12px' }}
-                onClick={() => autofill('boyebamiji+staff@schulltech.com', 'Fixture123!')}
+                onClick={() => autofill('tjoel+staff_finance@schulltech.com', 'Fixture123!')}
               >
-                Staff
+                Staff (Finance)
               </button>
               <button
                 className="btn btn-secondary"
                 style={{ fontSize: '12px', padding: '6px 12px' }}
-                onClick={() => autofill('boyebamiji+supervisor@schulltech.com', 'Fixture123!')}
+                onClick={() => autofill('tjoel+staff_hr@schulltech.com', 'Fixture123!')}
               >
-                Supervisor
+                Staff (HR)
               </button>
               <button
                 className="btn btn-secondary"
                 style={{ fontSize: '12px', padding: '6px 12px' }}
-                onClick={() => autofill('boyebamiji+management@schulltech.com', 'Fixture123!')}
+                onClick={() => autofill('tjoel+supervisor_finance@schulltech.com', 'Fixture123!')}
               >
-                Management
+                Supervisor (Finance)
               </button>
               <button
                 className="btn btn-secondary"
                 style={{ fontSize: '12px', padding: '6px 12px' }}
-                onClick={() => autofill('boyebamiji+clientadmin@schulltech.com', 'Fixture123!')}
+                onClick={() => autofill('tjoel+management_ops@schulltech.com', 'Fixture123!')}
+              >
+                Management (Ops)
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => autofill('tjoel+clientadmin@schulltech.com', 'Fixture123!')}
               >
                 Client Admin
               </button>
               <button
                 className="btn btn-secondary"
                 style={{ fontSize: '12px', padding: '6px 12px' }}
-                onClick={() => autofill('boyebamiji+auditor@schulltech.com', 'Fixture123!')}
+                onClick={() => autofill('tjoel+auditor@schulltech.com', 'Fixture123!')}
               >
                 Auditor
               </button>
               <button
                 className="btn btn-secondary"
                 style={{ fontSize: '12px', padding: '6px 12px' }}
-                onClick={() => autofill('boyebamiji+schulltechadmin@schulltech.com', 'Fixture123!')}
+                onClick={() => autofill('tjoel+schulltechadmin@schulltech.com', 'Fixture123!')}
               >
                 Platform Admin
               </button>

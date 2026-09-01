@@ -54,16 +54,63 @@ export interface User {
   updatedAt: string | null;
 }
 
+export type RolePermissionResource =
+  | 'document'
+  | 'cabinet'
+  | 'folder'
+  | 'workflow'
+  | 'audit'
+  | 'user'
+  | 'dashboard';
+
+export type RolePermissionAction =
+  | 'view'
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'route'
+  | 'export'
+  | 'download'
+  | 'print';
+
+export type RolePermission = {
+  resource: RolePermissionResource;
+  action: RolePermissionAction;
+};
+
+/** Body for `POST /roles`. `name` 1–100 chars, `description` max 500. */
+export interface CreateRoleRequest {
+  name: string;
+  description?: string;
+}
+
+/** Body for `PATCH /roles/{id}`. At least one field required. */
+export interface UpdateRoleRequest {
+  name?: string;
+  description?: string;
+}
+
+/** Body for `PUT /roles/{id}/permissions` — replaces the whole permission set. */
+export interface SetPermissionsRequest {
+  permissions: RolePermission[];
+}
+
+/** Body for `POST /users/{id}/roles`. */
+export interface AssignRolesRequest {
+  roleIds: string[];
+}
+
 export interface Role {
   id: string;
   name: string;
   description?: string | null;
-  permissions?: {
-    resource: 'document' | 'cabinet' | 'folder' | 'workflow' | 'audit' | 'user' | 'dashboard';
-    action: 'view' | 'create' | 'edit' | 'delete' | 'route' | 'export' | 'download' | 'print';
-  }[];
+  /** Flattened by `rolesService` from the API's actual `rolePermissions[].permission`
+   *  shape — the Swagger schema documents a flat `permissions` array, but the live
+   *  response nests it under the raw Prisma join instead. */
+  permissions?: RolePermission[];
+  isSystemRole?: boolean;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 // --- Documents ---
@@ -79,11 +126,17 @@ export interface Document {
   confidentiality: string; // 'public' | 'internal' | 'confidential' | 'restricted'
   urgency: string; // 'low' | 'normal' | 'high' | 'critical'
   isCheckedOut: boolean;
+  /** Only observed as present (non-null) while checked out — shape unconfirmed
+   *  live since no fixture document was in that state when this was checked. */
+  checkoutLock?: CheckoutLock | null;
   archivedAt?: string | null;
   createdBy: string;
-  assignee?: string | null;
   dueDate?: string | null;
   createdAt: string;
+  updatedAt?: string | null;
+  currentVersionId?: string | null;
+  currentVersion?: DocumentVersion;
+  metadata?: DocumentMetadataField[];
 }
 
 export interface DocumentVersion {
@@ -91,10 +144,17 @@ export interface DocumentVersion {
   documentId: string;
   versionNumber: number;
   fileKey: string;
+  /**
+   * Short-lived pre-signed download URL for `fileKey`, minted by the backend.
+   * Observed on `currentVersion` from `GET /documents/{id}` (expires ~15 min).
+   * Not guaranteed on version-list responses, so treat as optional.
+   */
+  fileUrl?: string | null;
   fileSize?: number | null;
   mimeType: string;
   checksum: string;
   ocrStatus: 'pending' | 'processing' | 'completed' | 'failed';
+  ocrText?: string | null;
   uploadedBy: string;
   createdAt: string;
 }
@@ -117,7 +177,78 @@ export interface DocumentMetadataField {
   value?: string | null;
 }
 
+export type DocumentConfidentiality =
+  | 'public'
+  | 'internal'
+  | 'confidential'
+  | 'restricted'
+  | 'top_secret';
+
+export type DocumentUrgency = 'low' | 'normal' | 'high' | 'critical';
+
+export type DocumentStatus = 'pending' | 'in_progress' | 'on_hold' | 'closed';
+
+/**
+ * Body for `POST /documents`. The file is uploaded to storage (S3) by the
+ * client first; this only registers the record. `checksum` is the SHA-256 of
+ * the file content.
+ */
+export interface UploadDocumentRequest {
+  title: string;
+  fileUrl: string;
+  mimeType: string;
+  checksum: string;
+  cabinetId: string;
+  confidentiality: DocumentConfidentiality;
+  urgency: DocumentUrgency;
+  fileSize?: number;
+  documentType?: string;
+  folderId?: string;
+}
+
+/** Body for `PATCH /documents/{id}`. At least one field required. */
+export interface UpdateDocumentRequest {
+  title?: string;
+  documentType?: string;
+  folderId?: string;
+  confidentiality?: DocumentConfidentiality;
+  urgency?: DocumentUrgency;
+  status?: DocumentStatus;
+}
+
+/** Body for `POST /documents/{id}/versions`. Same upload-first contract as {@link UploadDocumentRequest}. */
+export interface CreateVersionRequest {
+  fileUrl: string;
+  mimeType: string;
+  checksum: string;
+  fileSize?: number;
+}
+
+/** One entry in the `PUT /documents/{id}/metadata` body (a raw array). */
+export interface DocumentMetadataValueInput {
+  fieldId: string;
+  value: string | number | boolean | null;
+}
+
 // --- Workflows ---
+
+export type WorkflowStageAction =
+  | 'approve'
+  | 'reject'
+  | 'review'
+  | 'request_changes'
+  | 'close'
+  | 'delegate';
+
+export type WorkflowStageType =
+  | 'start'
+  | 'review'
+  | 'approval'
+  | 'sign'
+  | 'condition'
+  | 'parallel'
+  | 'notify'
+  | 'close';
 
 export interface WorkflowStage {
   id: string;
@@ -125,7 +256,9 @@ export interface WorkflowStage {
   role?: string;
   user_id?: string;
   sla_hours: number;
-  actions?: ('approve' | 'reject' | 'review' | 'request_changes' | 'close')[];
+  /** Designer-authored stage kind. Persisted by the backend alongside `actions`. */
+  type?: WorkflowStageType;
+  actions?: WorkflowStageAction[];
 }
 
 export interface WorkflowTransition {
@@ -153,6 +286,16 @@ export interface WorkflowDefinition {
 
 export type WorkflowInstanceStatus = 'pending' | 'in_progress' | 'on_hold' | 'closed';
 
+/** Shared by `WorkflowInstance` and `TaskWorkflowInstance` — the workflow
+ *  definition summary both embed. */
+export interface WorkflowDefinitionSummary {
+  id: string;
+  name: string;
+  version: number;
+  status: 'draft' | 'published' | 'archived';
+  definition?: WorkflowDefinitionJson;
+}
+
 export interface WorkflowInstance {
   id: string;
   workflowDefinitionId: string;
@@ -164,6 +307,44 @@ export interface WorkflowInstance {
   startedAt: string;
   closedAt?: string | null;
   tasks?: Task[];
+  /** Present on `GET /workflow-instances/{id}` (confirmed live) — not
+   *  documented on this schema, and not present on the list response. */
+  workflowDefinition?: WorkflowDefinitionSummary;
+}
+
+/** Body for `POST /workflow-instances` — creates a pending instance. */
+export interface CreateWorkflowInstanceRequest {
+  documentId: string;
+  workflowDefinitionId: string;
+}
+
+/** `data` shape of `GET /workflow-instances/stats`. */
+export interface WorkflowInstanceStatsResponse {
+  buckets: { key: string; count: number }[];
+  avgTurnaroundDays: number;
+}
+
+/** A read-only `GET /workflow-history` row. */
+export interface WorkflowHistoryRecord {
+  id: string;
+  workflowInstanceId: string;
+  taskId?: string | null;
+  fromStage?: string | null;
+  toStage?: string | null;
+  /** e.g. `workflow_started`, `review`, `approve`, `task_reassigned`, `workflow_closed`. */
+  action: string;
+  actorId?: string | null;
+  note?: string | null;
+  elapsedSeconds?: number | null;
+  occurredAt: string;
+  actor?: {
+    id: string;
+    name: string;
+    email: string;
+    status: string;
+  } | null;
+  task?: Record<string, any> | null;
+  workflowInstance?: Record<string, any>;
 }
 
 /**
@@ -189,13 +370,7 @@ export interface TaskWorkflowInstance {
   startedAt?: string | null;
   closedAt?: string | null;
   document: TaskDocumentSummary;
-  workflowDefinition: {
-    id: string;
-    name: string;
-    version: number;
-    status: 'draft' | 'published' | 'archived';
-    definition?: WorkflowDefinitionJson;
-  };
+  workflowDefinition: WorkflowDefinitionSummary;
 }
 
 export type TaskStatus = 'pending' | 'completed' | 'reassigned' | 'delegated' | 'escalated';
@@ -226,9 +401,60 @@ export interface Task {
   workflowInstance: TaskWorkflowInstance;
 }
 
-export interface TaskActionRequest {
-  action: 'approve' | 'reject' | 'review' | 'request_changes' | 'close';
+export type TaskActionRequest =
+  | { action: Exclude<WorkflowStageAction, 'delegate'>; note?: string }
+  | {
+      action: 'delegate';
+      /** Who the replacement task goes to. The workflow stays at the current
+       *  stage — this doesn't advance anything, just hands off the task. */
+      delegateId: string;
+      note?: string;
+    };
+
+/** Body for `PATCH /tasks/{taskId}/reassign`. */
+export interface ReassignTaskRequest {
+  assigneeId: string;
   note?: string;
+}
+
+/** `data` shape of `GET /tasks/stats` — completed-task SLA rollup by department. */
+export interface TaskSlaStatsResponse {
+  buckets: {
+    departmentId?: string | null;
+    departmentName?: string | null;
+    total: number;
+    onTime: number;
+    overdue: number;
+    /** `onTime / total * 100`. */
+    slaRate: number;
+  }[];
+}
+
+// --- Delegations ---
+
+export interface DelegationScope {
+  cabinets?: string[];
+  workflows?: string[];
+}
+
+export interface Delegation {
+  id: string;
+  delegatorId: string;
+  delegateId: string;
+  startsAt: string;
+  endsAt: string;
+  /** `null` means all workflow tasks. */
+  scope?: DelegationScope | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+/** Body for `POST /delegations`. */
+export interface CreateDelegationRequest {
+  delegateId: string;
+  startsAt: string;
+  endsAt: string;
+  scope?: DelegationScope | null;
 }
 
 // --- Departments ---
@@ -243,12 +469,122 @@ export interface Department {
   updatedAt?: string | null;
 }
 
+/** Body for `POST /departments`. `name` max 150. */
+export interface CreateDepartmentRequest {
+  name: string;
+  /** Parent department UUID. Omit for a root-level department. */
+  parentId?: string;
+}
+
+/** Body for `PATCH /departments/{id}`. Any subset; `parentId: null` makes it root. */
+export interface UpdateDepartmentRequest {
+  name?: string;
+  parentId?: string | null;
+}
+
 // --- Cabinets ---
 
-export interface CabinetFolder {
+/** Full cabinet folder — matches Swagger's `Folder` schema (hierarchical). */
+export interface Folder {
   id: string;
   name: string;
   cabinetId: string;
+  parentId?: string | null;
+  createdBy?: string;
+  children?: Folder[];
+  parent?: Folder | null;
+  _count?: {
+    documents: number;
+  };
+  createdAt?: string;
+  updatedAt?: string | null;
+}
+
+/** @deprecated Use {@link Folder}. Kept as an alias so existing imports compile. */
+export type CabinetFolder = Folder;
+
+/** Body for `POST /cabinets/{cabinetId}/folders`. `name` max 200. */
+export interface CreateFolderRequest {
+  name: string;
+  /** Parent folder UUID. Omit for a top-level folder in the cabinet. */
+  parentId?: string;
+}
+
+/** Body for `PATCH /folders/{id}`. `parentId: null` promotes to top-level. */
+export interface UpdateFolderRequest {
+  name?: string;
+  parentId?: string | null;
+}
+
+export type CabinetMetadataFieldType = 'text' | 'number' | 'date' | 'select' | 'boolean';
+
+export interface CabinetMetadataField {
+  id: string;
+  cabinetId: string;
+  name: string;
+  fieldType: CabinetMetadataFieldType;
+  isRequired: boolean;
+  options?: string[] | null;
+  displayOrder: number;
+}
+
+/** Body for `POST /cabinets/{id}/metadata-fields`. `options` only for `select`. */
+export interface CreateMetadataFieldRequest {
+  name: string;
+  fieldType: CabinetMetadataFieldType;
+  isRequired?: boolean;
+  options?: string[];
+  displayOrder?: number;
+}
+
+/** Body for `PATCH /cabinets/{id}/metadata-fields/{fieldId}`. Any subset. */
+export type UpdateMetadataFieldRequest = Partial<CreateMetadataFieldRequest>;
+
+/**
+ * Cabinet-scoped permission verbs (`GET/POST /cabinets/{id}/access`).
+ * Note: distinct from {@link RolePermission}'s `action` set.
+ */
+export type CabinetAccessPermission =
+  | 'view'
+  | 'upload'
+  | 'edit'
+  | 'route'
+  | 'export'
+  | 'delete';
+
+export interface CabinetAccessGrant {
+  id: string;
+  cabinetId: string;
+  permission: CabinetAccessPermission;
+  roleId?: string | null;
+  userId?: string | null;
+  /** Embedded on the list response when the grant targets a role. */
+  role?: { id: string; name: string } | null;
+  /** Embedded on the list response when the grant targets a user. */
+  user?: { id: string; name: string; email: string } | null;
+}
+
+/** Body for `POST /cabinets/{id}/access`. Exactly one of `roleId` / `userId`. */
+export interface GrantAccessRequest {
+  permission: CabinetAccessPermission;
+  roleId?: string;
+  userId?: string;
+}
+
+/** Body for `POST /cabinets`. `name` max 200, `description` max 1000. */
+export interface CreateCabinetRequest {
+  name: string;
+  description?: string;
+  departmentId?: string;
+  retentionPolicyId?: string;
+}
+
+/** Body for `PATCH /cabinets/{id}`. Any subset; nulls detach the relation. */
+export interface UpdateCabinetRequest {
+  name?: string;
+  description?: string;
+  departmentId?: string | null;
+  retentionPolicyId?: string | null;
 }
 
 export interface Cabinet {
@@ -263,6 +599,10 @@ export interface Cabinet {
   department?: Department | null;
   retentionPolicy?: any | null;
   icon?: string | null;
+  /** Only present on `GET /cabinets/{id}` — not documented in Swagger's `Cabinet`
+   *  schema, and never on the `GET /cabinets` list, but confirmed embedded on the
+   *  live single-cabinet response. */
+  metadataFields?: CabinetMetadataField[];
   _count?: {
     documents: number;
     folders?: number;
