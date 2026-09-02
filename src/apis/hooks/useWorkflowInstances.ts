@@ -1,11 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { workflowInstancesService } from '../services/workflowInstances.service';
+import {
+  workflowInstancesService,
+  WorkflowInstanceStatsParams,
+} from '../services/workflowInstances.service';
+import { CreateWorkflowInstanceRequest } from '@/types/models';
 import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 
-export const useWorkflowInstances = (params?: Record<string, any>) => {
+export const useWorkflowInstances = (
+  params?: Record<string, any>,
+  options?: { enabled?: boolean },
+) => {
   return useQuery({
     queryKey: ['workflowInstances', params],
     queryFn: () => workflowInstancesService.getAll(params),
+    enabled: options?.enabled ?? true,
   });
 };
 
@@ -22,20 +30,46 @@ export const useAllWorkflowInstances = (params: Record<string, any> = {}) => {
   });
 };
 
-export const useWorkflowInstance = (id: string) => {
+export const useWorkflowInstance = (id: string | undefined) => {
   return useQuery({
     queryKey: ['workflowInstances', id],
-    queryFn: () => workflowInstancesService.getById(id),
+    queryFn: () => workflowInstancesService.getById(id as string),
     enabled: !!id,
   });
 };
 
+export const useWorkflowInstanceStats = (
+  params?: WorkflowInstanceStatsParams,
+  options?: { enabled?: boolean },
+) => {
+  return useQuery({
+    queryKey: ['workflowInstances', 'stats', params],
+    queryFn: () => workflowInstancesService.getStats(params),
+    enabled: options?.enabled ?? true,
+  });
+};
+
+export const useCreateWorkflowInstance = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreateWorkflowInstanceRequest) => workflowInstancesService.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workflowInstances'] });
+    },
+  });
+};
+
+/**
+ * Creates a pending instance and immediately starts it — the two-step
+ * `POST /workflow-instances` + `POST /workflow-instances/{id}/start` flow.
+ */
 export const useStartWorkflowInstance = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ workflowId, documentId }: { workflowId: string; documentId: string }) =>
-      workflowInstancesService.start(workflowId, documentId),
+      workflowInstancesService.createAndStart(workflowId, documentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflowInstances'] });
     },
@@ -46,8 +80,8 @@ export const useHoldWorkflowInstance = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
-      workflowInstancesService.hold(id, reason),
+    // `reason` is accepted for call-site compatibility but the endpoint takes no body.
+    mutationFn: ({ id }: { id: string; reason?: string }) => workflowInstancesService.hold(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workflowInstances'] });
     },

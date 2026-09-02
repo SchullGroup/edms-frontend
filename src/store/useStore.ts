@@ -243,7 +243,7 @@ export const canView = (doc: any, user: any) => {
   return doc.restrictedTo.includes(user.id);
 };
 
-export const userById = (users: any[], id: string) =>
+export const userById = (users: any[], id: string | null | undefined) =>
   users.find((u) => u.id === id) || {
     id,
     name: id === 'system' ? 'System' : 'Unknown',

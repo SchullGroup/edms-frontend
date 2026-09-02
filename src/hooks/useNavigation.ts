@@ -127,6 +127,7 @@ export const useNavigation = () => {
           items: [
             { route: '/admin', label: 'Admin Home', icon: 'home' },
             { route: '/admin/users', label: 'Users & Roles', icon: 'users' },
+            { route: '/admin/departments', label: 'Departments', icon: 'building' },
           ],
         },
         {

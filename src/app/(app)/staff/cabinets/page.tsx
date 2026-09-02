@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useStore, effStatus, cabById, userById } from '@/store/useStore';
+import { effStatus, cabById, userById } from '@/store/useStore';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useDocuments } from '@/apis/hooks/useDocuments';
 import { useWorkflows } from '@/apis/hooks/useWorkflows';
 import { useStartWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
+import { useUsers } from '@/apis/hooks/useUsers';
 import { documentsService } from '@/apis/services/documents.service';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
@@ -20,7 +21,8 @@ export default function CabinetBrowserPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { session, users } = useStore();
+  const { data: usersData } = useUsers();
+  const users = usersData?.data || [];
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
 
   const [activeCab, setActiveCab] = useState<string | null>(searchParams?.get('cab') || null);
@@ -199,15 +201,15 @@ export default function CabinetBrowserPage() {
     },
     { key: 'urgency', label: 'Urgency', render: (d) => <UrgBadge level={d.urgency} /> },
     {
-      key: 'assignee',
-      label: 'Assignee',
-      render: (d) => <span>{userById(users, d.assignee).name}</span>,
+      key: 'createdBy',
+      label: 'Uploaded by',
+      render: (d) => <span>{userById(users, d.createdBy)?.name || 'Unknown'}</span>,
     },
     {
-      key: 'created',
+      key: 'createdAt',
       label: 'Created',
       sortable: true,
-      render: (d) => <span>{new Date(d.created).toLocaleDateString('en-GB')}</span>,
+      render: (d) => <span>{new Date(d.createdAt).toLocaleDateString('en-GB')}</span>,
     },
   ];
 

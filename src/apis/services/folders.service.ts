@@ -1,38 +1,43 @@
 import { apiClient } from '@/lib/api-client';
-import { ApiResponse, PaginatedResponse, CabinetFolder } from '@/types/models';
+import {
+  ApiResponse,
+  CreateFolderRequest,
+  Folder,
+  UpdateFolderRequest,
+} from '@/types/models';
 
 export const foldersService = {
-  // Cabinet Folders
-  listByCabinet: async (
-    cabinetId: string,
-    params?: Record<string, any>,
-  ): Promise<PaginatedResponse<CabinetFolder>> => {
-    const res = await apiClient.get<PaginatedResponse<CabinetFolder>>(
-      `/cabinets/${cabinetId}/folders`,
-      { params },
-    );
+  // --- Cabinet folders ---
+
+  // `GET /cabinets/{id}/folders` returns `{ success, data: Folder[] }` — not paginated.
+  // Returns the wrapper (callers read `.data`) to stay consistent with the other
+  // list services (`cabinetsService.getAll`, `departmentsService.getAll`).
+  listByCabinet: async (cabinetId: string): Promise<ApiResponse<Folder[]>> => {
+    const res = await apiClient.get<ApiResponse<Folder[]>>(`/cabinets/${cabinetId}/folders`);
     return res.data;
   },
 
-  create: async (cabinetId: string, data: Partial<CabinetFolder>): Promise<CabinetFolder> => {
-    const res = await apiClient.post<ApiResponse<CabinetFolder>>(
+  create: async (cabinetId: string, data: CreateFolderRequest): Promise<Folder> => {
+    const res = await apiClient.post<ApiResponse<Folder>>(
       `/cabinets/${cabinetId}/folders`,
       data,
     );
     return res.data.data;
   },
 
-  // Global Folders
-  getById: async (id: string): Promise<CabinetFolder> => {
-    const res = await apiClient.get<ApiResponse<CabinetFolder>>(`/folders/${id}`);
+  // --- Global folder endpoints ---
+
+  getById: async (id: string): Promise<Folder> => {
+    const res = await apiClient.get<ApiResponse<Folder>>(`/folders/${id}`);
     return res.data.data;
   },
 
-  update: async (id: string, updates: Partial<CabinetFolder>): Promise<CabinetFolder> => {
-    const res = await apiClient.patch<ApiResponse<CabinetFolder>>(`/folders/${id}`, updates);
+  update: async (id: string, updates: UpdateFolderRequest): Promise<Folder> => {
+    const res = await apiClient.patch<ApiResponse<Folder>>(`/folders/${id}`, updates);
     return res.data.data;
   },
 
+  // 409 if the folder still contains documents.
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/folders/${id}`);
   },

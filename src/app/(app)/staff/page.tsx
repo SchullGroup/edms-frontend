@@ -105,8 +105,34 @@ export default function StaffDashboard() {
   ];
 
   const myNotifs = notifications.filter((n) => n.user === currentUser.id).slice(0, 5);
-  const closedMine = mine.filter((t) => t.status === 'completed').length;
-  const slaPct = 86;
+
+  // Mirrors the SLA/turnaround calc on staff/performance — dashboard shows the
+  // same real numbers instead of a hardcoded placeholder.
+  const closedTasks = mine.filter((t) => t.status === 'completed');
+  let onTime = 0;
+  let breached = 0;
+  closedTasks.forEach((t: any) => {
+    if (t.dueAt && t.completedAt && new Date(t.completedAt) > new Date(t.dueAt)) breached++;
+    else onTime++;
+  });
+  const totalSla = onTime + breached;
+  const slaPct = totalSla === 0 ? 100 : Math.round((onTime / totalSla) * 100);
+
+  const closedTasksWithDates = closedTasks.filter((t: any) => t.dueAt && t.completedAt);
+  const avgTurnaroundMs =
+    closedTasksWithDates.length > 0
+      ? closedTasksWithDates.reduce(
+          (sum: number, t: any) =>
+            sum + (new Date(t.completedAt).getTime() - new Date(t.dueAt).getTime()),
+          0,
+        ) / closedTasksWithDates.length
+      : 0;
+  const avgTurnaround = avgTurnaroundMs > 0 ? (avgTurnaroundMs / 86400000).toFixed(1) + ' days' : '0 days';
+
+  const THIRTY_DAYS_MS = 30 * 86400000;
+  const volume30d = closedTasks.filter(
+    (t: any) => t.completedAt && Date.now() - new Date(t.completedAt).getTime() <= THIRTY_DAYS_MS,
+  ).length;
 
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -262,11 +288,11 @@ export default function StaffDashboard() {
                 <div style={{ flex: 1 }}>
                   <div className="metric-li">
                     <span>Avg turnaround</span>
-                    <b>1.8 days</b>
+                    <b>{avgTurnaround}</b>
                   </div>
                   <div className="metric-li">
                     <span>Volume (30d)</span>
-                    <b>{closedMine + 9}</b>
+                    <b>{volume30d}</b>
                   </div>
                   <div className="metric-li">
                     <span>Rework rate</span>

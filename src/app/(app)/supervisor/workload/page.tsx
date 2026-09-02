@@ -1,24 +1,23 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useStore, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments, useUpdateDocument } from '@/apis/hooks/useDocuments';
+import { useAllTasks, useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { Spinner } from '@/components/common/Spinner';
 import { TaskRow } from '@/components/ui/TaskRow';
 
 export default function WorkloadPage() {
-  const { currentUser } = useStore();
-  const session = currentUser?.id;
-
-  const { data: docsData, isLoading: isLoadingDocs } = useDocuments();
+  // No backend concept of "my team" exists yet, so this shows the first 5
+  // users returned by the API against tenant-wide open tasks — not a real
+  // reporting-line relationship.
+  const { data: tasksResult, isLoading: isLoadingTasks } = useAllTasks({ status: 'pending' });
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
-  const documents = docsData?.data || [];
+  const tasks = tasksResult?.items || [];
   const users = usersData?.data || [];
 
-  const updateDocument = useUpdateDocument();
+  const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
 
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
@@ -27,16 +26,17 @@ export default function WorkloadPage() {
     setPageTitle('Workload & Reassign');
   }, [setPageTitle]);
 
-  if (isLoadingDocs || isLoadingUsers) return <Spinner />;
+  if (isLoadingTasks || isLoadingUsers) return <Spinner />;
 
   const team = users.slice(0, 5); // mock team
   const cap = 8;
 
-  const handleReassign = (d: any) => {
+  const handleReassign = (t: any) => {
     let newAssignee = '';
     let note = '';
+    const title = t.workflowInstance?.document?.title || 'this document';
     openModal({
-      title: `Reassign — ${d.title.slice(0, 44)}${d.title.length > 44 ? '…' : ''}`,
+      title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
       body: (
         <div>
           <div className="field">
@@ -44,7 +44,7 @@ export default function WorkloadPage() {
             <input
               className="input"
               disabled
-              value={userById(users, d.assignee as string)?.name || ''}
+              value={t.assignee?.name || t.assignedRole?.name || ''}
             />
           </div>
           <div className="field">
@@ -52,10 +52,10 @@ export default function WorkloadPage() {
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select user...</option>
               {users
-                .filter((u) => u.status === 'active' && u.id !== d.assignee)
+                .filter((u) => u.status === 'active' && u.id !== t.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} — {(u as any).roleLabel || (u as any).role || u.roles?.[0]}
+                    {u.name}
                   </option>
                 ))}
             </select>
@@ -80,16 +80,22 @@ export default function WorkloadPage() {
               addToast('Please select a new assignee', 'error');
               return;
             }
-            const prev = d.assignee;
-            updateDocument.mutate({ id: d.id, updates: { assignee: newAssignee } });
-            addToast('Tasks reassigned', 'success');
-            createAuditLog.mutate({
-              action: 'REASSIGN',
-              target: d.id,
-              detail: `Reassigned from ${userById(users, prev as string)?.name} to ${userById(users, newAssignee as string)?.name}`,
-            });
-            addToast(`Reassigned to ${userById(users, newAssignee as string)?.name}`, 'success');
-            closeModal();
+            const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
+            const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
+            reassignTask.mutate(
+              { id: t.id, assigneeId: newAssignee, note: note || undefined },
+              {
+                onSuccess: () => {
+                  createAuditLog.mutate({
+                    action: 'REASSIGN',
+                    target: t.workflowInstance?.documentId || t.id,
+                    detail: `Reassigned from ${prevName} to ${newName}`,
+                  });
+                  addToast(`Reassigned to ${newName}`, 'success');
+                  closeModal();
+                },
+              },
+            );
           },
         },
       ],
@@ -109,7 +115,7 @@ export default function WorkloadPage() {
 
       <div>
         {team.map((u) => {
-          const open = documents.filter((d) => d.assignee === u.id && d.status !== 'closed');
+          const open = tasks.filter((t: any) => t.assigneeId === u.id);
           const pct = Math.min(100, Math.round((open.length / cap) * 100));
           const color =
             pct >= 90
@@ -163,16 +169,16 @@ export default function WorkloadPage() {
 
               {open.length > 0 && (
                 <div className="rowlist mt8" style={{ borderTop: '1px solid var(--border)' }}>
-                  {open.map((d: any) => (
+                  {open.map((t: any) => (
                     <TaskRow
-                      key={d.id}
-                      item={d}
+                      key={t.id}
+                      item={t}
                       extraActions={
                         <button
                           className="btn btn-secondary btn-sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleReassign(d);
+                            handleReassign(t);
                           }}
                         >
                           Reassign

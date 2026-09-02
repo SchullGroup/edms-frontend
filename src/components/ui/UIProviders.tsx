@@ -5,9 +5,17 @@ import { useUIStore } from '@/store/useUIStore';
 
 export const UIProviders = () => {
   const { toasts, removeToast, modal, closeModal, drawer, closeDrawer } = useUIStore();
+  const [loadingActionIdx, setLoadingActionIdx] = React.useState<number | null>(null);
+  const isBusy = loadingActionIdx !== null;
+
+  // A newly opened modal is never mid-request.
+  useEffect(() => {
+    setLoadingActionIdx(null);
+  }, [modal]);
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
+      if (isBusy) return;
       if (e.key === 'Escape') {
         if (drawer) closeDrawer();
         else if (modal) closeModal();
@@ -15,7 +23,7 @@ export const UIProviders = () => {
     };
     document.addEventListener('keydown', esc);
     return () => document.removeEventListener('keydown', esc);
-  }, [modal, closeModal, drawer, closeDrawer]);
+  }, [modal, closeModal, drawer, closeDrawer, isBusy]);
 
   return (
     <>
@@ -39,6 +47,7 @@ export const UIProviders = () => {
           <div
             className="modal-backdrop"
             onClick={(e) => {
+              if (isBusy) return;
               if (e.target === e.currentTarget) closeModal();
             }}
           >
@@ -50,7 +59,12 @@ export const UIProviders = () => {
             >
               <div className="modal-head">
                 <span className="h2">{modal.title}</span>
-                <button className="modal-close" aria-label="Close" onClick={closeModal}>
+                <button
+                  className="modal-close"
+                  aria-label="Close"
+                  onClick={closeModal}
+                  disabled={isBusy}
+                >
                   ×
                 </button>
               </div>
@@ -61,13 +75,31 @@ export const UIProviders = () => {
                     <button
                       key={i}
                       className={`btn ${a.kind || 'btn-secondary'}`}
-                      disabled={a.disabled}
-                      onClick={() => {
-                        const r = a.onClick ? a.onClick() : true;
-                        if (r !== false) closeModal();
+                      disabled={a.disabled || isBusy}
+                      onClick={async () => {
+                        const result = a.onClick ? a.onClick() : true;
+                        const isPromise = !!result && typeof (result as any).then === 'function';
+                        if (!isPromise) {
+                          if (result !== false) closeModal();
+                          return;
+                        }
+                        setLoadingActionIdx(i);
+                        try {
+                          const resolved = await result;
+                          setLoadingActionIdx(null);
+                          if (resolved !== false) closeModal();
+                        } catch {
+                          // Error toast is expected to come from the caller's mutation.
+                          // Keep the modal open so the user can see it and retry.
+                          setLoadingActionIdx(null);
+                        }
                       }}
                     >
-                      {a.label}
+                      {loadingActionIdx === i ? (
+                        <span className="btn-spinner" aria-hidden="true" />
+                      ) : (
+                        a.label
+                      )}
                     </button>
                   ))}
                 </div>

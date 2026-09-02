@@ -55,6 +55,7 @@ export default function UploadCapturePage() {
       progress: number;
       guess?: any;
       docId?: string;
+      abortUpload?: () => void;
     }[]
   >([]);
 
@@ -173,6 +174,16 @@ export default function UploadCapturePage() {
                       : 'Uploading…'}
                   </div>
                 </div>
+                {file.status === 'uploading' && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    title="Cancel upload"
+                    aria-label="Cancel upload"
+                    onClick={() => file.abortUpload?.()}
+                  >
+                    <Icon name="x" size={14} />
+                  </button>
+                )}
               </div>
             );
           }
@@ -205,7 +216,8 @@ export default function UploadCapturePage() {
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { documentsService } from '@/apis/services/documents.service';
-import { uploadFile, calculateChecksum } from '@/apis/services/s3.service';
+import { calculateChecksum } from '@/apis/services/s3.service';
+import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 
 function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
   const { docTypes, session, users } = useStore();
@@ -214,6 +226,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
   const { addToast } = useUIStore();
   const guess = file.guess;
   const me = session ? users.find((u) => u.id === session) : null;
+  const { startUpload, uploadProgress, abort } = useMultipartUploader();
 
   const [title, setTitle] = useState(file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]/g, ' '));
   const [type, setType] = useState(guess.type);
@@ -230,6 +243,15 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
       setSelCab(cabinets[0].id);
     }
   }, [cabinets, selCab]);
+
+  // Mirror the multipart uploader's chunk-by-chunk progress into the shared
+  // files list, same as the old per-call onProgress callback used to.
+  useEffect(() => {
+    if (uploadProgress <= 0) return;
+    setFiles((current: any[]) =>
+      current.map((f) => (f.id === file.id ? { ...f, progress: uploadProgress } : f)),
+    );
+  }, [uploadProgress, file.id, setFiles]);
 
   const [conf, setConf] = useState('internal');
   const [urg, setUrg] = useState('normal');
@@ -260,7 +282,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
     setIsSubmitting(true);
     setFiles((current: any[]) =>
       current.map((f) => {
-        if (f.id === file.id) return { ...f, status: 'uploading', progress: 0 };
+        if (f.id === file.id) return { ...f, status: 'uploading', progress: 0, abortUpload: abort };
         return f;
       }),
     );
@@ -269,22 +291,12 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
       // 1. Compute checksum
       const checksum = await calculateChecksum(file.file);
 
-      // 2. Upload to S3
-      const uploadRes = await uploadFile(file.file, {
-        folderName: 'edms-documents',
-        onProgress: (progressEvent) => {
-          setFiles((current: any[]) =>
-            current.map((f) => {
-              if (f.id === file.id) return { ...f, progress: progressEvent.progress };
-              return f;
-            }),
-          );
-        },
+      // 2. Upload to S3 via the chunked multipart flow
+      const fileUrl = await startUpload({
+        file: file.file,
+        fileName: file.file.name,
+        folderName: 'edmsDocuments',
       });
-
-      if (uploadRes.type === 'error') {
-        throw new Error(uploadRes.result);
-      }
 
       setFiles((current: any[]) =>
         current.map((f) => {
@@ -301,7 +313,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         folderId: selFol || undefined,
         confidentiality: conf,
         urgency: urg,
-        fileUrl: uploadRes.result,
+        fileUrl,
         mimeType: file.file.type || 'application/pdf',
         fileSize: file.file.size,
         checksum: checksum,
@@ -312,16 +324,17 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
       setFiles((current: any[]) =>
         current.map((f) => {
           if (f.id === file.id)
-            return { ...f, status: 'filed', docId: createdDoc.id, name: title.trim() };
+            return { ...f, status: 'filed', docId: createdDoc.id, name: title.trim(), abortUpload: undefined };
           return f;
         }),
       );
     } catch (err: any) {
-      addToast(err.message || 'Failed to upload document', 'error');
+      const wasAborted = err?.message === 'Upload aborted';
+      addToast(wasAborted ? 'Upload canceled' : err.message || 'Failed to upload document', wasAborted ? 'info' : 'error');
       // Revert to ready state
       setFiles((current: any[]) =>
         current.map((f) => {
-          if (f.id === file.id) return { ...f, status: 'ready' };
+          if (f.id === file.id) return { ...f, status: 'ready', abortUpload: undefined };
           return f;
         }),
       );

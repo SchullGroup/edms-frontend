@@ -2,9 +2,8 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, userById, effStatus } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments, useUpdateDocument } from '@/apis/hooks/useDocuments';
+import { useAllTasks, useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { Spinner } from '@/components/common/Spinner';
@@ -15,15 +14,15 @@ import { StatusBadge } from '@/components/ui/Badges';
 
 export default function BottlenecksPage() {
   const router = useRouter();
-  const { currentUser } = useStore();
-  const session = currentUser?.id;
 
-  const { data: docsData, isLoading: isLoadingDocs } = useDocuments();
+  // No backend concept of "my team" exists yet, so this is tenant-wide open
+  // work, not scoped to a specific supervisor's reports.
+  const { data: tasksResult, isLoading: isLoadingTasks } = useAllTasks({ status: 'pending' });
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
-  const documents = docsData?.data || [];
+  const tasks = tasksResult?.items || [];
   const users = usersData?.data || [];
 
-  const updateDocument = useUpdateDocument();
+  const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
 
@@ -31,18 +30,18 @@ export default function BottlenecksPage() {
     setPageTitle('Bottlenecks & Ageing');
   }, [setPageTitle]);
 
-  if (isLoadingDocs || isLoadingUsers) return <Spinner />;
+  if (isLoadingTasks || isLoadingUsers) return <Spinner />;
 
-  const teamDocs = documents; // mock team docs
-  const open = teamDocs.filter(d => d.status !== 'closed');
-  const aged = open.map(d => ({
-    d,
-    ageDays: Math.floor((Date.now() - (d.createdAt ? new Date(d.createdAt).getTime() : Date.now())) / 86400000),
-    stage: ((d as any).workflow?.find((s: any) => s.state === 'current') || {}).name || '—',
-    overdue: effStatus(d) === 'Overdue'
-  })).sort((a, b) => b.ageDays - a.ageDays);
+  const aged = tasks
+    .map((t: any) => ({
+      t,
+      ageDays: Math.floor((Date.now() - new Date(t.createdAt).getTime()) / 86400000),
+      stage: t.stage || '—',
+      overdue: !!(t.dueAt && new Date(t.dueAt) < new Date()),
+    }))
+    .sort((a, b) => b.ageDays - a.ageDays);
 
-  const breaches = aged.filter(a => a.overdue);
+  const breaches = aged.filter((a) => a.overdue);
 
   const buckets = [
     { label: '0–3 days', value: aged.filter(a => a.ageDays <= 3).length, color: 'var(--status-closed)' },
@@ -55,23 +54,24 @@ export default function BottlenecksPage() {
   aged.forEach(a => { byStage[a.stage] = (byStage[a.stage] || 0) + 1; });
   const stageItems = Object.entries(byStage).map(([label, value]) => ({ label, value, color: 'var(--brand-primary-light)' }));
 
-  const handleReassign = (d: any) => {
+  const handleReassign = (t: any) => {
     let newAssignee = '';
     let note = '';
+    const title = t.workflowInstance?.document?.title || 'this document';
     openModal({
-      title: `Reassign — ${d.title.slice(0, 44)}${d.title.length > 44 ? '…' : ''}`,
+      title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
       body: (
         <div>
           <div className="field">
             <label>Current assignee</label>
-            <input className="input" disabled value={userById(users, d.assignee as string)?.name || ''} />
+            <input className="input" disabled value={t.assignee?.name || t.assignedRole?.name || ''} />
           </div>
           <div className="field">
             <label>New assignee</label>
             <select className="input" onChange={e => newAssignee = e.target.value}>
               <option value="">Select user...</option>
-              {users.filter(u => u.status === 'active' && u.id !== d.assignee).map(u => (
-                <option key={u.id} value={u.id}>{u.name} — {(u as any).roleLabel || (u as any).role || u.roles?.[0]}</option>
+              {users.filter(u => u.status === 'active' && u.id !== t.assigneeId).map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
           </div>
@@ -91,16 +91,22 @@ export default function BottlenecksPage() {
               addToast('Please select a new assignee', 'error');
               return;
             }
-            const prev = d.assignee;
-            updateDocument.mutate({ id: d.id, updates: { assignee: newAssignee } });
-            const name = userById(users, newAssignee as string)?.name;
-            createAuditLog.mutate({
-              action: 'REASSIGN',
-              target: d.id,
-              detail: `Reassigned from ${userById(users, prev as string)?.name} to ${name}`
-            });
-            addToast('Document reassigned to ' + name, 'success');
-            closeModal();
+            const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
+            const newName = users.find(u => u.id === newAssignee)?.name || 'new assignee';
+            reassignTask.mutate(
+              { id: t.id, assigneeId: newAssignee, note: note || undefined },
+              {
+                onSuccess: () => {
+                  createAuditLog.mutate({
+                    action: 'REASSIGN',
+                    target: t.workflowInstance?.documentId || t.id,
+                    detail: `Reassigned from ${prevName} to ${newName}`
+                  });
+                  addToast('Reassigned to ' + newName, 'success');
+                  closeModal();
+                },
+              },
+            );
           }
         }
       ]
@@ -108,12 +114,12 @@ export default function BottlenecksPage() {
   };
 
   const cols: Column<any>[] = [
-    { key: 'title', label: 'Document', render: r => <b>{r.d.title}</b> },
+    { key: 'title', label: 'Document', render: r => <b>{r.t.workflowInstance?.document?.title || 'Unknown document'}</b> },
     { key: 'stage', label: 'Stuck at stage' },
-    { key: 'assignee', label: 'Assignee', render: r => <span>{userById(users, r.d.assignee as string)?.name}</span> },
+    { key: 'assignee', label: 'Assignee', render: r => <span>{r.t.assignee?.name || r.t.assignedRole?.name || 'Unassigned'}</span> },
     { key: 'ageDays', label: 'Age', sortable: true, render: r => <span style={r.ageDays > 7 ? { color: 'var(--status-overdue)', fontWeight: 800 } : {}}>{r.ageDays}d</span> },
-    { key: 'status', label: 'Status', render: r => <StatusBadge status={effStatus(r.d)} /> },
-    { key: 'act', label: '', render: r => <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleReassign(r.d); }}>Reassign</button> },
+    { key: 'status', label: 'Status', render: r => <StatusBadge status={r.overdue ? 'Overdue' : 'Pending'} /> },
+    { key: 'act', label: '', render: r => <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleReassign(r.t); }}>Reassign</button> },
   ];
 
   return (
@@ -128,7 +134,7 @@ export default function BottlenecksPage() {
       {breaches.length > 0 ? (
         <div className="banner error">
           <span dangerouslySetInnerHTML={{ __html: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>` }} style={{ marginRight: '8px' }} />
-          <b>{breaches.length} SLA breach{breaches.length > 1 ? 'es' : ''}</b> — escalations have been sent. Oldest: “{breaches[0].d.title.slice(0, 48)}…”
+          <b>{breaches.length} SLA breach{breaches.length > 1 ? 'es' : ''}</b> — escalations have been sent. Oldest: “{(breaches[0].t.workflowInstance?.document?.title || '').slice(0, 48)}…”
         </div>
       ) : (
         <div className="banner success">No active SLA breaches. Nice.</div>
@@ -157,7 +163,14 @@ export default function BottlenecksPage() {
         <div className="card-head">
           <span className="h3">Ageing detail — oldest first</span>
         </div>
-        <Table cols={cols} rows={aged} onRow={(r) => router.push(`/doc/${r.d.id}`)} />
+        <Table
+          cols={cols}
+          rows={aged}
+          onRow={(r) => {
+            const docId = r.t.workflowInstance?.documentId || r.t.workflowInstance?.document?.id;
+            if (docId) router.push(`/doc/${docId}`);
+          }}
+        />
       </div>
     </div>
   );
