@@ -2,50 +2,79 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore } from '@/store/useStore';
+
 import { useUIStore } from '@/store/useUIStore';
+import {
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotificationPreferences,
+  useNotifications,
+  useUpdateNotificationPreferences,
+} from '@/apis/hooks/useNotifications';
 import { Icon } from '@/components/ui/Icons';
+import { Spinner } from '@/components/common/Spinner';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { timeAgo } from '@/utils/helpers';
+import type { Notification } from '@/types/models';
+
+// Backend notification `type` values are dot-namespaced (task.assigned,
+// sla.breach, workflow.started …); the icon set is keyed by the namespace.
+const TYPE_ICON: Record<string, string> = {
+  task: 'inbox',
+  sla: 'alert',
+  comment: 'edit',
+  circular: 'speaker',
+  workflow: 'flow',
+  delegation: 'swap',
+  report: 'report',
+  admin: 'settings',
+  platform: 'building',
+  audit: 'finding',
+  notification: 'bell',
+};
+
+function iconFor(type: string): string {
+  return TYPE_ICON[type.split('.')[0]] ?? 'bell';
+}
 
 export default function NotificationCenterPage() {
   const router = useRouter();
-  const { notifications, session } = useStore();
   const { setPageTitle, addToast } = useUIStore();
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+
+  const {
+    data: page,
+    isLoading,
+    isError,
+    refetch,
+  } = useNotifications({ limit: 50, unreadOnly: filter === 'unread' });
+  const markRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
+  const { data: prefs } = useNotificationPreferences();
+  const updatePrefs = useUpdateNotificationPreferences();
 
   useEffect(() => {
     setPageTitle('Notification Center');
   }, [setPageTitle]);
 
-  const typeIcon: Record<string, string> = { 
-    task: 'inbox', sla: 'alert', comment: 'edit', circular: 'speaker', 
-    workflow: 'flow', report: 'report', admin: 'settings', platform: 'building', audit: 'finding' 
+  const list = page?.data ?? [];
+
+  const openNotification = (n: Notification) => {
+    if (!n.readAt) markRead.mutate(n.id);
+    // The backend supplies the deep link as payload.actionUrl; there is no
+    // separate docId/circularId on the wire.
+    if (n.payload?.actionUrl) router.push(n.payload.actionUrl);
   };
 
-  const markRead = (n: any) => {
-    const newNotifs = useStore.getState().notifications.map(notif => {
-      if (notif.id === n.id) return { ...notif, read: true };
-      return notif;
+  const handleMarkAllRead = () => {
+    markAllRead.mutate(undefined, {
+      onSuccess: () => addToast('All marked as read', 'info'),
+      onError: () => addToast('Could not mark all as read', 'error'),
     });
-    useStore.setState({ notifications: newNotifs });
   };
 
-  const handleRowClick = (n: any) => {
-    markRead(n);
-    if (n.docId) router.push(`/doc/${n.docId}`);
-    else if (n.circularId) router.push('/circulars');
-  };
-
-  const markAllRead = () => {
-    const newNotifs = useStore.getState().notifications.map(notif => {
-      if (notif.user === session) return { ...notif, read: true };
-      return notif;
-    });
-    useStore.setState({ notifications: newNotifs });
-    addToast('All marked as read', 'info');
-  };
-
-  const list = notifications.filter((n: any) => n.user === session && (filter === 'all' || !n.read));
+  if (isLoading) return <Spinner />;
+  if (isError) return <ErrorMessage message="Could not load notifications" retry={refetch} />;
 
   return (
     <div>
@@ -56,35 +85,94 @@ export default function NotificationCenterPage() {
         </div>
         <div className="actions">
           <div className="seg">
-            <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All</button>
-            <button className={filter === 'unread' ? 'active' : ''} onClick={() => setFilter('unread')}>Unread</button>
+            <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>
+              All
+            </button>
+            <button
+              className={filter === 'unread' ? 'active' : ''}
+              onClick={() => setFilter('unread')}
+            >
+              Unread
+            </button>
           </div>
-          <button className="btn btn-secondary" onClick={markAllRead}>Mark all read</button>
+          <button
+            className="btn btn-secondary"
+            onClick={handleMarkAllRead}
+            disabled={markAllRead.isPending}
+          >
+            {markAllRead.isPending ? 'Marking…' : 'Mark all read'}
+          </button>
         </div>
       </div>
 
+      {prefs && (
+        <div className="card mb16" style={{ padding: '14px 16px' }}>
+          <div className="flex jcb aic" style={{ gap: '16px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '13px' }}>Delivery preferences</div>
+              <div className="caption">Where and how often we contact you.</div>
+            </div>
+            <div className="flex g16 aic" style={{ flexWrap: 'wrap' }}>
+              {(
+                [
+                  ['inAppEnabled', 'In-app'],
+                  ['emailEnabled', 'Email'],
+                  ['digestMode', 'Daily digest'],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="flex aic g8" style={{ fontSize: '13px' }}>
+                  <input
+                    type="checkbox"
+                    checked={prefs[key]}
+                    disabled={updatePrefs.isPending}
+                    onChange={(e) =>
+                      updatePrefs.mutate(
+                        { [key]: e.target.checked },
+                        { onError: () => addToast('Could not save preference', 'error') },
+                      )
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         {list.length > 0 ? (
-          list.map((n: any) => (
-            <div 
-              key={n.id} 
-              className={`notif-item ${n.read ? 'read' : ''}`} 
-              onClick={() => handleRowClick(n)}
+          list.map((n) => (
+            <div
+              key={n.id}
+              className={`notif-item ${n.readAt ? 'read' : ''}`}
+              onClick={() => openNotification(n)}
               role="button"
               tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openNotification(n);
+                }
+              }}
             >
               <span className="dot"></span>
-              <span className="notif-ico"><Icon name={typeIcon[n.type] || 'bell'} size={15} /></span>
+              <span className="notif-ico">
+                <Icon name={iconFor(n.type)} size={15} />
+              </span>
               <div style={{ flex: 1 }}>
-                <div className="msg">{n.text}</div>
+                <div className="msg">{n.payload?.message ?? n.payload?.title ?? ''}</div>
                 <div className="caption" style={{ marginTop: '3px' }}>
-                  {timeAgo(n.at)} · {n.type.toUpperCase()}
+                  {timeAgo(new Date(n.createdAt).getTime())} · {n.type.toUpperCase()}
                 </div>
               </div>
-              {!n.read && (
-                <button 
-                  className="btn btn-ghost btn-sm" 
-                  onClick={(e) => { e.stopPropagation(); markRead(n); }}
+              {!n.readAt && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    markRead.mutate(n.id);
+                  }}
                 >
                   Mark read
                 </button>
@@ -97,7 +185,9 @@ export default function NotificationCenterPage() {
             <div className="h3 mt16 mb8">
               {filter === 'unread' ? 'No unread notifications' : 'No notifications'}
             </div>
-            <p className="caption mb16">Workflow updates, SLA alerts and mentions will appear here.</p>
+            <p className="caption mb16">
+              Workflow updates, SLA alerts and mentions will appear here.
+            </p>
           </div>
         )}
       </div>

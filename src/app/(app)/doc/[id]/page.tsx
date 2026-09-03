@@ -16,7 +16,6 @@ import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { usePolicies } from '@/apis/hooks/usePolicies';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
-import { useSendNotification } from '@/apis/hooks/useNotifications';
 import { useTaskAction } from '@/apis/hooks/useTasks';
 import { useWorkflowInstances, useWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
 import { Icon } from '@/components/ui/Icons';
@@ -44,7 +43,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const addDocumentComment = useAddDocumentComment();
   const addDocumentSignature = useAddDocumentSignature();
   const createAuditLog = useCreateAuditLog();
-  const sendNotification = useSendNotification();
   const taskAction = useTaskAction();
   const checkoutDocument = useCheckoutDocument();
   const checkinDocument = useCheckinDocument();
@@ -136,13 +134,11 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                 target: doc.id,
                 detail: 'Requested access',
               });
-              sendNotification.mutate({
-                userId: doc.createdBy,
-                type: 'workflow',
-                message: `Someone requested access to “${doc.title}”.`,
-                docId: doc.id,
-              });
-              addToast('Access request sent', 'info');
+              // The document owner is notified server-side once the
+              // access-request endpoint exists. The client deliberately does
+              // not mint a notification for another user — see
+              // docs/BACKEND_REQUESTS.md (BE-1).
+              addToast('Access request recorded', 'info');
             }}
           >
             Request access
@@ -180,6 +176,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     (p) => p.key === `confidentiality.${doc.confidentiality.toLowerCase()}`,
   );
   const confPolicy = confPolicyItem?.value || { download: true, print: true, watermark: false };
+
   const lockedByOther = doc.isCheckedOut && doc.checkoutLock?.lockedBy !== me.id;
   const lockedByMe = doc.isCheckedOut && doc.checkoutLock?.lockedBy === me.id;
   const checkoutBusy = checkoutDocument.isPending || checkinDocument.isPending;

@@ -1,16 +1,20 @@
 import { useStore, userById } from '@/store/useStore';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useUnreadNotificationCount } from '@/apis/hooks/useNotifications';
 
 export const useNavigation = () => {
-  const { currentUser, documents, notifications, circulars, findings } = useStore();
+  const { currentUser, documents, circulars, findings } = useStore();
   const { hasPermission } = usePermissions();
+  // Must be called before the `!me` early return below — hooks cannot be
+  // conditional. The query itself is cheap and cached.
+  const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
   const me = currentUser;
 
   if (!me) return null;
 
   const myOpenTasks = () =>
     documents.filter((dc) => dc.assignee === me.id && dc.status !== 'Closed').length;
-  const unreadCount = () => notifications.filter((n) => n.user === me.id && !n.read).length;
+  const unreadCount = () => unreadNotifications;
   const circularsPendingAck = () =>
     circulars.filter((c) => c.requiresAck && !c.ackBy.includes(me.id)).length;
   const approvalsCount = () =>
