@@ -92,9 +92,20 @@ export default function StaffDashboard() {
 
   list.sort(
     (a, b) =>
-      (URG_ORDER[a.workflowInstance?.document?.urgency ? a.workflowInstance.document.urgency.charAt(0).toUpperCase() + a.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) -
-      (URG_ORDER[b.workflowInstance?.document?.urgency ? b.workflowInstance.document.urgency.charAt(0).toUpperCase() + b.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) ||
-      (a.dueAt ? new Date(a.dueAt).getTime() : 9e15) - (b.dueAt ? new Date(b.dueAt).getTime() : 9e15),
+      (URG_ORDER[
+        a.workflowInstance?.document?.urgency
+          ? a.workflowInstance.document.urgency.charAt(0).toUpperCase() +
+            a.workflowInstance.document.urgency.slice(1)
+          : 'Normal'
+      ] || 3) -
+        (URG_ORDER[
+          b.workflowInstance?.document?.urgency
+            ? b.workflowInstance.document.urgency.charAt(0).toUpperCase() +
+              b.workflowInstance.document.urgency.slice(1)
+            : 'Normal'
+        ] || 3) ||
+      (a.dueAt ? new Date(a.dueAt).getTime() : 9e15) -
+        (b.dueAt ? new Date(b.dueAt).getTime() : 9e15),
   );
 
   const tileDefs = [
@@ -104,7 +115,9 @@ export default function StaffDashboard() {
     { key: 'Overdue', cls: 't-overdue', icon: 'alert', label: 'Overdue / SLA' },
   ];
 
-  const myNotifs = notifications.filter((n) => n.user === currentUser.id).slice(0, 5);
+  // The API already scopes notifications to the authenticated user, so no
+  // client-side filtering by id is needed.
+  const myNotifs = notifications.slice(0, 5);
 
   // Mirrors the SLA/turnaround calc on staff/performance — dashboard shows the
   // same real numbers instead of a hardcoded placeholder.
@@ -127,7 +140,8 @@ export default function StaffDashboard() {
           0,
         ) / closedTasksWithDates.length
       : 0;
-  const avgTurnaround = avgTurnaroundMs > 0 ? (avgTurnaroundMs / 86400000).toFixed(1) + ' days' : '0 days';
+  const avgTurnaround =
+    avgTurnaroundMs > 0 ? (avgTurnaroundMs / 86400000).toFixed(1) + ' days' : '0 days';
 
   const THIRTY_DAYS_MS = 30 * 86400000;
   const volume30d = closedTasks.filter(
@@ -245,18 +259,17 @@ export default function StaffDashboard() {
               myNotifs.map((n) => (
                 <div
                   key={n.id}
-                  className={`notif-item ${n.read ? 'read' : ''}`}
+                  className={`notif-item ${n.readAt ? 'read' : ''}`}
                   onClick={() => {
-                    markRead.mutate(n.id);
-                    if (n.docId) router.push(`/doc/${n.docId}`);
-                    else router.push('/notifications');
+                    if (!n.readAt) markRead.mutate(n.id);
+                    router.push(n.payload?.actionUrl || '/notifications');
                   }}
                 >
                   <span className="dot"></span>
                   <div>
-                    <div className="msg">{n.text}</div>
+                    <div className="msg">{n.payload?.message ?? n.payload?.title ?? ''}</div>
                     <div className="caption" style={{ marginTop: '3px' }}>
-                      {timeAgo(n.at)}
+                      {timeAgo(new Date(n.createdAt).getTime())}
                     </div>
                   </div>
                 </div>

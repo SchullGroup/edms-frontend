@@ -55,23 +55,10 @@ export interface User {
 }
 
 export type RolePermissionResource =
-  | 'document'
-  | 'cabinet'
-  | 'folder'
-  | 'workflow'
-  | 'audit'
-  | 'user'
-  | 'dashboard';
+  'document' | 'cabinet' | 'folder' | 'workflow' | 'audit' | 'user' | 'dashboard';
 
 export type RolePermissionAction =
-  | 'view'
-  | 'create'
-  | 'edit'
-  | 'delete'
-  | 'route'
-  | 'export'
-  | 'download'
-  | 'print';
+  'view' | 'create' | 'edit' | 'delete' | 'route' | 'export' | 'download' | 'print';
 
 export type RolePermission = {
   resource: RolePermissionResource;
@@ -178,11 +165,7 @@ export interface DocumentMetadataField {
 }
 
 export type DocumentConfidentiality =
-  | 'public'
-  | 'internal'
-  | 'confidential'
-  | 'restricted'
-  | 'top_secret';
+  'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
 
 export type DocumentUrgency = 'low' | 'normal' | 'high' | 'critical';
 
@@ -233,22 +216,10 @@ export interface DocumentMetadataValueInput {
 // --- Workflows ---
 
 export type WorkflowStageAction =
-  | 'approve'
-  | 'reject'
-  | 'review'
-  | 'request_changes'
-  | 'close'
-  | 'delegate';
+  'approve' | 'reject' | 'review' | 'request_changes' | 'close' | 'delegate';
 
 export type WorkflowStageType =
-  | 'start'
-  | 'review'
-  | 'approval'
-  | 'sign'
-  | 'condition'
-  | 'parallel'
-  | 'notify'
-  | 'close';
+  'start' | 'review' | 'approval' | 'sign' | 'condition' | 'parallel' | 'notify' | 'close';
 
 export interface WorkflowStage {
   id: string;
@@ -544,13 +515,7 @@ export type UpdateMetadataFieldRequest = Partial<CreateMetadataFieldRequest>;
  * Cabinet-scoped permission verbs (`GET/POST /cabinets/{id}/access`).
  * Note: distinct from {@link RolePermission}'s `action` set.
  */
-export type CabinetAccessPermission =
-  | 'view'
-  | 'upload'
-  | 'edit'
-  | 'route'
-  | 'export'
-  | 'delete';
+export type CabinetAccessPermission = 'view' | 'upload' | 'edit' | 'route' | 'export' | 'delete';
 
 export interface CabinetAccessGrant {
   id: string;
@@ -671,4 +636,34 @@ export interface Branding {
   primaryLight: string;
   accent: string;
   logoText: string;
+}
+
+// --- Notifications ---
+
+/** Rendered body + deep link, stored as the notification's `payload` JSON column. */
+export interface NotificationPayload {
+  title: string;
+  message: string;
+  actionUrl?: string;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  type: string;
+  channel: 'in_app' | 'email';
+  status: 'pending' | 'sent' | 'read' | 'failed';
+  payload: NotificationPayload;
+  sentAt: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationPreferences {
+  id: string;
+  userId: string;
+  emailEnabled: boolean;
+  inAppEnabled: boolean;
+  digestMode: boolean;
+  updatedAt: string | null;
 }

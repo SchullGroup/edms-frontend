@@ -6,6 +6,11 @@ import { useStore, userById } from '@/store/useStore';
 import { useNavigation } from '@/hooks/useNavigation';
 import { Icon } from '@/components/ui/Icons';
 import { useUIStore } from '@/store/useUIStore';
+import {
+  useMarkAllNotificationsRead,
+  useNotifications,
+  useUnreadNotificationCount,
+} from '@/apis/hooks/useNotifications';
 
 const QUICK_ACTION: Record<string, { label: string; icon: string; go: string }> = {
   staff: { label: 'Upload document', icon: 'upload', go: '/upload' },
@@ -18,7 +23,7 @@ const QUICK_ACTION: Record<string, { label: string; icon: string; go: string }> 
 
 export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav: () => void }) => {
   const router = useRouter();
-  const { currentUser, notifications, prefs, setPrefs } = useStore();
+  const { currentUser, prefs, setPrefs } = useStore();
   const { addToast } = useUIStore();
   const nav = useNavigation();
   const [notifOpen, setNotifOpen] = useState(false);
@@ -58,17 +63,23 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
     month: 'short',
   });
 
-  const unreadCount = notifications.filter((n) => n.user === me.id && !n.read).length;
-  const myNotifs = notifications.filter((n) => n.user === me.id).slice(0, 6);
+  // Live from the API. This used to be derived from the seeded store, so the
+  // badge never reflected real notifications.
+  const { data: unreadCount = 0 } = useUnreadNotificationCount();
+  const { data: notifPage } = useNotifications({ limit: 6 });
+  const myNotifs = notifPage?.data ?? [];
 
   const toggleTheme = () => {
     setPrefs({ ...prefs, theme: prefs.theme === 'light' ? 'dark' : 'light' });
   };
 
+  const markAllNotificationsRead = useMarkAllNotificationsRead();
+
   const markAllRead = () => {
-    // In a real app we'd dispatch an action, for this port we just mutate via setStore (not implemented yet).
-    // For now we'll just show a toast.
-    addToast('All notifications marked as read', 'info');
+    markAllNotificationsRead.mutate(undefined, {
+      onSuccess: () => addToast('All notifications marked as read', 'info'),
+      onError: () => addToast('Could not mark notifications as read', 'error'),
+    });
   };
 
   return (
@@ -124,18 +135,16 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
               myNotifs.map((n) => (
                 <div
                   key={n.id}
-                  className={`notif-item ${n.read ? 'read' : ''}`}
+                  className={`notif-item ${n.readAt ? 'read' : ''}`}
                   onClick={() => {
                     setNotifOpen(false);
-                    if (n.docId) router.push(`/doc/${n.docId}`);
-                    else if (n.circularId) router.push('/circulars');
-                    else router.push('/notifications');
+                    router.push(n.payload?.actionUrl || '/notifications');
                   }}
                 >
                   <span className="dot"></span>
                   <div>
-                    <div className="msg">{n.text}</div>
-                    <div className="caption mt8">{new Date(n.at).toLocaleDateString()}</div>
+                    <div className="msg">{n.payload?.message ?? n.payload?.title ?? ''}</div>
+                    <div className="caption mt8">{new Date(n.createdAt).toLocaleDateString()}</div>
                   </div>
                 </div>
               ))
