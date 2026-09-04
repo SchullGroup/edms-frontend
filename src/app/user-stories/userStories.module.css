@@ -1,6 +1,69 @@
-/* Product Guide (/user-stories)
+/* Product Guide (/user-stories) — PUBLIC, no application shell.
    Every colour, radius and shadow comes from the design system in globals.css.
    Nothing here introduces a new palette. */
+
+/* ---------- standalone chrome ---------- */
+.publicShell {
+  min-height: 100%;
+  background: var(--surface);
+}
+
+.masthead {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.mastheadInner {
+  max-width: 1180px;
+  margin: 0 auto;
+  height: var(--topbar-h);
+  padding: 0 clamp(18px, 4vw, 28px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+}
+
+.brand strong {
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.signIn {
+  text-decoration: none;
+}
+
+.signIn:hover {
+  text-decoration: none;
+}
+
+.publicMain {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px clamp(18px, 4vw, 28px) 72px;
+}
+
+.publicFoot {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--muted);
+}
 
 /* ---------- shared ---------- */
 .sectionLede {
