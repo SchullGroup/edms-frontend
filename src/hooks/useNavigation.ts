@@ -31,6 +31,7 @@ export const useNavigation = () => {
             { route: '/staff', label: 'Dashboard', icon: 'home' },
             { route: '/staff/tasks', label: 'My Tasks', icon: 'inbox', badge: myOpenTasks },
             { route: '/notifications', label: 'Notifications', icon: 'bell', badge: unreadCount },
+            { route: '/delegations', label: 'Delegations', icon: 'calendar' },
           ],
         },
         {
@@ -75,6 +76,7 @@ export const useNavigation = () => {
             { route: '/supervisor/instances', label: 'Workflow Monitor', icon: 'flow' },
             { route: '/supervisor/bottlenecks', label: 'Bottlenecks & Ageing', icon: 'clock' },
             { route: '/supervisor/workload', label: 'Workload & Reassign', icon: 'swap' },
+            { route: '/delegations', label: 'Delegations', icon: 'calendar' },
           ],
         },
         {

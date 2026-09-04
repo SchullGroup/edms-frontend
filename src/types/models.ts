@@ -295,6 +295,128 @@ export interface WorkflowInstanceStatsResponse {
   avgTurnaroundDays: number;
 }
 
+/**
+ * `data` shape of `GET /workflow-instances/status-counts` — dashboard-friendly
+ * instance counts using the same access scoping as the instance list.
+ * `inProgress` includes `on_hold`; `onHold` is a subset of it, not additional.
+ */
+export interface WorkflowInstanceStatusCounts {
+  pending: number;
+  inProgress: number;
+  onHold: number;
+  closed: number;
+  total: number;
+}
+
+/** One row of `GET /workflow-instances/team-status-matrix`. */
+export interface WorkflowTeamStatusMember {
+  memberId: string;
+  memberName: string;
+  memberEmail: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  pending: number;
+  /** Files whose document status is `in_progress` or `on_hold`. */
+  inProgress: number;
+  /** Subset of `inProgress` whose active instance's `stageDueAt` has passed. */
+  overdue: number;
+  closed: number;
+  total: number;
+}
+
+/** One row of `GET /workflow-instances/open-items-by-cabinet`. */
+export interface WorkflowOpenItemsByCabinetItem {
+  cabinetId: string;
+  cabinetName: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  pending: number;
+  inProgress: number;
+  /** Subset of `inProgress`. */
+  onHold: number;
+  /** Subset of `inProgress`. */
+  overdue: number;
+  /** `pending + inProgress`. `onHold`/`overdue` are subsets, not added again. */
+  openItems: number;
+}
+
+/** `data` shape of `GET /workflow-instances/open-items-by-cabinet`. */
+export interface WorkflowOpenItemsByCabinetData {
+  cabinets: WorkflowOpenItemsByCabinetItem[];
+  totalOpenItems: number;
+}
+
+export type SlaStatus = 'healthy' | 'due_soon' | 'breached' | 'paused' | 'not_started';
+
+/** Summary counts for `GET /workflow-instances/bottlenecks-ageing`. */
+export interface WorkflowBottlenecksAgeingSummary {
+  totalOpenItems: number;
+  breachedItems: number;
+  dueSoonItems: number;
+  healthyItems: number;
+  pausedItems: number;
+  notStartedItems: number;
+  /** Hours before SLA expiry that an item is classified `due_soon`. */
+  slaWarningHours: number;
+}
+
+export interface WorkflowAgeingDistributionBucket {
+  bucket: '0_3_days' | '4_7_days' | '8_14_days' | '15_plus_days';
+  label: string;
+  count: number;
+}
+
+export interface WorkflowStageDistributionItem {
+  stage: string;
+  stageName: string;
+  count: number;
+}
+
+/**
+ * One active workflow item on the Bottlenecks & Ageing dashboard.
+ * `workflowStatus` (process state) and `slaStatus` (time-risk state) are
+ * deliberately separate fields — never merge them into one chip.
+ */
+export interface WorkflowBottleneckItem {
+  workflowInstanceId: string;
+  documentId: string;
+  documentTitle: string;
+  referenceNumber: string | null;
+  documentStatus: string;
+  confidentiality: string;
+  urgency: string;
+  cabinetId: string;
+  cabinetName: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  currentStage: string;
+  currentStageName: string;
+  workflowStatus: 'pending' | 'in_progress' | 'on_hold';
+  currentTaskId: string | null;
+  assignmentType: 'user' | 'role' | 'unassigned';
+  assigneeId: string | null;
+  /** User name, role name, or `Unassigned`. */
+  assigneeName: string;
+  assigneeEmail: string | null;
+  assignedRoleId: string | null;
+  assignedRoleName: string | null;
+  stageEnteredAt: string;
+  ageDays: number;
+  slaDueAt: string | null;
+  slaStatus: SlaStatus;
+  /** True when a current active task exists and can be reassigned. */
+  canReassign: boolean;
+}
+
+/** `data` shape of `GET /workflow-instances/bottlenecks-ageing`. */
+export interface WorkflowBottlenecksAgeingData {
+  summary: WorkflowBottlenecksAgeingSummary;
+  ageingDistribution: WorkflowAgeingDistributionBucket[];
+  stageDistribution: WorkflowStageDistributionItem[];
+  items: WorkflowBottleneckItem[];
+  pagination: PaginationInfo;
+}
+
 /** A read-only `GET /workflow-history` row. */
 export interface WorkflowHistoryRecord {
   id: string;
@@ -399,6 +521,57 @@ export interface TaskSlaStatsResponse {
     /** `onTime / total * 100`. */
     slaRate: number;
   }[];
+}
+
+/**
+ * Per-member row of `GET /tasks/workload`. Only directly assigned, active,
+ * current-stage tasks count toward a member's workload — role-pool tasks are
+ * deliberately not duplicated across every holder of the role.
+ */
+export interface TaskWorkloadMember {
+  memberId: string;
+  memberName: string;
+  memberEmail: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  roles: string[];
+  open: number;
+  /** Subset of `open` whose `dueAt` has passed. */
+  overdue: number;
+  /** Phase-1 fixed capacity per member (currently 8). */
+  capacity: number;
+  /** `max(capacity - open, 0)`. */
+  availableCapacity: number;
+  /** `open / capacity * 100`. Can exceed 100 when overloaded. */
+  utilizationPercent: number;
+}
+
+export interface TaskWorkloadSummary {
+  totalMembers: number;
+  totalOpen: number;
+  totalOverdue: number;
+  totalCapacity: number;
+  overallUtilizationPercent: number;
+}
+
+/** `data` shape of `GET /tasks/workload`. */
+export interface TaskWorkloadData {
+  members: TaskWorkloadMember[];
+  summary: TaskWorkloadSummary;
+}
+
+/** One row of `GET /sla/breaches` — a persisted SLA warning/escalation event. */
+export interface SlaBreach {
+  id: string;
+  workflowInstanceId: string;
+  taskId: string;
+  breachType: 'warning' | 'escalation';
+  notifiedAt: string;
+  resolvedAt: string | null;
+  /** Task and assignment context for the event. */
+  task?: Record<string, any>;
+  /** Workflow, document and current-stage context for the event. */
+  workflowInstance?: Record<string, any>;
 }
 
 // --- Delegations ---

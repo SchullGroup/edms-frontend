@@ -41,18 +41,19 @@ Four service modules never touch the network — they return `SEED` fixtures fro
 | `/platform/flags` | `src/app/(app)/platform/flags/page.tsx` | Thin re-export of `/platform/sysconfig`. |
 | `/platform/plans` | `src/app/(app)/platform/plans/page.tsx` | Subscription plan catalogue and tenant plan assignment. |
 | `/platform/sysconfig` | `src/app/(app)/platform/sysconfig/page.tsx` | Feature-flag and system configuration toggles. |
+| `/delegations` | `src/app/(app)/delegations/page.tsx` | Out-of-office workflow delegation: create/end a time-bounded delegation to a colleague, optionally scoped to specific cabinets; lists what you've delegated and what's been delegated to you. Any authenticated user. |
 | `/search` | `src/app/(app)/search/page.tsx` | Document search with faceted filtering, saved searches and CSV export. |
-| `/staff` | `src/app/(app)/staff/page.tsx` | Staff home: my task queue, notification feed, quick actions. |
+| `/staff` | `src/app/(app)/staff/page.tsx` | Staff home: status tiles (file/workflow-instance counts, not task counts), my task queue, notification feed, quick actions. |
 | `/staff/cabinets` | `src/app/(app)/staff/cabinets/page.tsx` | Cabinet/folder browser for staff: view, bulk-move and route documents into workflows. |
 | `/staff/performance` | `src/app/(app)/staff/performance/page.tsx` | Personal SLA, turnaround and 6-week throughput metrics. |
 | `/staff/tasks` | `src/app/(app)/staff/tasks/page.tsx` | My tasks list with status/urgency filters and sorting. |
-| `/supervisor` | `src/app/(app)/supervisor/page.tsx` | Supervisor dashboard: open items, workload by assignee, reassignment. |
-| `/supervisor/approvals` | `src/app/(app)/supervisor/approvals/page.tsx` | Pending approval queue — approve, reject, reassign. |
-| `/supervisor/bottlenecks` | `src/app/(app)/supervisor/bottlenecks/page.tsx` | Where work is stuck; SLA-breach banner and reassignment. |
+| `/supervisor` | `src/app/(app)/supervisor/page.tsx` | Team Overview: member × status matrix and open-items-by-cabinet from the purpose-built read models; row click opens a drawer with that member's open tasks, fetched on demand. |
+| `/supervisor/approvals` | `src/app/(app)/supervisor/approvals/page.tsx` | Approvals queue — pending/escalated tabs, server-paginated, approve/reassign. |
+| `/supervisor/bottlenecks` | `src/app/(app)/supervisor/bottlenecks/page.tsx` | Where work is stuck; SLA-breach banner, ageing/stage distributions and a server-paginated detail table with separate SLA-status and workflow-status columns. |
 | `/supervisor/exceptions` | `src/app/(app)/supervisor/exceptions/page.tsx` | Control-exception register with acknowledge action. |
 | `/supervisor/instances` | `src/app/(app)/supervisor/instances/page.tsx` | Workflow monitor: every started workflow instance, filterable by status/workflow, server-paginated; a drawer per row shows the stage rail, activity trail, and hold/resume/close actions. |
 | `/supervisor/performance` | `src/app/(app)/supervisor/performance/page.tsx` | Team comparative SLA/throughput table with sparklines. |
-| `/supervisor/workload` | `src/app/(app)/supervisor/workload/page.tsx` | Per-member open-task load with rebalancing. |
+| `/supervisor/workload` | `src/app/(app)/supervisor/workload/page.tsx` | Per-member load and utilization against a real capacity figure; expanding a row fetches and shows that member's open tasks for reassignment. |
 | `/unauthorized` | `src/app/(app)/unauthorized/page.tsx` | Static access-denied page reached by the client-side route guard. |
 | `/upload` | `src/app/(app)/upload/page.tsx` | Multi-file intake: classify, pick cabinet + folder (folder mandatory), chunked S3 upload, then register the document; a "Route to workflow" link appears once a file is filed. |
 
@@ -265,6 +266,8 @@ Facets (cabinet, type, status, confidentiality, urgency) are applied client-side
 | Endpoint | Status |
 |---|---|
 | `GET /tasks` | live |
+| `GET /workflow-instances/status-counts?scope=mine` (status tiles) | live |
+| `GET /sla/breaches?scope=mine&status=open&limit=1` (Overdue/SLA tile count) | live |
 | `GET /notifications?channel=in_app` | live |
 | `PATCH /notifications/{id}/read` | live |
 
@@ -296,9 +299,10 @@ Facets (cabinet, type, status, confidentiality, urgency) are applied client-side
 
 | Endpoint | Status |
 |---|---|
-| `GET /tasks?page=&limit=100` (all pages) | live |
+| `GET /workflow-instances/team-status-matrix` (member × status matrix; `departmentId` omitted — backend resolves the supervisor's own) | live |
+| `GET /workflow-instances/open-items-by-cabinet` (same scoping) | live |
 | `GET /users` | live |
-| `GET /cabinets` | live |
+| `GET /tasks?assigneeId=&status=pending&scope=all&limit=100` (row-click drawer, fetched on demand) | live |
 | `PATCH /tasks/{id}/reassign` | live |
 | audit logging | **mock** |
 
@@ -306,20 +310,40 @@ Facets (cabinet, type, status, confidentiality, urgency) are applied client-side
 
 | Endpoint | Status |
 |---|---|
-| `GET /tasks?scope=mine&status=pending` | live |
+| `GET /tasks/approvals?scope=all&status=pending\|escalated&page=&limit=20` (purpose-built queue, not a generic `/tasks` filter; pending/escalated tabs) | live |
 | `GET /users` | live |
 | `POST /tasks/{id}/action` | live |
 | `PATCH /tasks/{id}/reassign` | live |
 | audit logging | **mock** |
 
-### `/supervisor/bottlenecks`, `/supervisor/workload`
+### `/supervisor/bottlenecks`
 
 | Endpoint | Status |
 |---|---|
-| `GET /tasks?status=pending&page=&limit=100` (all pages) | live |
+| `GET /workflow-instances/bottlenecks-ageing?page=&limit=20` (summary, ageing/stage distributions and detail rows in one call; `slaStatus` and `workflowStatus` are separate fields, rendered as separate badges) | live |
 | `GET /users` | live |
+| `PATCH /tasks/{id}/reassign` (gated by each row's `canReassign`/`currentTaskId`) | live |
+| audit logging | **mock** |
+
+### `/supervisor/workload`
+
+| Endpoint | Status |
+|---|---|
+| `GET /tasks/workload` (per-member capacity/utilization; `departmentId` omitted) | live |
+| `GET /users` | live |
+| `GET /tasks?assigneeId=&status=pending&scope=all&limit=100` (fetched only once a member's row is expanded) | live |
 | `PATCH /tasks/{id}/reassign` | live |
 | audit logging | **mock** |
+
+### `/delegations`
+
+| Endpoint | Status |
+|---|---|
+| `GET /delegations?scope=mine&limit=100` | live |
+| `GET /users` (delegate picker) | live |
+| `GET /cabinets` (optional cabinet-scoped delegation) | live |
+| `POST /delegations` | live |
+| `POST /delegations/{id}/end` | live |
 
 ### `/supervisor/exceptions`
 
@@ -364,7 +388,7 @@ Static page, no calls.
 
 These services/hooks exist and point at real endpoints, but no page imports them:
 
-`GET|POST /delegations`, `POST /delegations/{id}/end`, `GET /delegations/{id}`, `GET /workflow-history/{id}` (the list endpoint `GET /workflow-history` is now called — see `/doc/[id]` and `/supervisor/instances`), `GET /tasks/stats`, `GET /workflow-instances/stats`, `GET|PUT /documents/{id}/metadata`, `GET|POST /documents/{id}/versions` (and `/restore`), `DELETE /documents/{id}`, `DELETE /users/{id}`, `DELETE /roles/{id}`, `PATCH /roles/{id}`, `PATCH /folders/{id}`, `GET /folders/{id}`, `PATCH /cabinets/{id}/metadata-fields/{fieldId}`, plus the legacy base64 uploaders in `s3.service.ts`. (`POST /workflow-instances/{id}/hold|resume|close` is now called too — see `/supervisor/instances`.)
+`GET /delegations/{id}` (`useDelegation` — single-record fetch has a hook but no screen opens one this way; the list, create and end calls are now used — see `/delegations`), `GET /workflow-history/{id}` (the list endpoint `GET /workflow-history` is now called — see `/doc/[id]` and `/supervisor/instances`), `GET /tasks/stats`, `GET /workflow-instances/stats` (both have service + hook, unused — see the Workflow Module API guide's own note that these are basic statistics endpoints, not the full Team Performance/Management Dashboard, and are intentionally left for a later pass), `GET /documents/stats`, `GET|PUT /documents/{id}/metadata`, `GET|POST /documents/{id}/versions` (and `/restore`), `DELETE /documents/{id}`, `DELETE /users/{id}`, `DELETE /roles/{id}`, `PATCH /roles/{id}`, `PATCH /folders/{id}`, `GET /folders/{id}`, `PATCH /cabinets/{id}/metadata-fields/{fieldId}`, plus the legacy base64 uploaders in `s3.service.ts`. (`POST /workflow-instances/{id}/hold|resume|close`, `GET /workflow-instances/status-counts`, `GET /workflow-instances/team-status-matrix`, `GET /workflow-instances/open-items-by-cabinet`, `GET /workflow-instances/bottlenecks-ageing`, `GET /tasks/approvals`, `GET /tasks/workload` and `GET /sla/breaches` are now all called too — see `/supervisor/instances`, `/staff`, `/supervisor`, `/supervisor/approvals`, `/supervisor/bottlenecks` and `/supervisor/workload`.)
 
 ---
 
@@ -411,20 +435,21 @@ Only screens that make at least one live call. ✅ implemented, ❌ absent.
 | `/management/trends` | ✅ | ❌ | ❌ | ❌ | ❌ walks all pages |
 | `/management/reports` | ❌ | ❌ | n/a | ❌ | n/a |
 | `/search` | ✅ | ❌ | ✅ "No results" panel | ❌ | ❌ |
+| `/delegations` | ✅ | ✅ `ErrorMessage` + retry | ✅ `EmptyState` per direction (delegated-by-you / delegated-to-you) | ❌ | ❌ — `limit: 100`, no `<Pagination>` |
 | `/staff` | ✅ | ✅ `ErrorMessage` + retry (tasks) | ✅ `EmptyState` for tasks and notifications | ❌ | ❌ |
 | `/staff/cabinets` | ✅ skeleton (full page on first load; table/grid skeleton while switching folders) | ❌ — mutation failures toast only | ✅ "This folder is empty" — now correctly gated behind the loading check, so it can no longer flash before a folder switch's real data arrives | ❌ | ❌ |
 | `/staff/performance` | ✅ | ❌ | ❌ | ❌ | ❌ |
 | `/staff/tasks` | ✅ | ✅ `ErrorMessage` + retry | ✅ "No tasks in this view" | ❌ | ❌ |
-| `/supervisor` | ✅ | ❌ | ✅ "No open items" | ❌ | ❌ walks all pages |
-| `/supervisor/approvals` | ✅ | ❌ | ✅ | ❌ | ❌ |
-| `/supervisor/bottlenecks` | ✅ | ❌ | ✅ "No active SLA breaches" banner | ❌ | ❌ walks all pages |
+| `/supervisor` | ✅ | ❌ — drawer's per-member task fetch has no error state | ✅ "No open items" (drawer) | ❌ | ❌ — matrix/by-cabinet are unpaginated aggregates; the drawer's task list is `limit: 100`, no `<Pagination>` |
+| `/supervisor/approvals` | ✅ | ✅ `ErrorMessage` + retry | ✅ per tab (pending/escalated) | ❌ | ✅ — `<Pagination>` on the queue |
+| `/supervisor/bottlenecks` | ✅ | ✅ `ErrorMessage` + retry | ✅ "No active SLA breaches" banner; `Table`'s built-in empty state for the detail rows | ❌ | ✅ — `<Pagination>` on the detail table |
 | `/supervisor/instances` | ✅ skeleton (`SkeletonTable`) | ❌ | ✅ via `Table` | ❌ | ✅ — `<Pagination>` on the instance list |
-| `/supervisor/workload` | ✅ | ❌ | ❌ | ❌ | ❌ walks all pages |
+| `/supervisor/workload` | ✅ | ✅ `ErrorMessage` + retry (workload); a member's expanded task list has no error state | ✅ "No open tasks" per expanded member | ❌ | ❌ — workload summary is an unpaginated aggregate; an expanded member's task list is `limit: 100` |
 | `/upload` | ✅ folder select ("Loading folders…") + per-file upload progress | ❌ — failures toast only | ❌ | ❌ | n/a |
 
 **403 handling — nothing screen-level exists anywhere.** The only permission behaviour is `AppShell`'s client-side route guard, which compares `currentUser.roles` against `src/config/routes.config.ts` and calls `router.replace('/unauthorized')` before render. A 403 returned by an actual API call is not distinguished from any other error: in `api-client.ts` a 403 is only inspected when it comes back from the *refresh* attempt, in which case the session is cleared. No query hook or screen branches on `error.response.status === 403`.
 
-**Pagination.** `<Pagination>` (`src/components/ui/Pagination.tsx`) takes `{page, totalPages, total, limit}` straight from the API envelope. Three places render it: `/admin/users`, `/supervisor/instances` (= `/admin/workflows/instances`), and the per-folder document list inside `/admin/cabinets`. Every other list either fetches the server default page and filters/sorts in the browser, or walks every page and concatenates client-side — via the shared `fetchAllPages.ts` (`/management`, `/management/departments`, `/management/trends`) or one of two separate hand-rolled equivalents, `tasksService.getAllPages` (`/management/performance`, `/supervisor`, `/supervisor/bottlenecks`, `/supervisor/workload`) and `usersService.getAllPages` (`/admin/cabinets`, `/admin/workflows`, and the access-grant/move pickers).
+**Pagination.** `<Pagination>` (`src/components/ui/Pagination.tsx`) takes `{page, totalPages, total, limit}` straight from the API envelope. Six places render it: `/admin/users`, `/supervisor/instances` (= `/admin/workflows/instances`), `/supervisor/approvals`, `/supervisor/bottlenecks`, `/notifications`, and the per-folder document list inside `/admin/cabinets`. Every other list either fetches the server default page and filters/sorts in the browser, or walks every page and concatenates client-side — via the shared `fetchAllPages.ts` (`/management`, `/management/departments`, `/management/trends`) or `tasksService.getAllPages` (`/management/performance`) or `usersService.getAllPages` (`/admin/cabinets`, `/admin/workflows`, and the access-grant/move pickers). `/supervisor`, `/supervisor/workload` and `/delegations` now read from purpose-built aggregate endpoints (`team-status-matrix`, `open-items-by-cabinet`, `tasks/workload`) that return the whole result in one unpaginated call rather than walking `/tasks` — a real reduction in request volume even without a `<Pagination>` control of their own; only the on-demand per-member task lists they open (capped at `limit: 100`) have no pager.
 
 **Loading skeletons.** `src/components/common/Skeleton.tsx` (`Skeleton`, `SkeletonText`, `SkeletonTreeRows`, `SkeletonTable`) wires up the `.skel` shimmer that already existed in `globals.css` but had no component using it. Used by `/admin/cabinets`, `/staff/cabinets`, `/doc/[id]`, `/supervisor/instances` and `/admin/workflows/instances` (via `WorkflowInstanceMonitor`/`WorkflowInstanceDetail`). Every other screen's "✅" in the Loading column above is still `<Spinner>` (`src/components/common/Spinner.tsx`) or an inline "Loading…" string, not a skeleton.
 

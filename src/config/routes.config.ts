@@ -63,6 +63,7 @@ export const routeConfig: RouteRule[] = [
   { path: '/search', matchType: 'prefix' },
   { path: '/circulars', matchType: 'prefix' },
   { path: '/notifications', matchType: 'prefix' },
+  { path: '/delegations', matchType: 'prefix' },
   { path: '/doc', matchType: 'prefix' }, // viewing a document
   {
     path: '/upload',

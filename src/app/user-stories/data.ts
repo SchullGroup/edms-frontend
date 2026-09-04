@@ -498,7 +498,7 @@ export const EPICS: Epic[] = [
         statement:
           'As David, I want to hand my approvals to a colleague for the two weeks I’m on leave, so that nothing stalls behind an empty desk.',
         status: 'progress',
-        note: 'Delegated tasks already route correctly; the screen to set one up is in progress.',
+        note: 'Create, view and end a delegation today. A visible marker on a delegated task, and a notification when one starts, are still in progress.',
       },
       {
         id: 'C5',
@@ -585,7 +585,7 @@ export const EPICS: Epic[] = [
         title: 'See my team’s workload',
         statement:
           'As David, I want to see how many open items each team member is carrying, so that I can rebalance before someone drowns.',
-        status: 'progress',
+        status: 'available',
       },
       {
         id: 'F2',

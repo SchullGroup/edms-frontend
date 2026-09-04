@@ -255,6 +255,7 @@ a:hover { text-decoration: underline; }
 .b-status-closed { background: #E1F4EC; color: #17714F; }
 .b-status-overdue { background: #FBE7EA; color: #B33A4C; }
 .b-status-on-hold { background: #ECE8FA; color: #5647A8; }
+.b-status-not-started { background: #EFF1F5; color: #5D6880; }
 .b-conf-public { background: #E1F4EC; color: #17714F; }
 .b-conf-internal { background: #E7EEFB; color: #2A55A8; }
 .b-conf-confidential { background: #FBF3DD; color: #906908; }
@@ -270,6 +271,7 @@ a:hover { text-decoration: underline; }
 [data-theme="dark"] .b-status-closed, [data-theme="dark"] .b-conf-public { color: #6FD3A6; }
 [data-theme="dark"] .b-status-overdue, [data-theme="dark"] .b-conf-top-secret, [data-theme="dark"] .b-urg-critical { color: #F2929F; }
 [data-theme="dark"] .b-status-on-hold { color: #B4A6F5; }
+[data-theme="dark"] .b-status-not-started { color: #9AA3B7; }
 [data-theme="dark"] .b-conf-restricted, [data-theme="dark"] .b-urg-high { color: #EFA96E; }
 [data-theme="dark"] .b-urg-low { color: #9AA3B7; }
 

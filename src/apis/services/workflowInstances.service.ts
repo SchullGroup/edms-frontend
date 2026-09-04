@@ -3,8 +3,12 @@ import {
   ApiResponse,
   CreateWorkflowInstanceRequest,
   PaginatedResponse,
+  WorkflowBottlenecksAgeingData,
   WorkflowInstance,
   WorkflowInstanceStatsResponse,
+  WorkflowInstanceStatusCounts,
+  WorkflowOpenItemsByCabinetData,
+  WorkflowTeamStatusMember,
 } from '@/types/models';
 
 export interface WorkflowInstanceFilters {
@@ -19,6 +23,17 @@ export interface WorkflowInstanceStatsParams {
   groupBy?: 'month';
   status?: 'closed';
   departmentId?: string;
+}
+
+/** Team/department-scoped params. Per the API guide, a supervisor should
+ *  normally omit `departmentId` — the backend resolves their own department. */
+export interface DepartmentScopedParams {
+  departmentId?: string;
+}
+
+export interface BottlenecksAgeingParams extends DepartmentScopedParams {
+  page?: number;
+  limit?: number;
 }
 
 export const workflowInstancesService = {
@@ -44,6 +59,52 @@ export const workflowInstancesService = {
   ): Promise<WorkflowInstanceStatsResponse> => {
     const response = await apiClient.get<ApiResponse<WorkflowInstanceStatsResponse>>(
       '/workflow-instances/stats',
+      { params },
+    );
+    return response.data.data;
+  },
+
+  /** Dashboard-friendly Pending/In-Progress/Closed counts (Staff Dashboard tiles). */
+  getStatusCounts: async (
+    scope: 'mine' | 'all' = 'mine',
+  ): Promise<WorkflowInstanceStatusCounts> => {
+    const response = await apiClient.get<ApiResponse<WorkflowInstanceStatusCounts>>(
+      '/workflow-instances/status-counts',
+      { params: { scope } },
+    );
+    return response.data.data;
+  },
+
+  /** Supervisor Team Overview, by member. Omit `departmentId` for a supervisor —
+   *  the backend resolves their own department. */
+  getTeamStatusMatrix: async (
+    params?: DepartmentScopedParams,
+  ): Promise<WorkflowTeamStatusMember[]> => {
+    const response = await apiClient.get<ApiResponse<{ members: WorkflowTeamStatusMember[] }>>(
+      '/workflow-instances/team-status-matrix',
+      { params },
+    );
+    return response.data.data.members;
+  },
+
+  /** Supervisor Team Overview, by cabinet. */
+  getOpenItemsByCabinet: async (
+    params?: DepartmentScopedParams,
+  ): Promise<WorkflowOpenItemsByCabinetData> => {
+    const response = await apiClient.get<ApiResponse<WorkflowOpenItemsByCabinetData>>(
+      '/workflow-instances/open-items-by-cabinet',
+      { params },
+    );
+    return response.data.data;
+  },
+
+  /** Supervisor Bottlenecks & Ageing read model: summary + distributions +
+   *  paginated detail rows, in one call. */
+  getBottlenecksAgeing: async (
+    params?: BottlenecksAgeingParams,
+  ): Promise<WorkflowBottlenecksAgeingData> => {
+    const response = await apiClient.get<ApiResponse<WorkflowBottlenecksAgeingData>>(
+      '/workflow-instances/bottlenecks-ageing',
       { params },
     );
     return response.data.data;

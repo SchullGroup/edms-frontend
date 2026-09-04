@@ -1,20 +1,35 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useUIStore } from '@/store/useUIStore';
-import { useTasks, useTaskAction, useReassignTask } from '@/apis/hooks/useTasks';
+import { useApprovalTasks, useTaskAction, useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { Spinner } from '@/components/common/Spinner';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { TaskRow } from '@/components/ui/TaskRow';
+import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
+import { Task } from '@/types/models';
 
-const URG_ORDER: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3 };
+const PAGE_SIZE = 20;
 
 export default function ApprovalsQueuePage() {
-  const { data: tasksData, isLoading: isLoadingTasks } = useTasks({ scope: 'mine', status: 'pending' });
+  const [tab, setTab] = useState<'pending' | 'escalated'>('pending');
+  const [page, setPage] = useState(1);
+
+  // The purpose-built approvals endpoint, not a generic /tasks filter — it's
+  // already ordered by urgency then due date server-side, and `scope: 'all'`
+  // gives the team's queue rather than just tasks assigned directly to me.
+  const {
+    data: tasksData,
+    isLoading: isLoadingTasks,
+    isError: isTasksError,
+    refetch: refetchTasks,
+  } = useApprovalTasks({ scope: 'all', status: tab, page, limit: PAGE_SIZE });
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
   const tasks = tasksData?.data || [];
+  const pagination = tasksData?.pagination;
   const users = usersData?.data || [];
 
   const taskAction = useTaskAction();
@@ -27,15 +42,12 @@ export default function ApprovalsQueuePage() {
     setPageTitle('Approvals Queue');
   }, [setPageTitle]);
 
-  if (isLoadingTasks || isLoadingUsers) return <Spinner />;
+  const setTabAndReset = (next: 'pending' | 'escalated') => {
+    setTab(next);
+    setPage(1);
+  };
 
-  const queue = [...tasks].sort((a: any, b: any) => {
-    const ua = URG_ORDER[a.workflowInstance?.document?.urgency] ?? 2;
-    const ub = URG_ORDER[b.workflowInstance?.document?.urgency] ?? 2;
-    return ua - ub;
-  });
-
-  const handleApprove = (t: any) => {
+  const handleApprove = (t: Task) => {
     const title = t.workflowInstance?.document?.title || 'this document';
     openConfirm({
       title: `Approve “${title.slice(0, 40)}…”?`,
@@ -60,7 +72,7 @@ export default function ApprovalsQueuePage() {
     });
   };
 
-  const handleReassign = (t: any) => {
+  const handleReassign = (t: Task) => {
     let newAssignee = '';
     let note = '';
     const title = t.workflowInstance?.document?.title || 'this document';
@@ -136,46 +148,81 @@ export default function ApprovalsQueuePage() {
             Items awaiting your decision — approve inline or open for full context.
           </div>
         </div>
+        <div className="actions">
+          <div className="seg">
+            <button
+              className={tab === 'pending' ? 'active' : ''}
+              onClick={() => setTabAndReset('pending')}
+            >
+              Pending
+            </button>
+            <button
+              className={tab === 'escalated' ? 'active' : ''}
+              onClick={() => setTabAndReset('escalated')}
+            >
+              Escalated
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="card">
-        {queue.length > 0 ? (
-          <div className="rowlist">
-            {queue.map((t: any) => (
-              <TaskRow
-                key={t.id}
-                item={t}
-                extraActions={
-                  <>
-                    <button
-                      className="btn btn-success btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleApprove(t);
-                      }}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleReassign(t);
-                      }}
-                    >
-                      Reassign
-                    </button>
-                  </>
-                }
+        {isLoadingUsers || isLoadingTasks ? (
+          <Spinner />
+        ) : isTasksError ? (
+          <ErrorMessage message="Failed to load the approvals queue" retry={() => refetchTasks()} />
+        ) : tasks.length > 0 ? (
+          <>
+            <div className="rowlist">
+              {tasks.map((t) => (
+                <TaskRow
+                  key={t.id}
+                  item={t}
+                  extraActions={
+                    <>
+                      <button
+                        className="btn btn-success btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleApprove(t);
+                        }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleReassign(t);
+                        }}
+                      >
+                        Reassign
+                      </button>
+                    </>
+                  }
+                />
+              ))}
+            </div>
+            {pagination && (
+              <Pagination
+                page={pagination.page}
+                totalPages={pagination.totalPages}
+                total={pagination.total}
+                limit={pagination.limit}
+                onPageChange={setPage}
               />
-            ))}
-          </div>
+            )}
+          </>
         ) : (
           <div className="empty">
             <Icon name="approve" size={32} />
-            <div className="h3 mt16 mb8">Approvals queue is clear</div>
+            <div className="h3 mt16 mb8">
+              {tab === 'escalated' ? 'No escalated approvals' : 'Approvals queue is clear'}
+            </div>
             <p className="caption mb16">
-              Items routed for your decision will appear here, ordered by urgency and SLA.
+              {tab === 'escalated'
+                ? 'Escalated items will appear here once something breaches its SLA.'
+                : 'Items routed for your decision will appear here, ordered by urgency and SLA.'}
             </p>
           </div>
         )}

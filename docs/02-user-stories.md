@@ -19,6 +19,23 @@ not just `/staff/cabinets`. **B3**'s workflow activity trail is now read from li
 mock). One story added: **F4 — Monitor running workflows** (✅ Done, same DRIFT-05
 authorization caveat as C1/C5). [§15](#15-story-map-summary) counts updated: Done 11 → 12.
 
+**Revised a third time 2026-09-04**, after wiring the frontend to the backend's Workflow
+Module read models (all endpoints confirmed live against the deployed Swagger doc; no
+backend changes). **F1 (team workload) moves from Partial to Done** — `/supervisor/workload`
+and `/supervisor` (Team Overview) now call `GET /tasks/workload` and
+`GET /workflow-instances/team-status-matrix`/`open-items-by-cabinet` instead of walking
+every task page in the browser. **F2 (SLA ageing)** ticks one more box — `/supervisor/bottlenecks`
+now reads `GET /workflow-instances/bottlenecks-ageing` instead of computing ageing from
+`SEED`, with SLA status and workflow status rendered as two separate badges — but stays
+Partial: nothing still calls `notifyUser` on a breach. **C4 (delegation) moves from
+Partial-with-no-UI to a fuller Partial** — `/delegations` now exists (create, list, end;
+"Delegated by you" / "Delegated to you"), leaving only the delegation-arrived visual marker
+and the activation notification. `/supervisor/approvals` also moved onto the purpose-built
+`GET /tasks/approvals` endpoint (with `scope=all`, fixing a real bug where it only showed
+tasks assigned directly to the supervisor, plus a new escalated-tasks tab) and gained
+pagination, error states and a retry, as did `/supervisor/bottlenecks`. [§15](#15-story-map-summary)
+counts updated: Done 12 → 13, Partial 16 → 15.
+
 Each story carries a **build status** so this document doubles as a backlog rather than a
 wish list. Statuses are defined once, here:
 
@@ -567,7 +584,7 @@ and role-pool assignment, and honours active delegations.
 
 ---
 
-### C4 — Delegate my work while I'm away · 🟨 **Partial** (backend only)
+### C4 — Delegate my work while I'm away · 🟨 **Partial**
 
 > **As** David,
 > **I want to** hand my approvals to a colleague for the two weeks I'm on leave,
@@ -579,15 +596,21 @@ workflows, an `isActive` flag, and full CRUD at `GET/POST /delegations` and
 `POST /delegations/:id/end`. `tasks.service` already resolves delegations when listing and
 actioning tasks.
 
-**There is no UI whatsoever.** No page, no service file, no hook.
+**A UI now exists** (`/delegations`, reachable from the Staff and Supervisor nav): create a
+time-bounded delegation to a colleague, optionally scoped to specific cabinets; separate
+"Delegated by you" / "Delegated to you" lists; end an active delegation. Self-delegation is
+rejected client- and server-side. What's still missing is entirely cosmetic/notification —
+nothing on the task itself shows it arrived by delegation, and the delegate isn't told when
+one activates.
 
 **Acceptance criteria**
 - [x] Backend: date-bounded delegation with optional cabinet/workflow scoping
 - [x] Backend: delegates see and can action delegated tasks
 - [x] Backend: `DELEGATION_VIEW_ALL_ROLES` / `DELEGATION_MANAGE_ALL_ROLES` govern oversight
-- [ ] Any UI at all — create, list, end
+- [x] UI to create, list and end a delegation (`/delegations`)
 - [ ] Visual marker on a task showing it arrived by delegation
-- [ ] Notification to the delegate when a delegation activates
+- [ ] Notification to the delegate when a delegation activates (DRIFT-10 — same
+      "nothing calls `notifyUser`" gap as everywhere else)
 
 ---
 
@@ -777,18 +800,29 @@ matrix editor — but it writes to **`SEED.rolesMatrix` in localStorage** via
 
 ---
 
-### F1 — See my team's workload · 🟨 **Partial**
+### F1 — See my team's workload · ✅ **Done** *(was 🟨 Partial)*
 
 > **As** David,
 > **I want to** see how many open items each team member is carrying,
 > **so that** I can rebalance before someone drowns.
 
+**Current state (verified against the Workflow Module API guide): fixed.** The backend
+shipped purpose-built read models — `GET /tasks/workload` (per-member `open`/`overdue`
+against a real `capacity`/`utilizationPercent`) and `GET /workflow-instances/team-status-matrix`
+/ `open-items-by-cabinet` for the Team Overview screen — and the frontend now calls them
+directly instead of walking every page of `/tasks` and rolling counts up in the browser.
+`/supervisor/workload` and `/supervisor` (Team Overview) both moved off the client-side
+aggregation stopgap; a member's row still lazily fetches their actual task list (capped at
+100) only once expanded/clicked, for the reassign action.
+
 **Acceptance criteria**
-- [x] `/supervisor/workload` renders per-person counts from live `/documents` and `/users`
+- [x] `/supervisor/workload` renders per-person counts from a server-side aggregate
+      (`GET /tasks/workload`), not a client-side walk of every task
+- [x] `/supervisor` (Team Overview) renders the member × status matrix and open-items-by-
+      cabinet from their own dedicated endpoints
 - [x] Reassignment via `PATCH /tasks/:id/reassign`, gated by `TASK_REASSIGN_ROLES`
-- [ ] ⚠️ Counts are computed client-side by walking every page of `/documents`
-      (`fetchAllPages`) — up to 50 sequential requests. No aggregation endpoint exists.
-- [ ] ⚠️ Some panels still read `SEED.documents` rather than the API
+- [x] Supervisor omits `departmentId`; the backend resolves it — no department picker in
+      the UI (per the API guide's §4 rule)
 
 ---
 
@@ -815,8 +849,15 @@ notification module, so `sla.warning` and `sla.breach` — both defined in
 - [x] Auto-escalation of overdue tasks
 - [x] Breach resolution when the task completes
 - [ ] 🔴 Anyone is actually notified (DRIFT-10)
-- [ ] `/supervisor/bottlenecks` reads real SLA data rather than computing ageing from
-      `SEED` documents
+- [x] `/supervisor/bottlenecks` reads real SLA data — `GET /workflow-instances/bottlenecks-ageing`
+      (summary + ageing/stage distributions + paginated detail rows) rather than computing
+      ageing from `SEED` documents. `slaStatus` (`healthy | due_soon | breached | paused |
+      not_started`) and `workflowStatus` render as two separate badges, per the API guide's
+      explicit "don't merge these" rule. The staff dashboard's Overdue/SLA tile and the
+      bottleneck banner now also draw on the persisted `GET /sla/breaches` event feed, not
+      ad-hoc `dueAt < now` math — though the guide itself notes the two totals
+      (`bottlenecks-ageing.summary.breachedItems` vs `sla/breaches.pagination.total`) aren't
+      guaranteed to agree, since one is a live calculation and the other a persisted event log
 - [ ] Configurable SLA thresholds per workflow stage rather than one global env var
 
 ---
@@ -1318,13 +1359,13 @@ error paths and workers).
 | C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; routing **fixed**; still **unauthorized** |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
-| F — Oversight & SLA | 2 | 2 | 0 | 0 | Engine real, instance monitor shipped; **nobody is notified** |
+| F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; **nobody is notified** |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | Works today; will not scale |
 | H — Audit & Compliance | 0 | 0 | 2 | 1 | **Entirely mock — the biggest gap** |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 0 | 1 | 2 | 0 | Circulars mock; notifications **plumbed but silent** |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **12** | **16** | **11** | **3** | 42 functional stories |
+| **Total** | **13** | **15** | **11** | **3** | 42 functional stories |
 
 **The honest one-paragraph summary:** the *document* half of this EDMS — capture, filing,
 versioning, checkout, classification, task execution and approval — is genuinely built and
@@ -1351,3 +1392,16 @@ reads. **C1**'s route-to-workflow picker reached the document and upload screens
 workflow activity trail is now live data. The F4 monitor exposes hold/resume/close in the
 UI, which widens the blast radius of the unchanged DRIFT-05 authorization hole: pausing or
 closing any tenant's workflow instance is now a two-click operation for any signed-in user.
+
+**Revised a third time 2026-09-04**, after the frontend was wired to the backend's
+Workflow Module read models (`status-counts`, `team-status-matrix`,
+`open-items-by-cabinet`, `bottlenecks-ageing`, `tasks/approvals`, `tasks/workload`,
+`sla/breaches`, `delegations`) — all confirmed live against the deployed Swagger doc, no
+backend changes. **F1 moves to Done**; **F2** and **C4** both tick further boxes without
+changing status. Done climbs to 13, Partial drops to 15. The client-side `/tasks`
+page-walking stopgap (`useAllTasks` / `fetchAllPages`) is now retired from every
+supervisor screen except the three `/management/*` dashboards, which this pass
+deliberately left alone — the Workflow Module API guide itself scopes Team Performance
+metrics and the Management Dashboard as separate modules (§11), and its own §10 flags
+that several of these read models (including `tasks/stats` and `workflow-instances/stats`,
+which back those dashboards) aren't yet department-scoped for supervisors server-side.

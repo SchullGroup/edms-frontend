@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
+import { useWorkflowInstanceStatusCounts } from '@/apis/hooks/useWorkflowInstances';
+import { useSlaBreaches } from '@/apis/hooks/useSla';
 import { useNotifications, useMarkNotificationRead } from '@/apis/hooks/useNotifications';
 import {
   isUnread,
@@ -76,6 +78,12 @@ export default function StaffDashboard() {
     channel: 'in_app',
   });
   const markRead = useMarkNotificationRead();
+  // Status tiles are file/workflow-instance counts (per the Workflow Module API
+  // guide, §5.2) — a different lens from the task list below. `inProgress`
+  // already includes on_hold; don't add it again.
+  const { data: statusCounts } = useWorkflowInstanceStatusCounts('mine');
+  // Persisted SLA breach events, not ad-hoc `dueAt < now` math.
+  const { data: slaBreaches } = useSlaBreaches({ scope: 'mine', status: 'open', limit: 1 });
 
   if (!currentUser) return null;
 
@@ -85,10 +93,10 @@ export default function StaffDashboard() {
   const mine = tasks;
   const open = mine.filter((t) => t.status !== 'completed');
   const counts: Record<string, number> = {
-    Pending: open.filter((t) => t.status === 'pending').length,
-    'In Progress': open.filter((t) => t.status === 'pending').length, // Same as pending for now
-    Closed: mine.filter((t) => t.status === 'completed').length,
-    Overdue: open.filter((t) => t.dueAt && new Date(t.dueAt) < new Date()).length,
+    Pending: statusCounts?.pending ?? 0,
+    'In Progress': statusCounts?.inProgress ?? 0,
+    Closed: statusCounts?.closed ?? 0,
+    Overdue: slaBreaches?.pagination.total ?? 0,
   };
 
   let list = open.filter((t) => {
@@ -100,9 +108,20 @@ export default function StaffDashboard() {
 
   list.sort(
     (a, b) =>
-      (URG_ORDER[a.workflowInstance?.document?.urgency ? a.workflowInstance.document.urgency.charAt(0).toUpperCase() + a.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) -
-      (URG_ORDER[b.workflowInstance?.document?.urgency ? b.workflowInstance.document.urgency.charAt(0).toUpperCase() + b.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) ||
-      (a.dueAt ? new Date(a.dueAt).getTime() : 9e15) - (b.dueAt ? new Date(b.dueAt).getTime() : 9e15),
+      (URG_ORDER[
+        a.workflowInstance?.document?.urgency
+          ? a.workflowInstance.document.urgency.charAt(0).toUpperCase() +
+            a.workflowInstance.document.urgency.slice(1)
+          : 'Normal'
+      ] || 3) -
+        (URG_ORDER[
+          b.workflowInstance?.document?.urgency
+            ? b.workflowInstance.document.urgency.charAt(0).toUpperCase() +
+              b.workflowInstance.document.urgency.slice(1)
+            : 'Normal'
+        ] || 3) ||
+      (a.dueAt ? new Date(a.dueAt).getTime() : 9e15) -
+        (b.dueAt ? new Date(b.dueAt).getTime() : 9e15),
   );
 
   const tileDefs = [
@@ -136,7 +155,8 @@ export default function StaffDashboard() {
           0,
         ) / closedTasksWithDates.length
       : 0;
-  const avgTurnaround = avgTurnaroundMs > 0 ? (avgTurnaroundMs / 86400000).toFixed(1) + ' days' : '0 days';
+  const avgTurnaround =
+    avgTurnaroundMs > 0 ? (avgTurnaroundMs / 86400000).toFixed(1) + ' days' : '0 days';
 
   const THIRTY_DAYS_MS = 30 * 86400000;
   const volume30d = closedTasks.filter(
@@ -184,60 +204,8 @@ export default function StaffDashboard() {
         ))}
       </div>
 
-      <div className="dash-body">
-        <div className="card">
-          <div className="card-head">
-            <span className="h3">
-              <Icon name="inbox" size={16} /> My Tasks{filter ? ` — ${filter}` : ''}
-            </span>
-            <div className="flex g8">
-              {filter && (
-                <button className="btn btn-ghost btn-sm" onClick={() => setFilter(null)}>
-                  Clear filter
-                </button>
-              )}
-              <button className="btn btn-secondary btn-sm" onClick={() => router.push('/search')}>
-                View all
-              </button>
-            </div>
-          </div>
-          {isTasksError ? (
-            <div style={{ padding: '32px' }}>
-              <ErrorMessage message="Failed to load tasks" retry={refetchTasks} />
-            </div>
-          ) : isTasksLoading ? (
-            <div style={{ padding: '32px' }}>
-              <Spinner text="Loading tasks..." />
-            </div>
-          ) : list.length ? (
-            <div className="rowlist">
-              {list.slice(0, 8).map((t) => (
-                <TaskRow key={t.id} item={t} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              icon="approve"
-              title="You're all caught up"
-              message="No tasks match. Upload a document or search the archive to keep working."
-              action={
-                <div className="flex g8" style={{ justifyContent: 'center' }}>
-                  <button className="btn btn-primary btn-sm" onClick={() => router.push('/upload')}>
-                    Upload a document
-                  </button>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => router.push('/search')}
-                  >
-                    Search
-                  </button>
-                </div>
-              }
-            />
-          )}
-        </div>
-
-        <div className="grid" style={{ gap: '16px' }}>
+      <div className="grid gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div className="card">
             <div className="card-head">
               <span className="h3">
@@ -312,6 +280,58 @@ export default function StaffDashboard() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head">
+            <span className="h3">
+              <Icon name="inbox" size={16} /> My Tasks{filter ? ` — ${filter}` : ''}
+            </span>
+            <div className="flex g8">
+              {filter && (
+                <button className="btn btn-ghost btn-sm" onClick={() => setFilter(null)}>
+                  Clear filter
+                </button>
+              )}
+              <button className="btn btn-secondary btn-sm" onClick={() => router.push('/search')}>
+                View all
+              </button>
+            </div>
+          </div>
+          {isTasksError ? (
+            <div style={{ padding: '32px' }}>
+              <ErrorMessage message="Failed to load tasks" retry={refetchTasks} />
+            </div>
+          ) : isTasksLoading ? (
+            <div style={{ padding: '32px' }}>
+              <Spinner text="Loading tasks..." />
+            </div>
+          ) : list.length ? (
+            <div className="rowlist">
+              {list.slice(0, 8).map((t) => (
+                <TaskRow key={t.id} item={t} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon="approve"
+              title="You're all caught up"
+              message="No tasks match. Upload a document or search the archive to keep working."
+              action={
+                <div className="flex g8" style={{ justifyContent: 'center' }}>
+                  <button className="btn btn-primary btn-sm" onClick={() => router.push('/upload')}>
+                    Upload a document
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => router.push('/search')}
+                  >
+                    Search
+                  </button>
+                </div>
+              }
+            />
+          )}
         </div>
       </div>
     </div>

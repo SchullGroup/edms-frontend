@@ -17,6 +17,39 @@ export const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
+/**
+ * Time-risk state from `bottlenecks-ageing`/`sla/breaches` — deliberately a
+ * separate chip from `StatusBadge` (process state). Never merge the two.
+ */
+export const SlaBadge = ({ status }: { status: string }) => {
+  const label: Record<string, string> = {
+    healthy: 'Healthy',
+    due_soon: 'Due soon',
+    breached: 'Breached',
+    paused: 'Paused',
+    not_started: 'Not started',
+  };
+  const cls: Record<string, string> = {
+    healthy: 'b-status-closed',
+    due_soon: 'b-status-pending',
+    breached: 'b-status-overdue',
+    paused: 'b-status-on-hold',
+    not_started: 'b-status-not-started',
+  };
+  const ico: Record<string, string> = {
+    healthy: 'check',
+    due_soon: 'clock',
+    breached: 'alert',
+    paused: 'circle',
+    not_started: 'circle',
+  };
+  return (
+    <span className={`badge ${cls[status] || 'b-status-not-started'}`} title="SLA status">
+      <Icon name={ico[status] || 'circle'} size={10} /> {label[status] || status}
+    </span>
+  );
+};
+
 export const ConfBadge = ({ level }: { level: string }) => {
   const cls = 'b-conf-' + level.toLowerCase().replace(/\s+/g, '-');
   return (
