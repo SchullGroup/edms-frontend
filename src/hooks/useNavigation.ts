@@ -245,5 +245,16 @@ export const useNavigation = () => {
       .filter((section: any) => section.items.length > 0),
   };
 
+  // Appended for every role rather than repeated in each NAV entry. The Product
+  // Guide is reference material, not role-specific work, and carries no route
+  // rule in routes.config.ts — so every signed-in user can reach it.
+  filteredNav.sections = [
+    ...filteredNav.sections,
+    {
+      label: 'Reference',
+      items: [{ route: '/user-stories', label: 'Product Guide', icon: 'flow' }],
+    },
+  ];
+
   return filteredNav;
 };
