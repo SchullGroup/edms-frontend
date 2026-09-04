@@ -2,6 +2,14 @@
 
 **Status:** Written 2026-08-29. Every row verified against the source.
 
+**Revised 2026-09-04** against `edms-backend` @ `dev` (`b72e0bf`, 83 routes) and
+`EDMS-FRONTEND` @ `dev` (`f02c7b8`). Two findings changed: **document routing is fixed**
+(the two-call create-then-start sequence shipped) and **the notifications module now
+exists** on both sides — but nothing calls `notifyUser`, so no notification is ever
+created. Superseded statements are struck through or marked in place rather than
+deleted. See `01-architecture-and-drift.md` for the full revision table.
+
+
 For each of the six role dashboards this document lists:
 
 - **Every page**, with its line count and exact data source
@@ -743,19 +751,32 @@ module is built.
 | Call | Result today | Fix |
 |---|---|---|
 | `POST /api/v1/auth/logout` | HTML 404, swallowed by `try/catch` | Build it with a refresh-token denylist |
-| `POST /workflow-instances/start` | HTML 404 | **Frontend** — use the two-call sequence |
+| ~~`POST /workflow-instances/start`~~ | ✅ **resolved** | Frontend now uses the two-call sequence |
 | `POST /documents/:id/comments` | HTML 404 | Build the endpoint |
 | `POST /documents/:id/signatures` | HTML 404 | Build the endpoint |
-| `GET /notifications` | HTML 404 | Build the module |
-| `PATCH /notifications/:id/read` | HTML 404 | Build the module |
-| `POST /notifications/mark-all-read` | HTML 404 | Build the module |
-| `POST /notifications` | HTML 404 | Build the module |
+| ~~`GET /notifications`~~ | ✅ **resolved** | Backend module built; frontend rewired |
+| ~~`PATCH /notifications/:id/read`~~ | ✅ **resolved** | — |
+| ~~`POST /notifications/mark-all-read`~~ | ✅ **resolved** | Route is `POST /notifications/read-all`; **fixed on the frontend** |
+| ~~`POST /notifications`~~ | 🔒 **withdrawn** | Deliberately removed — see below |
 
-⚠️ **All eight return an HTML body**, because `app.ts` has no JSON 404 handler — the
-`errorHandler` is a 4-arg error middleware and is skipped on the happy path. Axios then
-fails parsing the HTML, so every one of these surfaces as a confusing parse error rather
-than a clean 404. **Adding a JSON 404 handler is a five-line change that makes all eight
-failures legible.**
+**Revised 2026-09-04.** Five of the original eight are resolved. **Two remain**
+(`comments`, `signatures`), and one was withdrawn rather than fixed.
+
+> 🔒 **Why `POST /notifications` was withdrawn.** The frontend used it to notify a
+> document's owner when someone requested access, passing an arbitrary `userId` and
+> arbitrary message text. Implemented server-side as called, it would let any
+> authenticated user send a notification addressed to anyone, with content of their
+> choosing, rendered with full system credibility — a phishing vector. The client call was
+> removed; the "Request access" button now records the audit action only, and **the owner
+> is not notified** until a server-side endpoint that derives both recipient and text from
+> the document exists (`BACKEND_REQUESTS.md` → BE-1).
+
+⚠️ **The 404s that remain still return an HTML body**, because `app.ts` has no JSON 404
+handler — the `errorHandler` is a 4-arg error middleware and is skipped on the happy path.
+Axios then fails parsing the HTML, so each surfaces as a confusing parse error rather than
+a clean 404. **Adding a JSON 404 handler is a five-line change** and still worth doing:
+it makes every *future* wrong URL legible, which is exactly how the routing bug above hid
+for as long as it did.
 
 ---
 
@@ -767,7 +788,7 @@ failures legible.**
 |---|---|---|---|---|
 | 1 | `npx prisma generate` | Backend | 2 min | Unblocks the build; stops every user being silently narrowed to `department` scope |
 | 2 | Two-call create-then-start in `workflowInstancesService.start()` | Frontend | 1 hr | **Unblocks the entire approval half of the product** |
-| 3 | `requirePermission` on all 23 workflow routes + role checks in definitions/instances services | Backend | 1 day | Any staff user can currently publish/archive workflows and drive any instance |
+| 3 | `requirePermission` on all **25** workflow routes + role checks in definitions/instances services | Backend | 1 day | Any staff user can currently publish/archive workflows and drive any instance |
 | 4 | Fix the 12 login test-account emails to the `tjoel+…` set | Frontend | 10 min | Every autofill button fails today |
 | 5 | JSON 404 handler in `app.ts` | Backend | 5 min | Makes 8 broken calls fail legibly |
 | 6 | Make `usePermissions` parse three-segment strings | Frontend | 30 min | **Must ship before `/auth/me` returns `permissions`**, or every `<Guard>` goes dark at once |

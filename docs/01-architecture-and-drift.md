@@ -2,6 +2,20 @@
 
 **Status:** Written 2026-08-29 against `EDMS-FRONTEND` @ `src/` (15,862 LOC) and `edms-backend` @ `tolu` branch, commit `2c8b901` (11,393 LOC).
 
+**Revised 2026-09-04** against `edms-backend` @ `dev` (`b72e0bf`, **83 routes** over 9 routers)
+and `EDMS-FRONTEND` @ `dev` (`f02c7b8`). Three findings changed and are marked
+**✅ RESOLVED** or **🟨 REVISED** in place rather than deleted, so the register stays
+readable as a history:
+
+| Was | Now | Where |
+|---|---|---|
+| DRIFT-09 — routing 404s | ✅ **Resolved** — two-call sequence shipped and wired | [§8](#8-endpoint-by-endpoint-contract-table) |
+| DRIFT-10 — notifications module missing | 🟨 **Revised** — module and UI both exist; **nothing emits** | [§8](#8-endpoint-by-endpoint-contract-table) |
+| DRIFT-05 — 23 workflow routes unguarded | 🔴 **Unchanged, recounted** — it is **25** routes | [§10](#10-drift-register--ranked-with-owners) |
+
+Route counts throughout this document were 74 at the time of writing; the backend `dev`
+branch has since grown to 83. Counts below have been updated.
+
 This document describes **what actually exists in the code today**, not the target design.
 Where the two systems disagree, the disagreement is named explicitly and marked with a
 severity. Nothing here is aspirational — every claim is anchored to a file and line.
@@ -66,7 +80,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
 │                               │              │                                        │
-│  Sole responsibility:         │              │  74 routes over 8 modules              │
+│  Sole responsibility:         │              │  83 routes over 9 modules              │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
 │  sees it.                     │              │  │ Repository → PrismaClient        │  │
@@ -97,7 +111,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
 | Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 42 pages |
-| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 74 routes, Swagger at `/api-docs` |
+| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 83 routes, Swagger at `/api-docs` |
 | Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |
 
@@ -277,7 +291,7 @@ which layer denies a request is the single most common source of confusion in th
 │ WHERE   middlewares/role.middleware.ts → requirePermission(resource, action)     │
 │ INPUT   req.user.permissions, rebuilt from the DB on every request              │
 │ EFFECT  403 FORBIDDEN, or sets req.permissionScope                              │
-│ TRUST   ✅ REAL — but absent from all 23 workflow routes.                       │
+│ TRUST   ✅ REAL — but absent from all 25 workflow routes.                       │
 └────────────────────────────────────────────────────────────────────────────────┘
 ┌─ LAYER 4 ── Backend row/instance-level filters ────────────────────────────────┐
 │ 4a  RBAC scope    → documents.repository buildDocumentWhere / applyAccessScope  │
@@ -364,7 +378,7 @@ appears to work because **every `/platform` page reads from `SEED`**, never from
 never granted. Because the workflow routes have no `requirePermission` at all
 (DRIFT-05), those actions currently succeed — for the wrong reason.
 
-### 🔴 DRIFT-05 — 23 workflow routes have no permission check
+### 🔴 DRIFT-05 — 25 workflow routes have no permission check
 
 `edms-backend/src/modules/workflows/workflows.router.ts` contains **zero** `requirePermission`
 calls. Tasks, delegations and history compensate with in-service role checks
@@ -564,7 +578,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET/POST /workflows`, `GET/PATCH /workflows/:id` | ✅ | ✅ |
 | `POST /workflows/:id/publish` `/archive` | ✅ | ✅ |
 | `GET /workflow-instances`, `GET /workflow-instances/:id` | ✅ | ✅ |
-| **`POST /workflow-instances/start`** | ❌ backend is `POST /workflow-instances` **then** `POST /:instanceId/start` | 🔴 **DRIFT-09** |
+| ~~`POST /workflow-instances/start`~~ | now the two-call `POST /workflow-instances` **then** `POST /:instanceId/start` | ✅ **DRIFT-09 resolved** |
 | `POST /workflow-instances/:id/hold` `/resume` `/close` | ✅ | ✅ |
 | `GET /tasks`, `GET /tasks/:id` | ✅ | ✅ |
 | `POST /tasks/:id/action` | ✅ | ✅ |
@@ -572,12 +586,23 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | — | `GET/POST /delegations`, `POST /delegations/:id/end` | ⚠️ backend only — **no UI at all** |
 | — | `GET /workflow-history`, `GET /workflow-history/:id` | ⚠️ backend only — **no UI at all** |
 
-**DRIFT-09 detail:** `workflowInstancesService.start()` posts to `/workflow-instances/start`
-with `{workflowId, documentId}`. Inside `workflowInstancesRouter` the registered POST routes
-are `/` and `/:instanceId/start` — a single segment `/start` matches neither, so this 404s.
-Routing a document to a workflow is a **two-call sequence**:
-`POST /workflow-instances` (create) → `POST /workflow-instances/:id/start`.
-**Document routing does not currently work from the UI.**
+**DRIFT-09 — ✅ RESOLVED (verified 2026-09-04).**
+
+*The original finding:* `workflowInstancesService.start()` posted to
+`/workflow-instances/start` with `{workflowId, documentId}`. Inside
+`workflowInstancesRouter` the registered POST routes are `/` and `/:instanceId/start` — a
+single segment `/start` matched neither, so it 404'd. Document routing did not work from
+the UI at all, which made the entire approval half of the product unreachable.
+
+*What shipped:* `workflowInstances.service.ts` now exposes `start(instanceId)` for the
+second call and a `createAndStart(workflowId, documentId)` convenience that performs the
+correct sequence — `POST /workflow-instances` then `POST /workflow-instances/:id/start`.
+It is wired into the UI through `useStartWorkflowInstance` (`useWorkflowInstances.ts:67`),
+consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
+
+> ⚠️ **Two of the compounding problems remain.** The endpoint still performs
+> **no authorization check** (DRIFT-05), and the assignee is still **never notified**
+> (DRIFT-10) — the task lands in the queue silently.
 
 ### Identity
 
@@ -608,19 +633,52 @@ product can grant or revoke a cabinet permission.** The Cabinet Designer at
 
 | Frontend service | Endpoints called | Backend | Status |
 |---|---|---|---|
-| `notifications.service.ts` | `GET /notifications`, `PATCH /notifications/:id/read`, `POST /notifications/mark-all-read`, `POST /notifications` | **module directory is empty** | 🔴 **DRIFT-10** |
 | `audit.service.ts` | none — returns `SEED.audit` after a 400 ms `setTimeout` | **module directory is empty** | 🔴 **DRIFT-11** |
 | `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 |
 | `branding.service.ts` | none — returns `SEED.branding` | no module, no schema | 🔴 |
 | `circulars.service.ts` | none — returns `SEED.circulars` | no module, no schema | 🔴 |
 
-**DRIFT-10 (notifications):** the four endpoints are called for real via `apiClient` and
-will 404. Compounding it, the backend has **no JSON 404 handler** — `app.ts` mounts
-`errorHandler` (a 4-arg error middleware, skipped on the happy path) and nothing else, so
-Express returns its default **HTML** body. The frontend's axios then tries to read
-`.data.data` off an HTML string. The staff dashboard's notification panel and the bell
-badge are permanently broken, and the failure mode is a confusing parse error rather than
-a clean 404.
+**DRIFT-10 (notifications) — 🟨 REVISED (verified 2026-09-04).**
+
+*The original finding:* the frontend called four notification endpoints for real via
+`apiClient` against an **empty backend module directory**, so all four 404'd. The bell
+badge and the staff notification panel were permanently broken.
+
+*What changed on both sides:*
+
+- **Backend** — `src/modules/notifications/` now exists in full (router, controller,
+  service, repository, validation, types, swagger, email worker) and registers **6 routes**:
+  `GET /notifications`, `GET /notifications/unread-count`,
+  `GET /notifications/preferences`, `PUT /notifications/preferences`,
+  `PATCH /notifications/:id/read`, `POST /notifications/read-all`.
+- **Frontend** — rewired to those routes on 2026-09-03 (commit `e07d8c3`). The badge and
+  panel now read the live API instead of `SEED`; `getUnreadCount`, `getPreferences` and
+  `updatePreferences` gained callers for the first time.
+
+*Two things that did not change:*
+
+1. 🔴 **Nothing ever creates a notification.** There are **zero references to `notifyUser`
+   outside `src/modules/notifications/`** — no upload, task assignment, approval,
+   reassignment or SLA breach calls it. The module, the queue, the worker and the entire
+   UI are complete, and the table stays empty. **This is now the whole of DRIFT-10**, and
+   it is a much smaller fix than the original finding implied: the plumbing exists, the
+   calls do not.
+2. 🟠 **Still no JSON 404 handler.** `app.ts` mounts `errorHandler` (a 4-arg error
+   middleware, skipped on the happy path) and nothing else, so Express returns its default
+   **HTML** body and the frontend's axios tries to read `.data.data` off an HTML string.
+   Any future missing route fails as a confusing parse error rather than a clean 404.
+
+> **Naming note.** The frontend had been calling `POST /notifications/mark-all-read`; the
+> backend route is `POST /notifications/read-all`. This was fixed **on the frontend** —
+> `read-all` pairs with `unread-count` and is the better name.
+
+> ⚠️ **Deliberate removal.** `notificationsService.send()` was deleted rather than pointed
+> at a backend endpoint. It POSTed to `/notifications` with an arbitrary `userId` and
+> arbitrary text; served server-side, that would let any authenticated user send a
+> notification addressed to anyone, rendered with full system credibility. The
+> "Request access" button on `/doc/[id]` therefore **no longer notifies the document
+> owner** — it records the audit action only, pending a server-side endpoint
+> (see `BACKEND_REQUESTS.md` → BE-1).
 
 **DRIFT-11 (audit):** more serious than it looks. The backend `audit_entries` table is
 designed as a hash-chained, append-only compliance trail (`prevHash`/`entryHash`,
@@ -832,12 +890,13 @@ suspiciously few documents.
 
 | ID | Severity | Title | Owner | Blast radius |
 |---|---|---|---|---|
-| DRIFT-05 | 🔴 **Critical** | 23 workflow routes have zero permission checks | Backend | Any staff user can publish/archive workflow definitions and drive any instance |
+| DRIFT-05 | 🔴 **Critical** | **25** workflow routes have zero permission checks | Backend | Any staff user can publish/archive workflow definitions and drive any instance |
 | DRIFT-11 | 🔴 **Critical** | Audit trail unimplemented on both sides | Backend | The product's compliance claim is a mock; `audit_entries` is never written |
 | DRIFT-06 | 🔴 **Critical** | Upload target ≠ Textract source bucket | Both | OCR always fails → search index never built → search silently returns nothing |
 | DRIFT-02 | 🔴 High | Frontend route guard is client-side only, no `middleware.ts` | Frontend | Any role forgeable via localStorage; fully exposes all `SEED`-backed portals |
-| DRIFT-09 | 🔴 High | `POST /workflow-instances/start` 404s | Frontend | Document routing to a workflow does not work from the UI |
-| DRIFT-10 | 🔴 High | Notifications module missing; no JSON 404 handler | Backend | Bell badge + notification panel permanently broken with a parse error |
+| ~~DRIFT-09~~ | ✅ **Resolved** | ~~`POST /workflow-instances/start` 404s~~ — two-call sequence shipped 2026-09 | Frontend | Was: document routing did not work from the UI at all |
+| DRIFT-10 | 🔴 High | **Revised** — notifications module and UI now both exist, but **nothing calls `notifyUser`**, so the table is always empty | Backend | Task assignment, SLA warnings and returned work are all silent |
+| DRIFT-10b | 🟠 Med | No JSON 404 handler — Express returns HTML | Backend | Any missing route surfaces as an axios parse error, not a clean 404 |
 | DRIFT-03 | 🔴 High | `resource:action` vs `resource:action:scope` | Both | Latent — detonates the moment `/auth/me` returns `permissions` |
 | DRIFT-01 | 🟠 Med | `POST /auth/logout` missing | Backend | Refresh token stays valid 7 days after "logout"; no revocation |
 | DRIFT-08 | 🟠 Med | `/documents/:id/comments` + `/signatures` 404 | Backend | Two prominent doc-detail actions fail |
@@ -856,12 +915,14 @@ suspiciously few documents.
 
 **Week 1 — stop the bleeding (backend)**
 1. `npx prisma generate` (2 minutes, unblocks the build and un-narrows every scope)
-2. Add `requirePermission` to all 23 workflow routes + role checks in
-   `definitions.service` / `instances.service` (DRIFT-05)
-3. Add a JSON 404 handler to `app.ts` so missing routes fail legibly (DRIFT-10 half)
+2. Add `requirePermission` to all **25** workflow routes + role checks in
+   `definitions.service` / `instances.service` (DRIFT-05) — **still open, now the single
+   most urgent item in either codebase**
+3. Add a JSON 404 handler to `app.ts` so missing routes fail legibly (DRIFT-10b)
 
 **Week 1 — stop the bleeding (frontend)**
-4. Fix `workflowInstancesService.start()` to do the two-call create-then-start (DRIFT-09)
+4. ✅ ~~Fix `workflowInstancesService.start()` to do the two-call create-then-start~~ —
+   **done** (DRIFT-09 resolved)
 5. Fix the login test-account emails to the `tjoel+…` set (DRIFT-12)
 6. Make `usePermissions` parse three-segment strings **before** anyone touches
    `/auth/me` (DRIFT-03)
@@ -870,7 +931,9 @@ suspiciously few documents.
 7. Presigned upload endpoint + async Textract + unconditional search indexing (DRIFT-06)
 8. Build the audit module and call `AuditService.log()` from every mutating service
    (DRIFT-11)
-9. Build the notifications module and wire the SLA worker to it (DRIFT-10)
+9. ~~Build the notifications module~~ — **built.** What remains is to *call* it:
+   `notifyUser` from task assignment, reassignment, rejection and the SLA worker
+   (DRIFT-10). Small change, high value — the UI is already waiting for the data.
 10. `middleware.ts` for server-side route protection (DRIFT-02)
 
 **Week 4+ — close the feature gaps**

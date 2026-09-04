@@ -1,8 +1,17 @@
 # SchullTech EDMS — Documentation
 
-**Written:** 2026-08-29
+**Written:** 2026-08-29 · **Revised:** 2026-09-04
 **Verified against:** `EDMS-FRONTEND` (`src/`, 15,862 LOC, 42 pages) and
 `edms-backend` (branch `tolu`, commit `2c8b901`, 11,393 LOC, 74 routes).
+**Re-verified 2026-09-04 against** `edms-backend` @ `dev` (`b72e0bf`, **83 routes**) and
+`EDMS-FRONTEND` @ `dev` (`f02c7b8`).
+
+> **What changed in the 2026-09-04 revision.** Two findings moved and one was recounted:
+> **document routing is fixed** (the two-call create-then-start sequence shipped and is
+> wired in), **the notifications module now exists** on both sides but nothing ever calls
+> `notifyUser`, and the unguarded workflow routes number **25**, not 23. Superseded text is
+> struck through or marked in place rather than deleted, so each document reads as a
+> history. Doc 01 carries the full revision table.
 
 These five documents describe **what the code actually does today**, not the target design.
 Every claim is anchored to a file and, where useful, a line number. Where the two codebases
@@ -58,13 +67,20 @@ The GOVERNANCE half is a UI over fixtures
 
 | # | Defect | Where | Effect |
 |---|---|---|---|
-| 1 | **Workflow routes have no authorization** | `workflows.router.ts` — 0 of 23 routes call `requirePermission`; `definitions.service` and `instances.service` never read roles | Any `staff` account can publish or archive workflow definitions and drive any instance |
+| 1 | **Workflow routes have no authorization** | `workflows.router.ts` — 0 of **25** routes call `requirePermission`; `definitions.service` and `instances.service` never read roles | Any `staff` account can publish or archive workflow definitions and drive any instance |
 | 2 | **The audit trail has never recorded an event** | `audit.middleware.ts` is a **0-byte file**; zero `auditEntry` references in the backend `src/` | The product's compliance positioning is currently unsupported by the code |
-| 3 | **Document routing calls a URL that doesn't exist** | `workflowInstancesService.start()` posts to `/workflow-instances/start`; the backend needs `POST /workflow-instances` then `POST /:id/start` | Staff can file documents but cannot send any of them for approval |
+| 3 | **Nothing ever creates a notification** | The module, its 6 routes, the queue, the worker and the whole frontend surface exist — but there are **zero references to `notifyUser` outside `src/modules/notifications/`** | Task assignment, returned work and SLA breaches are all silent; the list is permanently empty |
 | 4 | **`effStatus()` is a no-op on real data** | Two divergent copies; `Document` has no due-date field; status compares are capitalized against lowercase values | Every overdue badge, count and ageing bucket reads zero across 8 call sites |
 
-**#3 is roughly one hour of work and unblocks the entire approval half of the product.**
+**#1 is now the most urgent item in either codebase.** Fixing the routing bug (below) made
+this hole reachable from the UI rather than merely present in the API.
+**#3 is much smaller than it was** — the plumbing is built; only the call sites are missing.
 **#4 is roughly two hours and restores every SLA and ageing view.**
+
+> ✅ **Resolved since 2026-08-29.** *"Document routing calls a URL that doesn't exist"* was
+> #3 in this list. `workflowInstances.service.ts` now performs the correct two-call
+> sequence via `createAndStart`, wired in through `useStartWorkflowInstance` at
+> `staff/cabinets/page.tsx:53`. The approval half of the product is reachable.
 
 ### Two more worth knowing before you debug anything
 
