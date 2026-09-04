@@ -20,7 +20,13 @@ export interface NotificationFilters {
 
 export const notificationsService = {
   getAll: async (params?: NotificationFilters): Promise<PaginatedResponse<Notification>> => {
-    const res = await apiClient.get<PaginatedResponse<Notification>>('/notifications', { params });
+    const res = await apiClient.get<PaginatedResponse<Notification>>('/notifications', {
+      // The backend query schema coerces `unreadOnly` from the strings 'true'/'false',
+      // so send it as a string rather than a raw boolean, and omit it when not set.
+      params: params
+        ? { ...params, unreadOnly: params.unreadOnly ? 'true' : undefined }
+        : undefined,
+    });
     return res.data;
   },
 
@@ -41,7 +47,9 @@ export const notificationsService = {
     return res.data.data;
   },
 
-  // POST /notifications/read-all — marks every in-app notification read.
+  // POST /notifications/read-all — marks every in-app notification read. It pairs
+  // with /unread-count; the frontend previously called /mark-all-read, which
+  // matched no route and 404'd silently.
   markAllAsRead: async (): Promise<void> => {
     await apiClient.post('/notifications/read-all');
   },
@@ -110,3 +118,11 @@ export const notificationIcon = (type: string): string => {
   };
   return icons[group] || 'bell';
 };
+
+// NOTE: there is deliberately no `send()` here.
+//
+// The old implementation POSTed to `/notifications` with an arbitrary `userId`,
+// which matched no backend route (silent 404). It should not be restored as-is:
+// letting a client mint a notification addressed to another user is a spoofing
+// vector. The "Request access" flow that used it needs a backend endpoint that
+// derives the actor from the session — see docs/BACKEND_REQUESTS.md.

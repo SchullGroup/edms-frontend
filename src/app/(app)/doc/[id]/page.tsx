@@ -146,7 +146,11 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                 target: doc.id,
                 detail: 'Requested access',
               });
-              addToast('Access request sent', 'info');
+              // The document owner is notified server-side once the
+              // access-request endpoint exists. The client deliberately does
+              // not mint a notification for another user — see
+              // docs/BACKEND_REQUESTS.md (BE-1).
+              addToast('Access request recorded', 'info');
             }}
           >
             Request access
@@ -180,11 +184,22 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const fileMimeType = doc.currentVersion?.mimeType || '';
 
   const highConf = ['restricted', 'confidential'].includes(doc.confidentiality.toLowerCase());
-  const confPolicyList: any[] = Array.isArray(policiesData) ? policiesData : [];
-  const confPolicyItem = confPolicyList.find(
-    (p) => p.key === `confidentiality.${doc.confidentiality.toLowerCase()}`,
+  // policiesService returns { confidentiality: [{ level, desc, watermark, download, print }], … }.
+  // This previously looked for an array of { key: 'confidentiality.<tier>', value: {…} } —
+  // a shape nothing produces — so `find` always missed and every document silently fell
+  // back to "download and print allowed, no watermark", including restricted ones.
+  // Fixture levels are display-cased with spaces ("Top Secret"); the backend
+  // sends snake_case tiers ("top_secret"). Normalise both sides before matching.
+  const normaliseTier = (v: string) => v.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const confTiers: any[] = (policiesData as any)?.confidentiality ?? [];
+  const confPolicyItem = confTiers.find(
+    (p) => normaliseTier(String(p.level)) === normaliseTier(doc.confidentiality),
   );
-  const confPolicy = confPolicyItem?.value || { download: true, print: true, watermark: false };
+  const confPolicy = {
+    download: confPolicyItem?.download ?? true,
+    print: confPolicyItem?.print ?? true,
+    watermark: confPolicyItem?.watermark ?? false,
+  };
   const lockedByOther = doc.isCheckedOut && doc.checkoutLock?.lockedBy !== me.id;
   const lockedByMe = doc.isCheckedOut && doc.checkoutLock?.lockedBy === me.id;
   const checkoutBusy = checkoutDocument.isPending || checkinDocument.isPending;
