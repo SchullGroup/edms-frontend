@@ -6,6 +6,15 @@ import {
 import { CreateWorkflowInstanceRequest } from '@/types/models';
 import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 
+/** Starting, holding, resuming or closing an instance moves the document's
+ *  status and the task queues too, so every view that reads them is stale. */
+const invalidateInstanceViews = (queryClient: ReturnType<typeof useQueryClient>) => {
+  queryClient.invalidateQueries({ queryKey: ['workflowInstances'] });
+  queryClient.invalidateQueries({ queryKey: ['workflowHistory'] });
+  queryClient.invalidateQueries({ queryKey: ['tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['documents'] });
+};
+
 export const useWorkflowInstances = (
   params?: Record<string, any>,
   options?: { enabled?: boolean },
@@ -71,7 +80,7 @@ export const useStartWorkflowInstance = () => {
     mutationFn: ({ workflowId, documentId }: { workflowId: string; documentId: string }) =>
       workflowInstancesService.createAndStart(workflowId, documentId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflowInstances'] });
+      invalidateInstanceViews(queryClient);
     },
   });
 };
@@ -83,7 +92,7 @@ export const useHoldWorkflowInstance = () => {
     // `reason` is accepted for call-site compatibility but the endpoint takes no body.
     mutationFn: ({ id }: { id: string; reason?: string }) => workflowInstancesService.hold(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflowInstances'] });
+      invalidateInstanceViews(queryClient);
     },
   });
 };
@@ -94,7 +103,7 @@ export const useResumeWorkflowInstance = () => {
   return useMutation({
     mutationFn: (id: string) => workflowInstancesService.resume(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflowInstances'] });
+      invalidateInstanceViews(queryClient);
     },
   });
 };
@@ -105,7 +114,7 @@ export const useCloseWorkflowInstance = () => {
   return useMutation({
     mutationFn: (id: string) => workflowInstancesService.close(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workflowInstances'] });
+      invalidateInstanceViews(queryClient);
     },
   });
 };

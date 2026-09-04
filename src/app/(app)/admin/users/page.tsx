@@ -54,12 +54,12 @@ export default function UsersRolesPage() {
   });
   const rawUsers = usersData?.data || [];
 
-  // The role picker in the invite/edit modal is reachable from any tab (the
-  // header button isn't tab-scoped), so keep it enabled once that modal's
-  // been opened even if the admin isn't on the Roles tab — but don't fetch
-  // it just for sitting on Users or Groups & SoD, which never render it.
-  const [modalNeedsRoles, setModalNeedsRoles] = useState(false);
-  const { data: roles } = useRoles({ enabled: tab === 'roles' || modalNeedsRoles });
+  // Only needed for the Roles tab's permission matrix — the invite/edit
+  // modal's own role picker fetches independently (see `RoleSelect` below),
+  // so this doesn't need to switch on for the modal too.
+  const { data: roles, isLoading: isRolesLoading } = useRoles({
+    enabled: tab === 'roles',
+  });
   const setRolePermissions = useSetRolePermissions();
   const createRole = useCreateRole();
 
@@ -71,9 +71,9 @@ export default function UsersRolesPage() {
   const departmentList = useMemo(() => Array.from(departmentIndex.values()), [departmentIndex]);
 
   // Segregation-of-duties controls only render on the Groups & SoD tab.
-  const { data: policiesData } = usePolicies({ enabled: tab === 'groups' });
-  const policies = policiesData as any;
-  const updatePolicyControl = useUpdatePolicyControl();
+  // const { data: policiesData } = usePolicies({ enabled: tab === 'groups' });
+  // const policies = policiesData as any;
+  // const updatePolicyControl = useUpdatePolicyControl();
 
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
@@ -97,7 +97,6 @@ export default function UsersRolesPage() {
   }, [setPageTitle]);
 
   const handleUserModal = (user: any | null) => {
-    setModalNeedsRoles(true);
     const isNew = !user;
     const existingRoleId = user?.userRoles?.[0]?.roleId ?? user?.roles?.[0]?.id ?? '';
     let u = {
@@ -136,18 +135,7 @@ export default function UsersRolesPage() {
           </div>
           <div className="field">
             <label>Role</label>
-            <select
-              className="input capitalize"
-              defaultValue={u.roleId}
-              onChange={(e) => (u.roleId = e.target.value)}
-            >
-              <option value="">Unassigned</option>
-              {roles?.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name.replace('_', ' ')}
-                </option>
-              ))}
-            </select>
+            <RoleSelect initialRoleId={u.roleId} onChange={(roleId) => (u.roleId = roleId)} />
           </div>
           <div className="field">
             <label>Department</label>
@@ -280,7 +268,6 @@ export default function UsersRolesPage() {
   ];
 
   const handleNewRole = () => {
-    setModalNeedsRoles(true);
     const form = { name: '', description: '' };
     openModal({
       title: 'New role',
@@ -399,12 +386,12 @@ export default function UsersRolesPage() {
         >
           Roles & permissions
         </button>
-        <button
+        {/* <button
           className={`tab ${tab === 'groups' ? 'active' : ''}`}
           onClick={() => setTab('groups')}
         >
           Groups & SoD
-        </button>
+        </button> */}
       </div>
 
       {tab === 'users' && (
@@ -525,7 +512,7 @@ export default function UsersRolesPage() {
         </div>
       )}
 
-      {tab === 'groups' && (
+      {/* {tab === 'groups' && (
         <div className="grid cols-2" style={{ alignItems: 'start' }}>
           <div className="card">
             <div className="card-head">
@@ -593,7 +580,53 @@ export default function UsersRolesPage() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </div>
+  );
+}
+
+/**
+ * The invite/edit modal's role picker. Split out into its own component so it
+ * fetches roles itself rather than reading a `roles` value captured by the
+ * surrounding `openModal(...)` call — that value is frozen at the moment the
+ * modal button is clicked, so if the query hadn't resolved yet (e.g. the very
+ * first time the modal is opened on a fresh page load) the `<select>` was
+ * permanently stuck without roles until the modal was closed and reopened.
+ * A real component re-renders on its own once the query settles, so this
+ * can't go stale the same way.
+ *
+ * `key={isLoading ...}` forces a remount once roles arrive, so an edit
+ * modal's `defaultValue` (the user's existing role) gets re-applied against
+ * the now-available `<option>` list instead of quietly falling back to
+ * "Unassigned" because that option didn't exist yet at mount time.
+ */
+function RoleSelect({
+  initialRoleId,
+  onChange,
+}: {
+  initialRoleId: string;
+  onChange: (roleId: string) => void;
+}) {
+  const { data: roles, isLoading } = useRoles();
+
+  return (
+    <select
+      key={isLoading ? 'loading' : 'loaded'}
+      className="input capitalize"
+      defaultValue={initialRoleId}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">Unassigned</option>
+      {isLoading && (
+        <option value="_loading" disabled>
+          Loading roles….
+        </option>
+      )}
+      {roles?.map((r) => (
+        <option key={r.id} value={r.id}>
+          {r.name.replace('_', ' ')}
+        </option>
+      ))}
+    </select>
   );
 }

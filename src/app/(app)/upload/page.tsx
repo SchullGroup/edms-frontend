@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useStore, cabById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
+import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 
 const IDU_GUESSES = [
   {
@@ -45,6 +46,7 @@ const IDU_GUESSES = [
 export default function UploadCapturePage() {
   const router = useRouter();
   const { setPageTitle, addToast } = useUIStore();
+  const { routeDocuments } = useRouteToWorkflow();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [files, setFiles] = useState<
@@ -203,6 +205,13 @@ export default function UploadCapturePage() {
                 >
                   Open document
                 </a>
+                {' · '}
+                <a
+                  onClick={() => file.docId && routeDocuments([{ id: file.docId, title: file.name }])}
+                  style={{ fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Route to workflow
+                </a>
               </div>
             );
           }
@@ -231,7 +240,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
   const [title, setTitle] = useState(file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]/g, ' '));
   const [type, setType] = useState(guess.type);
   const [selCab, setSelCab] = useState(guess.cab || '');
-  const { data: folData } = useCabinetFolders(selCab);
+  const { data: folData, isLoading: foldersLoading } = useCabinetFolders(selCab);
   const folders = folData?.data || [];
   const [selFol, setSelFol] = useState(guess.folder || '');
 
@@ -244,6 +253,13 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
     }
   }, [cabinets, selCab]);
 
+  // The IDU guess carries a sample folder id, so drop it (and any stale pick
+  // from a previous cabinet) once the real folder list for the cabinet arrives.
+  useEffect(() => {
+    if (!selFol || !folders.length) return;
+    if (!folders.find((f: any) => f.id === selFol)) setSelFol('');
+  }, [folders, selFol]);
+
   // Mirror the multipart uploader's chunk-by-chunk progress into the shared
   // files list, same as the old per-call onProgress callback used to.
   useEffect(() => {
@@ -255,7 +271,6 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
 
   const [conf, setConf] = useState('internal');
   const [urg, setUrg] = useState('normal');
-  const [due, setDue] = useState(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10));
   const [showErr, setShowErr] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -274,7 +289,9 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
   ];
 
   const fileDoc = async () => {
-    if (!title.trim()) {
+    // A document must land in a folder — filing straight into a cabinet leaves
+    // it floating at the cabinet root.
+    if (!title.trim() || !selCab || !selFol) {
       setShowErr(true);
       return;
     }
@@ -310,7 +327,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         title: title.trim(),
         documentType: type,
         cabinetId: selCab,
-        folderId: selFol || undefined,
+        folderId: selFol,
         confidentiality: conf,
         urgency: urg,
         fileUrl,
@@ -361,7 +378,9 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         </div>
       )}
 
-      <div className="grid cols-2" style={{ gap: '12px' }}>
+      {/* `.field` carries its own bottom margin, which would stack on top of the
+          grid's row gap — zero it out so row and column spacing stay equal. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start mb-4 [&_.field]:mb-0!">
         <div className="field">
           <label>
             Title <span className="req">*</span>
@@ -388,9 +407,11 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
           </select>
         </div>
         <div className="field">
-          <label>Destination Cabinet</label>
+          <label>
+            Destination Cabinet <span className="req">*</span>
+          </label>
           <select
-            className="input mb2"
+            className="input"
             value={selCab}
             onChange={(e) => {
               setSelCab(e.target.value);
@@ -403,24 +424,35 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
               </option>
             ))}
           </select>
-          <label>Destination Folder (Optional)</label>
-          <select className="input" value={selFol} onChange={(e) => setSelFol(e.target.value)}>
-            <option value="">-- No Folder --</option>
+        </div>
+        <div className="field">
+          <label>
+            Destination Folder <span className="req">*</span>
+          </label>
+          <select
+            className={`input ${showErr && !selFol ? 'invalid' : ''}`}
+            value={selFol}
+            disabled={!selCab || foldersLoading}
+            onChange={(e) => setSelFol(e.target.value)}
+          >
+            <option value="">
+              {foldersLoading ? 'Loading folders…' : '-- Select a folder --'}
+            </option>
             {folders.map((f: any) => (
               <option key={f.id} value={f.id}>
                 {f.name}
               </option>
             ))}
           </select>
-        </div>
-        <div className="field">
-          <label>Due date</label>
-          <input
-            className="input"
-            type="date"
-            value={due}
-            onChange={(e) => setDue(e.target.value)}
-          />
+          {showErr && !selFol ? (
+            <div className="err" style={{ display: 'block' }}>
+              {folders.length || foldersLoading
+                ? 'Choose a folder before filing.'
+                : 'This cabinet has no folders yet — create one before filing here.'}
+            </div>
+          ) : (
+            <div className="help">Documents must be filed into a folder, not a cabinet root.</div>
+          )}
         </div>
         <div className="field">
           <label>

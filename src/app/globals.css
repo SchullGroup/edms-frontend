@@ -85,7 +85,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body {
-  font-family: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-geist), "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: var(--fs-body); color: var(--ink);
   background: var(--surface);
   -webkit-font-smoothing: antialiased;
@@ -414,6 +414,7 @@ input[type="checkbox"] { accent-color: var(--focus); }
 .empty .e-title { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 5px; }
 .skel { background: linear-gradient(90deg, var(--surface) 25%, color-mix(in srgb, var(--border) 55%, var(--surface)) 50%, var(--surface) 75%); background-size: 200% 100%; animation: shimmer 1.3s infinite; border-radius: 7px; }
 @keyframes shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; background-position: -75% 0; } }
 
 /* ---------- Login ---------- */
 .login-wrap { min-height: 100vh; display: grid; grid-template-columns: 1.05fr 1fr; }

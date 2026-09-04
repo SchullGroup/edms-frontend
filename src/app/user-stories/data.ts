@@ -165,7 +165,7 @@ export const SETUP_STEPS: Step[] = [
     detail:
       'Per-cabinet fields — vendor name, invoice number, contract value — so every document is captured consistently and those fields become searchable.',
     status: 'progress',
-    note: 'Available through the API; the designer screen is in progress.',
+    note: 'Fields can now be added and removed in the Cabinet Designer. Capturing the values at upload is still in progress.',
   },
   {
     lane: 2,
@@ -174,7 +174,7 @@ export const SETUP_STEPS: Step[] = [
     title: 'Set cabinet access',
     detail: 'Which teams may view, upload to, or manage each cabinet.',
     status: 'progress',
-    note: 'Available through the API; the management screen is in progress.',
+    note: 'Grants can now be set in the Cabinet Designer. Enforcing them on every read is still in progress.',
   },
   {
     lane: 2,
@@ -337,7 +337,7 @@ export const HANDOFFS: Handoff[] = [
     to: 'Staff & Supervisors',
     title: 'Structure and process',
     status: 'progress',
-    body: 'Cabinets, folders and approval workflows are the frame everyone else works inside. Defining them is what turns EDMS from storage into a process. The capture-field designer and the cabinet-access screen are the two parts still being built.',
+    body: 'Cabinets, folders and approval workflows are the frame everyone else works inside. Defining them is what turns EDMS from storage into a process. The capture-field and cabinet-access editors now live in the Cabinet Designer; capturing field values at upload, and enforcing access on every read, are the parts still being finished.',
   },
   {
     id: '4',
@@ -426,7 +426,7 @@ export const EPICS: Epic[] = [
         statement:
           'As Bola, I want to define that the Invoices cabinet requires “Vendor Name”, “Invoice Number” and “Contract Value”, so that every invoice is captured consistently and those fields become searchable.',
         status: 'progress',
-        note: 'Available through the API; the designer screen is in progress.',
+        note: 'The Cabinet Designer can now add and remove a cabinet’s fields. Capturing the values on the upload screen is still in progress.',
       },
     ],
   },
@@ -556,7 +556,7 @@ export const EPICS: Epic[] = [
         statement:
           'As Bola, I want to give the Legal team view access to the Contracts cabinet and upload access to nobody else, so that need-to-know is enforced by structure, not by trust.',
         status: 'progress',
-        note: 'Available through the API; the management screen is in progress.',
+        note: 'Grants can now be viewed, added and revoked from the Cabinet Designer. Enforcing them on every read path is still in progress.',
       },
       {
         id: 'E3',
@@ -578,7 +578,7 @@ export const EPICS: Epic[] = [
   {
     letter: 'F',
     name: 'Oversight & service levels',
-    verdict: 'Detection works; alerting is in progress',
+    verdict: 'Workload, reassignment and the workflow monitor work; deadline alerting is in progress',
     stories: [
       {
         id: 'F1',
@@ -600,6 +600,13 @@ export const EPICS: Epic[] = [
         title: 'Reassign work',
         statement:
           'As David, I want to move a task from one person to another with a reason, so that absence or overload doesn’t stall a document.',
+        status: 'available',
+      },
+      {
+        id: 'F4',
+        title: 'Monitor running workflows',
+        statement:
+          'As David or Bola, I want one screen listing every workflow that is running, with its current stage, and the ability to pause or close one, so that a stalled document is something I can see and act on rather than discover when someone chases it.',
         status: 'available',
       },
     ],

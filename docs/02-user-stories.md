@@ -8,6 +8,17 @@
 [§15](#15-story-map-summary) were updated to match. Old statuses are kept inline as
 *(was …)* so the backlog reads as a history rather than a snapshot.
 
+**Revised again 2026-09-04** after `feature/management` merged into `EDMS-FRONTEND` @
+`dev`. Frontend-only changes — no backend moved. **A4** and **E2** lost their
+*(backend only)* qualifier: the Cabinet Designer now has a metadata-field editor and a
+cabinet-access grant editor, both on live endpoints (both stories stay 🟨 Partial — the
+remaining gaps are the capture form and read-path enforcement respectively). **C1**'s
+route-to-workflow picker now also appears on the document screen and the upload screen,
+not just `/staff/cabinets`. **B3**'s workflow activity trail is now read from live
+`GET /workflow-history` rather than `SEED.audit` (the tamper-evident *audit* log is still
+mock). One story added: **F4 — Monitor running workflows** (✅ Done, same DRIFT-05
+authorization caveat as C1/C5). [§15](#15-story-map-summary) counts updated: Done 11 → 12.
+
 Each story carries a **build status** so this document doubles as a backlog rather than a
 wish list. Statuses are defined once, here:
 
@@ -311,7 +322,7 @@ the upload form. The frontend's confidence badges are fixtures.
 
 ---
 
-### A4 — Define custom metadata per cabinet · 🟨 **Partial** (backend only)
+### A4 — Define custom metadata per cabinet · 🟨 **Partial**
 
 > **As** Bola,
 > **I want to** define that the Invoices cabinet requires "Vendor Name", "Invoice Number"
@@ -323,14 +334,21 @@ the upload form. The frontend's confidence badges are fixtures.
 order, with full CRUD at `POST/PATCH/DELETE /cabinets/:id/metadata-fields`. Values are
 type-validated and normalised on write (`normalizeMetadataValue`).
 
-**There is no UI.** The Cabinet Designer at `/admin/cabinets` does not expose metadata
-fields at all.
+**The Cabinet Designer now has a metadata-schema panel** (`/admin/cabinets`, since the
+`feature/management` merge). It lists a cabinet's fields and adds and removes them against
+the live `POST /cabinets/:id/metadata-fields` and
+`DELETE /cabinets/:cabinetId/metadata-fields/:fieldId`. What is still missing is
+**editing/reordering an existing field** (`PATCH .../metadata-fields/:fieldId` exists but
+no screen calls it) and, more importantly, **anything that captures the values**: neither
+the upload form nor the document-detail screen renders a cabinet's fields, so a cabinet
+with required metadata is still filed incomplete every time.
 
 **Acceptance criteria**
 - [x] Backend: fields definable per cabinet with all five types
 - [x] Backend: values validated against the field type on write
 - [x] Backend: required-field enforcement on update
-- [ ] Admin UI to add/edit/reorder/delete fields
+- [x] Admin UI to add and delete fields (`/admin/cabinets` metadata panel)
+- [ ] Admin UI to edit and reorder an existing field (`PATCH` endpoint is unused)
 - [ ] Upload form renders the target cabinet's fields
 - [ ] Document detail renders and edits them
 - [ ] ⚠️ Backend bug: sending all-null values to clear metadata silently no-ops
@@ -405,9 +423,10 @@ a BullMQ job that is only enqueued from the **OCR success path**, and OCR always
 > workflow position and its activity,
 > **so that** I don't have to assemble the picture from four places.
 
-**Current state:** `/doc/[id]` is the most complete screen in the product — 776 lines,
-wired to eight different hooks. Preview, metadata, versions, workflow state, comments,
-signatures, actions.
+**Current state:** `/doc/[id]` is the most complete screen in the product — wired to
+~ten hooks. Preview, metadata, versions, workflow state, comments, signatures, actions,
+and — since the `feature/management` merge — a workflow **stage rail** and an **activity
+trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPanel`).
 
 **Acceptance criteria**
 - [x] Document loads from `GET /documents/:id`
@@ -423,9 +442,13 @@ signatures, actions.
       normalised too — fixtures say `Top Secret`, the backend sends `top_secret`.
 - [x] Checkout / check-in from this screen
 - [x] Edit title, type, folder, confidentiality, urgency, status
+- [x] Workflow stage rail + activity trail from live `GET /workflow-history` (since the
+      `feature/management` merge)
 - [ ] 🔴 **Comments 404.** `POST /documents/:id/comments` does not exist (DRIFT-08).
 - [ ] 🔴 **Signatures 404.** `POST /documents/:id/signatures` does not exist (DRIFT-08).
-- [ ] 🔴 **The activity timeline is fake** — it reads `SEED.audit` (DRIFT-11).
+- [ ] 🔴 **The tamper-evident audit log is still fake** — `useCreateAuditLog` resolves to
+      nothing and any audit-event view reads `SEED.audit` (DRIFT-11). Only the *workflow*
+      history above is real; document views, edits and downloads are still unrecorded.
 - [ ] ⚠️ **There is no download or preview endpoint.** The backend has no route that
       serves file bytes or issues a presigned GET. The preview pane renders a placeholder.
 - [ ] ⚠️ The file is `// @ts-nocheck` — type safety is off for the whole page.
@@ -474,9 +497,10 @@ filing cabinet, not a workflow system.
 **Current state (verified 2026-09-04): fixed.** `workflowInstances.service.ts` exposes
 `createAndStart(workflowId, documentId)`, which performs the backend's real two-call
 contract — `POST /workflow-instances` to create, then `POST /workflow-instances/:id/start`
-to begin execution. It reaches the UI through `useStartWorkflowInstance`
-(`useWorkflowInstances.ts:67`), consumed at `staff/cabinets/page.tsx:53`. DRIFT-09 is
-resolved.
+to begin execution. Since the `feature/management` merge this is a shared
+`useRouteToWorkflow` hook, and the "Route to workflow" picker (filtered to `published`
+definitions) now appears on **three** surfaces — `/staff/cabinets`, the document screen
+`/doc/[id]`, and `/upload` once a file is filed. DRIFT-09 is resolved.
 
 *Previously:* the UI posted to a single-segment `POST /workflow-instances/start` that
 matched no backend route, so routing a document 404'd. This was the highest
@@ -489,8 +513,8 @@ built and unreachable.
       stage's SLA hours, and writes a `WorkflowHistory` row
 - [x] Backend: role-pool assignment supported (`assignedRoleId`) as well as direct assignment
 - [x] ✅ Frontend calls the correct two-step sequence
-- [ ] Workflow picker on the **document detail** screen, filtered to `published` definitions
-      — routing is currently reachable from `/staff/cabinets` only
+- [x] ✅ Workflow picker (filtered to `published`) on `/staff/cabinets`, `/doc/[id]` and
+      `/upload`, via the shared `useRouteToWorkflow` hook
 - [ ] 🔴 ⚠️ **No authorization on any of this.** `requirePermission` is absent from all **25**
       workflow routes, and neither `definitions.service` nor `instances.service` checks
       roles. Any authenticated user can start, hold, resume or close any instance
@@ -678,7 +702,7 @@ and search. The design is sound.
 
 ---
 
-### E2 — Grant cabinet-level access · 🟨 **Partial** (backend only)
+### E2 — Grant cabinet-level access · 🟨 **Partial**
 
 > **As** Bola,
 > **I want to** give the Legal team view access to the Contracts cabinet and upload access
@@ -690,19 +714,21 @@ with a six-level permission hierarchy (`view < upload < edit < route < export < 
 Full CRUD exists at `GET/POST /cabinets/:id/access` and
 `DELETE /cabinets/:id/access/:grantId`.
 
-**Two problems:**
+**The Cabinet Designer now has an access-grants panel** (`/admin/cabinets`, since the
+`feature/management` merge) — it lists a cabinet's grants and adds and revokes them
+(role or individual user, with the permission level) on the live endpoints. The
+outstanding problem is the one that always mattered:
 
-1. **No UI exists to manage grants.** The model is unreachable from the product.
-2. **Grants are not enforced on reads.** `requireCabinetAccess` appears only on write
-   routes. Cabinet listing, cabinet detail, document listing, document detail and search
-   never consult the table. A user with `cabinet:view:global` sees everything.
+- **Grants are not enforced on reads.** `requireCabinetAccess` appears only on write
+  routes. Cabinet listing, cabinet detail, document listing, document detail and search
+  never consult the table. A user with `cabinet:view:global` sees everything. Backend fix.
 
 **Acceptance criteria**
 - [x] Backend: role and user grants with a permission hierarchy
 - [x] Backend: `client_admin` bypasses grants by design
 - [x] Backend: enforced on document upload, edit, delete and routing
+- [x] Admin UI to view, grant and revoke (`/admin/cabinets` access panel)
 - [ ] 🔴 Enforced on **read** paths — the whole point of the model
-- [ ] Admin UI to view, grant and revoke
 - [ ] "Who can see this cabinet?" view for auditors (`cabinet_access:view` is already
       granted to `internal_auditor` with no endpoint to use it)
 
@@ -807,6 +833,41 @@ notification module, so `sla.warning` and `sla.breach` — both defined in
 - [x] Writes a history row recording the reassignment
 - [x] UI at `/supervisor/workload`
 - [ ] ⚠️ No notification to either the old or new assignee
+
+---
+
+### F4 — Monitor running workflows · ✅ **Done** *(new — shipped in `feature/management`)*
+
+> **As** David (Supervisor) or Bola (Client Admin),
+> **I want** one screen listing every workflow instance that is running, with its current
+> stage and how long it has been there, and the ability to pause or close one,
+> **so that** a stalled document is something I can see and act on rather than discover
+> when someone chases it.
+
+**Why this matters:** C1–C3 route and action individual tasks, but until now nothing gave
+an operator the instance-level view — which documents are mid-workflow, where each one is
+sitting, and which have stalled.
+
+**Flow as built** (`/supervisor/instances`, re-exported at `/admin/workflows/instances`;
+`WorkflowInstanceMonitor` / `WorkflowInstanceDetail` / `WorkflowStageProgress` /
+`WorkflowHistoryTimeline`):
+1. A server-paginated table of instances (`GET /workflow-instances?page=&limit=20&status=&workflowDefinitionId=`),
+   filterable by status and by workflow definition.
+2. Clicking a row opens a drawer: `GET /workflow-instances/:id` for the stage rail and
+   `GET /workflow-history?workflowInstanceId=&scope=all&order=desc` for the activity trail.
+3. Hold / resume / close act on `POST /workflow-instances/:id/hold | resume | close`.
+
+**Acceptance criteria**
+- [x] Instance list with status + definition filters, server-paginated
+- [x] Per-instance stage rail and activity trail from live endpoints
+- [x] Hold, resume and close, wired to the real lifecycle routes
+- [x] Skeleton loading state (`SkeletonTable`)
+- [ ] 🔴 ⚠️ **Same DRIFT-05 hole as C1/C5** — the workflow routes have no authorization, so
+      any authenticated user can hold, resume or close any instance. This screen makes the
+      lifecycle actions a two-click operation in the UI.
+- [ ] ⚠️ Hold/resume/close are not audit-logged (`useCreateAuditLog` is a no-op, DRIFT-11)
+- [ ] No error state — a failed instance fetch shows nothing rather than a retry
+- [ ] SLA / ageing indicators per instance (the list shows status, not time-in-stage)
 
 ---
 
@@ -1257,13 +1318,13 @@ error paths and workers).
 | C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; routing **fixed**; still **unauthorized** |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
-| F — Oversight & SLA | 1 | 2 | 0 | 0 | Engine real; **nobody is notified** |
+| F — Oversight & SLA | 2 | 2 | 0 | 0 | Engine real, instance monitor shipped; **nobody is notified** |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | Works today; will not scale |
 | H — Audit & Compliance | 0 | 0 | 2 | 1 | **Entirely mock — the biggest gap** |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 0 | 1 | 2 | 0 | Circulars mock; notifications **plumbed but silent** |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **11** | **16** | **11** | **3** | 41 functional stories |
+| **Total** | **12** | **16** | **11** | **3** | 42 functional stories |
 
 **The honest one-paragraph summary:** the *document* half of this EDMS — capture, filing,
 versioning, checkout, classification, task execution and approval — is genuinely built and
@@ -1280,3 +1341,13 @@ endpoints and the whole frontend surface now exist, but nothing calls `notifyUse
 list is correctly and permanently empty. Neither of the two cross-cutting defects above
 has changed, and fixing C1 made the authorization hole *reachable from the UI* rather than
 merely present in the API.
+
+**Revised again 2026-09-04**, after `feature/management` merged into `dev`. Frontend only —
+no backend moved, so the two cross-cutting defects still stand. **F4 (monitor running
+workflows) is new and Done**, bringing the Done total to 12. **A4** and **E2** gained
+admin UI (metadata-field editor, cabinet-access editor) and lost their *(backend only)*
+tag, though both stay Partial — A4 still captures no values and E2 still isn't enforced on
+reads. **C1**'s route-to-workflow picker reached the document and upload screens. **B3**'s
+workflow activity trail is now live data. The F4 monitor exposes hold/resume/close in the
+UI, which widens the blast radius of the unchanged DRIFT-05 authorization hole: pausing or
+closing any tenant's workflow instance is now a two-click operation for any signed-in user.
