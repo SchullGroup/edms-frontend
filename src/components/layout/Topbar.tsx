@@ -2,15 +2,21 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, userById } from '@/store/useStore';
+import { useStore } from '@/store/useStore';
 import { useNavigation } from '@/hooks/useNavigation';
 import { Icon } from '@/components/ui/Icons';
 import { useUIStore } from '@/store/useUIStore';
 import {
-  useMarkAllNotificationsRead,
   useNotifications,
   useUnreadNotificationCount,
+  useMarkNotificationRead,
+  useMarkAllNotificationsRead,
 } from '@/apis/hooks/useNotifications';
+import {
+  isUnread,
+  notificationHref,
+  notificationMessage,
+} from '@/apis/services/notifications.service';
 
 const QUICK_ACTION: Record<string, { label: string; icon: string; go: string }> = {
   staff: { label: 'Upload document', icon: 'upload', go: '/upload' },
@@ -24,11 +30,19 @@ const QUICK_ACTION: Record<string, { label: string; icon: string; go: string }> 
 export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav: () => void }) => {
   const router = useRouter();
   const { currentUser, prefs, setPrefs } = useStore();
-  const { addToast } = useUIStore();
   const nav = useNavigation();
   const [notifOpen, setNotifOpen] = useState(false);
   const me = currentUser;
   const notifRef = useRef<HTMLDivElement>(null);
+
+  const { data: unreadCount = 0 } = useUnreadNotificationCount({ enabled: !!me });
+  // Only fetched while the menu is open — the badge alone runs off the count endpoint.
+  const { data: notifData } = useNotifications(
+    { limit: 6, channel: 'in_app' },
+    { enabled: notifOpen },
+  );
+  const markRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -63,23 +77,10 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
     month: 'short',
   });
 
-  // Live from the API. This used to be derived from the seeded store, so the
-  // badge never reflected real notifications.
-  const { data: unreadCount = 0 } = useUnreadNotificationCount();
-  const { data: notifPage } = useNotifications({ limit: 6 });
-  const myNotifs = notifPage?.data ?? [];
+  const myNotifs = notifData?.data || [];
 
   const toggleTheme = () => {
     setPrefs({ ...prefs, theme: prefs.theme === 'light' ? 'dark' : 'light' });
-  };
-
-  const markAllNotificationsRead = useMarkAllNotificationsRead();
-
-  const markAllRead = () => {
-    markAllNotificationsRead.mutate(undefined, {
-      onSuccess: () => addToast('All notifications marked as read', 'info'),
-      onError: () => addToast('Could not mark notifications as read', 'error'),
-    });
   };
 
   return (
@@ -127,7 +128,11 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
               <span className="menu-head" style={{ padding: 0 }}>
                 Notifications
               </span>
-              <button className="btn btn-ghost btn-sm" onClick={markAllRead}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => markAllRead.mutate()}
+                disabled={markAllRead.isPending}
+              >
                 Mark all read
               </button>
             </div>
@@ -135,15 +140,16 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
               myNotifs.map((n) => (
                 <div
                   key={n.id}
-                  className={`notif-item ${n.readAt ? 'read' : ''}`}
+                  className={`notif-item ${isUnread(n) ? '' : 'read'}`}
                   onClick={() => {
                     setNotifOpen(false);
-                    router.push(n.payload?.actionUrl || '/notifications');
+                    if (isUnread(n)) markRead.mutate(n.id);
+                    router.push(notificationHref(n) || '/notifications');
                   }}
                 >
                   <span className="dot"></span>
                   <div>
-                    <div className="msg">{n.payload?.message ?? n.payload?.title ?? ''}</div>
+                    <div className="msg">{notificationMessage(n)}</div>
                     <div className="caption mt8">{new Date(n.createdAt).toLocaleDateString()}</div>
                   </div>
                 </div>

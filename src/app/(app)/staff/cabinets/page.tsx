@@ -5,8 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { effStatus, cabById, userById } from '@/store/useStore';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useDocuments } from '@/apis/hooks/useDocuments';
-import { useWorkflows } from '@/apis/hooks/useWorkflows';
-import { useStartWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
+import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { documentsService } from '@/apis/services/documents.service';
 import { useQueryClient } from '@tanstack/react-query';
@@ -16,6 +15,7 @@ import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
 import { Table, Column } from '@/components/ui/Table';
+import { Skeleton, SkeletonTable, SkeletonTreeRows } from '@/components/common/Skeleton';
 
 export default function CabinetBrowserPage() {
   const router = useRouter();
@@ -36,10 +36,10 @@ export default function CabinetBrowserPage() {
     setPageTitle('Cabinet Browser');
   }, [setPageTitle]);
 
-  const { data: cabinetsData } = useCabinets();
+  const { data: cabinetsData, isLoading: isLoadingCabinets } = useCabinets();
   const cabinets = cabinetsData?.data || [];
 
-  const { data: documentsData } = useDocuments({
+  const { data: documentsData, isLoading: isLoadingDocs } = useDocuments({
     cabinetId: activeCab || undefined,
     folderId: activeFolder || undefined,
   });
@@ -48,9 +48,7 @@ export default function CabinetBrowserPage() {
   const { data: activeCabFoldersData } = useCabinetFolders(activeCab || undefined);
   const activeCabFolders = activeCabFoldersData?.data || [];
 
-  const { data: workflowsData } = useWorkflows();
-  const workflows = workflowsData?.data || [];
-  const { mutateAsync: startWorkflow } = useStartWorkflowInstance();
+  const { routeDocuments } = useRouteToWorkflow();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -131,59 +129,11 @@ export default function CabinetBrowserPage() {
     });
   };
 
-  const handleRouteModal = () => {
-    let selValue = workflows.length > 0 ? workflows[0].id : '';
-    openModal({
-      title: `Route ${selected.length} document(s)`,
-      body: (
-        <div className="field">
-          <label>Select Workflow</label>
-          <select
-            className="input"
-            onChange={(e) => (selValue = e.target.value)}
-            defaultValue={selValue}
-          >
-            {workflows.map((w: any) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-          {workflows.length === 0 && (
-            <div className="help text-error mt4">
-              No workflows available. Please create one first.
-            </div>
-          )}
-        </div>
-      ),
-      actions: [
-        { label: 'Cancel' },
-        {
-          label: 'Route',
-          kind: 'btn-primary',
-          disabled: workflows.length === 0,
-          onClick: () => {
-            if (!selValue) return;
-            setIsSubmitting(true);
-            (async () => {
-              try {
-                await Promise.all(
-                  selected.map((d) => startWorkflow({ workflowId: selValue, documentId: d.id })),
-                );
-                addToast(`${selected.length} document(s) routed to workflow`, 'success');
-                setSelected([]);
-                closeModal();
-              } catch (err: any) {
-                addToast(err.message || 'Failed to route documents', 'error');
-              } finally {
-                setIsSubmitting(false);
-              }
-            })();
-          },
-        },
-      ],
-    });
-  };
+  const handleRouteModal = () =>
+    routeDocuments(
+      selected.map((d) => ({ id: d.id, title: d.title })),
+      { onSuccess: () => setSelected([]) },
+    );
 
   const cols: Column<any>[] = [
     {
@@ -212,6 +162,10 @@ export default function CabinetBrowserPage() {
       render: (d) => <span>{new Date(d.createdAt).toLocaleDateString('en-GB')}</span>,
     },
   ];
+
+  // This page previously had no loading state at all — the tree and table
+  // simply rendered empty until the fetch resolved.
+  if (isLoadingCabinets) return <CabinetBrowserSkeleton />;
 
   return (
     <div>
@@ -287,7 +241,7 @@ export default function CabinetBrowserPage() {
         </div>
 
         {/* List Card */}
-        <div>
+        <div className="min-w-0">
           <div className="flex jcb aic mb8" style={{ gap: '10px', flexWrap: 'wrap' }}>
             <div className="crumbs">
               <a
@@ -370,7 +324,25 @@ export default function CabinetBrowserPage() {
             </div>
           )}
 
-          {!docs.length ? (
+          {isLoadingDocs ? (
+            <div className="card">
+              {view === 'grid' ? (
+                <div className="doc-grid">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="doc-card" style={{ cursor: 'default' }} aria-hidden="true">
+                      <Skeleton height={70} radius={10} style={{ width: '100%', marginBottom: '11px' }} />
+                      <Skeleton height={12} width="80%" style={{ marginBottom: '7px' }} />
+                      <Skeleton height={16} width="45%" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <SkeletonTable
+                  columns={['', 'Title', 'Type', 'Status', 'Confidentiality', 'Urgency', 'Uploaded by', 'Created']}
+                />
+              )}
+            </div>
+          ) : !docs.length ? (
             <div className="card">
               <div className="empty">
                 <Icon name="folder" size={32} />
@@ -418,6 +390,36 @@ export default function CabinetBrowserPage() {
               />
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Mirrors the real `.cab-layout` shell — tree sidebar + document table. */
+function CabinetBrowserSkeleton() {
+  return (
+    <div>
+      <div className="page-head">
+        <div>
+          <div className="page-title">Cabinet Browser</div>
+          <div className="page-sub">
+            Navigate cabinets and folders; select rows for bulk actions.
+          </div>
+        </div>
+      </div>
+
+      <div className="cab-layout">
+        <div className="card tree">
+          <SkeletonTreeRows rows={7} />
+        </div>
+
+        <div className="min-w-0">
+          <div className="card">
+            <SkeletonTable
+              columns={['', 'Title', 'Type', 'Status', 'Confidentiality', 'Urgency', 'Uploaded by', 'Created']}
+            />
+          </div>
         </div>
       </div>
     </div>

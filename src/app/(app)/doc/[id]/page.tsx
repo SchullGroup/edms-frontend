@@ -18,6 +18,7 @@ import { usePolicies } from '@/apis/hooks/usePolicies';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useTaskAction } from '@/apis/hooks/useTasks';
 import { useWorkflowInstances, useWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
+import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, UrgBadge, ConfBadge } from '@/components/ui/Badges';
 import { fmtDateTime, fmtDate } from '@/utils/helpers';
@@ -25,6 +26,8 @@ import { DocumentViewerPanel } from '@/components/documents/DocumentViewerPanel'
 import { DocumentDetailsPanel } from '@/components/documents/DocumentDetailsPanel';
 import { WorkflowActivityPanel } from '@/components/workflowInstances/WorkflowActivityPanel';
 import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/components/documents/types';
+import type { WorkflowStageAction } from '@/types/models';
+import { Skeleton, SkeletonText } from '@/components/common/Skeleton';
 
 export default function DocumentDetail({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -46,6 +49,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const taskAction = useTaskAction();
   const checkoutDocument = useCheckoutDocument();
   const checkinDocument = useCheckinDocument();
+  const { routeDocuments } = useRouteToWorkflow();
 
   const [mode, setMode] = useState<'view' | 'redact'>('view');
   const [previewRelease, setPreviewRelease] = useState(false);
@@ -75,10 +79,23 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   // the instance id; the single-instance GET is what actually embeds `tasks[]`
   // and the stage definitions (verified against the live backend — the list
   // response doesn't carry either).
-  const { data: instancesData } = useWorkflowInstances({ documentId: doc?.id }, { enabled: !!doc?.id });
-  const instanceSummary = instancesData?.data?.[0];
+  const { data: instancesData, isLoading: isLoadingInstances } = useWorkflowInstances(
+    { documentId: doc?.id },
+    { enabled: !!doc?.id },
+  );
+  // A document can be routed more than once, so the list isn't a single row.
+  // The live instance is the one that matters; fall back to the most recent
+  // closed one so a finished document still shows its trail.
+  const orderedInstances = [...(instancesData?.data || [])].sort(
+    (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+  );
+  const instanceSummary =
+    orderedInstances.find((i) => i.status !== 'closed') || orderedInstances[0];
   const { data: workflowInstance } = useWorkflowInstance(instanceSummary?.id);
   const currentTask = workflowInstance?.tasks?.find((t) => t.status === 'pending');
+  // Only offer routing once we know there is nothing running — otherwise the
+  // CTA flashes on every load before the instance list resolves.
+  const hasNoWorkflow = !isLoadingInstances && !instanceSummary;
 
   const { data: activeCabFoldersData } = useCabinetFolders(doc?.cabinetId);
   const activeCabFolders = activeCabFoldersData?.data || [];
@@ -92,13 +109,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   }, [doc?.title, setPageTitle]);
 
   if (isLoading || isLoadingCabs || isLoadingUsers || isLoadingPolicies) {
-    return (
-      <div className="card" style={{ padding: '60px', textAlign: 'center' }}>
-        <div className="h3" style={{ color: 'var(--text-soft)' }}>
-          Loading document...
-        </div>
-      </div>
-    );
+    return <DocumentDetailSkeleton />;
   }
 
   if (!doc) {
@@ -124,7 +135,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <div className="h3 mt16 mb8">Restricted document</div>
           <p className="caption mb16" style={{ maxWidth: '400px', margin: '0 auto 16px' }}>
             “{doc.title}” is classified {doc.confidentiality} and access is limited to named
-            individuals. You can request access — the owner and audit log are notified.
+            individuals. You can request access — the request is written to the audit log for the
+            owner to action.
           </p>
           <button
             className="btn btn-primary"
@@ -158,7 +170,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     (s) => s.id === workflowInstance?.currentStage,
   );
   const stage = stageDef ? { name: stageDef.name || stageDef.id } : null;
-  const currentStageActorName = currentTask?.assignee?.name || currentTask?.assignedRole?.name || 'Unassigned';
+  const currentStageActorName =
+    currentTask?.assignee?.name || currentTask?.assignedRole?.name || 'Unassigned';
 
   const rawFileKey = doc.currentVersion?.fileKey;
   // The API now returns a ready-to-use pre-signed URL on the current version —
@@ -204,42 +217,80 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           : null;
   const canAct = !closed && !lockedByOther && !!currentTask && isMine && mode === 'view';
 
+  // What the assignee may do here is whatever the stage definition allows. The
+  // approve/return pair is only a fallback for when the definition didn't come
+  // back with the instance, so the strip is never empty for a live task.
+  const allowedActions: WorkflowStageAction[] = stageDef?.actions?.length
+    ? stageDef.actions
+    : ['approve', 'request_changes'];
+
+  // Every stage action the API accepts is emitted from here, gated by what the
+  // stage's `actions` list actually allows — `request_changes` (send the file
+  // back a stage) and `reject` (terminate the workflow) are deliberately
+  // separate, where they used to be conflated behind one "Reject" button.
+  const runAction = (
+    actionReq: Parameters<typeof taskAction.mutate>[0]['actionReq'],
+    audit: { action: string; detail: string },
+    toast: { message: string; kind: 'success' | 'warning' | 'error' },
+  ) => {
+    if (!currentTask) return;
+    taskAction.mutate(
+      { id: currentTask.id, actionReq },
+      {
+        onSuccess: () => {
+          createAuditLog.mutate({ action: audit.action, target: doc.id, detail: audit.detail });
+          addToast(toast.message, toast.kind);
+        },
+        onError: (err: any) => {
+          addToast(err?.response?.data?.message || 'Action failed', 'error');
+        },
+      },
+    );
+  };
+
+  const stageLabel = stage ? stage.name : 'Current stage';
+
+  const actReview = () => {
+    if (!currentTask) return;
+    openConfirm({
+      title: 'Mark this stage reviewed?',
+      confirmLabel: 'Mark reviewed',
+      message: `“${stageLabel}” will be marked reviewed and the file advances to the next stage. This is recorded in the audit trail.`,
+      onConfirm: () =>
+        runAction(
+          { action: 'review', note: 'Reviewed by ' + me.name },
+          { action: 'REVIEW', detail: `Reviewed stage “${stageLabel}”` },
+          { message: 'Reviewed — advanced to next stage', kind: 'success' },
+        ),
+    });
+  };
+
   const actApprove = () => {
     if (!currentTask) return;
     openConfirm({
       title: 'Approve this stage?',
       confirmLabel: 'Approve',
-      message: `“${stage ? stage.name : 'Current stage'}” will be marked complete and the file will advance to the next stage. This action is recorded in the audit trail.`,
-      onConfirm: () => {
-        taskAction.mutate(
-          { id: currentTask.id, actionReq: { action: 'approve', note: 'Approved by ' + me.name } },
-          {
-            onSuccess: () => {
-              createAuditLog.mutate({
-                action: 'APPROVE',
-                target: doc.id,
-                detail: `Approved stage “${stage ? stage.name : ''}”`,
-              });
-              addToast('Approved — advanced to next stage', 'success');
-            },
-          },
-        );
-      },
+      message: `“${stageLabel}” will be marked complete and the file will advance to the next stage. This action is recorded in the audit trail.`,
+      onConfirm: () =>
+        runAction(
+          { action: 'approve', note: 'Approved by ' + me.name },
+          { action: 'APPROVE', detail: `Approved stage “${stageLabel}”` },
+          { message: 'Approved — advanced to next stage', kind: 'success' },
+        ),
     });
   };
 
-  // "Reject" in this UI means "send it back with a reason" (SLA restarts on the
-  // previous stage) — that's the real `request_changes` action, not `reject`
-  // (which the API uses to terminate the workflow outright).
-  const actReject = () => {
+  // Sends the file back one stage with a reason. The workflow stays alive.
+  const actRequestChanges = () => {
     if (!currentTask) return;
     let reasonText = '';
     openModal({
-      title: 'Reject / return to previous stage',
+      title: 'Request changes — return to previous stage',
       body: (
         <div>
           <div className="banner warning">
-            Rejecting routes the file back with your reason. The SLA timer restarts for that stage.
+            The file goes back to the previous stage with your reason. The SLA timer restarts for
+            that stage and the workflow stays open.
           </div>
           <div className="field">
             <label>
@@ -256,31 +307,145 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       actions: [
         { label: 'Cancel' },
         {
-          label: 'Reject & return',
-          kind: 'btn-danger',
+          label: 'Send back',
+          kind: 'btn-secondary',
           onClick: () => {
-            if (!reasonText.trim()) return false;
-            taskAction.mutate(
-              {
-                id: currentTask.id,
-                actionReq: { action: 'request_changes', note: reasonText.trim() },
-              },
-              {
-                onSuccess: () => {
-                  createAuditLog.mutate({
-                    action: 'REJECT',
-                    target: doc.id,
-                    detail: 'Rejected: ' + reasonText.trim(),
-                  });
-                  addToast('Returned to previous stage with reason', 'warning');
-                },
-              },
+            if (!reasonText.trim()) {
+              addToast('A reason is required', 'error');
+              return false;
+            }
+            runAction(
+              { action: 'request_changes', note: reasonText.trim() },
+              { action: 'REQUEST_CHANGES', detail: 'Changes requested: ' + reasonText.trim() },
+              { message: 'Returned to previous stage with reason', kind: 'warning' },
             );
           },
         },
       ],
     });
   };
+
+  // The terminating action — the workflow ends here and the document closes.
+  const actReject = () => {
+    if (!currentTask) return;
+    let reasonText = '';
+    openModal({
+      title: 'Reject and end this workflow',
+      body: (
+        <div>
+          <div className="banner error">
+            Rejecting <b>ends the workflow outright</b> — the remaining stages are never raised and
+            the document closes. To send it back for edits instead, use “Request changes”.
+          </div>
+          <div className="field">
+            <label>
+              Reason <span className="req">*</span>
+            </label>
+            <textarea
+              className="input"
+              placeholder="Reason (required, recorded on the workflow trail)…"
+              onChange={(e) => (reasonText = e.target.value)}
+            />
+          </div>
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Reject & end workflow',
+          kind: 'btn-danger',
+          onClick: () => {
+            if (!reasonText.trim()) {
+              addToast('A reason is required', 'error');
+              return false;
+            }
+            runAction(
+              { action: 'reject', note: reasonText.trim() },
+              { action: 'REJECT', detail: 'Rejected: ' + reasonText.trim() },
+              { message: 'Rejected — workflow ended', kind: 'warning' },
+            );
+          },
+        },
+      ],
+    });
+  };
+
+  // Hands this stage to someone else. The workflow does not advance.
+  const actDelegate = () => {
+    if (!currentTask) return;
+    let delegateId = '';
+    let note = '';
+    openModal({
+      title: 'Delegate this stage',
+      body: (
+        <div>
+          <div className="banner info">
+            The stage stays where it is — a replacement task is raised for whoever you pick.
+          </div>
+          <div className="field">
+            <label>
+              Delegate to <span className="req">*</span>
+            </label>
+            <select className="input" onChange={(e) => (delegateId = e.target.value)}>
+              <option value="">Select a person…</option>
+              {users
+                .filter((u) => u.status === 'active' && u.id !== me.id)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Note</label>
+            <input
+              className="input"
+              placeholder="Optional handover note"
+              onChange={(e) => (note = e.target.value)}
+            />
+          </div>
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Delegate',
+          kind: 'btn-primary',
+          onClick: () => {
+            if (!delegateId) {
+              addToast('Pick someone to delegate to', 'error');
+              return false;
+            }
+            const name = users.find((u) => u.id === delegateId)?.name || 'another user';
+            runAction(
+              { action: 'delegate', delegateId, ...(note.trim() ? { note: note.trim() } : {}) },
+              { action: 'DELEGATE', detail: `Delegated “${stageLabel}” to ${name}` },
+              { message: `Delegated to ${name}`, kind: 'success' },
+            );
+          },
+        },
+      ],
+    });
+  };
+
+  const actClose = () => {
+    if (!currentTask) return;
+    openConfirm({
+      title: 'Close this workflow?',
+      confirmLabel: 'Close workflow',
+      danger: true,
+      message: `The workflow ends at “${stageLabel}” — any remaining stages are skipped and the document is finalised. This cannot be undone.`,
+      onConfirm: () =>
+        runAction(
+          { action: 'close', note: 'Closed by ' + me.name },
+          { action: 'CLOSE', detail: `Closed workflow at stage “${stageLabel}”` },
+          { message: 'Workflow closed', kind: 'success' },
+        ),
+    });
+  };
+
+  const routeThisDocument = () => routeDocuments([{ id: doc.id, title: doc.title }]);
 
   const actDownload = () => {
     if (!confPolicy.download) {
@@ -499,6 +664,28 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     });
   };
 
+  // Rendered in this order so the destructive/secondary choices sit left of the
+  // primary one, and filtered by the stage's allowed actions.
+  const stageActionButtons: {
+    action: WorkflowStageAction;
+    label: string;
+    kind: string;
+    icon?: string;
+    run: () => void;
+  }[] = [
+    { action: 'review', label: 'Mark reviewed', kind: 'btn-secondary', run: actReview },
+    {
+      action: 'request_changes',
+      label: 'Request changes',
+      kind: 'btn-secondary',
+      run: actRequestChanges,
+    },
+    { action: 'delegate', label: 'Delegate', kind: 'btn-secondary', run: actDelegate },
+    { action: 'close', label: 'Close workflow', kind: 'btn-secondary', run: actClose },
+    { action: 'reject', label: 'Reject', kind: 'btn-danger', run: actReject },
+    { action: 'approve', label: 'Approve', kind: 'btn-success', icon: 'approve', run: actApprove },
+  ];
+
   const actionBtn = (
     label: string,
     kind: string,
@@ -563,11 +750,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               <Icon name="download" size={14} /> Download
             </button>
             {lockedByMe ? (
-              <button
-                className="btn btn-secondary"
-                onClick={actCheckin}
-                disabled={checkoutBusy}
-              >
+              <button className="btn btn-secondary" onClick={actCheckin} disabled={checkoutBusy}>
                 <Icon name="lock" size={14} /> Check in
               </button>
             ) : (
@@ -644,8 +827,18 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                 </div>
               )}
             </div>
-            {actionBtn('Reject', 'btn-secondary', actReject)}
-            {actionBtn('Approve', 'btn-success', actApprove, { icon: 'approve' })}
+            {hasNoWorkflow && !closed && (
+              <button className="btn btn-primary" onClick={routeThisDocument}>
+                <Icon name="flow" size={14} /> Route to workflow
+              </button>
+            )}
+            {stageActionButtons
+              .filter((b) => allowedActions.includes(b.action))
+              .map((b) => (
+                <React.Fragment key={b.action}>
+                  {actionBtn(b.label, b.kind, b.run, b.icon ? { icon: b.icon } : {})}
+                </React.Fragment>
+              ))}
           </div>
         )}
       </div>
@@ -725,7 +918,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         </div>
       )}
 
-      <div className="flex gap-4">
+      <div className="grid grid-cols-[2fr_1fr] gap-4">
         <DocumentViewerPanel
           documentTitle={doc.title}
           confidentiality={doc.confidentiality}
@@ -760,6 +953,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             comments={doc.comments}
             getCommentAuthor={(c) => c.creator || userById(users, c.createdBy)}
             isAddingComment={addDocumentComment.isPending}
+            onRoute={hasNoWorkflow && !closed ? routeThisDocument : undefined}
             onAddComment={(text) => {
               addDocumentComment.mutate(
                 { id: doc.id, text },
@@ -775,6 +969,66 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               );
             }}
           />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Mirrors the real crumbs + header + `grid-cols-[2fr_1fr]` viewer/detail
+ *  shell, so the layout doesn't reflow once the document actually loads in. */
+function DocumentDetailSkeleton() {
+  return (
+    <div>
+      <div className="crumbs">
+        <Skeleton height={11} width={160} />
+      </div>
+
+      <div className="page-head">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <Skeleton height={19} width="40%" style={{ marginBottom: '10px' }} />
+          <div className="flex g8 mt8 wrap">
+            <Skeleton height={20} width={70} radius={99} />
+            <Skeleton height={20} width={90} radius={99} />
+            <Skeleton height={20} width={80} radius={99} />
+          </div>
+        </div>
+        <div className="actions">
+          <Skeleton height={34} width={90} radius={10} />
+          <Skeleton height={34} width={110} radius={10} />
+          <Skeleton height={34} width={100} radius={10} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[2fr_1fr] gap-4">
+        <Skeleton height={620} radius={16} style={{ width: '100%' }} />
+
+        <div className="flex flex-col gap-4">
+          <div className="card">
+            <div className="card-head">
+              <Skeleton height={16} width="45%" />
+            </div>
+            <div className="card-body">
+              <SkeletonText lines={5} />
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <Skeleton height={16} width="55%" />
+            </div>
+            <div className="card-body">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="wf-stage" style={{ cursor: 'default' }} aria-hidden="true">
+                  <Skeleton width={24} height={24} circle />
+                  <div className="wf-info" style={{ flex: 1 }}>
+                    <Skeleton height={12} width="60%" style={{ marginBottom: '5px' }} />
+                    <Skeleton height={10} width="35%" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

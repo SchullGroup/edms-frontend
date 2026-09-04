@@ -205,7 +205,7 @@ export default function SearchPage() {
         </div>
 
         {/* Results */}
-        <div>
+        <div className="min-w-0">
           <div className="flex jcb aic mb8">
             <span className="muted" style={{ fontSize: '12.5px' }}>
               {results.length} result{results.length === 1 ? '' : 's'}{q ? ` for “${q}”` : ''} · semantic + keyword search across OCR text

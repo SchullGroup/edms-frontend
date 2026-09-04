@@ -428,6 +428,54 @@ export interface CreateDelegationRequest {
   scope?: DelegationScope | null;
 }
 
+// --- Notifications ---
+
+export type NotificationChannel = 'in_app' | 'email';
+
+export type NotificationStatus = 'pending' | 'sent' | 'read' | 'failed';
+
+/** Server-rendered contents of a notification. The backend documents it only as
+ *  "rendered title, message, and deep-link action URL", so every key is optional
+ *  and unknown extras are preserved. */
+export interface NotificationPayload {
+  title?: string;
+  message?: string;
+  /** Deep link into the app, e.g. `/doc/{id}`. May be absolute. */
+  actionUrl?: string;
+  [key: string]: unknown;
+}
+
+export interface Notification {
+  id: string;
+  /** Recipient. Present on the wire; not needed by the client since
+   *  `/notifications` is already scoped to the authenticated user. */
+  userId?: string;
+  /** Event key such as `task.assigned`, `workflow.closed`, `workflow.on_hold`. */
+  type: string;
+  channel: NotificationChannel;
+  status: NotificationStatus;
+  payload: NotificationPayload;
+  sentAt?: string | null;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface NotificationPreferences {
+  id?: string;
+  userId?: string;
+  emailEnabled: boolean;
+  inAppEnabled: boolean;
+  digestMode: boolean;
+  updatedAt?: string | null;
+}
+
+/** Body for `PUT /notifications/preferences`. */
+export interface UpdateNotificationPreferencesRequest {
+  emailEnabled?: boolean;
+  inAppEnabled?: boolean;
+  digestMode?: boolean;
+}
+
 // --- Departments ---
 
 export interface Department {
@@ -636,34 +684,4 @@ export interface Branding {
   primaryLight: string;
   accent: string;
   logoText: string;
-}
-
-// --- Notifications ---
-
-/** Rendered body + deep link, stored as the notification's `payload` JSON column. */
-export interface NotificationPayload {
-  title: string;
-  message: string;
-  actionUrl?: string;
-}
-
-export interface Notification {
-  id: string;
-  userId: string;
-  type: string;
-  channel: 'in_app' | 'email';
-  status: 'pending' | 'sent' | 'read' | 'failed';
-  payload: NotificationPayload;
-  sentAt: string | null;
-  readAt: string | null;
-  createdAt: string;
-}
-
-export interface NotificationPreferences {
-  id: string;
-  userId: string;
-  emailEnabled: boolean;
-  inAppEnabled: boolean;
-  digestMode: boolean;
-  updatedAt: string | null;
 }

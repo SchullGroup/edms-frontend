@@ -6,6 +6,11 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
 import { useNotifications, useMarkNotificationRead } from '@/apis/hooks/useNotifications';
+import {
+  isUnread,
+  notificationHref,
+  notificationMessage,
+} from '@/apis/services/notifications.service';
 import { Icon } from '@/components/ui/Icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TaskRow } from '@/components/ui/TaskRow';
@@ -66,7 +71,10 @@ export default function StaffDashboard() {
     isError: isTasksError,
     refetch: refetchTasks,
   } = useTasks();
-  const { data: notifData, isLoading: isNotifLoading } = useNotifications();
+  const { data: notifData, isLoading: isNotifLoading } = useNotifications({
+    limit: 5,
+    channel: 'in_app',
+  });
   const markRead = useMarkNotificationRead();
 
   if (!currentUser) return null;
@@ -92,20 +100,9 @@ export default function StaffDashboard() {
 
   list.sort(
     (a, b) =>
-      (URG_ORDER[
-        a.workflowInstance?.document?.urgency
-          ? a.workflowInstance.document.urgency.charAt(0).toUpperCase() +
-            a.workflowInstance.document.urgency.slice(1)
-          : 'Normal'
-      ] || 3) -
-        (URG_ORDER[
-          b.workflowInstance?.document?.urgency
-            ? b.workflowInstance.document.urgency.charAt(0).toUpperCase() +
-              b.workflowInstance.document.urgency.slice(1)
-            : 'Normal'
-        ] || 3) ||
-      (a.dueAt ? new Date(a.dueAt).getTime() : 9e15) -
-        (b.dueAt ? new Date(b.dueAt).getTime() : 9e15),
+      (URG_ORDER[a.workflowInstance?.document?.urgency ? a.workflowInstance.document.urgency.charAt(0).toUpperCase() + a.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) -
+      (URG_ORDER[b.workflowInstance?.document?.urgency ? b.workflowInstance.document.urgency.charAt(0).toUpperCase() + b.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) ||
+      (a.dueAt ? new Date(a.dueAt).getTime() : 9e15) - (b.dueAt ? new Date(b.dueAt).getTime() : 9e15),
   );
 
   const tileDefs = [
@@ -115,9 +112,8 @@ export default function StaffDashboard() {
     { key: 'Overdue', cls: 't-overdue', icon: 'alert', label: 'Overdue / SLA' },
   ];
 
-  // The API already scopes notifications to the authenticated user, so no
-  // client-side filtering by id is needed.
-  const myNotifs = notifications.slice(0, 5);
+  // `/notifications` is already scoped to the authenticated user server-side.
+  const myNotifs = notifications;
 
   // Mirrors the SLA/turnaround calc on staff/performance — dashboard shows the
   // same real numbers instead of a hardcoded placeholder.
@@ -140,8 +136,7 @@ export default function StaffDashboard() {
           0,
         ) / closedTasksWithDates.length
       : 0;
-  const avgTurnaround =
-    avgTurnaroundMs > 0 ? (avgTurnaroundMs / 86400000).toFixed(1) + ' days' : '0 days';
+  const avgTurnaround = avgTurnaroundMs > 0 ? (avgTurnaroundMs / 86400000).toFixed(1) + ' days' : '0 days';
 
   const THIRTY_DAYS_MS = 30 * 86400000;
   const volume30d = closedTasks.filter(
@@ -255,21 +250,23 @@ export default function StaffDashboard() {
                 View all
               </button>
             </div>
-            {myNotifs.length ? (
+            {isNotifLoading ? (
+              <Spinner text="Loading notifications…" />
+            ) : myNotifs.length ? (
               myNotifs.map((n) => (
                 <div
                   key={n.id}
-                  className={`notif-item ${n.readAt ? 'read' : ''}`}
+                  className={`notif-item ${isUnread(n) ? '' : 'read'}`}
                   onClick={() => {
-                    if (!n.readAt) markRead.mutate(n.id);
-                    router.push(n.payload?.actionUrl || '/notifications');
+                    if (isUnread(n)) markRead.mutate(n.id);
+                    router.push(notificationHref(n) || '/notifications');
                   }}
                 >
                   <span className="dot"></span>
                   <div>
-                    <div className="msg">{n.payload?.message ?? n.payload?.title ?? ''}</div>
+                    <div className="msg">{notificationMessage(n)}</div>
                     <div className="caption" style={{ marginTop: '3px' }}>
-                      {timeAgo(new Date(n.createdAt).getTime())}
+                      {timeAgo(Date.parse(n.createdAt))}
                     </div>
                   </div>
                 </div>
