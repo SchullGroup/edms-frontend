@@ -515,10 +515,16 @@ built and unreachable.
 - [x] ✅ Frontend calls the correct two-step sequence
 - [x] ✅ Workflow picker (filtered to `published`) on `/staff/cabinets`, `/doc/[id]` and
       `/upload`, via the shared `useRouteToWorkflow` hook
-- [ ] 🔴 ⚠️ **No authorization on any of this.** `requirePermission` is absent from all **25**
-      workflow routes, and neither `definitions.service` nor `instances.service` checks
-      roles. Any authenticated user can start, hold, resume or close any instance
-      (DRIFT-05). **Fixing the 404 made this hole reachable from the UI.**
+- [x] ✅ **Authorization now enforced** (2026-09-04). All five workflow services assert
+      roles and return a named `403` — `instances.service` gates list, bottlenecks-ageing
+      and team-status-matrix; `WORKFLOW_INSTANCE_MANAGE_ROLES` covers hold/resume/close.
+      DRIFT-05 is resolved. *(`requirePermission` is still absent from the 32 workflow
+      routes — the checks live in the services, so grep `_FORBIDDEN`.)*
+- [ ] 🔴 ⚠️ **Blocked again, by a different cause (DRIFT-14).** The same commit set
+      `WORKFLOW_DEFINITION_VIEW_ROLES = MANAGE_ROLES`, so `staff` and `supervisor` cannot
+      call `GET /workflows` — the list `useRouteToWorkflow` needs to build its picker.
+      The modal falls back to *"No published workflows"*, which is neither true nor the
+      reason. **Routing is unreachable for the roles that hold `workflow:route`.**
 - [ ] ⚠️ No notification is sent to the new assignee (DRIFT-10)
 
 ---
@@ -606,8 +612,14 @@ lifecycle.
 - [x] Create, edit, publish and archive definitions
 - [x] Stages with sequential transitions, SLA hours and role/user assignment
 - [x] Published definitions are immutable; edits require a new version
-- [ ] 🔴 **No authorization.** Any authenticated user can publish or archive any definition
-      (DRIFT-05). This is the highest-severity issue in either codebase.
+- [x] ✅ **Authorization now enforced** (2026-09-04). `definitions.service.ts` asserts on
+      every method: `assertCanView` on list/getById, `assertCanManage` on
+      create/update/publish/archive, with `WORKFLOW_DEFINITION_MANAGE_ROLES` =
+      `client_admin` + `schulltech_admin`. DRIFT-05 resolved.
+- [ ] 🔴 **Read access was over-restricted in the same change (DRIFT-14).**
+      `WORKFLOW_DEFINITION_VIEW_ROLES` aliases `MANAGE_ROLES`, so `management` and
+      `internal_auditor` are refused despite holding a seeded `workflow:view:global`
+      grant — and `staff`/`supervisor` cannot list definitions to route into.
 - [ ] ⚠️ `// @ts-nocheck` on the page
 - [ ] Parallel and conditional branches — Phase 1 is explicitly sequential-only
 - [ ] Visual graph editor; today it is a form
@@ -862,9 +874,10 @@ sitting, and which have stalled.
 - [x] Per-instance stage rail and activity trail from live endpoints
 - [x] Hold, resume and close, wired to the real lifecycle routes
 - [x] Skeleton loading state (`SkeletonTable`)
-- [ ] 🔴 ⚠️ **Same DRIFT-05 hole as C1/C5** — the workflow routes have no authorization, so
-      any authenticated user can hold, resume or close any instance. This screen makes the
-      lifecycle actions a two-click operation in the UI.
+- [x] ✅ **DRIFT-05 resolved** (2026-09-04) — `instances.service.ts` gates every read and
+      `WORKFLOW_INSTANCE_MANAGE_ROLES` gates hold/resume/close. *Previously* any
+      authenticated user could hold, resume or close any instance, and this screen made
+      that a two-click operation.
 - [ ] ⚠️ Hold/resume/close are not audit-logged (`useCreateAuditLog` is a no-op, DRIFT-11)
 - [ ] No error state — a failed instance fetch shows nothing rather than a retry
 - [ ] SLA / ageing indicators per instance (the list shows status, not time-in-stage)
@@ -1351,3 +1364,30 @@ reads. **C1**'s route-to-workflow picker reached the document and upload screens
 workflow activity trail is now live data. The F4 monitor exposes hold/resume/close in the
 UI, which widens the blast radius of the unchanged DRIFT-05 authorization hole: pausing or
 closing any tenant's workflow instance is now a two-click operation for any signed-in user.
+
+**Re-scanned 2026-09-04 (evening)**, after `feat(workflow): close workflow gaps 1-10`
+landed on the backend. This is the first revision where a *cross-cutting* defect moved.
+
+- ✅ **The workflow authorization hole is closed.** All five workflow services —
+  definitions, instances, tasks, delegations, sla — now assert roles and throw a named
+  `403`. C1, C5 and F4 have lost the caveat they carried since this document was written.
+  It was the highest-severity finding here for a week.
+- 🔴 **C1 is blocked again, by a new cause (DRIFT-14).** The same commit set
+  `WORKFLOW_DEFINITION_VIEW_ROLES = WORKFLOW_DEFINITION_MANAGE_ROLES`, so only
+  `client_admin` and `schulltech_admin` can read definitions. `staff` and `supervisor`
+  hold `workflow:route` and can no longer list what to route into; the picker reports
+  "no published workflows". **C1 stays Done as built** — the frontend is correct — but the
+  journey does not complete. Tracked as DRIFT-14, not as a story regression.
+- 🔄 **G1–G3 are now a frontend task.** Eight server-side aggregation endpoints exist
+  (instance stats, status counts, bottlenecks-ageing, team-status-matrix,
+  open-items-by-cabinet, task stats, SLA breaches, document stats). The frontend consumes
+  one. These stories stay Partial, but the reason changed from "the backend has nothing"
+  to "the frontend has not adopted it".
+- 🔄 **B1's dependency moved.** OCR now uses the asynchronous Textract API against the
+  correct bucket, so multi-page documents are supported. Search still returns nothing
+  because the upload still goes to a third-party gateway — now a frontend-only fix.
+- **Unchanged:** the audit trail (H1, H2) has still never recorded an event, and nothing
+  still calls `notifyUser` (J3).
+
+Story statuses themselves are unchanged by this scan. What changed is *why* several of
+them are where they are, and who owns moving them.

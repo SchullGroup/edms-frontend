@@ -9,6 +9,24 @@ exists** on both sides — but nothing calls `notifyUser`, so no notification is
 created. Superseded statements are struck through or marked in place rather than
 deleted. See `01-architecture-and-drift.md` for the full revision table.
 
+**Re-scanned 2026-09-04 (evening)** against `edms-backend` @ `dev` (`e60c418`, 90 routes).
+The backend moved after the morning revision above. Two changes affect this document:
+
+- ✅ **Workflow authorization is now enforced** in all five workflow services, so the
+  "no authorization on the endpoint" caveat attached to the workflow phases is resolved
+  (DRIFT-05). Note it is enforced in the *services*, not via `requirePermission` on the
+  routes — a route-level grep still shows zero.
+- 🔴 **A new blocker replaced it (DRIFT-14).** `WORKFLOW_DEFINITION_VIEW_ROLES` was set
+  equal to `MANAGE_ROLES`, so `staff` and `supervisor` can no longer read workflow
+  definitions. Routing a document is unreachable for the roles that hold
+  `workflow:route`, and the picker reports "no published workflows" — which is neither
+  true nor the reason.
+- 🔄 **OCR's backend half is correct now** — asynchronous Textract, correct bucket,
+  presigned download URLs, OCR text archived. The upload still goes to a third-party
+  gateway, so the failure is unchanged but is now a frontend-only fix.
+- 🔄 **Eight server-side aggregation endpoints now exist**; the frontend consumes one.
+
+
 
 Doc 03 followed the organisation as a single chain. **This document goes role by role** —
 what each person's first day, first week and steady state actually look like — and then
@@ -716,9 +734,13 @@ of one wrong URL. It was the highest impact-to-effort fix in either codebase.
 **⚠️ Two problems this fix did not solve, and one it made worse:**
 
 1. ⛔ The supervisor is **still never notified** (DRIFT-10) — the task lands silently.
-2. ⛔ **No authorization is checked** (DRIFT-05) on any of the 25 workflow routes.
-3. 🔴 That authorization hole is now **reachable from the UI** rather than merely present
-   in the API. Fixing the routing raised the priority of fixing the permissions.
+2. ✅ **Authorization is now checked** (2026-09-04) — all five workflow services assert
+   roles and return a named `403`. DRIFT-05 resolved.
+3. 🔴 **But routing is blocked again (DRIFT-14).** The commit that closed DRIFT-05 also
+   restricted *reading* workflow definitions to `client_admin` and `schulltech_admin`, so
+   `staff` and `supervisor` — the roles that hold `workflow:route` — can no longer list
+   the definitions they route into. This handoff is once again non-functional in
+   practice, for a new reason. **The fix is a one-line constant split.**
 
 **Still missing:** a workflow picker on `/doc/[id]`. Routing works from the cabinets
 screen only, so the natural place a user would look for it does not offer it.

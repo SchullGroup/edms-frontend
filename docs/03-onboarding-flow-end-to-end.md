@@ -9,6 +9,24 @@ exists** on both sides — but nothing calls `notifyUser`, so no notification is
 created. Superseded statements are struck through or marked in place rather than
 deleted. See `01-architecture-and-drift.md` for the full revision table.
 
+**Re-scanned 2026-09-04 (evening)** against `edms-backend` @ `dev` (`e60c418`, 90 routes).
+The backend moved after the morning revision above. Two changes affect this document:
+
+- ✅ **Workflow authorization is now enforced** in all five workflow services, so the
+  "no authorization on the endpoint" caveat attached to the workflow phases is resolved
+  (DRIFT-05). Note it is enforced in the *services*, not via `requirePermission` on the
+  routes — a route-level grep still shows zero.
+- 🔴 **A new blocker replaced it (DRIFT-14).** `WORKFLOW_DEFINITION_VIEW_ROLES` was set
+  equal to `MANAGE_ROLES`, so `staff` and `supervisor` can no longer read workflow
+  definitions. Routing a document is unreachable for the roles that hold
+  `workflow:route`, and the picker reports "no published workflows" — which is neither
+  true nor the reason.
+- 🔄 **OCR's backend half is correct now** — asynchronous Textract, correct bucket,
+  presigned download URLs, OCR text archived. The upload still goes to a third-party
+  gateway, so the failure is unchanged but is now a frontend-only fix.
+- 🔄 **Eight server-side aggregation endpoints now exist**; the frontend consumes one.
+
+
 
 This document follows a **single organisation from nothing to fully operational**, in
 sequence, across all six roles. It answers the question *"what has to happen, in what
@@ -748,7 +766,9 @@ Phase 2  Departments             ✅
 Phase 3  Cabinets + folders      ✅            → ⛔ no metadata designer
 Phase 4  Cabinet access grants   ⛔ NO UI      → and not enforced on reads
 Phase 5  Users                   🟨            → ⛔ no invite, no reset, no rate limit
-Phase 6  Workflows               🟨            → ⛔ NO AUTHORIZATION (critical)
+Phase 6  Workflows               ✅            → ✅ authorization FIXED 09-04
+                                               → ⛔ but staff/supervisor can no
+                                                 longer READ definitions (DRIFT-14)
 Phase 7  First login             ✅            → ⛔ test accounts wrong (DRIFT-12)
 Phase 8  First document          🟨            → ⛔ OCR fails; ✅ routing FIXED 09-04
 Phase 9  Steady state            🟨            → ⛔ search dead; 🟨 notifications
@@ -764,7 +784,8 @@ Ordered by *(impact ÷ effort)*, highest first:
 |---|---|---|---|---|---|
 | 1 | `npx prisma generate` | Backend | 2 min | The build; un-narrows every user's scope | ✅ done |
 | 2 | Two-call create-then-start in `workflowInstancesService` | Frontend | 1 hr | **The entire approval half of the product** | ✅ done |
-| 3 | `requirePermission` on all **25** workflow routes + role checks in definitions/instances services | Backend | 1 day | Closes the critical authorization hole | 🔴 **open** |
+| 3 | ~~Authorization on the workflow routes~~ | Backend | ~~1 day~~ | Closed the critical authorization hole | ✅ **done** — in the service layer |
+| 3b | **Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`** so the roles holding `workflow:route` can read definitions | Backend | **1 line** | **Document routing, again** — currently unreachable for `staff` and `supervisor` | 🔴 **open, most urgent** |
 | 4 | Fix login test-account emails to the `tjoel+…` set | Frontend | 10 min | New-developer onboarding | 🔴 open |
 | 5 | Presigned-upload endpoint + async Textract + unconditional search indexing | Both | 3 days | OCR **and** search, together | 🔴 open |
 | 6 | ~~Build the notifications module~~ → **call `notifyUser` from real events** | Backend | ~~3 days~~ **~2 days** | Task assignment, SLA warnings, returned work | 🟨 module built, nothing emits |
