@@ -1,25 +1,112 @@
 import { apiClient } from '@/lib/api-client';
-import { PaginatedResponse } from '@/types/models';
+import {
+  ApiResponse,
+  Notification,
+  NotificationChannel,
+  NotificationPreferences,
+  NotificationStatus,
+  PaginatedResponse,
+  UpdateNotificationPreferencesRequest,
+} from '@/types/models';
+
+/** Mirrors the query schema on `GET /notifications`. */
+export interface NotificationFilters {
+  page?: number;
+  limit?: number;
+  channel?: NotificationChannel;
+  status?: NotificationStatus;
+  unreadOnly?: boolean;
+}
 
 export const notificationsService = {
-  getAll: async (params?: Record<string, any>): Promise<PaginatedResponse<any>> => {
-    const res = await apiClient.get<PaginatedResponse<any>>('/notifications', { params });
+  getAll: async (params?: NotificationFilters): Promise<PaginatedResponse<Notification>> => {
+    const res = await apiClient.get<PaginatedResponse<Notification>>('/notifications', { params });
     return res.data;
   },
 
-  markAsRead: async (id: string): Promise<any> => {
-    const res = await apiClient.patch(`/notifications/${id}/read`);
-    return res.data;
+  /** `GET /notifications/unread-count` — in-app unread only. The response body
+   *  isn't documented in the spec, so accept either a bare number or the usual
+   *  `{ count }` envelope. */
+  getUnreadCount: async (): Promise<number> => {
+    const res = await apiClient.get<ApiResponse<number | { count?: number; unread?: number }>>(
+      '/notifications/unread-count',
+    );
+    const data = res.data.data;
+    if (typeof data === 'number') return data;
+    return data?.count ?? data?.unread ?? 0;
   },
 
-  markAllAsRead: async (): Promise<any> => {
-    const res = await apiClient.post('/notifications/mark-all-read');
-    return res.data;
+  markAsRead: async (id: string): Promise<Notification> => {
+    const res = await apiClient.patch<ApiResponse<Notification>>(`/notifications/${id}/read`);
+    return res.data.data;
   },
 
-  send: async (userId: string, type: string, message: string, docId?: string): Promise<any> => {
-    // This might be better as an admin endpoint, but implemented for parity
-    const res = await apiClient.post('/notifications', { userId, type, message, docId });
-    return res.data;
+  // POST /notifications/read-all — marks every in-app notification read.
+  markAllAsRead: async (): Promise<void> => {
+    await apiClient.post('/notifications/read-all');
   },
+
+  getPreferences: async (): Promise<NotificationPreferences> => {
+    const res = await apiClient.get<ApiResponse<NotificationPreferences>>(
+      '/notifications/preferences',
+    );
+    return res.data.data;
+  },
+
+  updatePreferences: async (
+    data: UpdateNotificationPreferencesRequest,
+  ): Promise<NotificationPreferences> => {
+    const res = await apiClient.put<ApiResponse<NotificationPreferences>>(
+      '/notifications/preferences',
+      data,
+    );
+    return res.data.data;
+  },
+};
+
+// ── Payload helpers ───────────────────────────────────────────────────────────
+// `payload` is rendered server-side and only loosely specified, so the shape
+// knowledge lives here rather than being repeated in every component.
+
+export const isUnread = (n: Notification): boolean => n.status !== 'read' && !n.readAt;
+
+export const notificationTitle = (n: Notification): string =>
+  n.payload?.title || n.payload?.message || n.type;
+
+export const notificationMessage = (n: Notification): string =>
+  n.payload?.message || n.payload?.title || n.type;
+
+/**
+ * In-app destination for a notification, or `null` when it doesn't deep-link.
+ * Absolute URLs pointing at another origin are dropped — `router.push` can't
+ * use them and they'd be an open-redirect if the payload were ever tampered with.
+ */
+export const notificationHref = (n: Notification): string | null => {
+  const url = n.payload?.actionUrl;
+  if (!url) return null;
+  if (url.startsWith('/')) return url;
+  try {
+    const parsed = new URL(url);
+    if (typeof window !== 'undefined' && parsed.origin !== window.location.origin) return null;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+};
+
+/** Maps the `type` event key (`task.assigned`, `workflow.on_hold`, …) onto an
+ *  icon name from `@/components/ui/Icons`. */
+export const notificationIcon = (type: string): string => {
+  const group = (type || '').split('.')[0];
+  const icons: Record<string, string> = {
+    task: 'inbox',
+    workflow: 'flow',
+    document: 'doc',
+    sla: 'alert',
+    comment: 'edit',
+    circular: 'speaker',
+    delegation: 'users',
+    audit: 'finding',
+  };
+  return icons[group] || 'bell';
 };

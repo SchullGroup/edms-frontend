@@ -12,10 +12,14 @@ export const workflowHistoryKeys = {
   detail: (id: string) => [...workflowHistoryKeys.all, 'detail', id] as const,
 };
 
-export function useWorkflowHistory(params: WorkflowHistoryFilters = {}) {
+export function useWorkflowHistory(
+  params: WorkflowHistoryFilters = {},
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: workflowHistoryKeys.list(params),
     queryFn: () => workflowHistoryService.getAll(params),
+    enabled: options?.enabled ?? true,
   });
 }
 

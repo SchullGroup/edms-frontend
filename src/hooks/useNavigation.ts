@@ -68,6 +68,7 @@ export const useNavigation = () => {
               icon: 'approve',
               badge: approvalsCount,
             },
+            { route: '/supervisor/instances', label: 'Workflow Monitor', icon: 'flow' },
             { route: '/supervisor/bottlenecks', label: 'Bottlenecks & Ageing', icon: 'clock' },
             { route: '/supervisor/workload', label: 'Workload & Reassign', icon: 'swap' },
           ],
@@ -135,6 +136,7 @@ export const useNavigation = () => {
           items: [
             { route: '/admin/cabinets', label: 'Cabinet Designer', icon: 'cabinet' },
             { route: '/admin/workflows', label: 'Workflow Designer', icon: 'flow' },
+            { route: '/admin/workflows/instances', label: 'Workflow Monitor', icon: 'pulse' },
             { route: '/admin/policies', label: 'Policies', icon: 'policy' },
             { route: '/admin/branding', label: 'Branding', icon: 'brush' },
           ],

@@ -5,6 +5,8 @@ import { Avatar } from '@/components/ui/Avatar';
 import { timeAgo } from '@/utils/helpers';
 import type { WorkflowInstance } from '@/types/models';
 import type { DocumentCommentUI } from '@/components/documents/types';
+import { WorkflowStageProgress } from './WorkflowStageProgress';
+import { WorkflowHistoryTimeline } from './WorkflowHistoryTimeline';
 
 export interface WorkflowActivityPanelProps {
   workflowInstance: WorkflowInstance | undefined;
@@ -13,6 +15,8 @@ export interface WorkflowActivityPanelProps {
   getCommentAuthor: (comment: DocumentCommentUI) => { name: string } | undefined;
   onAddComment: (text: string) => void;
   isAddingComment: boolean;
+  /** Opens the route-to-workflow picker. Omitted when the viewer can't route. */
+  onRoute?: () => void;
 }
 
 export function WorkflowActivityPanel({
@@ -22,6 +26,7 @@ export function WorkflowActivityPanel({
   getCommentAuthor,
   onAddComment,
   isAddingComment,
+  onRoute,
 }: WorkflowActivityPanelProps) {
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const stages = workflowInstance?.workflowDefinition?.definition?.stages;
@@ -39,22 +44,37 @@ export function WorkflowActivityPanel({
         <span className="h3">Workflow & Activity</span>
       </div>
       <div className="card-body">
-        {!workflowInstance && <div className="caption mb8">No workflow started for this document.</div>}
-        {stages?.map((s, i, arr) => {
-          const curIdx = arr.findIndex((x) => x.id === workflowInstance!.currentStage);
-          const state = workflowInstance!.status === 'closed' || i < curIdx ? 'done' : i === curIdx ? 'current' : 'next';
-          return (
-            <div key={s.id} className={`wf-stage ${state}`}>
-              <div className="wf-dot">{state === 'done' ? '✓' : String(i + 1)}</div>
-              <div className="wf-info" style={{ flex: 1 }}>
-                <div className="nm">{s.name || s.id}</div>
-                <div className="who">
-                  {state === 'current' ? `${currentStageActorName} · in progress` : s.role || ''}
-                </div>
-              </div>
+        {!workflowInstance ? (
+          <div className="mb16">
+            <div className="caption mb8">
+              No workflow started for this document — nobody has been asked to act on it.
             </div>
-          );
-        })}
+            {onRoute && (
+              <button className="btn btn-primary btn-sm" onClick={onRoute}>
+                Route to workflow
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <WorkflowStageProgress
+              stages={stages}
+              currentStage={workflowInstance.currentStage}
+              status={workflowInstance.status}
+              currentActorName={currentStageActorName}
+              stageDueAt={workflowInstance.stageDueAt}
+            />
+
+            <div className="divider"></div>
+            <div className="h3 mb8">Activity trail</div>
+            <WorkflowHistoryTimeline
+              workflowInstanceId={workflowInstance.id}
+              stages={stages}
+              limit={20}
+              emptyMessage="Nothing has been actioned on this workflow yet."
+            />
+          </>
+        )}
 
         <div className="divider"></div>
         <div className="h3 mb8">Minutes & comments</div>

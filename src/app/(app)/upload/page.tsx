@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useStore, cabById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
+import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 
 const IDU_GUESSES = [
   {
@@ -45,6 +46,7 @@ const IDU_GUESSES = [
 export default function UploadCapturePage() {
   const router = useRouter();
   const { setPageTitle, addToast } = useUIStore();
+  const { routeDocuments } = useRouteToWorkflow();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [files, setFiles] = useState<
@@ -202,6 +204,13 @@ export default function UploadCapturePage() {
                   style={{ fontWeight: 700, cursor: 'pointer' }}
                 >
                   Open document
+                </a>
+                {' · '}
+                <a
+                  onClick={() => file.docId && routeDocuments([{ id: file.docId, title: file.name }])}
+                  style={{ fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Route to workflow
                 </a>
               </div>
             );

@@ -6,6 +6,11 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
 import { useNotifications, useMarkNotificationRead } from '@/apis/hooks/useNotifications';
+import {
+  isUnread,
+  notificationHref,
+  notificationMessage,
+} from '@/apis/services/notifications.service';
 import { Icon } from '@/components/ui/Icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TaskRow } from '@/components/ui/TaskRow';
@@ -66,7 +71,10 @@ export default function StaffDashboard() {
     isError: isTasksError,
     refetch: refetchTasks,
   } = useTasks();
-  const { data: notifData, isLoading: isNotifLoading } = useNotifications();
+  const { data: notifData, isLoading: isNotifLoading } = useNotifications({
+    limit: 5,
+    channel: 'in_app',
+  });
   const markRead = useMarkNotificationRead();
 
   if (!currentUser) return null;
@@ -104,7 +112,8 @@ export default function StaffDashboard() {
     { key: 'Overdue', cls: 't-overdue', icon: 'alert', label: 'Overdue / SLA' },
   ];
 
-  const myNotifs = notifications.filter((n) => n.user === currentUser.id).slice(0, 5);
+  // `/notifications` is already scoped to the authenticated user server-side.
+  const myNotifs = notifications;
 
   // Mirrors the SLA/turnaround calc on staff/performance — dashboard shows the
   // same real numbers instead of a hardcoded placeholder.
@@ -241,22 +250,23 @@ export default function StaffDashboard() {
                 View all
               </button>
             </div>
-            {myNotifs.length ? (
+            {isNotifLoading ? (
+              <Spinner text="Loading notifications…" />
+            ) : myNotifs.length ? (
               myNotifs.map((n) => (
                 <div
                   key={n.id}
-                  className={`notif-item ${n.read ? 'read' : ''}`}
+                  className={`notif-item ${isUnread(n) ? '' : 'read'}`}
                   onClick={() => {
-                    markRead.mutate(n.id);
-                    if (n.docId) router.push(`/doc/${n.docId}`);
-                    else router.push('/notifications');
+                    if (isUnread(n)) markRead.mutate(n.id);
+                    router.push(notificationHref(n) || '/notifications');
                   }}
                 >
                   <span className="dot"></span>
                   <div>
-                    <div className="msg">{n.text}</div>
+                    <div className="msg">{notificationMessage(n)}</div>
                     <div className="caption" style={{ marginTop: '3px' }}>
-                      {timeAgo(n.at)}
+                      {timeAgo(Date.parse(n.createdAt))}
                     </div>
                   </div>
                 </div>
