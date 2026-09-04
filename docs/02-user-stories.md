@@ -2,6 +2,12 @@
 
 **Status:** Written 2026-08-29. Grounded in `EDMS-FRONTEND` and `edms-backend` as they exist today.
 
+**Revised 2026-09-04** against `edms-backend` @ `dev` (`b72e0bf`) and `EDMS-FRONTEND` @
+`dev` (`f02c7b8`). Three stories changed status — **C1 broken → done**,
+**J3 broken → partial**, **B3 gained a fixed confidentiality gate**. Counts in
+[§15](#15-story-map-summary) were updated to match. Old statuses are kept inline as
+*(was …)* so the backlog reads as a history rather than a snapshot.
+
 Each story carries a **build status** so this document doubles as a backlog rather than a
 wish list. Statuses are defined once, here:
 
@@ -407,6 +413,14 @@ signatures, actions.
 - [x] Document loads from `GET /documents/:id`
 - [x] Metadata, versions, cabinet and folder context render
 - [x] Confidentiality enforced server-side by `requireConfidentiality('view')`
+- [x] ✅ **Confidentiality policy now gates download and print in the UI** (fixed
+      2026-09-03, commit `e3e3398`). The lookup previously matched
+      `p.key === 'confidentiality.<tier>'` against an array, but `policies.service.ts`
+      returns an **object** keyed by section — so every check silently fell through to
+      permissive defaults and a `top_secret` document was downloadable by anyone who could
+      open it. Fixed in the consumer, not the service: `/admin/policies` and
+      `/admin/users` already read the object shape correctly. Tier casing is now
+      normalised too — fixtures say `Top Secret`, the backend sends `top_secret`.
 - [x] Checkout / check-in from this screen
 - [x] Edit title, type, folder, confidentiality, urgency, status
 - [ ] 🔴 **Comments 404.** `POST /documents/:id/comments` does not exist (DRIFT-08).
@@ -447,7 +461,7 @@ non-view actions. **All of it is dead code.** All twelve call sites use
 
 ---
 
-### C1 — Route a document into an approval workflow · 🟥 **Broken**
+### C1 — Route a document into an approval workflow · ✅ **Done** *(was 🟥 Broken)*
 
 > **As** Chika,
 > **I want to** send a filed invoice into the "Standard Invoice Approval" workflow,
@@ -457,22 +471,30 @@ non-view actions. **All of it is dead code.** All twelve call sites use
 **Why this matters:** this is the hinge of the entire product. Without it, EDMS is a
 filing cabinet, not a workflow system.
 
-**Current state:** **the UI call 404s.** `workflowInstancesService.start()` posts to
-`POST /workflow-instances/start`, which matches no backend route. The backend's actual
-contract is a two-call sequence: `POST /workflow-instances` to create, then
-`POST /workflow-instances/:id/start` to begin execution. See DRIFT-09.
+**Current state (verified 2026-09-04): fixed.** `workflowInstances.service.ts` exposes
+`createAndStart(workflowId, documentId)`, which performs the backend's real two-call
+contract — `POST /workflow-instances` to create, then `POST /workflow-instances/:id/start`
+to begin execution. It reaches the UI through `useStartWorkflowInstance`
+(`useWorkflowInstances.ts:67`), consumed at `staff/cabinets/page.tsx:53`. DRIFT-09 is
+resolved.
+
+*Previously:* the UI posted to a single-segment `POST /workflow-instances/start` that
+matched no backend route, so routing a document 404'd. This was the highest
+impact-to-effort defect in either codebase — the whole approval half of the product was
+built and unreachable.
 
 **Acceptance criteria**
 - [x] Backend: instance creation validates the document exists and the definition is `published`
 - [x] Backend: `start` creates the first stage's task(s), computes `stageDueAt` from the
       stage's SLA hours, and writes a `WorkflowHistory` row
 - [x] Backend: role-pool assignment supported (`assignedRoleId`) as well as direct assignment
-- [ ] 🔴 Frontend calls the correct two-step sequence
-- [ ] Workflow picker on the document detail screen, filtered to `published` definitions
-- [ ] ⚠️ **No authorization on any of this.** `requirePermission` is absent from all 23
+- [x] ✅ Frontend calls the correct two-step sequence
+- [ ] Workflow picker on the **document detail** screen, filtered to `published` definitions
+      — routing is currently reachable from `/staff/cabinets` only
+- [ ] 🔴 ⚠️ **No authorization on any of this.** `requirePermission` is absent from all **25**
       workflow routes, and neither `definitions.service` nor `instances.service` checks
       roles. Any authenticated user can start, hold, resume or close any instance
-      (DRIFT-05).
+      (DRIFT-05). **Fixing the 404 made this hole reachable from the UI.**
 - [ ] ⚠️ No notification is sent to the new assignee (DRIFT-10)
 
 ---
@@ -1059,31 +1081,48 @@ built against `SEED.circulars`. `circularsService` is four `setTimeout` stubs. T
 
 ---
 
-### J3 — Be notified when something needs me · 🟥 **Broken**
+### J3 — Be notified when something needs me · 🟨 **Partial** *(was 🟥 Broken)*
 
 > **As** any user,
 > **I want** an in-app notification when a task is assigned to me, an SLA is about to
 > breach, or a circular needs acknowledging,
 > **so that** I don't have to poll the system to find out I'm blocking someone.
 
-**Current state:** `notifications.service.ts` calls four endpoints for real via
-`apiClient`. **None of them exist.** `src/modules/notifications/` is an empty directory.
-Compounding it, the backend has no JSON 404 handler, so Express returns an **HTML** body
-that axios then fails to parse — the failure surfaces as a confusing parse error rather
-than a clean 404.
+**Current state (verified 2026-09-04): the pipe is built end to end and nothing is ever
+put into it.**
 
-The backend defines 16 `NOTIFICATION_TYPES`, both channels (`in_app`, `email`), a
-`Notification` model and a `NotificationPreference` model with digest mode. All unused.
+`src/modules/notifications/` now exists in full — router, controller, service, repository,
+validation, types, swagger and an email worker — exposing **6 routes**. The frontend was
+rewired to them on 2026-09-03 (commit `e07d8c3`): the bell badge and notification centre
+read the live API instead of `SEED`, and delivery preferences got a UI for the first time.
+
+**The one thing missing is the thing that matters.** There are **zero references to
+`notifyUser` outside the notifications module itself.** No upload, task assignment,
+approval, reassignment, delegation or SLA breach calls it. Every screen is correctly
+wired to an endpoint that correctly returns an empty list, forever.
+
+This is a much smaller fix than the original finding implied — the module, queue, worker
+and UI all exist. What is needed is the call sites.
 
 **Acceptance criteria**
-- [ ] `GET /notifications` (paginated, filterable by read state)
-- [ ] `PATCH /notifications/:id/read`, `POST /notifications/mark-all-read`
-- [ ] Notifications emitted on task assignment, completion, reassignment, delegation,
-      escalation, SLA warning/breach, and workflow transitions
-- [ ] Unread badge driven by the API rather than `SEED`
+- [x] `GET /notifications` (paginated, `unreadOnly` filter)
+- [x] `GET /notifications/unread-count`
+- [x] `PATCH /notifications/:id/read`, `POST /notifications/read-all`
+      *(the frontend had been calling `mark-all-read`; fixed on our side —
+      `read-all` pairs with `unread-count`)*
+- [x] `GET`/`PUT /notifications/preferences`
+- [x] Unread badge driven by the API rather than `SEED`
+- [x] `NotificationPreference` model respected by the read/write endpoints
+- [ ] 🔴 **Notifications actually emitted** on task assignment, completion, reassignment,
+      delegation, escalation, SLA warning/breach and workflow transitions —
+      **nothing calls `notifyUser`**
+- [ ] Digest mode honoured by a scheduled job
 - [ ] Email channel (no mail transport exists)
-- [ ] `NotificationPreference` respected, including digest mode
-- [ ] Add a JSON 404 handler to `app.ts` so missing routes fail legibly
+- [ ] Add a JSON 404 handler to `app.ts` so missing routes fail legibly (DRIFT-10b)
+
+> ⚠️ **A demo caveat.** Where a demo previously showed a fabricated unread count from
+> `SEED`, it now correctly shows **0** until something writes a notification. That is the
+> fix working, but it reads as a regression to anyone presenting.
 
 ---
 
@@ -1215,16 +1254,16 @@ error paths and workers).
 |---|---|---|---|---|---|
 | A — Capture & Filing | 2 | 1 | 0 | 1 | Core works; enrichment missing |
 | B — Retrieval & Search | 1 | 2 | 0 | 1 | Search built but returns nothing |
-| C — Routing & Approval | 2 | 2 | 1 | 0 | Task execution solid; **routing broken**, **unauthorized** |
+| C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; routing **fixed**; still **unauthorized** |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
 | F — Oversight & SLA | 1 | 2 | 0 | 0 | Engine real; **nobody is notified** |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | Works today; will not scale |
 | H — Audit & Compliance | 0 | 0 | 2 | 1 | **Entirely mock — the biggest gap** |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
-| J — Circulars | 0 | 0 | 2 | 1 | **Entirely mock** |
+| J — Circulars & Notifications | 0 | 1 | 2 | 0 | Circulars mock; notifications **plumbed but silent** |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **10** | **15** | **12** | **4** | |
+| **Total** | **11** | **16** | **11** | **3** | 41 functional stories |
 
 **The honest one-paragraph summary:** the *document* half of this EDMS — capture, filing,
 versioning, checkout, classification, task execution and approval — is genuinely built and
@@ -1233,3 +1272,11 @@ platform operations — is a convincing UI over fixture data. Two defects sit ac
 seam and matter more than any individual gap: **workflow routes have no authorization at
 all**, and **the audit trail the product's compliance positioning rests on has never
 recorded a single event.**
+
+**Revised 2026-09-04.** Two stories moved. **C1 (routing) is fixed** — the two-call
+create-then-start sequence shipped, which released the entire approval half of the
+product. **J3 (notifications) moved from broken to partial** — the backend module, its six
+endpoints and the whole frontend surface now exist, but nothing calls `notifyUser`, so the
+list is correctly and permanently empty. Neither of the two cross-cutting defects above
+has changed, and fixing C1 made the authorization hole *reachable from the UI* rather than
+merely present in the API.

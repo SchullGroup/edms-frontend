@@ -2,6 +2,14 @@
 
 **Status:** Written 2026-08-29 against the current code.
 
+**Revised 2026-09-04** against `edms-backend` @ `dev` (`b72e0bf`, 83 routes) and
+`EDMS-FRONTEND` @ `dev` (`f02c7b8`). Two findings changed: **document routing is fixed**
+(the two-call create-then-start sequence shipped) and **the notifications module now
+exists** on both sides — but nothing calls `notifyUser`, so no notification is ever
+created. Superseded statements are struck through or marked in place rather than
+deleted. See `01-architecture-and-drift.md` for the full revision table.
+
+
 This document follows a **single organisation from nothing to fully operational**, in
 sequence, across all six roles. It answers the question *"what has to happen, in what
 order, before a Staff Officer can file their first document and have it approved?"*
@@ -83,11 +91,12 @@ PHASE 7   Every role  ·  ✅ REAL (test accounts are wrong — DRIFT-12)
                                     │
                                     ▼
 PHASE 8   Staff → Supervisor → (Management/Auditor observe)
-          Upload ✅ → OCR ⛔ → Route ⛔ → Approve ✅ → Close ✅
+          Upload ✅ → OCR ⛔ → Route ✅ → Approve ✅ → Close ✅
           ─────────────────────────────────────────────────────────────────
                                     │
                                     ▼
-PHASE 9   Steady state: search 🟥 · notifications ⛔ · SLA half-real
+PHASE 9   Steady state: search 🟥 · notifications 🟨 (built, never emitted)
+                        · SLA half-real
                                     │
                                     ▼
 PHASE 10  Governance: audit 🟥 · findings 🟥 · reporting 🟨
@@ -587,20 +596,19 @@ it succeeds and where it stops.
 │      only. Multi-page PDFs need StartDocumentTextDetection regardless.      │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
-┌─ STEP 3 · Chika routes it to a workflow ──────────────────────── ⛔ 404 ────┐
-│ /doc/[id] → "Route for approval"                                            │
-│   • workflowInstancesService.start(workflowId, documentId)                   │
-│     → POST /workflow-instances/start        ⛔ matches no backend route      │
-│                                                                             │
-│   The backend contract is TWO calls:                                         │
+┌─ STEP 3 · Chika routes it to a workflow ──────────────────── ✅ FIXED 09-04 ┐
+│ /staff/cabinets → useStartWorkflowInstance()                                │
+│   • workflowInstancesService.createAndStart(workflowId, documentId)          │
 │     1. POST /workflow-instances { documentId, workflowDefinitionId }         │
 │     2. POST /workflow-instances/:instanceId/start                            │
 │                                                                             │
-│   ⛔ DOCUMENT ROUTING DOES NOT WORK FROM THE UI. This is a small frontend    │
-│      fix and it unblocks the entire approval half of the product.            │
+│   Was: a single-segment POST /workflow-instances/start that matched no       │
+│   backend route and 404'd. Routing a document did not work from the UI at    │
+│   all, which made the whole approval half of the product unreachable.        │
+│                                                                             │
+│   ⚠️ STILL MISSING: a workflow picker on /doc/[id]. Routing is reachable    │
+│      from the cabinets screen only.                                          │
 └─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                   (assume the two-call fix is applied)
                                     │
 ┌─ STEP 4 · Backend starts the instance ────────────────────────── ✅ WORKS ──┐
 │ instances.service.start()                                                   │
@@ -609,7 +617,8 @@ it succeeds and where it stops.
 │   • stageDueAt = now + stage.slaHours                                       │
 │   • creates Task(s): assigneeId or assignedRoleId, dueAt                    │
 │   • writes WorkflowHistory { fromStage:null, toStage:'review' }             │
-│   ⛔ No notification to the assignee (no notifications module)              │
+│   ⛔ No notification to the assignee — the module now EXISTS, but nothing   │
+│      calls notifyUser(), so no row is ever written (DRIFT-10)               │
 │   ⛔ No audit entry                                                          │
 │   ⛔ No authorization check at all (DRIFT-05)                                │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -646,8 +655,9 @@ it succeeds and where it stops.
 │   ✅ Writes WorkflowHistory                                                  │
 │   ✅ Resolves breaches when the task completes                               │
 │   ⛔ NOBODY IS EVER TOLD. sla.warning and sla.breach are defined in          │
-│      NOTIFICATION_TYPES and there is no notifications module.               │
-│      The SLA engine runs into a void.                                        │
+│      NOTIFICATION_TYPES, and the notifications module now EXISTS — but      │
+│      sla-breach.worker.ts never calls notifyUser(). The SLA engine still     │
+│      runs into a void, now past a working delivery pipe (DRIFT-10).          │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -657,15 +667,18 @@ it succeeds and where it stops.
 |---|---|
 | 1. Upload and file | ✅ works |
 | 2. OCR and index | ⛔ always fails; document unsearchable forever |
-| 3. Route to workflow | ⛔ 404 — the UI calls a route that doesn't exist |
-| 4. Instance start | ✅ works (once step 3 is fixed) — but unauthorized |
+| 3. Route to workflow | ✅ **fixed 2026-09** — two-call sequence, wired from `/staff/cabinets` |
+| 4. Instance start | ✅ works — but **unauthorized** |
 | 5. Task appears | 🟨 appears, but nobody is notified |
 | 6. Approve / reject | ✅ works |
 | 7. SLA monitoring | 🟨 detects correctly, tells nobody |
 | — audit trail | ⛔ nothing recorded at any step |
 
-**Two frontend-side fixes (step 3's two-call sequence, and the upload bucket) plus two
-backend builds (notifications, audit) turn this from a demo into a working system.**
+**Revised 2026-09-04.** Step 3 is fixed, so the chain now runs unbroken from upload to
+closure. What remains splits cleanly in two: **one frontend/infrastructure fix** (the
+upload bucket, which unblocks OCR *and* search together) and **two backend builds**
+(emitting notifications, and writing audit entries). Note that the notifications *module*
+is no longer a build — it exists and works; only the call sites are missing.
 
 ---
 
@@ -737,8 +750,9 @@ Phase 4  Cabinet access grants   ⛔ NO UI      → and not enforced on reads
 Phase 5  Users                   🟨            → ⛔ no invite, no reset, no rate limit
 Phase 6  Workflows               🟨            → ⛔ NO AUTHORIZATION (critical)
 Phase 7  First login             ✅            → ⛔ test accounts wrong (DRIFT-12)
-Phase 8  First document          🟨            → ⛔ OCR fails, ⛔ routing 404s
-Phase 9  Steady state            🟨            → ⛔ search dead, ⛔ notifications dead
+Phase 8  First document          🟨            → ⛔ OCR fails; ✅ routing FIXED 09-04
+Phase 9  Steady state            🟨            → ⛔ search dead; 🟨 notifications
+                                                    plumbed but never emitted
 Phase 10 Governance              🟥            → ⛔ audit never written
 ```
 
@@ -746,17 +760,21 @@ Phase 10 Governance              🟥            → ⛔ audit never written
 
 Ordered by *(impact ÷ effort)*, highest first:
 
-| # | Fix | Owner | Effort | Unblocks |
-|---|---|---|---|---|
-| 1 | `npx prisma generate` | Backend | 2 min | The build; un-narrows every user's scope |
-| 2 | Two-call create-then-start in `workflowInstancesService.start()` | Frontend | 1 hr | **The entire approval half of the product** |
-| 3 | `requirePermission` on all 23 workflow routes + role checks in definitions/instances services | Backend | 1 day | Closes the critical authorization hole |
-| 4 | Fix login test-account emails to the `tjoel+…` set | Frontend | 10 min | New-developer onboarding |
-| 5 | Presigned-upload endpoint + async Textract + unconditional search indexing | Both | 3 days | OCR **and** search, together |
-| 6 | Build the notifications module and wire the SLA worker to it | Backend | 3 days | Task assignment, SLA warnings, circular acks |
+| # | Fix | Owner | Effort | Unblocks | Status |
+|---|---|---|---|---|---|
+| 1 | `npx prisma generate` | Backend | 2 min | The build; un-narrows every user's scope | ✅ done |
+| 2 | Two-call create-then-start in `workflowInstancesService` | Frontend | 1 hr | **The entire approval half of the product** | ✅ done |
+| 3 | `requirePermission` on all **25** workflow routes + role checks in definitions/instances services | Backend | 1 day | Closes the critical authorization hole | 🔴 **open** |
+| 4 | Fix login test-account emails to the `tjoel+…` set | Frontend | 10 min | New-developer onboarding | 🔴 open |
+| 5 | Presigned-upload endpoint + async Textract + unconditional search indexing | Both | 3 days | OCR **and** search, together | 🔴 open |
+| 6 | ~~Build the notifications module~~ → **call `notifyUser` from real events** | Backend | ~~3 days~~ **~2 days** | Task assignment, SLA warnings, returned work | 🟨 module built, nothing emits |
 
-Items 1, 2 and 4 total **under two hours** and move the product from "demo with a broken
-core loop" to "working document workflow".
+**Revised 2026-09-04.** Items 1 and 2 are done, and they moved the product from "demo with
+a broken core loop" to "working document workflow". Item 6 shrank considerably: the
+module, its six endpoints, the queue, the email worker and the entire frontend surface all
+exist — what is missing is the call sites. **Item 3 is now the most urgent thing in either
+codebase**, and fixing item 2 made that hole reachable from the UI rather than merely
+present in the API.
 
 ---
 

@@ -2,6 +2,14 @@
 
 **Status:** Written 2026-08-29 against the current code.
 
+**Revised 2026-09-04** against `edms-backend` @ `dev` (`b72e0bf`, 83 routes) and
+`EDMS-FRONTEND` @ `dev` (`f02c7b8`). Two findings changed: **document routing is fixed**
+(the two-call create-then-start sequence shipped) and **the notifications module now
+exists** on both sides — but nothing calls `notifyUser`, so no notification is ever
+created. Superseded statements are struck through or marked in place rather than
+deleted. See `01-architecture-and-drift.md` for the full revision table.
+
+
 Doc 03 followed the organisation as a single chain. **This document goes role by role** —
 what each person's first day, first week and steady state actually look like — and then
 maps the **handoffs** where work passes from one role to another.
@@ -621,9 +629,9 @@ it is the highest-value item in the backlog after the workflow authorization hol
 
 ## The seven handoffs
 
-Each handoff is a seam where work or data crosses a role boundary. **Five of seven are
-broken or partly broken**, and every one of them is a seam rather than a screen — which is
-why role-by-role testing misses them.
+Each handoff is a seam where work or data crosses a role boundary. **Four of seven are
+broken or partly broken** (was five — H4 was fixed on 2026-09-04), and every one of them
+is a seam rather than a screen, which is why role-by-role testing misses them.
 
 ---
 
@@ -683,35 +691,37 @@ definitions that everyone else operates inside.
 
 ---
 
-### H4 · Staff → Supervisor (routing for approval) · ⛔ **BROKEN**
+### H4 · Staff → Supervisor (routing for approval) · ✅ **FIXED 2026-09-04**
 
 **What passes:** a filed document enters a workflow; a task appears in the supervisor's
 queue with a deadline.
 
-**This is the most important handoff in the product, and it does not work.**
+**This is the most important handoff in the product, and it now works.**
 
 ```
-Chika clicks "Route for approval"
-  → workflowInstancesService.start(workflowId, documentId)
-  → POST /workflow-instances/start
-  → ⛔ 404 — matches no backend route
+Chika routes from /staff/cabinets
+  → useStartWorkflowInstance()
+  → workflowInstancesService.createAndStart(workflowId, documentId)
+  → 1. POST /workflow-instances        { documentId, workflowDefinitionId }
+    2. POST /workflow-instances/:id/start
+  → ✅ instance created, first stage computed, task assigned
 ```
 
-The backend requires **two** calls:
-```
-1. POST /workflow-instances        { documentId, workflowDefinitionId }
-2. POST /workflow-instances/:id/start
-```
+*Previously:* the UI posted to a single-segment `POST /workflow-instances/start` that
+matched no backend route and 404'd. Everything downstream was already real and working —
+instance creation, stage computation, SLA deadlines, task creation with role-pool support,
+history writes — so the approval half of the product was complete and unreachable because
+of one wrong URL. It was the highest impact-to-effort fix in either codebase.
 
-**Everything downstream of this is real and working** — instance creation, stage
-computation, SLA deadlines, task creation with role-pool support, history writes. The
-approval half of the product is complete and unreachable because of one wrong URL.
+**⚠️ Two problems this fix did not solve, and one it made worse:**
 
-**Compounding it:** even after the fix, the supervisor is never notified (DRIFT-10) and no
-authorization is checked (DRIFT-05).
+1. ⛔ The supervisor is **still never notified** (DRIFT-10) — the task lands silently.
+2. ⛔ **No authorization is checked** (DRIFT-05) on any of the 25 workflow routes.
+3. 🔴 That authorization hole is now **reachable from the UI** rather than merely present
+   in the API. Fixing the routing raised the priority of fixing the permissions.
 
-**To fix:** a one-hour change in `workflowInstancesService.start()`. This is the highest
-impact-to-effort fix in either codebase.
+**Still missing:** a workflow picker on `/doc/[id]`. Routing works from the cabinets
+screen only, so the natural place a user would look for it does not offer it.
 
 ---
 
@@ -725,7 +735,8 @@ different person.
 
 **Broken:**
 - ⛔ **No notification** to the person receiving the work back — they discover it by
-  chance
+  chance. The notifications module now exists and the UI is wired to it, but
+  `tasks.service` never calls `notifyUser`, so nothing is delivered (DRIFT-10).
 - ⛔ **No delegation UI**, so a supervisor on leave cannot hand over at all
 - ⛔ **No `audit_entries`** — workflow history is a different table with a different
   purpose and no hash chain
