@@ -3,15 +3,34 @@
 **Written:** 2026-08-29 · **Revised:** 2026-09-04
 **Verified against:** `EDMS-FRONTEND` (`src/`, 15,862 LOC, 42 pages) and
 `edms-backend` (branch `tolu`, commit `2c8b901`, 11,393 LOC, 74 routes).
-**Re-verified 2026-09-04 against** `edms-backend` @ `dev` (`b72e0bf`, **83 routes**) and
-`EDMS-FRONTEND` @ `dev` (`f02c7b8`).
+**Re-verified 2026-09-04 (evening) against** `edms-backend` @ `dev` (`e60c418`,
+**90 routes**, 45 permissions) and `EDMS-FRONTEND` @ `dev` (`aec7863`, **46 pages**).
 
-> **What changed in the 2026-09-04 revision.** Two findings moved and one was recounted:
-> **document routing is fixed** (the two-call create-then-start sequence shipped and is
-> wired in), **the notifications module now exists** on both sides but nothing ever calls
-> `notifyUser`, and the unguarded workflow routes number **25**, not 23. Superseded text is
-> struck through or marked in place rather than deleted, so each document reads as a
-> history. Doc 01 carries the full revision table.
+> **What changed on 2026-09-04.** Three scans happened in one day, because both
+> codebases moved. In order:
+>
+> **Morning (frontend).** Document routing was fixed — the two-call create-then-start
+> sequence shipped. The notifications module now exists on both sides, but nothing calls
+> `notifyUser`, so no notification is ever created. The `feature/management` merge added a
+> metadata-field editor, a cabinet-access editor, a shared route-to-workflow picker on
+> three screens, and live workflow history.
+>
+> **Evening (backend).** `feat(workflow): close workflow gaps 1-10` plus two OCR commits
+> landed, and they change the shape of this document set:
+>
+> - ✅ **The workflow authorization hole is closed.** It was ranked #1 here for a week. All
+>   five workflow services now assert roles and return `403`.
+> - 🔴 **A new critical finding replaced it.** The same commit made workflow definitions
+>   readable only by `client_admin` and `schulltech_admin` — so `staff` and `supervisor`,
+>   who hold `workflow:route`, can no longer list the workflows they need to route into.
+>   **Document routing is broken again**, by a different cause.
+> - 🔄 **Two findings changed owner from backend to frontend.** OCR now uses the
+>   asynchronous Textract API against the correct bucket; the only remaining problem is
+>   that the frontend still uploads elsewhere. And eight server-side aggregation endpoints
+>   now exist, of which the frontend consumes one.
+>
+> Superseded text is struck through or marked in place rather than deleted, so each
+> document reads as a history. Doc 01 carries the full revision table.
 
 These five documents describe **what the code actually does today**, not the target design.
 Every claim is anchored to a file and, where useful, a line number. Where the two codebases
@@ -67,20 +86,31 @@ The GOVERNANCE half is a UI over fixtures
 
 | # | Defect | Where | Effect |
 |---|---|---|---|
-| 1 | **Workflow routes have no authorization** | `workflows.router.ts` — 0 of **25** routes call `requirePermission`; `definitions.service` and `instances.service` never read roles | Any `staff` account can publish or archive workflow definitions and drive any instance |
-| 2 | **The audit trail has never recorded an event** | `audit.middleware.ts` is a **0-byte file**; zero `auditEntry` references in the backend `src/` | The product's compliance positioning is currently unsupported by the code |
+| 1 | **Staff and supervisors cannot read workflow definitions** | `WORKFLOW_DEFINITION_VIEW_ROLES` is set equal to `MANAGE_ROLES` — `client_admin` and `schulltech_admin` only — in `src/shared/constants/workflow.constants.ts` | **Document routing is unreachable for the roles that do it.** `useRouteToWorkflow` gets a `403`, so its picker says "no published workflows" — neither true nor the reason. Also contradicts `management` and `internal_auditor`'s seeded `workflow:view:global` |
+| 2 | **The audit trail has never recorded an event** | `audit.middleware.ts` is a **0-byte file**; zero `auditEntry` references in the backend `src/`, against 25 defined `AUDIT_ACTIONS` | The product's compliance positioning is currently unsupported by the code |
 | 3 | **Nothing ever creates a notification** | The module, its 6 routes, the queue, the worker and the whole frontend surface exist — but there are **zero references to `notifyUser` outside `src/modules/notifications/`** | Task assignment, returned work and SLA breaches are all silent; the list is permanently empty |
 | 4 | **`effStatus()` is a no-op on real data** | Two divergent copies; `Document` has no due-date field; status compares are capitalized against lowercase values | Every overdue badge, count and ageing bucket reads zero across 8 call sites |
 
-**#1 is now the most urgent item in either codebase.** Fixing the routing bug (below) made
-this hole reachable from the UI rather than merely present in the API.
+**#1 is a one-line fix and it currently disables the product's core loop** — give read its
+own role list instead of aliasing manage. Verify it against the seeded `workflow:view` and
+`workflow:route` grants rather than choosing a list by hand.
 **#3 is much smaller than it was** — the plumbing is built; only the call sites are missing.
 **#4 is roughly two hours and restores every SLA and ageing view.**
 
-> ✅ **Resolved since 2026-08-29.** *"Document routing calls a URL that doesn't exist"* was
-> #3 in this list. `workflowInstances.service.ts` now performs the correct two-call
-> sequence via `createAndStart`, wired in through `useStartWorkflowInstance` at
-> `staff/cabinets/page.tsx:53`. The approval half of the product is reachable.
+> ✅ **Resolved since 2026-08-29.** Two items have left this list.
+>
+> *"Document routing calls a URL that doesn't exist"* — fixed. The shared
+> `useRouteToWorkflow` hook now performs the correct two-call sequence and is wired into
+> `/upload`, `/staff/cabinets` and `/doc/[id]`.
+>
+> *"Workflow routes have no authorization"* — fixed, and it was #1 here for a week. All
+> five workflow services now assert roles and return a named `403`.
+> **⚠️ Note for anyone verifying this:** `requirePermission` still appears **0 times** in
+> `workflows.router.ts`. Authorization lives in the service layer, so grep for
+> `_FORBIDDEN`, not `requirePermission`. A route-level grep will make you re-report a
+> finding that is closed.
+>
+> Read #1 above alongside this: fixing the authorization hole is what introduced it.
 
 ### Two more worth knowing before you debug anything
 

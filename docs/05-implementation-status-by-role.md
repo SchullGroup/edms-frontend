@@ -9,6 +9,24 @@ exists** on both sides — but nothing calls `notifyUser`, so no notification is
 created. Superseded statements are struck through or marked in place rather than
 deleted. See `01-architecture-and-drift.md` for the full revision table.
 
+**Re-scanned 2026-09-04 (evening)** against `edms-backend` @ `dev` (`e60c418`, 90 routes).
+The backend moved after the morning revision above. Two changes affect this document:
+
+- ✅ **Workflow authorization is now enforced** in all five workflow services, so the
+  "no authorization on the endpoint" caveat attached to the workflow phases is resolved
+  (DRIFT-05). Note it is enforced in the *services*, not via `requirePermission` on the
+  routes — a route-level grep still shows zero.
+- 🔴 **A new blocker replaced it (DRIFT-14).** `WORKFLOW_DEFINITION_VIEW_ROLES` was set
+  equal to `MANAGE_ROLES`, so `staff` and `supervisor` can no longer read workflow
+  definitions. Routing a document is unreachable for the roles that hold
+  `workflow:route`, and the picker reports "no published workflows" — which is neither
+  true nor the reason.
+- 🔄 **OCR's backend half is correct now** — asynchronous Textract, correct bucket,
+  presigned download URLs, OCR text archived. The upload still goes to a third-party
+  gateway, so the failure is unchanged but is now a frontend-only fix.
+- 🔄 **Eight server-side aggregation endpoints now exist**; the frontend consumes one.
+
+
 
 For each of the six role dashboards this document lists:
 
@@ -788,7 +806,7 @@ for as long as it did.
 |---|---|---|---|---|
 | 1 | `npx prisma generate` | Backend | 2 min | Unblocks the build; stops every user being silently narrowed to `department` scope |
 | 2 | Two-call create-then-start in `workflowInstancesService.start()` | Frontend | 1 hr | **Unblocks the entire approval half of the product** |
-| 3 | `requirePermission` on all **25** workflow routes + role checks in definitions/instances services | Backend | 1 day | Any staff user can currently publish/archive workflows and drive any instance |
+| 3 | ~~Authorization on the workflow routes~~ — ✅ **done 2026-09-04**, enforced in all five workflow services. **New:** split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES` so `staff`/`supervisor` can read definitions (DRIFT-14) | Backend | 1 day | **Routing is blocked for the roles that hold `workflow:route`** |
 | 4 | Fix the 12 login test-account emails to the `tjoel+…` set | Frontend | 10 min | Every autofill button fails today |
 | 5 | JSON 404 handler in `app.ts` | Backend | 5 min | Makes 8 broken calls fail legibly |
 | 6 | Make `usePermissions` parse three-segment strings | Frontend | 30 min | **Must ship before `/auth/me` returns `permissions`**, or every `<Guard>` goes dark at once |

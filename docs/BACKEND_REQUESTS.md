@@ -1,13 +1,19 @@
 # Backend Requests — from the Frontend Team
 
-**Raised:** 2026-08-29
-**Frontend:** `edms-frontend` @ `dev` (`e3e3398`)
-**Backend checked against:** `edms-backend` @ `dev` (`b72e0bf`) — 83 routes
+**Raised:** 2026-08-29 · **Updated:** 2026-09-04 (evening)
+**Frontend:** `edms-frontend` @ `dev` (`aec7863`)
+**Backend checked against:** `edms-backend` @ `dev` (`e60c418`) — **90 routes**
+
+> **Update after `feat(workflow): close workflow gaps 1-10`.** Thank you — **BE-3 is
+> done**, and it was the critical item on this list. Closing it introduced one new
+> problem, raised below as **BE-12**, which is a one-line fix and currently blocks
+> document routing entirely. Please take BE-12 first.
 
 Everything below was verified against the code on both sides on the date above, not
 assumed. Each item states what the frontend does today, what it needs, and why.
 
-**Please read BE-1 and BE-4 before the others** — they are security items, not features.
+**Please read BE-12 first** — it is one line and the product's core loop is broken without
+it. Then BE-1 and BE-4, which are security items rather than features.
 
 ---
 
@@ -17,7 +23,8 @@ assumed. Each item states what the frontend does today, what it needs, and why.
 | --------- | ------------------------------------------------- | ------------ | ----------- | -------------------------- |
 | **BE-1**  | `POST /documents/:id/access-request`              | New endpoint | 🔴 High     | Yes — feature disabled     |
 | **BE-2**  | `POST /auth/logout` + refresh-token revocation    | New endpoint | 🔴 High     | No — fails silently today  |
-| **BE-3**  | `requirePermission` on the 25 workflow routes     | Security fix | 🔴 Critical | No — but wide open         |
+| **BE-12** | Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES` | Small fix | 🔴 **Critical** | **Yes — routing is dead**  |
+| ~~BE-3~~  | ~~Authorization on the workflow routes~~          | ✅ **Done**  | —           | —                          |
 | **BE-4**  | Enforce confidentiality for download/print/export | Security fix | 🔴 High     | No                         |
 | **BE-5**  | `GET /documents/:id/download`                     | New endpoint | 🟠 Med      | Yes — no way to get a file |
 | **BE-6**  | `POST /documents/:id/comments`                    | New endpoint | 🟠 Med      | Yes — UI built, 404s       |
@@ -41,6 +48,20 @@ These were broken and are now working. Frontend has been repointed accordingly.
 - **Cabinet access grants** and **cabinet metadata fields** — both wired.
 - **Delegations** and **workflow history** — both wired.
 - **`/tasks/stats`** and **`/workflow-instances/stats`** — both consumed.
+- **Workflow authorization (BE-3)** — all five workflow services now assert roles and
+  return a named `403`. We had asked for `requirePermission` on the routes; you enforced
+  it in the services instead, which works. One note for whoever verifies it next: a
+  route-level grep for `requirePermission` still returns zero, so it reads as unfixed
+  unless you know to grep `_FORBIDDEN`. Worth a comment in `workflows.router.ts`.
+- **Asynchronous OCR** — `StartDocumentTextDetectionCommand` replaces the synchronous
+  call, so multi-page PDFs work. This was the second half of our BE-8 ask.
+- **Presigned download URLs** (`getSignedDownloadUrl`) and **OCR text archiving**
+  (`saveOcrText`) — both noted.
+- **Eight aggregation endpoints** — instance stats, status counts, bottlenecks-ageing,
+  team-status-matrix, open-items-by-cabinet, task stats, `GET /sla/breaches` and document
+  stats. This is more than we asked for and it retires our client-side aggregation
+  problem. **We have only adopted `/tasks/stats` so far — that is on us**, and we are
+  tracking it.
 
 One naming note: we were calling `/notifications/mark-all-read`; the route is
 `/notifications/read-all`. **We changed our side** — `read-all` is the better name and
@@ -139,58 +160,112 @@ guessing is currently possible. `express-rate-limit` on that one route would clo
 
 ---
 
-## 🔴 BE-3 · Authorization on the workflow routes
+## 🔴 BE-12 · Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`
 
-**This is the most serious item in this document.**
+**This is now the most serious item in this document, and it is one line.**
 
 ### What we found
 
-`workflows.router.ts` has **25 routes and zero `requirePermission` calls**. We re-verified
-on `b72e0bf`:
+In `src/shared/constants/workflow.constants.ts`:
 
-```
-GET|POST   /workflows
-GET|PATCH  /workflows/:workflowId
-POST       /workflows/:workflowId/publish
-POST       /workflows/:workflowId/archive
-GET|POST   /workflow-instances
-GET        /workflow-instances/stats
-GET        /workflow-instances/:instanceId
-POST       /workflow-instances/:instanceId/{start,hold,resume,close}
-GET        /tasks · /tasks/stats · /tasks/:taskId
-POST       /tasks/:taskId/action
-PATCH      /tasks/:taskId/reassign
-GET|POST   /delegations · GET /delegations/:id · POST /delegations/:id/end
-GET        /workflow-history · /workflow-history/:historyId
+```ts
+export const WORKFLOW_DEFINITION_MANAGE_ROLES = ['client_admin', 'schulltech_admin'] as const;
+export const WORKFLOW_DEFINITION_VIEW_ROLES  = WORKFLOW_DEFINITION_MANAGE_ROLES;
 ```
 
-Tasks, delegations and history do check roles inside their services
-(`TASK_VIEW_ALL_ROLES`, `TASK_REASSIGN_ROLES`, `DELEGATION_*`). **Definitions and instances
-do not** — neither `definitions.service.ts` nor `instances.service.ts` reads `actor.roles`
-at all.
+Read access was aliased to manage access, and `definitions.service.ts` calls
+`assertCanView` on both `list` and `getById`. So `GET /workflows` now returns `403
+WORKFLOW_DEFINITION_VIEW_FORBIDDEN` for every role except `client_admin` and
+`schulltech_admin`.
 
-### Impact
+### Impact — document routing is unreachable for the roles that do it
 
-Any authenticated user — including a brand-new `staff` account — can create, edit, publish
-and archive workflow definitions, and start, hold, resume or close any workflow instance in
-the tenant.
+`staff` holds `workflow:route:own` and `supervisor` holds `workflow:route:department`.
+Neither can list the definitions they are supposed to route into.
 
-The `workflow:view|create|edit|publish|archive|route` permissions **are already seeded** in
-`seed-system.ts` and are never consulted.
+Our shared `useRouteToWorkflow` hook (`src/hooks/useRouteToWorkflow.tsx`, used by
+`/upload`, `/staff/cabinets` and `/doc/[id]`) calls `GET /workflows` and filters to
+`status === 'published'` to build its picker. On a `403` the query returns no data, the
+filtered list is empty, and the modal renders its empty state:
 
-Our `/admin/workflows` designer is gated to `client_admin`, but that is a client-side route
-guard — anyone can call the API directly.
+> *"No published workflows. A workflow has to be published in the Workflow Designer before
+> anything can be routed to it."*
 
-### What we need
+**That message is wrong and misleading.** A staff officer is told their organisation has no
+workflows, when in fact they are simply not permitted to see them. We would rather show a
+permission error, but we cannot distinguish the two cases from an empty list — which is
+itself an argument for BE-10 (a JSON 404/error shape we can branch on).
 
-`requirePermission('workflow', <action>)` on all 25 routes, plus role checks in the
-definitions and instances services. The permissions already exist, so this should be
-mechanical.
+This is the same outcome as the routing bug you fixed last week, from a different cause.
 
-Also: **`GET /documents/stats` has no authorization either** and returns tenant-wide
-document counts grouped by department.
+### It also contradicts the seeded permission model
+
+`seed-system.ts` grants `workflow:view` at `global` scope to **`management`** and
+**`internal_auditor`**. Both are refused by this constant. The RBAC table and the hardcoded
+role list disagree, and the hardcoded list wins.
+
+### What we are asking for
+
+Give read its own membership rather than aliasing manage:
+
+```ts
+export const WORKFLOW_DEFINITION_MANAGE_ROLES = ['client_admin', 'schulltech_admin'] as const;
+
+// Everyone who holds workflow:view or workflow:route needs to read definitions.
+// Routing a document requires listing published definitions to choose one.
+export const WORKFLOW_DEFINITION_VIEW_ROLES = [
+    'staff',
+    'supervisor',
+    'management',
+    'internal_auditor',
+    'client_admin',
+    'schulltech_admin',
+] as const;
+```
+
+Ideally derive this from the seeded `workflow:view` / `workflow:route` grants rather than
+maintaining a parallel list by hand — the drift above is exactly what a second source of
+truth produces. If you would rather restrict `list` to published definitions for
+non-managing roles, that works for us: the picker only ever shows `published`.
+
+### How to verify
+
+```bash
+# Sign in as the seeded staff account, then:
+curl -s -H "Authorization: Bearer $STAFF_TOKEN" \
+  http://localhost:3001/api/v1/workflows | jq .
+# Today: 403 WORKFLOW_DEFINITION_VIEW_FORBIDDEN
+# Wanted: 200 with the published definitions
+```
 
 ---
+
+## ✅ BE-3 · Authorization on the workflow routes — **DONE, thank you**
+
+This was the critical item on the list for a week. All five workflow services now assert
+roles and return a named `403`:
+
+| Service | Asserts |
+|---|---|
+| `definitions.service.ts` | `assertCanView` on list/getById, `assertCanManage` on create/update/publish/archive |
+| `instances.service.ts` | list, bottlenecks-ageing, team-status-matrix |
+| `tasks.service.ts` | list, approval queue, workload, stats |
+| `delegations.service.ts` | list, create, end |
+| `sla.service.ts` | breach list |
+
+We had asked for `requirePermission` on the routes and you enforced it in the services
+instead. That closes the hole, so we are not asking you to redo it — but two notes:
+
+1. **A route-level grep still shows zero `requirePermission` in `workflows.router.ts`**,
+   which reads as unfixed to anyone auditing quickly. The other eight routers use
+   `requirePermission`, so the workflow module is now the exception. A comment at the top
+   of `workflows.router.ts` pointing at the service-layer checks would save the next
+   reviewer from re-filing this.
+2. **Service-layer checks use role names, not the seeded permissions.** That is what
+   produced BE-12 above: the permission grants and the role constants can now disagree
+   silently. Worth considering whether `requirePermission` should still guard the routes
+   with the service checks as defence in depth.
+
 
 ## 🔴 BE-4 · Enforce confidentiality for download, print and export
 
@@ -267,7 +342,21 @@ approach differs a lot, and the PRD isn't specific. Happy to spec it together.
 
 ---
 
-## 🟠 BE-8 · Presigned upload URL
+## 🟠 BE-8 · Presigned upload URL — **half done**
+
+> **Update 2026-09-04.** The OCR half of this ask has shipped: Textract now uses
+> `StartDocumentTextDetectionCommand` (asynchronous, multi-page), reads from the
+> configured `S3_BUCKET`, and archives extracted text via `saveOcrText()`. You also added
+> `getSignedDownloadUrl()` — a presigned **GET**.
+>
+> **What is still missing is a presigned PUT**, so files can reach the bucket your worker
+> reads from. Until then the bucket mismatch below is unchanged, and OCR still fails on
+> every document. We accept that the remaining fix is mostly ours — we have to stop using
+> the third-party gateway — but we cannot do it without an upload path.
+>
+> One request while you are here: **move `searchIndexQueue.add()` off the OCR success
+> path.** A document that fails text extraction should still be findable by title,
+> reference and metadata. Right now one failure costs the document all searchability.
 
 ### What we found
 
@@ -407,11 +496,26 @@ dimensions would let us delete that code.
 ## Appendix C — how to reproduce the route inventory
 
 ```bash
-# in edms-backend
-find src/modules -name '*.router.ts' -exec grep -hoE \
-  "(\w*[Rr]outer|router)\.(get|post|patch|put|delete)\(" {} + | wc -l   # -> 83
+# in edms-backend, on dev @ e60c418
 
-# routes with no authorization middleware  -> 32
+# total routes -> 90
+find src -name '*.router.ts' -exec grep -hcE \
+  "^\s*[a-zA-Z]*[Rr]outer\.(get|post|put|patch|delete)\(" {} + \
+  | paste -sd+ | bc
+
+# per-router routes vs requirePermission calls
+for f in $(find src -name '*.router.ts' | sort); do
+  printf "%-32s routes=%-3s requirePermission=%s\n" "$(basename $f)" \
+    "$(grep -cE '^\s*[a-zA-Z]*[Rr]outer\.(get|post|put|patch|delete)\(' $f)" \
+    "$(grep -c requirePermission $f)"
+done
+# -> workflows.router.ts shows routes=32 requirePermission=0.
+#    That is EXPECTED as of 2026-09-04: the workflow module enforces in its
+#    services, not on its routes. Confirm with:
+grep -rn "_FORBIDDEN" src/modules/workflows --include=*.service.ts | wc -l
+
+# seeded permissions -> 45
+grep -cE "^\s+\{ resource: '[a-z_]+', action: '[a-z_]+' \}," prisma/seed-system.ts
 ```
 
 ---

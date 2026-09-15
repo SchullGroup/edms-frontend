@@ -2,19 +2,37 @@
 
 **Status:** Written 2026-08-29 against `EDMS-FRONTEND` @ `src/` (15,862 LOC) and `edms-backend` @ `tolu` branch, commit `2c8b901` (11,393 LOC).
 
-**Revised 2026-09-04** against `edms-backend` @ `dev` (`b72e0bf`, **83 routes** over 9 routers)
-and `EDMS-FRONTEND` @ `dev` (`f02c7b8`). Three findings changed and are marked
-**✅ RESOLVED** or **🟨 REVISED** in place rather than deleted, so the register stays
-readable as a history:
+**Revised 2026-09-04 (morning)** against `edms-backend` @ `dev` (`b72e0bf`, 83 routes) and
+`EDMS-FRONTEND` @ `dev` (`f02c7b8`):
 
-| Was | Now | Where |
+| Was | Now |
+|---|---|
+| DRIFT-09 — routing 404s | ✅ **Resolved** — two-call sequence shipped and wired |
+| DRIFT-10 — notifications module missing | 🟨 **Revised** — module and UI both exist; **nothing emits** |
+| DRIFT-05 — 23 workflow routes unguarded | 🔴 recounted to 25 |
+
+**Re-scanned 2026-09-04 (evening)** against `edms-backend` @ `dev` (`e60c418`,
+**90 routes** over 9 routers, 45 permissions) and `EDMS-FRONTEND` @ `dev` (`aec7863`,
+**46 pages**). The backend moved substantially — `feat(workflow): close workflow gaps 1-10`
+plus two OCR commits — and **the single most urgent finding in this document is now
+fixed**:
+
+| Finding | Change | Where |
 |---|---|---|
-| DRIFT-09 — routing 404s | ✅ **Resolved** — two-call sequence shipped and wired | [§8](#8-endpoint-by-endpoint-contract-table) |
-| DRIFT-10 — notifications module missing | 🟨 **Revised** — module and UI both exist; **nothing emits** | [§8](#8-endpoint-by-endpoint-contract-table) |
-| DRIFT-05 — 23 workflow routes unguarded | 🔴 **Unchanged, recounted** — it is **25** routes | [§10](#10-drift-register--ranked-with-owners) |
+| DRIFT-05 — workflow routes unguarded | ✅ **RESOLVED** — every workflow service now enforces roles | [§4](#4-authorization-four-independent-layers) |
+| DRIFT-06 — OCR reads the wrong bucket | 🔄 **Owner flips to Frontend** — the backend half is now correct | [§5](#5-the-document-storage-path-and-why-ocr-cannot-work) |
+| DRIFT-07 — client-side aggregation | 🔄 **Owner flips to Frontend** — 8 aggregation endpoints now exist | [§10](#10-drift-register--ranked-with-owners) |
+| **DRIFT-14 (new)** | 🔴 Workflow definitions are now **admin-only to read**, which breaks routing for the roles that are granted it | [§4](#4-authorization-four-independent-layers) |
 
-Route counts throughout this document were 74 at the time of writing; the backend `dev`
-branch has since grown to 83. Counts below have been updated.
+> ⚠️ **Do not re-derive DRIFT-05 from a route-level grep.** `requirePermission` still
+> appears **0 times** in `workflows.router.ts`, and that no longer means what it used to.
+> Authorization moved into the **service layer** — `definitions.service.ts`,
+> `instances.service.ts`, `tasks.service.ts`, `delegations.service.ts` and
+> `sla.service.ts` each assert roles and throw `403` with a named code. Grep for
+> `_FORBIDDEN` rather than `requirePermission` when checking the workflow module.
+
+Route counts throughout this document were 74 when written, 83 this morning, and **90**
+now. Counts below have been updated.
 
 This document describes **what actually exists in the code today**, not the target design.
 Where the two systems disagree, the disagreement is named explicitly and marked with a
@@ -80,7 +98,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
 │                               │              │                                        │
-│  Sole responsibility:         │              │  83 routes over 9 modules              │
+│  Sole responsibility:         │              │  90 routes over 9 modules              │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
 │  sees it.                     │              │  │ Repository → PrismaClient        │  │
@@ -110,8 +128,8 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
-| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 42 pages |
-| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 83 routes, Swagger at `/api-docs` |
+| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 46 pages (45 authed + 1 public) |
+| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 90 routes, Swagger at `/api-docs` |
 | Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |
 
@@ -291,7 +309,7 @@ which layer denies a request is the single most common source of confusion in th
 │ WHERE   middlewares/role.middleware.ts → requirePermission(resource, action)     │
 │ INPUT   req.user.permissions, rebuilt from the DB on every request              │
 │ EFFECT  403 FORBIDDEN, or sets req.permissionScope                              │
-│ TRUST   ✅ REAL — but absent from all 25 workflow routes.                       │
+│ TRUST   ✅ REAL — used by 8 of 9 routers. Workflows enforce in-service instead. │
 └────────────────────────────────────────────────────────────────────────────────┘
 ┌─ LAYER 4 ── Backend row/instance-level filters ────────────────────────────────┐
 │ 4a  RBAC scope    → documents.repository buildDocumentWhere / applyAccessScope  │
@@ -375,28 +393,74 @@ check, and `routes.config` opens all of `/platform` — but that user cannot cal
 appears to work because **every `/platform` page reads from `SEED`**, never from the API.
 
 `management` is the subtle one: the UI offers approve/reject affordances the backend
-never granted. Because the workflow routes have no `requirePermission` at all
-(DRIFT-05), those actions currently succeed — for the wrong reason.
+never granted. Those calls now fail correctly with a `403` (see DRIFT-05 below), so the
+drift is cosmetic — the UI promises a right the backend refuses.
 
-### 🔴 DRIFT-05 — 25 workflow routes have no permission check
+### ✅ DRIFT-05 — RESOLVED 2026-09-04
 
-`edms-backend/src/modules/workflows/workflows.router.ts` contains **zero** `requirePermission`
-calls. Tasks, delegations and history compensate with in-service role checks
-(`TASK_VIEW_ALL_ROLES`, `TASK_REASSIGN_ROLES`, `DELEGATION_*`). **Definitions and instances
-do not** — neither `definitions.service.ts` nor `instances.service.ts` reads roles at all.
+*The original finding:* `workflows.router.ts` contained **zero** `requirePermission`
+calls, and neither `definitions.service.ts` nor `instances.service.ts` read roles at all.
+Any authenticated user, including plain `staff`, could create, edit, publish or archive a
+workflow definition and drive any instance. This was the highest-severity finding in the
+pair of codebases.
 
-Any authenticated user, including plain `staff`, can today:
+*What shipped* (`feat(workflow): close workflow gaps 1-10`): authorization moved into the
+**service layer**, where it now covers all five workflow services.
 
-- `POST /workflows` — create a workflow definition
-- `PATCH /workflows/:id` — edit one
-- `POST /workflows/:id/publish` / `/archive`
-- `POST /workflow-instances` and `/:id/start` `/hold` `/resume` `/close`
+| Service | Asserts | Error codes |
+|---|---|---|
+| `definitions.service.ts` | `assertCanView` on list/getById; `assertCanManage` on create/update/publish/archive | `WORKFLOW_DEFINITION_VIEW_FORBIDDEN`, `WORKFLOW_DEFINITION_MANAGE_FORBIDDEN` |
+| `instances.service.ts` | list, bottlenecks-ageing, team-status-matrix | `WORKFLOW_INSTANCE_LIST_FORBIDDEN`, … |
+| `tasks.service.ts` | list, approval queue, workload, stats | `TASK_LIST_FORBIDDEN`, … |
+| `delegations.service.ts` | list, create, end | `DELEGATION_*_FORBIDDEN` |
+| `sla.service.ts` | breach list | `SLA_BREACH_LIST_FORBIDDEN` |
 
-The `workflow:view/create/edit/publish/archive/route` permissions **are seeded** and are
-never consulted. The frontend Workflow Designer at `/admin/workflows` is gated to
-`client_admin` in `routes.config.ts` — Layer 1 only, which DRIFT-02 makes forgeable.
+Role membership comes from `src/shared/constants/workflow.constants.ts` —
+`WORKFLOW_DEFINITION_MANAGE_ROLES`, `WORKFLOW_OVERSIGHT_ROLES`,
+`WORKFLOW_ORGANIZATION_WIDE_ROLES`, `TASK_REASSIGN_ROLES`. A new
+`shared/utils/workflow-scope.ts` additionally narrows a **pure supervisor** to their own
+department on reads, while leaving organisation-wide roles unrestricted.
 
-**This is the highest-severity finding in the pair of codebases.** Owner: backend.
+> ⚠️ **The route-level grep is now misleading.** `requirePermission` is still absent from
+> all 32 workflow routes, and that no longer indicates a hole. Check `_FORBIDDEN` instead.
+> Whether authorization *belongs* in the service rather than the router is a real design
+> question — the other eight routers use `requirePermission` — but it is enforced.
+
+### 🔴 DRIFT-14 — Workflow definitions became unreadable by the roles that route documents
+
+Introduced by the same commit that fixed DRIFT-05:
+
+```ts
+// src/shared/constants/workflow.constants.ts
+export const WORKFLOW_DEFINITION_MANAGE_ROLES = ['client_admin', 'schulltech_admin'];
+export const WORKFLOW_DEFINITION_VIEW_ROLES  = WORKFLOW_DEFINITION_MANAGE_ROLES;
+```
+
+Read access was set equal to manage access. Two consequences:
+
+**1. It breaks document routing for the roles granted it.** `staff` holds
+`workflow:route:own` and `supervisor` holds `workflow:route:department`, but neither can
+now call `GET /workflows`. The frontend's shared `useRouteToWorkflow` hook
+(`src/hooks/useRouteToWorkflow.tsx`, used by `/upload`, `/staff/cabinets` and `/doc/[id]`)
+lists definitions to build its picker and filters to `status === 'published'`. On a 403,
+`data` is `undefined`, so `publishedWorkflows` is `[]` and the modal renders its empty
+state:
+
+> *"No published workflows. A workflow has to be published in the Workflow Designer before
+> anything can be routed to it."*
+
+**Which is not true, and not the reason.** A staff officer is told the organisation has no
+workflows when in fact they are simply not allowed to see them. Routing is unreachable
+again for exactly the roles that do it — a different cause from DRIFT-09, same outcome.
+
+**2. It contradicts the seeded permission model.** `management` and `internal_auditor` are
+both granted `workflow:view:global` in `prisma/seed-system.ts`, and both are refused by
+this hardcoded list. The RBAC table says yes; the constant says no.
+
+**Fix:** give read its own membership. `WORKFLOW_DEFINITION_VIEW_ROLES` should include
+every role holding `workflow:view` or `workflow:route` — realistically all six — while
+`MANAGE` stays `client_admin` + `schulltech_admin`. Owner: backend. **This is now the
+highest-severity open finding**, because it silently disables the product's core loop.
 
 ---
 
@@ -440,6 +504,22 @@ never consulted. The frontend Workflow Designer at `/admin/workflows` is gated t
 ```
 
 ### 🔴 DRIFT-06 — The file is never in the bucket Textract reads from
+
+> 🔄 **Owner flipped to Frontend, 2026-09-04.** The backend half of this finding is now
+> correct. Two commits (`chore(config): ocr worker starter`,
+> `fix(documents): ocr worker update`) replaced the synchronous Textract call with
+> **`StartDocumentTextDetectionCommand`** — the asynchronous API, which handles multi-page
+> PDFs and retires problem (e) below — and added `src/shared/utils/storage.ts` with
+> `getSignedDownloadUrl()` (a 15-minute presigned GET, so a `fileKey` becomes a usable
+> `fileUrl` in responses) and `saveOcrText()` (archives extracted text under
+> `ocr-text/`).
+>
+> **The root cause is unchanged and is entirely frontend-side.** `s3.service.ts` still
+> posts to the hard-coded third-party API Gateway, so the file is still not in
+> `env.S3_BUCKET` and Textract still cannot read it. Every consequence below still holds.
+> Fixing this is now a single-repo change: upload through the backend instead of the
+> gateway. Problem (c) is the piece still missing — there is a presigned **GET** but no
+> presigned **PUT**.
 
 The browser uploads to a **third-party API Gateway hard-coded in `s3.service.ts`**. That
 gateway writes to whatever bucket it owns and returns a `pdf_url`. The backend then
@@ -531,9 +611,34 @@ The file's own header is candid about this and should be read in full — it cor
 identifies that this reconstructs in JS what one SQL `GROUP BY` would do on the server,
 and that it does not scale.
 
-Every management and supervisor dashboard depends on it. **The backend has no aggregation,
-reporting, or statistics endpoints of any kind.** This is the single largest backend gap
-for the management role.
+Every management and supervisor dashboard depends on it.
+
+> 🔄 **Owner flipped to Frontend, 2026-09-04.** The sentence that used to sit here —
+> *"the backend has no aggregation, reporting or statistics endpoints of any kind"* — is
+> no longer true. `feat(workflow): close workflow gaps 1-10` added **eight**:
+>
+> | Endpoint | Replaces |
+> |---|---|
+> | `GET /workflow-instances/stats` | instance rollups |
+> | `GET /workflow-instances/status-counts` | status tiles |
+> | `GET /workflow-instances/bottlenecks-ageing` | `/supervisor/bottlenecks` ageing buckets |
+> | `GET /workflow-instances/team-status-matrix` | team overview grid |
+> | `GET /workflow-instances/open-items-by-cabinet` | cabinet backlog |
+> | `GET /tasks/stats` | completed-task SLA rollup by department |
+> | `GET /sla/breaches` | SLA breach list (reads the `SlaBreach` table directly) |
+> | `GET /documents/stats` | document counts by department |
+>
+> **The frontend consumes exactly one of them** (`GET /tasks/stats`, in
+> `tasks.service.ts:81`). `fetchAllPages` is still wired into four hooks —
+> `useDocuments`, `useTasks`, `useCabinets`, `useWorkflowInstances` — so every management
+> and supervisor dashboard still pages whole collections into the browser.
+>
+> Note `GET /sla/breaches` in particular: the docs previously flagged that SLA compliance
+> was recomputed client-side while the `SlaBreach` table already held the answer. There is
+> now an endpoint that serves it.
+>
+> Adopting these is the highest-value frontend work outstanding, and it deletes
+> `fetchAllPages.ts` rather than optimising it.
 
 ---
 
@@ -890,9 +995,10 @@ suspiciously few documents.
 
 | ID | Severity | Title | Owner | Blast radius |
 |---|---|---|---|---|
-| DRIFT-05 | 🔴 **Critical** | **25** workflow routes have zero permission checks | Backend | Any staff user can publish/archive workflow definitions and drive any instance |
+| **DRIFT-14** | 🔴 **Critical** | Workflow definitions are readable only by `client_admin`/`schulltech_admin`, so `staff` and `supervisor` cannot list the workflows they hold `workflow:route` for | Backend | **Document routing is unreachable again.** The picker reports "no published workflows", which is neither true nor the reason. Also contradicts `management` and `internal_auditor`'s seeded `workflow:view:global` |
 | DRIFT-11 | 🔴 **Critical** | Audit trail unimplemented on both sides | Backend | The product's compliance claim is a mock; `audit_entries` is never written |
-| DRIFT-06 | 🔴 **Critical** | Upload target ≠ Textract source bucket | Both | OCR always fails → search index never built → search silently returns nothing |
+| DRIFT-06 | 🔴 **Critical** | Upload target ≠ Textract source bucket | **Frontend** *(was Both)* | OCR always fails → search index never built → search silently returns nothing. Backend half now correct: async Textract, presigned GET, OCR archiving |
+| ~~DRIFT-05~~ | ✅ **Resolved** | ~~Workflow routes have zero permission checks~~ — all five workflow services now assert roles and return `403` | Backend | Was: any staff account could publish or archive workflow definitions |
 | DRIFT-02 | 🔴 High | Frontend route guard is client-side only, no `middleware.ts` | Frontend | Any role forgeable via localStorage; fully exposes all `SEED`-backed portals |
 | ~~DRIFT-09~~ | ✅ **Resolved** | ~~`POST /workflow-instances/start` 404s~~ — two-call sequence shipped 2026-09 | Frontend | Was: document routing did not work from the UI at all |
 | DRIFT-10 | 🔴 High | **Revised** — notifications module and UI now both exist, but **nothing calls `notifyUser`**, so the table is always empty | Backend | Task assignment, SLA warnings and returned work are all silent |
@@ -904,7 +1010,7 @@ suspiciously few documents.
 | DRIFT-12 | 🟠 Med | Login test accounts don't exist | Frontend | Every autofill button fails; blocks new-dev onboarding |
 | — | 🟠 Med | Prisma client stale → all users forced to `department` scope | Backend | Run `npx prisma generate` |
 | DRIFT-13 | 🟠 Med | `effStatus()` is a no-op on real data — two divergent copies, no `due` field on `Document`, capitalized status compares | Frontend | Every overdue count, badge and ageing bucket is permanently zero across 8 call sites |
-| DRIFT-07 | 🟡 Low | Client-side aggregation via `fetchAllPages` | Backend | Management dashboards fire up to 50 sequential requests |
+| DRIFT-07 | 🟠 Med | Client-side aggregation via `fetchAllPages`, now that server-side endpoints exist and go unused | **Frontend** *(was Backend)* | Management dashboards still fire up to 50 sequential requests; 7 of the 8 new aggregation endpoints have no caller |
 | — | 🟡 Low | `top_secret` settable but unreadable by anyone | Backend | Documents can be permanently orphaned |
 | — | 🟡 Low | Cabinet access-grant CRUD has no UI | Frontend | Need-to-know model unusable in the product |
 | — | 🟡 Low | Enum casing mismatch (`Pending` vs `pending`) | Both | Badge/filter mismatches on mixed-source pages |
@@ -913,30 +1019,44 @@ suspiciously few documents.
 
 ### Suggested order of attack
 
-**Week 1 — stop the bleeding (backend)**
-1. `npx prisma generate` (2 minutes, unblocks the build and un-narrows every scope)
-2. Add `requirePermission` to all **25** workflow routes + role checks in
-   `definitions.service` / `instances.service` (DRIFT-05) — **still open, now the single
-   most urgent item in either codebase**
-3. Add a JSON 404 handler to `app.ts` so missing routes fail legibly (DRIFT-10b)
+*Re-ordered 2026-09-04 evening. Items 2, 4 and the aggregation endpoints are done; a new
+item 1 jumped the queue.*
 
-**Week 1 — stop the bleeding (frontend)**
-4. ✅ ~~Fix `workflowInstancesService.start()` to do the two-call create-then-start~~ —
-   **done** (DRIFT-09 resolved)
-5. Fix the login test-account emails to the `tjoel+…` set (DRIFT-12)
-6. Make `usePermissions` parse three-segment strings **before** anyone touches
+**Do first — one constant, and the core loop comes back (backend)**
+1. 🔴 **Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`** so `staff`,
+   `supervisor`, `management` and `internal_auditor` can read definitions (DRIFT-14).
+   **A one-line change that currently blocks document routing entirely.** Verify against
+   the seeded `workflow:view` / `workflow:route` grants rather than picking a role list by
+   hand.
+2. ✅ ~~`npx prisma generate`~~ — done
+3. ✅ ~~Add authorization to the workflow routes~~ — **done** (DRIFT-05 resolved, in the
+   service layer)
+4. Add a JSON 404 handler to `app.ts` so missing routes fail legibly (DRIFT-10b)
+
+**Then — frontend**
+5. ✅ ~~Two-call create-then-start~~ — done (DRIFT-09 resolved)
+6. 🔴 **Upload through the backend instead of the hard-coded third-party gateway**
+   (DRIFT-06). Now a frontend-only change: the async Textract path, the bucket
+   configuration and the presigned GET all exist. A presigned **PUT** endpoint is the one
+   backend piece still missing.
+7. **Adopt the eight aggregation endpoints and delete `fetchAllPages.ts`** (DRIFT-07).
+   Seven of the eight have no caller; `useDocuments`, `useTasks`, `useCabinets` and
+   `useWorkflowInstances` still page whole collections.
+8. Fix the login test-account emails to the `tjoel+…` set (DRIFT-12)
+9. Make `usePermissions` parse three-segment strings **before** anyone touches
    `/auth/me` (DRIFT-03)
+10. Fix `effStatus()` — one implementation, against a field that exists (DRIFT-13)
 
-**Weeks 2–3 — make the core real**
-7. Presigned upload endpoint + async Textract + unconditional search indexing (DRIFT-06)
-8. Build the audit module and call `AuditService.log()` from every mutating service
-   (DRIFT-11)
-9. ~~Build the notifications module~~ — **built.** What remains is to *call* it:
-   `notifyUser` from task assignment, reassignment, rejection and the SLA worker
-   (DRIFT-10). Small change, high value — the UI is already waiting for the data.
-10. `middleware.ts` for server-side route protection (DRIFT-02)
+**Then — make the governance half real**
+11. Build the audit module and call `AuditService.log()` from every mutating service
+    (DRIFT-11). `AUDIT_ACTIONS` now lists 25 action types and
+    `src/middlewares/audit.middleware.ts` is still a 0-byte file.
+12. ~~Build the notifications module~~ — **built.** What remains is to *call* it:
+    `notifyUser` from task assignment, reassignment, rejection and the SLA worker
+    (DRIFT-10). Still **zero** callers outside the module. Small change, high value — the
+    UI is already waiting for the data.
+13. `middleware.ts` for server-side route protection (DRIFT-02)
 
-**Week 4+ — close the feature gaps**
-11. Aggregation/reporting endpoints, then delete `fetchAllPages.ts` (DRIFT-07)
-12. Cabinet access-grant UI; comments + signatures endpoints (DRIFT-08)
-13. Circulars, policies and branding — currently mock on both sides
+**Then — close the feature gaps**
+14. Comments + signatures endpoints (DRIFT-08); a gated `GET /documents/:id/download`
+15. Circulars, policies and branding — currently mock on both sides
