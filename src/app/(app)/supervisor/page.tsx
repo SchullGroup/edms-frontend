@@ -78,7 +78,7 @@ export default function SupervisorDashboard() {
       title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
       body: (
         <div>
-          <div className="field mb12">
+          <div className="field mb-3">
             <label>Current Assignee</label>
             <input
               className="input"
@@ -86,7 +86,7 @@ export default function SupervisorDashboard() {
               value={t.assignee?.name || t.assignedRole?.name || 'Unassigned'}
             />
           </div>
-          <div className="field mb12">
+          <div className="field mb-3">
             <label>
               New Assignee <span className="req">*</span>
             </label>
@@ -166,7 +166,7 @@ export default function SupervisorDashboard() {
       key: 'memberName',
       label: 'Member',
       render: (r) => (
-        <span className="flex aic g8">
+        <span className="flex items-center gap-2">
           <Avatar user={{ name: r.memberName }} sm />
           <span>
             <div style={{ fontWeight: 700 }}>{r.memberName}</div>
@@ -207,7 +207,7 @@ export default function SupervisorDashboard() {
         </div>
       </div>
 
-      <div className="grid cols-4 mb16">
+      <div className="grid cols-4 mb-4">
         {tiles.map((t, i) => (
           <div
             key={i}
@@ -280,7 +280,7 @@ function MemberDrawerBody({
 
   return (
     <div>
-      <div className="flex aic g12 mb16">
+      <div className="flex items-center gap-3 mb-4">
         <Avatar user={{ name: member.memberName }} />
         <div>
           <b style={{ fontSize: '14px', color: 'var(--ink)' }}>{member.memberName}</b>
@@ -320,7 +320,7 @@ function MemberDrawerBody({
                   >
                     {doc?.title || 'Unknown document'}
                   </div>
-                  <div className="task-meta flex aic g8">
+                  <div className="task-meta flex items-center gap-2">
                     <StatusBadge status={overdue ? 'Overdue' : 'Pending'} />
                   </div>
                 </div>
@@ -341,7 +341,7 @@ function MemberDrawerBody({
       ) : (
         <div className="empty" style={{ padding: '32px 16px' }}>
           <Icon name="approve" size={32} />
-          <div className="h3 mt16 mb8">No open items</div>
+          <div className="h3 mt-4 mb-2">No open items</div>
           <p className="caption">This member’s queue is clear.</p>
         </div>
       )}

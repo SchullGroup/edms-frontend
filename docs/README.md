@@ -105,6 +105,24 @@ Two claims in an earlier draft were wrong and have been corrected in place:
 above was found; and the three "7-line stub" pages are **re-exports**, one of which
 (`/platform/flags`) renders the wrong screen entirely.
 
+**Correction (2026-09-10).** Doc 05 stated `/admin/users` "writes the role matrix to
+`SEED`" and listed `useRole`/`useUpdateRole`/`useDeleteRole` etc. as dead — both were
+stale. The matrix already used `PUT /roles/{id}/permissions` via `useSetRolePermissions`;
+this session then wired role **rename/delete** and user **role assign/remove**, the
+`/doc/[id]` **versions/metadata/archive** surface, `/admin/cabinets` **folder rename +
+metadata-field edit**, and the `/tasks/stats` · `/workflow-instances/stats` ·
+`/documents/stats` tiles on the management dashboards. Frontend gating was also
+rebuilt to be **permission-key based** (`src/lib/permissions.ts`), retiring the
+`usePermissions` role-name heuristics — see DRIFT-03 / DRIFT-04 in doc 01.
+
+**Correction (2026-09-15).** DRIFT-03's remaining backend half is done: `POST /auth/login`
+and `GET /auth/me` now return a scoped `permissions: string[]` array. That live payload
+is the precise per-user source of truth; `useHydratePermissions` (role-derived, from
+`GET /roles`) is a gap-filler only. It previously *replaced* `currentUser.permissions`
+outright on any mismatch with the role-derived set — harmless while the payload was
+empty, but silently scope-dropping the moment it wasn't — so it was fixed to only add
+genuinely missing keys. See DRIFT-03 in doc 01.
+
 ---
 
 ## Relationship to the older docs

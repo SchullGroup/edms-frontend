@@ -39,7 +39,8 @@ export const rolesService = {
     return normalizeRole(response.data.data);
   },
 
-  // `PUT` (not POST) — replaces the whole permission set. Matches the Swagger spec.
+  // `PUT` — replaces the WHOLE permission set for the role, so callers must send
+  // the complete desired list (each `{ id?, resource, action }`), not a delta.
   setPermissions: async (id: string, permissions: RolePermission[]): Promise<Role> => {
     const response = await apiClient.put<ApiResponse<Role>>(`/roles/${id}/permissions`, {
       permissions,

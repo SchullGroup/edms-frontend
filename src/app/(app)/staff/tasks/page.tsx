@@ -152,8 +152,8 @@ export default function MyTasksPage() {
         ) : (
           <div className="empty">
             <Icon name="inbox" size={32} />
-            <div className="h3 mt16 mb8">No tasks in this view</div>
-            <p className="caption mb16">Adjust the filters, or enjoy the quiet moment.</p>
+            <div className="h3 mt-4 mb-2">No tasks in this view</div>
+            <p className="caption mb-4">Adjust the filters, or enjoy the quiet moment.</p>
           </div>
         )}
       </div>

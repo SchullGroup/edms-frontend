@@ -9,6 +9,7 @@ import {
   DocumentMetadataValueInput,
   CreateVersionRequest,
   UploadDocumentRequest,
+  DocumentStatsResponse,
 } from '@/types/models';
 
 export interface DocumentFilters {
@@ -45,6 +46,15 @@ export const documentsService = {
 
   getById: async (id: string): Promise<Document> => {
     const response = await apiClient.get<ApiResponse<Document>>(`/documents/${id}`);
+    return response.data.data;
+  },
+
+  // Server-side count aggregates for the management dashboards. Shape unverified —
+  // see `DocumentStatsResponse`. Callers must tolerate a 404 / partial payload.
+  getStats: async (params?: Record<string, any>): Promise<DocumentStatsResponse> => {
+    const response = await apiClient.get<ApiResponse<DocumentStatsResponse>>('/documents/stats', {
+      params,
+    });
     return response.data.data;
   },
 
@@ -131,17 +141,7 @@ export const documentsService = {
     return response.data.data;
   },
 
-  // Comments & Signatures — implemented on the Express backend, not in the Swagger spec.
-  addComment: async (id: string, text: string): Promise<any> => {
-    const response = await apiClient.post<ApiResponse<any>>(`/documents/${id}/comments`, { text });
-    return response.data.data;
-  },
-
-  addSignature: async (
-    id: string,
-    data: { fieldName: string; method?: string; password: string },
-  ): Promise<any> => {
-    const response = await apiClient.post<ApiResponse<any>>(`/documents/${id}/signatures`, data);
-    return response.data.data;
-  },
+  // NOTE: there is no document-level comments or signatures endpoint. Comments
+  // are the `comment` field on `POST /tasks/{taskId}/action`; a signature is the
+  // `signature` image on that endpoint's `approve` action (see tasks.service).
 };

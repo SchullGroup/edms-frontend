@@ -108,12 +108,12 @@ export default function BrandingPage() {
             </div>
             <div style={{ padding: '18px', fontSize: '13px', lineHeight: 1.6 }}>
               <p>Hello {'{{first_name}}'},</p>
-              <p className="mt8">
+              <p className="mt-2">
                 {t === 'Task assigned'
                   ? '“{{document_title}}” has been routed to you at stage “{{stage}}”. It is due {{due_date}}.'
                   : `This is the ${t.toLowerCase()} template. Merge fields: {{document_title}}, {{stage}}, {{due_date}}, {{link}}.`}
               </p>
-              <p className="mt8">
+              <p className="mt-2">
                 <span
                   className="btn btn-sm"
                   style={{ background: localB.accent, color: '#fff', pointerEvents: 'none' }}
@@ -123,7 +123,7 @@ export default function BrandingPage() {
               </p>
             </div>
           </div>
-          <div className="caption mt8">Templates inherit tenant branding automatically.</div>
+          <div className="caption mt-2">Templates inherit tenant branding automatically.</div>
         </div>
       ),
       actions: [
@@ -177,7 +177,7 @@ export default function BrandingPage() {
 
       <div className="grid cols-2" style={{ alignItems: 'start' }}>
         <div>
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <span className="h3">Identity</span>
             </div>
@@ -290,8 +290,8 @@ export default function BrandingPage() {
                 </div>
               )}
 
-              <div className="h3 mb8 mt8">Sample alternate brands</div>
-              <div className="flex g8 wrap">
+              <div className="h3 mb-2 mt-2">Sample alternate brands</div>
+              <div className="flex gap-2 flex-wrap">
                 {PRESETS.map((p) => (
                   <button
                     key={p.name}
@@ -353,7 +353,7 @@ export default function BrandingPage() {
               </div>
             ))}
             <div className="divider"></div>
-            <div className="h3 mb8">Login preview</div>
+            <div className="h3 mb-2">Login preview</div>
             <div
               style={{
                 border: '1px solid var(--border)',
@@ -383,7 +383,7 @@ export default function BrandingPage() {
               <b>{localB.appName || 'SchullTech EDMS'}</b>
               <div className="caption">{localB.tenantName}</div>
               <div
-                className="btn btn-sm mt8"
+                className="btn btn-sm mt-2"
                 style={{ background: localB.primary, color: '#fff', pointerEvents: 'none' }}
               >
                 Sign in with SSO

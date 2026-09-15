@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
@@ -16,12 +17,18 @@ import {
   useUpdateCabinet,
   useDeleteCabinet,
   useAddMetadataField,
+  useUpdateMetadataField,
   useDeleteMetadataField,
   useCabinetAccessGrants,
   useGrantCabinetAccess,
   useRevokeCabinetAccess,
 } from '@/apis/hooks/useCabinets';
-import { useCabinetFolders, useCreateFolder, useDeleteFolder } from '@/apis/hooks/useFolders';
+import {
+  useCabinetFolders,
+  useCreateFolder,
+  useUpdateFolder,
+  useDeleteFolder,
+} from '@/apis/hooks/useFolders';
 import { useDocuments, useDocument } from '@/apis/hooks/useDocuments';
 import { documentsService } from '@/apis/services/documents.service';
 import { useDepartments } from '@/apis/hooks/useDepartments';
@@ -52,6 +59,7 @@ export default function CabinetDesignerPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { auditAction, currentUser } = useStore();
+  const { can, scopeFor } = usePermissions();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
   const { data: cabinetsResponse, isLoading, isError, refetch } = useCabinets();
@@ -65,10 +73,7 @@ export default function CabinetDesignerPage() {
 
   // Admins see every cabinet. Everyone else sees only cabinets scoped to their
   // own department, plus "general" cabinets that aren't scoped to any (departmentId null).
-  const roleNames = (currentUser?.roles || []).map((r: any) =>
-    typeof r === 'string' ? r : r?.name,
-  );
-  const isAdmin = roleNames.some((r) => r === 'client_admin' || r === 'schulltech_admin');
+  const isAdmin = can('cabinet', 'create') || scopeFor('cabinet', 'view') === 'global';
   const { data: me } = useUser(currentUser?.id || '');
   const myDepartmentId = me?.departmentId ?? null;
 
@@ -90,12 +95,14 @@ export default function CabinetDesignerPage() {
   const { data: folData, isLoading: isLoadingFolders } = useCabinetFolders(activeCab?.id);
   const activeCabFolders = folData?.data || [];
   const createFolder = useCreateFolder();
+  const updateFolder = useUpdateFolder();
   const deleteFolder = useDeleteFolder();
 
   // `metadataFields` only comes back on the single-cabinet GET, not the list.
   const { data: activeCabDetail, isLoading: isLoadingSchema } = useCabinet(activeCab?.id);
   const activeSchema = activeCabDetail?.metadataFields || [];
   const addMetadataField = useAddMetadataField();
+  const updateMetadataField = useUpdateMetadataField();
   const deleteMetadataField = useDeleteMetadataField();
 
   // Access grants for the selected cabinet.
@@ -403,6 +410,89 @@ export default function CabinetDesignerPage() {
     });
   };
 
+  const handleRenameFolder = (f: any) => {
+    let name = f.name;
+    openModal({
+      title: `Rename folder "${f.name}"`,
+      body: (
+        <div className="field">
+          <label>Folder name</label>
+          <input
+            className="input"
+            defaultValue={f.name}
+            onChange={(e) => (name = e.target.value)}
+          />
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save',
+          kind: 'btn-primary',
+          onClick: () => {
+            if (!name.trim() || name.trim() === f.name) return closeModal();
+            updateFolder.mutate(
+              { id: f.id, updates: { name: name.trim() } },
+              {
+                onSuccess: () => {
+                  auditAction('FOLDER_EDIT', activeCab.id, `Renamed folder → ${name}`);
+                  closeModal();
+                },
+              },
+            );
+          },
+        },
+      ],
+    });
+  };
+
+  const handleEditField = (r: any) => {
+    let fn = r.name;
+    let rq = !!r.isRequired;
+    openModal({
+      title: `Edit field "${r.name}"`,
+      body: (
+        <div className="grid" style={{ gap: '12px' }}>
+          <div className="field">
+            <label>Field name</label>
+            <input
+              className="input"
+              defaultValue={r.name}
+              onChange={(e) => (fn = e.target.value)}
+            />
+          </div>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              defaultChecked={rq}
+              onChange={(e) => (rq = e.target.checked)}
+            />
+            Required
+          </label>
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save',
+          kind: 'btn-primary',
+          onClick: () => {
+            if (!fn.trim()) return;
+            updateMetadataField.mutate(
+              { cabinetId: activeCab.id, fieldId: r.id, updates: { name: fn.trim(), isRequired: rq } },
+              {
+                onSuccess: () => {
+                  auditAction('SCHEMA_EDIT', activeCab.id, `Edited field ${fn}`);
+                  closeModal();
+                },
+              },
+            );
+          },
+        },
+      ],
+    });
+  };
+
   const handleNewField = () => {
     let fn = '';
     let ft: 'text' | 'number' | 'date' | 'select' | 'boolean' = 'text';
@@ -692,21 +782,26 @@ export default function CabinetDesignerPage() {
       key: 'act',
       label: '',
       render: (r) => (
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => {
-            deleteMetadataField.mutate(
-              { cabinetId: activeCab.id, fieldId: r.id },
-              {
-                onSuccess: () => {
-                  auditAction('SCHEMA_EDIT', activeCab.id, 'Removed field ' + r.name);
+        <span className="flex gap-2">
+          <button className="btn btn-ghost btn-sm" onClick={() => handleEditField(r)}>
+            Edit
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              deleteMetadataField.mutate(
+                { cabinetId: activeCab.id, fieldId: r.id },
+                {
+                  onSuccess: () => {
+                    auditAction('SCHEMA_EDIT', activeCab.id, 'Removed field ' + r.name);
+                  },
                 },
-              },
-            );
-          }}
-        >
-          Remove
-        </button>
+              );
+            }}
+          >
+            Remove
+          </button>
+        </span>
       ),
     },
   ];
@@ -784,7 +879,7 @@ export default function CabinetDesignerPage() {
         </div>
 
         <div className="min-w-0" style={{ flexGrow: 1 }}>
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <span className="h3">
                 {activeCab.name}
@@ -794,7 +889,7 @@ export default function CabinetDesignerPage() {
                   </span>
                 )}
               </span>
-              <span className="flex aic g8">
+              <span className="flex items-center gap-2">
                 <button className="btn btn-secondary btn-sm" onClick={handleEditCabinet}>
                   Edit
                 </button>
@@ -809,7 +904,7 @@ export default function CabinetDesignerPage() {
             </div>
           </div>
 
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <span className="h3">{activeCab.name} — structure</span>
               <button className="btn btn-secondary btn-sm" onClick={handleNewFolder}>
@@ -823,7 +918,7 @@ export default function CabinetDesignerPage() {
                 <>
                   {activeCabFolders.length > 8 && (
                     <input
-                      className="input mb8"
+                      className="input mb-2"
                       type="search"
                       placeholder={`Filter ${activeCabFolders.length} folders…`}
                       value={folderFilter}
@@ -839,7 +934,7 @@ export default function CabinetDesignerPage() {
                           style={{ cursor: 'pointer' }}
                           onClick={() => setOpenFolderId((cur) => (cur === f.id ? null : f.id))}
                         >
-                          <span className="flex aic g8">
+                          <span className="flex items-center gap-2">
                             <span
                               style={{
                                 display: 'inline-flex',
@@ -856,8 +951,17 @@ export default function CabinetDesignerPage() {
                             </span>
                             {f.name}
                           </span>
-                          <span className="flex aic g8">
+                          <span className="flex items-center gap-2">
                             <span className="caption">{f._count?.documents ?? 0} docs</span>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRenameFolder(f);
+                              }}
+                            >
+                              Rename
+                            </button>
                             <button
                               className="btn btn-ghost btn-sm"
                               onClick={(e) => {
@@ -893,7 +997,7 @@ export default function CabinetDesignerPage() {
             </div>
           </div>
 
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <span className="h3">Metadata schema</span>
               <button className="btn btn-secondary btn-sm" onClick={handleNewField}>
@@ -990,13 +1094,13 @@ function FolderDocuments({
           style={{ cursor: 'pointer' }}
           onClick={() => onOpenDocument(d)}
         >
-          <span className="flex aic g8">
+          <span className="flex items-center gap-2">
             <span style={{ display: 'inline-flex', alignItems: 'center' }}>
               <Icon name="doc" size={14} />
             </span>
             {d.title}
           </span>
-          <span className="flex aic g8">
+          <span className="flex items-center gap-2">
             <span className="caption">
               {d.confidentiality} · v{d.currentVersion?.versionNumber ?? 1}
             </span>
@@ -1111,7 +1215,7 @@ function DocumentPreviewBody({ documentId }: { documentId: string }) {
 
   return (
     <div>
-      <div className="flex g8 wrap" style={{ marginBottom: '12px' }}>
+      <div className="flex gap-2 flex-wrap" style={{ marginBottom: '12px' }}>
         <span className="badge b-urg-low">{doc.status}</span>
         <span className="badge b-urg-low">{doc.confidentiality}</span>
         <span className="badge b-urg-low">{doc.urgency}</span>
@@ -1177,14 +1281,14 @@ function CabinetDesignerSkeleton() {
         </div>
 
         <div className="min-w-0" style={{ flexGrow: 1 }}>
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <Skeleton height={18} width="30%" />
               <Skeleton height={12} width="55%" />
             </div>
           </div>
 
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <Skeleton height={16} width="35%" />
             </div>
@@ -1193,7 +1297,7 @@ function CabinetDesignerSkeleton() {
             </div>
           </div>
 
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <Skeleton height={16} width="30%" />
             </div>

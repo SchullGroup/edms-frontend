@@ -3,11 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
 
 export default function AuditorFindingsPage() {
   const { findings, users, currentUser, addFinding, updateFinding, auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
+  const { can } = usePermissions();
 
   const [statusF, setStatusF] = useState('All');
 
@@ -146,7 +148,7 @@ export default function AuditorFindingsPage() {
       size: 'lg',
       body: (
         <div>
-          <div className="flex g8 wrap mb16">
+          <div className="flex gap-2 flex-wrap mb-4">
             <span
               className={`badge ${f.severity === 'High' ? 'b-urg-high' : f.severity === 'Medium' ? 'b-urg-normal' : 'b-urg-low'}`}
             >
@@ -174,10 +176,10 @@ export default function AuditorFindingsPage() {
               </div>
             ))}
 
-          <div className="h3 mt16 mb8">Detail</div>
+          <div className="h3 mt-4 mb-2">Detail</div>
           <p style={{ fontSize: '12.5px', lineHeight: 1.6 }}>{f.detail}</p>
 
-          <div className="h3 mt16 mb8">Responses ({f.responses?.length || 0})</div>
+          <div className="h3 mt-4 mb-2">Responses ({f.responses?.length || 0})</div>
           {f.responses && f.responses.length > 0 ? (
             f.responses.map((r: any, i: number) => (
               <div
@@ -217,14 +219,14 @@ export default function AuditorFindingsPage() {
             <p className="caption">No responses yet.</p>
           )}
 
-          <div className="mt16">
+          <div className="mt-4">
             <textarea
               className="input"
               placeholder="Add response / evidence note…"
               style={{ minHeight: '64px' }}
               onChange={(e) => (responseText = e.target.value)}
             ></textarea>
-            <div className="flex g8 mt8" style={{ justifyContent: 'flex-end' }}>
+            <div className="flex gap-2 mt-2" style={{ justifyContent: 'flex-end' }}>
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => {
@@ -351,7 +353,7 @@ export default function AuditorFindingsPage() {
               <option key={s}>{s}</option>
             ))}
           </select>
-          {currentUser?.roles?.includes('auditor') && (
+          {can('audit', 'view') && (
             <button className="btn btn-primary" onClick={handleRaiseFinding}>
               Raise finding
             </button>

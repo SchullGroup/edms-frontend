@@ -193,7 +193,7 @@ GET  /documents/search                       ⚠️ works but always returns [] 
 |---|---|---|
 | `POST /workflow-instances` + `/:id/start` | Frontend calls the wrong URL (DRIFT-09) | **Cannot route a document for approval** |
 | `GET/PATCH /notifications*` | Backend module is an empty directory | Bell badge and notification panel dead |
-| `POST /documents/:id/comments` | Not built | Cannot add context to a document |
+| ~~`POST /documents/:id/comments`~~ | Not a real endpoint — use the `comment` field on `POST /tasks/:id/action` | — |
 | `GET /documents/:id/download` | Not built | No way to retrieve the file |
 | `GET /circulars`, `POST /circulars/:id/ack` | No model, no endpoint | Circulars page is fixture-only |
 
@@ -229,7 +229,7 @@ GET  /documents/search                       ⚠️ works but always returns [] 
 1. **Fix routing** — two-call `POST /workflow-instances` then `/:id/start`. *~1 hour. Unblocks the entire approval half of the product.*
 2. **Fix the upload→OCR bucket** so search works at all.
 3. **Build notifications** (backend module + wire the bell).
-4. **Add `POST /documents/:id/comments`.**
+4. ~~Add `POST /documents/:id/comments`~~ — **done differently (2026-09-10):** comments are the `comment` field on `POST /tasks/:id/action`; the stage-action modals now send it.
 5. **Add a download endpoint** gated by `requireConfidentiality('download')`.
 6. **Replace `IDU_GUESSES`** with real extraction, or clearly label it as a preview.
 7. **Render cabinet metadata fields** in the upload form.
@@ -445,7 +445,8 @@ Invisible at demo scale. A 30-second page load at 10,000 documents.
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
 | `/admin` | 114 | `currentUser` | `useUsers`, `useCabinets` ✅ | ✅ Live |
-| `/admin/users` | 423 | **`rolesMatrix`, `policies`** + `updateRoleMatrix` | `useUsers` + mutations ✅ | 🟨 Hybrid — ⚠️ **the role matrix writes to `SEED`, not the API** |
+| `/admin/users` | ~320 | `auditAction` only | `useUsers` + mutations, `useRoles` (picker), `useAssign/RemoveUserRole` ✅ | ✅ Live — users only since 2026-09-10 (roles split out) |
+| `/admin/roles` | ~470 | `auditAction` only | `useRoles`, `useCreate/Update/DeleteRole`, `useSetRolePermissions` ✅ | ✅ Live — rail + data-driven permission matrix; catalog derived from the `GET /roles` union (no `GET /permissions` exists); built-in roles read-only |
 | `/admin/cabinets` | 346 | `auditAction` only | `useCabinets`, `useCabinetFolders`, `useDepartments` ✅ | ✅ Live |
 | `/admin/workflows` | 493 | `auditAction` only | `useWorkflows` + mutations ✅ · `@ts-nocheck` | ✅ Live ⚠️ **no authorization on the endpoints** |
 | `/admin/policies` | 244 | `auditAction` | `usePolicies` 🟥 | 🟥 Mock |
@@ -703,15 +704,16 @@ This is a **phase**, not a backlog item:
 | Feature | Status |
 |---|---|
 | Load document | ✅ `GET /documents/:id` |
-| Metadata panel | ✅ `GET /documents/:id/metadata` |
-| Version history | ✅ `GET /documents/:id/versions` |
+| Metadata panel | ✅ `GET` + inline editor `PUT /documents/:id/metadata` (when `document:edit`) |
+| Version history | ✅ `GET /documents/:id/versions` · open · `POST /versions/:vid/restore` · upload new version |
+| Archive | ✅ `DELETE /documents/:id` (More menu, when `document:delete`) |
 | Edit document | ✅ `PATCH /documents/:id` |
 | Checkout / check-in | ✅ |
 | Task action from this screen | ✅ `POST /tasks/:id/action` |
 | Cabinet + folder context | ✅ |
-| **Comments** | ⛔ `POST /documents/:id/comments` → 404 |
-| **Signatures** | ⛔ `POST /documents/:id/signatures` → 404 |
-| **Activity timeline** | 🟥 `SEED.audit` |
+| **Comments** | ✅ the `comment` field on `POST /tasks/:id/action` (no document-level endpoint exists); free-text box removed |
+| **Signatures** | ✅ `signature: {fileUrl,mimeType}` image on the `approve` task action — `SignaturePad` draws/uploads it (`useSignAndApprove`) |
+| **Activity timeline** | ✅ `GET /workflow-instances/:id/history` (`WorkflowHistoryTimeline`) |
 | **Policies (confidentiality options)** | 🟥 `SEED.policies` — offers `Top Secret`, which the upload form correctly omits |
 | **File preview / download** | ⛔ no endpoint exists |
 | Type safety | ⚠️ `@ts-nocheck` |
@@ -750,17 +752,19 @@ module is built.
 
 | Call | Result today | Fix |
 |---|---|---|
-| `POST /api/v1/auth/logout` | HTML 404, swallowed by `try/catch` | Build it with a refresh-token denylist |
+| `POST /api/v1/auth/logout` | Now called with the bearer token (Sidebar sign-out, 2026-09-10); backend route still 404s | Build it with a refresh-token denylist |
 | ~~`POST /workflow-instances/start`~~ | ✅ **resolved** | Frontend now uses the two-call sequence |
-| `POST /documents/:id/comments` | HTML 404 | Build the endpoint |
-| `POST /documents/:id/signatures` | HTML 404 | Build the endpoint |
+| ~~`POST /documents/:id/comments`~~ | ✅ **resolved (frontend)** | Not a real endpoint — comments are the `comment` field on `POST /tasks/:id/action`; box removed |
+| ~~`POST /documents/:id/signatures`~~ | ✅ **resolved (frontend)** | Not a real endpoint — signature is the `signature` image on the `approve` task action |
 | ~~`GET /notifications`~~ | ✅ **resolved** | Backend module built; frontend rewired |
 | ~~`PATCH /notifications/:id/read`~~ | ✅ **resolved** | — |
 | ~~`POST /notifications/mark-all-read`~~ | ✅ **resolved** | Route is `POST /notifications/read-all`; **fixed on the frontend** |
 | ~~`POST /notifications`~~ | 🔒 **withdrawn** | Deliberately removed — see below |
 
-**Revised 2026-09-04.** Five of the original eight are resolved. **Two remain**
-(`comments`, `signatures`), and one was withdrawn rather than fixed.
+**Revised 2026-09-04, again 2026-09-10.** All of the original eight are now resolved or
+withdrawn. `comments` and `signatures` were never real endpoints — they are fields on
+`POST /tasks/:id/action` (`comment` string; `signature` image on `approve`), and the
+frontend was rewired accordingly on 2026-09-10.
 
 > 🔒 **Why `POST /notifications` was withdrawn.** The frontend used it to notify a
 > document's owner when someone requested access, passing an arbitrary `userId` and
@@ -791,7 +795,7 @@ for as long as it did.
 | 3 | `requirePermission` on all **25** workflow routes + role checks in definitions/instances services | Backend | 1 day | Any staff user can currently publish/archive workflows and drive any instance |
 | 4 | Fix the 12 login test-account emails to the `tjoel+…` set | Frontend | 10 min | Every autofill button fails today |
 | 5 | JSON 404 handler in `app.ts` | Backend | 5 min | Makes 8 broken calls fail legibly |
-| 6 | Make `usePermissions` parse three-segment strings | Frontend | 30 min | **Must ship before `/auth/me` returns `permissions`**, or every `<Guard>` goes dark at once |
+| 6 | ✅ ~~Make `usePermissions` parse three-segment strings~~ — **done 2026-09-10, backend caught up 2026-09-15.** `src/lib/permissions.ts` normalises/matches on `resource:action`, parses scope separately; role-name heuristics removed; gating now permission-key based (`routes.config` `anyPermissions`). Login + `GET /auth/me` now return a live, scoped `permissions` array — that's the source of truth; `useHydratePermissions` (from `GET /roles`) only tops up keys it's missing | Frontend + Backend | — | Was: every `<Guard>` would go dark the moment `/auth/me` returned `permissions`; that day has arrived and it didn't |
 | 7 | Fix `effStatus()` — one copy, derive overdue from `dueAt`/`stageDueAt`, normalise status casing | Frontend | 2 hr | Every overdue badge, count and ageing bucket in the product currently reads zero (DRIFT-13) |
 
 *Items 1, 2, 4, 5 and 6 total under two hours and move the product from "demo with a broken
@@ -808,7 +812,7 @@ ageing indicator.*
 | 11 | Next.js `middleware.ts` for server-side route protection | Frontend | Closes the forgeable-role hole |
 | 12 | Cabinet access-grant UI **+ backend read-path enforcement, shipped together** | Both | Need-to-know actually works |
 | 13 | Delegation UI | Frontend | Supervisors can take leave |
-| 14 | Repoint the role matrix editor at `PUT /roles/:id/permissions` | Frontend | Stops silent data loss |
+| 14 | ✅ ~~Repoint the role matrix editor~~ — already on `PUT /roles/:id/permissions` via `useSetRolePermissions`. **2026-09-10** also added role **rename**/**delete** (`useUpdateRole`/`useDeleteRole`), user **role assign/remove** on save (`POST`/`DELETE /users/:id/roles`), and moved the resource/action vocabulary into `src/lib/permissions.ts` | Frontend | Was: silent data loss |
 | 15 | `POST /users/invite` + mail transport + password reset + login rate limiting | Backend | Removes admin password handling |
 
 ### 🟡 P2 — the following month
@@ -818,12 +822,12 @@ ageing indicator.*
 | 16 | Aggregation/reporting endpoints; then delete `fetchAllPages.ts` | Backend |
 | 17 | `Finding` model + endpoints + a management-oriented view | Both |
 | 18 | Cabinet metadata-field designer + dynamic upload form | Frontend |
-| 19 | Comments and signatures endpoints | Backend |
+| 19 | ✅ ~~Comments and signatures endpoints~~ — **not needed (2026-09-10).** Both already exist as fields on `POST /tasks/:id/action`: `comment` (string, ≤2000) and, for `approve`, a required `signature: {fileUrl,mimeType}` image. Frontend rewired; the 404-ing `POST /documents/:id/comments` and `/signatures` calls, hooks and service methods were deleted. | — |
 | 20 | Document download/export/print, gated by the existing tier allowlists | Backend |
 | 21 | Circulars: model, endpoints, audience targeting, ack tracking | Both |
 | 22 | Retention policy endpoints + enforcement job | Backend |
 | 23 | Branding model + endpoints + logo upload | Both |
-| 24 | Version-restore and archive buttons (backend already done) | Frontend |
+| 24 | ✅ ~~Version-restore and archive buttons~~ — **done 2026-09-10.** `/doc/[id]` right column has a `DocumentVersionsPanel` (list · open · restore · upload new version) and an "Archive document" item in the More menu; `DocumentDetailsPanel` gains an inline metadata editor when the user holds `document:edit` | Frontend |
 | 25 | `GET /workflow-history` tab on `/doc/[id]` — replaces the fake timeline | Frontend |
 | 26 | Paginate cabinets, folders, roles, departments | Backend |
 | 27 | Remove `@ts-nocheck` from the three files that carry it | Frontend |

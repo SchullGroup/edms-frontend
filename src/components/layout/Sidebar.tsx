@@ -1,38 +1,83 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter, usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { useStore, userById } from '@/store/useStore';
 import { useNavigation } from '@/hooks/useNavigation';
 import { Icon, IconEl } from '@/components/ui/Icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { useUIStore } from '@/store/useUIStore';
+import { authService } from '@/apis/services/auth.service';
 
 export const Sidebar = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const { currentUser, branding, resetData } = useStore();
+  const { currentUser, branding, resetData, prefs, setPrefs } = useStore();
   const { openModal, addToast } = useUIStore();
+  const queryClient = useQueryClient();
+
+  const handleSignOut = () => {
+    setMenuOpen(false);
+    // Tear the session down immediately. `authService.logout()` clears the
+    // accessToken cookie synchronously and fires the backend revoke call in the
+    // background — we don't wait for it.
+    authService.logout();
+    queryClient.clear();
+    useStore.getState().setCurrentUser(null);
+    router.replace('/');
+  };
   const nav = useNavigation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ left: number; bottom: number } | null>(null);
   const me = currentUser;
-  const menuRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const popoverRef = React.useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => {
+  // Position the popover against the trigger. It renders in a portal on
+  // `document.body` (position: fixed) so the sidebar's `overflow: hidden`
+  // can't clip it.
+  const placeMenu = React.useCallback(() => {
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const width = 240;
+    setMenuPos({
+      left: Math.min(r.left, window.innerWidth - width - 8),
+      bottom: window.innerHeight - r.top + 8,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      setMenuPos(null);
+      return;
+    }
+    placeMenu();
+    const onScrollResize = () => placeMenu();
+    window.addEventListener('resize', onScrollResize);
+    window.addEventListener('scroll', onScrollResize, true);
+
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const t = event.target as Node;
+      if (
+        !triggerRef.current?.contains(t) &&
+        !popoverRef.current?.contains(t)
+      ) {
         setMenuOpen(false);
       }
     };
-
-    if (menuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    const handleKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKey);
 
     return () => {
+      window.removeEventListener('resize', onScrollResize);
+      window.removeEventListener('scroll', onScrollResize, true);
       document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [menuOpen]);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [menuOpen, placeMenu]);
 
   if (!me || !nav) return null;
 
@@ -128,11 +173,14 @@ export const Sidebar = () => {
           <span className="foot-label">Help & support</span>
         </button>
 
-        <div style={{ position: 'relative' }} ref={menuRef}>
+        <div style={{ position: 'relative' }}>
           <button
+            ref={triggerRef}
             className="profile-card"
             aria-label="Account menu"
-            onClick={() => setMenuOpen(!menuOpen)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((v) => !v)}
           >
             <Avatar user={me} />
             <span>
@@ -144,50 +192,60 @@ export const Sidebar = () => {
             </span>
           </button>
 
-          {menuOpen && (
-            <div className="menu up">
-              <div className="menu-head">{me.roles?.[0] || 'User'}</div>
-              <button
-                className="menu-item"
-                onClick={() => {
-                  // Theme toggle logic here (requires document mutation which we can handle in AppShell)
-                  addToast('Theme settings are managed in AppShell', 'info');
+          {menuOpen &&
+            menuPos &&
+            createPortal(
+              <div
+                ref={popoverRef}
+                className="menu"
+                role="menu"
+                style={{
+                  position: 'fixed',
+                  left: menuPos.left,
+                  bottom: menuPos.bottom,
+                  top: 'auto',
+                  right: 'auto',
+                  width: 240,
                 }}
               >
-                <span>
-                  <Icon name="sun" size={16} />
-                </span>{' '}
-                Theme
-              </button>
-              <div className="menu-sep"></div>
-              <button
-                className="menu-item"
-                onClick={() => {
-                  resetData();
-                  addToast('Demo data reset', 'info');
-                  setMenuOpen(false);
-                }}
-              >
-                <span>
-                  <Icon name="swap" size={16} />
-                </span>{' '}
-                Reset demo data
-              </button>
-              <div className="menu-sep"></div>
-              <button
-                className="menu-item danger"
-                onClick={() => {
-                  useStore.getState().setCurrentUser(null);
-                  router.push('/');
-                }}
-              >
-                <span>
-                  <Icon name="logout" size={16} />
-                </span>{' '}
-                Sign out / switch role
-              </button>
-            </div>
-          )}
+                <div className="menu-head">{me.roles?.[0] || 'User'}</div>
+                <button
+                  className="menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setPrefs({ ...prefs, theme: prefs.theme === 'dark' ? 'light' : 'dark' });
+                  }}
+                >
+                  <span>
+                    <Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} size={16} />
+                  </span>{' '}
+                  {prefs.theme === 'dark' ? 'Light theme' : 'Dark theme'}
+                </button>
+                <div className="menu-sep"></div>
+                <button
+                  className="menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    resetData();
+                    addToast('Demo data reset', 'info');
+                    setMenuOpen(false);
+                  }}
+                >
+                  <span>
+                    <Icon name="swap" size={16} />
+                  </span>{' '}
+                  Reset demo data
+                </button>
+                <div className="menu-sep"></div>
+                <button className="menu-item danger" role="menuitem" onClick={handleSignOut}>
+                  <span>
+                    <Icon name="logout" size={16} />
+                  </span>{' '}
+                  Sign out / switch role
+                </button>
+              </div>,
+              document.body,
+            )}
         </div>
       </div>
     </aside>

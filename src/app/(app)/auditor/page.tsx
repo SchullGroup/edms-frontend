@@ -49,7 +49,7 @@ export default function AuditorDashboard() {
         </div>
       )}
 
-      <div className="grid cols-4 mb16">
+      <div className="grid cols-4 mb-4">
         <div className="tile t-overdue" role="button" tabIndex={0} onClick={() => router.push('/auditor/findings')}>
           <div className="cnt">{findings.filter(f => f.status === 'Open').length}</div>
           <div className="lbl"><Icon name="finding" size={13} /> Open findings</div>
@@ -116,7 +116,7 @@ export default function AuditorDashboard() {
                 <span>Closed in period</span>
                 <span className="caption">Sample →</span>
               </div>
-              <div className="caption mt8">
+              <div className="caption mt-2">
                 Auditor access is read-only; every view of a Restricted document is itself logged.
               </div>
             </div>

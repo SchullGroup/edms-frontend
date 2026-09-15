@@ -214,7 +214,7 @@ export default function BottlenecksPage() {
             <div className="banner success">No active SLA breaches. Nice.</div>
           )}
 
-          <div className="grid cols-2 mb16">
+          <div className="grid cols-2 mb-4">
             <div className="card">
               <div className="card-head">
                 <span className="h3">Ageing distribution (open items)</span>

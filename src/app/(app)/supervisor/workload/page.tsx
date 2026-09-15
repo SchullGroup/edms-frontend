@@ -155,15 +155,15 @@ function WorkloadMemberCard({
     pct >= 90 ? 'var(--status-overdue)' : pct >= 65 ? 'var(--status-pending)' : 'var(--status-closed)';
 
   return (
-    <div className="card card-pad mb16">
+    <div className="card card-pad mb-4">
       <div
-        className="flex jcb aic wrap g12"
+        className="flex justify-between items-center flex-wrap gap-3"
         style={{ cursor: 'pointer' }}
         role="button"
         tabIndex={0}
         onClick={() => setExpanded((e) => !e)}
       >
-        <div className="flex aic g12">
+        <div className="flex items-center gap-3">
           <div className="avatar">{member.memberName.charAt(0)}</div>
           <div>
             <b>{member.memberName}</b>
@@ -197,7 +197,7 @@ function WorkloadMemberCard({
           </div>
         </div>
         <span
-          className="tnum"
+          className="tabular-nums"
           style={{
             fontWeight: 800,
             color: pct >= 90 ? 'var(--status-overdue)' : 'inherit',
@@ -209,7 +209,7 @@ function WorkloadMemberCard({
       </div>
 
       {expanded && (
-        <div className="rowlist mt8" style={{ borderTop: '1px solid var(--border)' }}>
+        <div className="rowlist mt-2" style={{ borderTop: '1px solid var(--border)' }}>
           {isLoading ? (
             <Spinner text="Loading tasks…" />
           ) : tasks.length > 0 ? (

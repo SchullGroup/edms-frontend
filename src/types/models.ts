@@ -54,13 +54,20 @@ export interface User {
   updatedAt: string | null;
 }
 
-export type RolePermissionResource =
-  'document' | 'cabinet' | 'folder' | 'workflow' | 'audit' | 'user' | 'dashboard';
-
-export type RolePermissionAction =
-  'view' | 'create' | 'edit' | 'delete' | 'route' | 'export' | 'download' | 'print';
+/**
+ * The live backend catalog is broader than the Swagger enum (which is stale):
+ * resources include `document_version`, `document_lock`, `document_metadata`,
+ * `cabinet_metadata_field`, `cabinet_access`, `department`, `role`, … and actions
+ * include `search`, `restore`, `publish`, `archive`. It has no `GET /permissions`,
+ * so the UI derives the catalog from the union across `GET /roles`. Keep these
+ * as `string` and let the roles studio build the grid from real data.
+ */
+export type RolePermissionResource = string;
+export type RolePermissionAction = string;
 
 export type RolePermission = {
+  /** Present on rows returned by `GET /roles`; echoed back on `PUT`. */
+  id?: string;
   resource: RolePermissionResource;
   action: RolePermissionAction;
 };
@@ -211,6 +218,19 @@ export interface CreateVersionRequest {
 export interface DocumentMetadataValueInput {
   fieldId: string;
   value: string | number | boolean | null;
+}
+
+/**
+ * `data` shape of `GET /documents/stats` — server-side count aggregates for the
+ * management dashboards. The exact shape is unverified against the live API
+ * (backend repo not in this workspace); consumers treat every field as optional
+ * and fall back to client-side aggregation when it is missing.
+ */
+export interface DocumentStatsResponse {
+  total?: number;
+  byStatus?: Record<string, number>;
+  byConfidentiality?: Record<string, number>;
+  byDepartment?: { departmentId?: string | null; departmentName?: string | null; count: number }[];
 }
 
 // --- Workflows ---
@@ -494,13 +514,29 @@ export interface Task {
   workflowInstance: TaskWorkflowInstance;
 }
 
+/** Signature image metadata carried by an `approve` task action. The backend
+ *  validates that the file extension in `fileUrl` matches `mimeType`. */
+export interface TaskActionSignature {
+  fileUrl: string;
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+}
+
 export type TaskActionRequest =
-  | { action: Exclude<WorkflowStageAction, 'delegate'>; note?: string }
+  | {
+      /** Advancing an approval stage. The backend **requires** `signature` here
+       *  (422 without it). `comment` is persisted to the workflow activity trail. */
+      action: 'approve';
+      signature: TaskActionSignature;
+      comment?: string;
+      note?: string;
+    }
+  | { action: 'review' | 'reject' | 'request_changes' | 'close'; comment?: string; note?: string }
   | {
       action: 'delegate';
       /** Who the replacement task goes to. The workflow stays at the current
        *  stage — this doesn't advance anything, just hands off the task. */
       delegateId: string;
+      comment?: string;
       note?: string;
     };
 

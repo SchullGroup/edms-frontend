@@ -287,7 +287,7 @@ export default function StaffDashboard() {
             <span className="h3">
               <Icon name="inbox" size={16} /> My Tasks{filter ? ` — ${filter}` : ''}
             </span>
-            <div className="flex g8">
+            <div className="flex gap-2">
               {filter && (
                 <button className="btn btn-ghost btn-sm" onClick={() => setFilter(null)}>
                   Clear filter
@@ -318,7 +318,7 @@ export default function StaffDashboard() {
               title="You're all caught up"
               message="No tasks match. Upload a document or search the archive to keep working."
               action={
-                <div className="flex g8" style={{ justifyContent: 'center' }}>
+                <div className="flex gap-2" style={{ justifyContent: 'center' }}>
                   <button className="btn btn-primary btn-sm" onClick={() => router.push('/upload')}>
                     Upload a document
                   </button>

@@ -143,7 +143,7 @@ export default function DelegationsPage() {
     const phase = delegationPhase(d);
     return (
       <div key={d.id} className="task-row" style={{ alignItems: 'flex-start' }}>
-        <div className="flex aic g12" style={{ flex: 1 }}>
+        <div className="flex items-center gap-3" style={{ flex: 1 }}>
           <Avatar user={{ name: other?.name || 'Unknown' }} />
           <div>
             <div style={{ fontWeight: 600 }}>
@@ -193,7 +193,7 @@ export default function DelegationsPage() {
         <ErrorMessage message="Failed to load delegations" retry={() => refetch()} />
       ) : (
         <>
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <span className="h3">
                 <Icon name="swap" size={16} /> Delegated by you
@@ -266,7 +266,7 @@ function DelegationForm({
 
   return (
     <div>
-      <div className="field mb12">
+      <div className="field mb-3">
         <label>
           Delegate to <span className="req">*</span>
         </label>
@@ -279,7 +279,7 @@ function DelegationForm({
           ))}
         </select>
       </div>
-      <div className="flex g12 mb12">
+      <div className="flex gap-3 mb-3">
         <div className="field" style={{ flex: 1 }}>
           <label>
             Starts <span className="req">*</span>
@@ -301,7 +301,7 @@ function DelegationForm({
           />
         </div>
       </div>
-      <div className="field mb12">
+      <div className="field mb-3">
         <label>Applies to</label>
         <select
           className="input"
@@ -320,11 +320,11 @@ function DelegationForm({
         </select>
       </div>
       {scopeMode === 'cabinets' && (
-        <div className="field mb12">
+        <div className="field mb-3">
           <label>Cabinets</label>
           <div style={{ maxHeight: '140px', overflowY: 'auto' }}>
             {cabinets.map((c) => (
-              <label key={c.id} className="flex aic g8" style={{ padding: '4px 0' }}>
+              <label key={c.id} className="flex items-center gap-2" style={{ padding: '4px 0' }}>
                 <input
                   type="checkbox"
                   checked={selectedCabinets.has(c.id)}

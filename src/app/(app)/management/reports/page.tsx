@@ -98,7 +98,7 @@ export default function ReportsExportPage() {
         </div>
       </div>
 
-      <div className="grid cols-2 mb16" style={{ alignItems: 'start' }}>
+      <div className="grid cols-2 mb-4" style={{ alignItems: 'start' }}>
         <div className="card">
           <div className="card-head">
             <span className="h3">Report builder</span>
@@ -140,9 +140,9 @@ export default function ReportsExportPage() {
                 <option>PDF</option>
               </select>
             </div>
-            <div className="flex g8" style={{ justifyContent: 'flex-end' }}>
+            <div className="flex gap-2" style={{ justifyContent: 'flex-end' }}>
               <button className="btn btn-secondary" onClick={handleScheduleReport}>Schedule…</button>
-              <button className="btn btn-primary flex aic" onClick={handleRunReport}>
+              <button className="btn btn-primary flex items-center" onClick={handleRunReport}>
                 <span style={{ marginRight: '8px' }}><Icon name="download" size={15} /></span> Run & export
               </button>
             </div>

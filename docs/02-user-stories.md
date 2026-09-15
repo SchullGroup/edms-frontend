@@ -170,8 +170,10 @@ what the operations team says.
 **Backend rights (10 grants):** all read-only and `global`-scoped — `document:view`,
 `document:search`, `document_version:view`, `document_metadata:view`, `cabinet:view`,
 `folder:view`, `department:view`, `user:view`, `workflow:view`, plus `workflow:route`.
-**Management cannot create, edit, or delete anything.** (The frontend's
-`usePermissions` heuristic wrongly grants them approve/reject — see DRIFT-04 in doc 01.)
+**Management cannot create, edit, or delete anything.** (Fixed 2026-09-10: the
+`usePermissions` role-name heuristic was deleted — the UI now derives each user's
+`resource:action` keys from `GET /roles` and gates on those. Management's approve/reject
+affordances only appear where the seeded grants actually allow them. See DRIFT-04.)
 
 ---
 
@@ -239,9 +241,12 @@ architecture note in `access-control.constants.ts` is explicit that any future s
 access must be a separate, audited, time-boxed impersonation mechanism — not a standing
 role grant.
 
-> ⚠️ The frontend contradicts this. `usePermissions.ts:24` returns `true` for every
-> permission check when the user has `schulltech_admin`. The entire `/platform` portal
-> reads from `SEED` fixtures, so nothing enforces the real posture in the UI. See DRIFT-04.
+> ✅ Fixed 2026-09-10. The `usePermissions` "return true for schulltech_admin" heuristic
+> is gone. `schulltech_admin`'s effective keys are now just its 3 seeded grants
+> (`workflow:view`, `workflow:route`, `audit:view`); `hasPermission('document', …)` etc.
+> return `false`. The `/platform` portal is still `SEED`-backed so this is latent until
+> those pages are wired, but the UI no longer *claims* the vendor can read documents. See
+> DRIFT-04.
 
 ---
 
@@ -781,18 +786,23 @@ outstanding problem is the one that always mattered:
 > **so that** the system matches my organisation's separation-of-duties policy rather than
 > a vendor's assumptions.
 
-**Current state:** `PUT /roles/:id/permissions` exists and works. The frontend has a role
-matrix editor — but it writes to **`SEED.rolesMatrix` in localStorage** via
-`updateRoleMatrix`, not to the API.
+**Current state (updated 2026-09-10):** `PUT /roles/:id/permissions` exists and works, and
+the `/admin/users` matrix editor calls it (`useSetRolePermissions`) — not the local store.
+Role **create / rename / delete** and per-user **role assign / remove** are also wired
+(`POST /roles`, `PATCH|DELETE /roles/:id`, `POST|DELETE /users/:id/roles`). The
+`resource`/`action` vocabulary lives in `src/lib/permissions.ts` and the same keys now
+drive the app's own route/nav/affordance gating (`usePermissions`), so a freshly created
+role takes effect in the UI without a code change.
 
 **Acceptance criteria**
 - [x] Backend: `resource:action:scope` triples assignable per role
 - [x] Backend: scopes `global | department | own`
 - [x] Backend: permissions re-read from the DB on every request, so changes take effect
       immediately without re-login
-- [ ] 🔴 The UI matrix editor calls the API instead of the local store
+- [x] The UI matrix editor calls the API instead of the local store
+- [x] Create / rename / delete roles, assign / remove roles on a user
 - [ ] Guard rails preventing an admin from removing their own admin rights
-- [ ] `role.permissions_updated` audit entry
+- [ ] `role.permissions_updated` audit entry (frontend writes a local `auditAction` only)
 
 ---
 

@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { useUIStore } from '@/store/useUIStore';
-import { useApprovalTasks, useTaskAction, useReassignTask } from '@/apis/hooks/useTasks';
+import { useApprovalTasks, useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
+import { useSignAndApprove } from '@/hooks/useSignAndApprove';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { TaskRow } from '@/components/ui/TaskRow';
@@ -32,11 +33,11 @@ export default function ApprovalsQueuePage() {
   const pagination = tasksData?.pagination;
   const users = usersData?.data || [];
 
-  const taskAction = useTaskAction();
   const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
+  const { promptSignAndApprove } = useSignAndApprove();
 
-  const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
+  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
 
   useEffect(() => {
     setPageTitle('Approvals Queue');
@@ -49,26 +50,16 @@ export default function ApprovalsQueuePage() {
 
   const handleApprove = (t: Task) => {
     const title = t.workflowInstance?.document?.title || 'this document';
-    openConfirm({
-      title: `Approve “${title.slice(0, 40)}…”?`,
-      message:
-        'The current stage completes and the file advances. Your decision is recorded in the immutable audit trail.',
-      confirmLabel: 'Approve',
-      onConfirm: () => {
-        taskAction.mutate(
-          { id: t.id, actionReq: { action: 'approve' } },
-          {
-            onSuccess: () => {
-              createAuditLog.mutate({
-                action: 'APPROVE',
-                target: t.workflowInstance?.documentId || t.id,
-                detail: 'Approved via approvals queue',
-              });
-              addToast('Approved', 'success');
-            },
-          },
-        );
-      },
+    // `approve` requires a signature image — open the pad, upload, then act.
+    promptSignAndApprove({
+      taskId: t.id,
+      title: title.slice(0, 44),
+      onSuccess: () =>
+        createAuditLog.mutate({
+          action: 'APPROVE',
+          target: t.workflowInstance?.documentId || t.id,
+          detail: 'Signed & approved via approvals queue',
+        }),
     });
   };
 
@@ -216,10 +207,10 @@ export default function ApprovalsQueuePage() {
         ) : (
           <div className="empty">
             <Icon name="approve" size={32} />
-            <div className="h3 mt16 mb8">
+            <div className="h3 mt-4 mb-2">
               {tab === 'escalated' ? 'No escalated approvals' : 'Approvals queue is clear'}
             </div>
-            <p className="caption mb16">
+            <p className="caption mb-4">
               {tab === 'escalated'
                 ? 'Escalated items will appear here once something breaches its SLA.'
                 : 'Items routed for your decision will appear here, ordered by urgency and SLA.'}

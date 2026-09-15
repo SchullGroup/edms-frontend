@@ -33,6 +33,22 @@ export function useAllDocuments(filters: Omit<DocumentFilters, 'page' | 'limit'>
   });
 }
 
+/**
+ * Server-computed document aggregates (`GET /documents/stats`). Best-effort: the
+ * endpoint may not be deployed and its shape is unverified, so failures are
+ * swallowed (no retry, no error toast) and callers fall back to client-side
+ * counts when `data` is undefined.
+ */
+export function useDocumentStats(params?: Record<string, any>, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...documentKeys.all, 'stats', params ?? {}],
+    queryFn: () => documentsService.getStats(params),
+    enabled: options?.enabled ?? true,
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
 export function useDocumentSearch(query: string, filters: DocumentFilters = {}) {
   return useQuery({
     queryKey: ['documents', 'search', query, filters],
@@ -125,48 +141,10 @@ export function useCheckinDocument() {
   });
 }
 
-export function useAddDocumentComment() {
-  const queryClient = useQueryClient();
-  const { addToast } = useUIStore.getState();
-
-  return useMutation({
-    mutationFn: ({ id, text }: { id: string; text: string }) =>
-      documentsService.addComment(id, text),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: documentKeys.detail(id) });
-      addToast('Comment added', 'success');
-    },
-    onError: (err: any) => {
-      addToast(err.response?.data?.message || 'Failed to add comment', 'error');
-    },
-  });
-}
-
-export function useAddDocumentSignature() {
-  const queryClient = useQueryClient();
-  const { addToast } = useUIStore.getState();
-
-  return useMutation({
-    mutationFn: ({
-      id,
-      fieldName,
-      method,
-      password,
-    }: {
-      id: string;
-      fieldName: string;
-      method?: string;
-      password: string;
-    }) => documentsService.addSignature(id, { fieldName, method, password }),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: documentKeys.detail(id) });
-      addToast('Signature applied successfully', 'success');
-    },
-    onError: (err: any) => {
-      addToast(err.response?.data?.message || 'Failed to apply signature', 'error');
-    },
-  });
-}
+// Document-level comments and signatures do not exist on the API. Comments are
+// the `comment` field on `POST /tasks/{taskId}/action`; a signature is the
+// `signature` image on that endpoint's `approve` action. See
+// `src/app/(app)/doc/[id]/page.tsx` (`actApprove`).
 
 export function useArchiveDocument() {
   const queryClient = useQueryClient();

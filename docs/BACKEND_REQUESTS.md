@@ -20,12 +20,13 @@ assumed. Each item states what the frontend does today, what it needs, and why.
 | **BE-3**  | `requirePermission` on the 25 workflow routes     | Security fix | 🔴 Critical | No — but wide open         |
 | **BE-4**  | Enforce confidentiality for download/print/export | Security fix | 🔴 High     | No                         |
 | **BE-5**  | `GET /documents/:id/download`                     | New endpoint | 🟠 Med      | Yes — no way to get a file |
-| **BE-6**  | `POST /documents/:id/comments`                    | New endpoint | 🟠 Med      | Yes — UI built, 404s       |
-| **BE-7**  | `POST /documents/:id/signatures`                  | New endpoint | 🟠 Med      | Yes — UI built, 404s       |
+| ~~BE-6~~  | ~~`POST /documents/:id/comments`~~ — **withdrawn**: it's `comment` on `POST /tasks/:id/action` | — | — | No — frontend rewired |
+| ~~BE-7~~  | ~~`POST /documents/:id/signatures`~~ — **withdrawn**: it's `signature` on the `approve` task action | — | — | No — frontend rewired |
 | **BE-8**  | Presigned upload URL                              | New endpoint | 🟠 Med      | Yes — OCR/search broken    |
 | **BE-9**  | `policies` module                                 | New module   | 🟠 Med      | No — frontend on fixtures  |
 | **BE-10** | JSON 404 handler                                  | Small fix    | 🟡 Low      | No                         |
 | **BE-11** | `audit` module                                    | New module   | 🟡 Low      | No — but nothing is logged |
+| **BE-12** | `forgot-password` / `reset-password`              | New endpoint | 🟠 Med      | Yes — UI built, 404s       |
 
 ---
 
@@ -106,6 +107,12 @@ The feature is effectively disabled.
 ---
 
 ## 🔴 BE-2 · `POST /auth/logout` + refresh-token revocation
+
+> **Frontend update 2026-09-10.** The Sidebar "Sign out" button now actually calls
+> `authService.logout()` → `POST /api/auth/logout` **with the `Authorization: Bearer`
+> header**, then clears the React Query cache and local session. Our BFF deletes the
+> `refreshToken` cookie and forwards to `${API_URL}/api/v1/auth/logout`. Everything on
+> the frontend side is in place — we just need the backend route + denylist below.
 
 ### What we found
 
@@ -239,31 +246,27 @@ action in the product.
 
 ---
 
-## 🟠 BE-6 · `POST /documents/:id/comments`
+## ~~BE-6 · `POST /documents/:id/comments`~~ — WITHDRAWN (2026-09-10)
 
-The document detail page has a comments UI wired to `POST /documents/:id/comments`. No such
-route exists; it 404s.
-
-Needs a `DocumentComment` model (no comment model exists in the schema today) and probably:
-
-```
-GET  /api/v1/documents/:id/comments      (paginated)
-POST /api/v1/documents/:id/comments      { body: string }
-```
-
-Author from the session, not the body. Worth deciding whether comments are visible to
-everyone who can view the document, or scoped further.
+Comments are not a document operation. The live spec has no `comments` path anywhere; a
+comment is the optional `comment` string on `POST /tasks/:id/action` (`minLength 1`,
+`maxLength 2000`), persisted to the workflow activity trail, and read back via
+`GET /workflow-instances/:id/history`. The frontend's free-text comment box on
+`/doc/[id]` (which posted to the non-existent route) has been removed; the stage-action
+modals now send their note as `comment`. No backend work required.
 
 ---
 
-## 🟠 BE-7 · `POST /documents/:id/signatures`
+## ~~BE-7 · `POST /documents/:id/signatures`~~ — WITHDRAWN (2026-09-10)
 
-Same situation: UI is built, `POST /documents/:id/signatures` 404s, no signature model
-exists.
-
-Before building, we'd like to agree what a signature _is_ here — an acknowledgement
-(name + timestamp + hash of the version signed), or a cryptographic signature? The
-approach differs a lot, and the PRD isn't specific. Happy to spec it together.
+Also already defined in the live spec, and also not a document operation. `POST
+/tasks/:id/action` with `action: "approve"` **requires**
+`signature: { fileUrl: <uri>, mimeType: "image/png" | "image/jpeg" | "image/webp" }`
+(422 without it; the backend validates the URL extension matches the MIME type).
+`comment` is optional alongside it. The frontend now captures a drawn/uploaded signature
+image (`SignaturePad`), uploads it via the multipart uploader, and sends it on the
+approve action (`useSignAndApprove`, used by `/doc/[id]` and the supervisor approvals
+queue). No backend work required.
 
 ---
 
@@ -375,6 +378,46 @@ What we'd eventually need:
 GET /api/v1/audit          filters: actor, objectType, objectId, action, from, to
 GET /api/v1/audit/verify   chain-integrity proof
 ```
+
+---
+
+## 🟠 BE-12 · Self-service password recovery
+
+**Priority: Medium. Blocking — the screens are built and have nowhere to submit.**
+
+### What we found
+
+There is no account-recovery path anywhere in the API. Checked against the deployed
+Swagger doc (2026-09-05): `/auth` exposes only `login`, `refresh` and `me`. This is the
+same gap story I2 already named: "no self-service password reset."
+
+### What we built anyway
+
+`/forgot-password` (email in, confirmation screen) and `/reset-password` (new password +
+confirm, reading `?token=` from the URL) are live in the frontend, posting to
+`authService.forgotPassword` / `resetPassword`. Both currently 404 — there's nothing to
+demo end to end until the routes below exist.
+
+### What we need
+
+```
+POST /api/v1/auth/forgot-password
+  body: { email: string }
+  → always 200, regardless of whether the email is registered — this is the standard
+    anti-enumeration mitigation, and it has to be enforced server-side; the frontend
+    can't do it for you. Issues a signed, expiring token and (once a mail transport
+    exists — see the "no mail transport" note under I2) emails a link containing it.
+
+POST /api/v1/auth/reset-password
+  body: { token: string, newPassword: string, confirmPassword: string }
+  → validates the token (signature + expiry + single-use), checks newPassword ===
+    confirmPassword and against whatever complexity policy exists, updates
+    passwordHash, and should invalidate the token immediately so it can't be replayed.
+```
+
+Whatever the reset token's format, it needs to be safe to sit in a URL query string
+(we read it via `?token=`) and short-lived — this is exactly the kind of value that ends
+up in browser history and referrer headers.
 
 ---
 

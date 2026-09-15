@@ -10,7 +10,7 @@ Four service modules never touch the network — they return `SEED` fixtures fro
 
 | Route | Component file | What it does |
 |---|---|---|
-| `/` | `src/app/page.tsx` | Login split-screen; posts credentials to the Next proxy and redirects by role. |
+| `/` | `src/app/page.tsx` | Login split-screen; posts credentials to the Next proxy and redirects to the portal the user's permissions resolve to (`resolvePortal`). Password field has a show/hide toggle; "Forgot password?" links to `/forgot-password`. |
 | `/admin` | `src/app/(app)/admin/page.tsx` | Client-admin home: setup-health counters (users, cabinets, published workflows) and quick links. |
 | `/admin/audit` | `src/app/(app)/admin/audit/page.tsx` | Tenant-scoped immutable event log with user/action/text filters and CSV export. |
 | `/admin/branding` | `src/app/(app)/admin/branding/page.tsx` | White-label theming editor (colors, logo, app name) with a live preview panel. |
@@ -18,7 +18,8 @@ Four service modules never touch the network — they return `SEED` fixtures fro
 | `/admin/circulars` | `src/app/(app)/admin/circulars/page.tsx` | Author, publish and track acknowledgement of org-wide circulars. |
 | `/admin/departments` | `src/app/(app)/admin/departments/page.tsx` | Department hierarchy tree with create/rename/reparent/delete. |
 | `/admin/policies` | `src/app/(app)/admin/policies/page.tsx` | Confidentiality / urgency / retention matrices and toggleable control rules. |
-| `/admin/users` | `src/app/(app)/admin/users/page.tsx` | Paginated user directory, user create/edit, role creation and the role-permission matrix. |
+| `/admin/users` | `src/app/(app)/admin/users/page.tsx` | Paginated user directory; invite / edit user, set department, assign one role (via `POST`/`DELETE /users/:id/roles`). Roles moved to `/admin/roles` on 2026-09-10. |
+| `/admin/roles` | `src/app/(app)/admin/roles/page.tsx` | Roles studio: left rail (role list + filter + "New role"), right pane = selected role header + Edit/Delete + a module-grouped permission matrix. Resource rows / action columns are derived from the union of `{resource, action, id}` across `GET /roles` (there is no `GET /permissions`); `id` is echoed back on `PUT /roles/:id/permissions`. Draft-then-Save; built-in roles are read-only. |
 | `/admin/workflows` | `src/app/(app)/admin/workflows/page.tsx` | Drag-and-drop workflow designer: stages, assignees, SLA, actions; publish/archive. |
 | `/admin/workflows/instances` | `src/app/(app)/admin/workflows/instances/page.tsx` | Thin re-export of `/supervisor/instances`. |
 | `/auditor` | `src/app/(app)/auditor/page.tsx` | Auditor home: open findings count and sensitive-action summary charts. |
@@ -26,7 +27,8 @@ Four service modules never touch the network — they return `SEED` fixtures fro
 | `/auditor/findings` | `src/app/(app)/auditor/findings/page.tsx` | Findings register — raise, filter and update audit findings. |
 | `/auditor/trail` | `src/app/(app)/auditor/trail/page.tsx` | Full audit trail browser with user/action/date-range filters. |
 | `/circulars` | `src/app/(app)/circulars/page.tsx` | End-user circular reader with an acknowledge action. |
-| `/doc/[id]` | `src/app/(app)/doc/[id]/page.tsx` | Document workspace: viewer, redaction mode, metadata, check-out/in, sign, comment; act on the active workflow task with whatever the current stage's `actions` allow (review, approve, request changes, reject, delegate, close); route an unrouted document into a workflow; workflow stage rail + activity trail. |
+| `/doc/[id]` | `src/app/(app)/doc/[id]/page.tsx` | Document workspace: viewer, redaction mode, editable metadata, version history (open/restore/upload), archive, check-out/in; act on the active workflow task with whatever the current stage's `actions` allow (review, approve, request changes, reject, delegate, close) — `approve` captures a signature image via a signature pad; route an unrouted document into a workflow; workflow stage rail + activity trail (read from `GET /workflow-instances/{id}/history`). |
+| `/forgot-password` | `src/app/forgot-password/page.tsx` | Unauthenticated. Email in, toggles to a "check your email" confirmation on success — the confirmation copy doesn't reveal whether the address is registered. Outside `(app)`, shares `AuthShell` with `/`. |
 | `/management` | `src/app/(app)/management/page.tsx` | Executive dashboard: throughput, turnaround, SLA and per-department rollups with CSV export. |
 | `/management/compliance` | `src/app/(app)/management/compliance/page.tsx` | Compliance posture — sensitive-action breakdown and open findings table. |
 | `/management/departments` | `src/app/(app)/management/departments/page.tsx` | Per-department document/task/instance volumes and trend charts. |
@@ -41,6 +43,7 @@ Four service modules never touch the network — they return `SEED` fixtures fro
 | `/platform/flags` | `src/app/(app)/platform/flags/page.tsx` | Thin re-export of `/platform/sysconfig`. |
 | `/platform/plans` | `src/app/(app)/platform/plans/page.tsx` | Subscription plan catalogue and tenant plan assignment. |
 | `/platform/sysconfig` | `src/app/(app)/platform/sysconfig/page.tsx` | Feature-flag and system configuration toggles. |
+| `/reset-password` | `src/app/reset-password/page.tsx` | Unauthenticated. New password + confirm; reads `?token=` via `useSearchParams` (wrapped in `<Suspense>`, per Next's requirement). No token in the URL → an inline "invalid link" state instead of the form. Outside `(app)`, shares `AuthShell` with `/`. |
 | `/delegations` | `src/app/(app)/delegations/page.tsx` | Out-of-office workflow delegation: create/end a time-bounded delegation to a colleague, optionally scoped to specific cabinets; lists what you've delegated and what's been delegated to you. Any authenticated user. |
 | `/search` | `src/app/(app)/search/page.tsx` | Document search with faceted filtering, saved searches and CSV export. |
 | `/staff` | `src/app/(app)/staff/page.tsx` | Staff home: status tiles (file/workflow-instance counts, not task counts), my task queue, notification feed, quick actions. |
@@ -72,16 +75,41 @@ Paths are relative to `${NEXT_PUBLIC_API_URL}/api/v1` unless noted. **mock** mea
 | Endpoint | Status |
 |---|---|
 | `GET /auth/me` | live |
+| `GET /roles` (AppShell + `useHydratePermissions`, to derive `currentUser.permissions`) | live |
 | `GET /notifications/unread-count` (Topbar bell badge, polled every 60s) | live |
 | `GET /notifications?channel=in_app&limit=6` (Topbar dropdown, only while open) | live |
 | `PATCH /notifications/{id}/read` | live |
 | `POST /notifications/read-all` | live |
+| `POST /api/auth/logout` (Sidebar sign-out, with bearer token; BFF → backend) | live (backend route still missing) |
+
+**Permission-aware gating.** `src/lib/permissions.ts` is the permission model:
+`normalizePermission`/`permissionMatches` (compare `resource:action`, parse `:scope`
+separately), `derivePermissionsFromRoles` (from `GET /roles`), `PORTALS` +
+`resolvePortal` (portal shell by role name for the six built-ins, by entry permission
+for custom roles), and `SYSTEM_ROLE_PERMISSIONS` (pre-hydration fallback).
+`usePermissions` returns `can`/`hasAny`/`hasAll`/`scopeFor`/`isReady`/`portal`.
+`src/config/routes.config.ts` rules declare `anyPermissions`/`permissions`
+(`/platform` still by role); `useNavigation` picks the portal via `resolvePortal` and
+filters nav items by their `anyPermissions`. `usePermissions` no longer has role-name
+heuristics.
 
 ### `/` — Login
 
 | Endpoint | Status |
 |---|---|
 | `POST /api/auth/login` (Next proxy → backend `POST /api/v1/auth/login`) | live |
+
+### `/forgot-password`
+
+| Endpoint | Status |
+|---|---|
+| `POST /auth/forgot-password` | **404 — not in the deployed Swagger doc.** See `docs/BACKEND_REQUESTS.md` (BE-12). |
+
+### `/reset-password`
+
+| Endpoint | Status |
+|---|---|
+| `POST /auth/reset-password` | **404 — not in the deployed Swagger doc.** See `docs/BACKEND_REQUESTS.md` (BE-12). |
 
 ### `/admin`
 
@@ -114,12 +142,14 @@ Paths are relative to `${NEXT_PUBLIC_API_URL}/api/v1` unless noted. **mock** mea
 | `PATCH /cabinets/{id}` | live |
 | `DELETE /cabinets/{id}` | live |
 | `POST /cabinets/{id}/metadata-fields` | live |
+| `PATCH /cabinets/{cabinetId}/metadata-fields/{fieldId}` (Edit field) | live |
 | `DELETE /cabinets/{cabinetId}/metadata-fields/{fieldId}` | live |
 | `GET /cabinets/{id}/access` | live |
 | `POST /cabinets/{id}/access` | live |
 | `DELETE /cabinets/{cabinetId}/access/{grantId}` | live |
 | `GET /cabinets/{cabinetId}/folders` | live |
 | `POST /cabinets/{cabinetId}/folders` | live |
+| `PATCH /folders/{id}` (Rename folder) | live |
 | `DELETE /folders/{id}` | live |
 | `GET /documents?cabinetId=&folderId=&page=&limit=20` — one expanded folder at a time, real server pages via `<Pagination>` | live |
 | `GET /documents/{id}` (inline preview) | live |
@@ -158,11 +188,17 @@ Paths are relative to `${NEXT_PUBLIC_API_URL}/api/v1` unless noted. **mock** mea
 | `GET /users?page=&limit=&departmentId=` | live |
 | `POST /users` | live |
 | `PATCH /users/{id}` | live |
-| `GET /roles` | live |
-| `POST /roles` | live |
-| `PUT /roles/{id}/permissions` | live |
+| `POST /users/{id}/roles` · `DELETE /users/{id}/roles/{roleId}` (edit-user save reconciles the role) | live |
+| `GET /roles` | live (role picker) |
 | `GET /departments` | live |
-| policy control toggles (Groups tab) | **mock** — `policiesService` |
+
+### `/admin/roles`
+
+| Endpoint | Status |
+|---|---|
+| `GET /roles` (also the source of the permission catalog — union of `{resource, action, id}`) | live |
+| `POST /roles` · `PATCH /roles/{id}` (name/description) · `DELETE /roles/{id}` | live |
+| `PUT /roles/{id}/permissions` (replaces the whole set; draft-then-Save) | live |
 
 ### `/admin/workflows`
 
@@ -209,9 +245,11 @@ No network calls — zustand store (`SEED.circulars`). **mock**
 | `POST /workflow-instances` then `POST /workflow-instances/{id}/start` (route to workflow) | live |
 | `POST /documents/{id}/checkout` | live |
 | `POST /documents/{id}/checkin` | live |
-| `POST /documents/{id}/comments` | live — an in-file comment records this 404s on the deployed backend |
-| `POST /documents/{id}/signatures` | live — same, 404s on the deployed backend |
-| `POST /tasks/{id}/action` — `review`, `approve`, `request_changes`, `reject`, `delegate`, or `close`, gated by the current stage's `actions` | live |
+| `GET /documents/{id}/versions` · `POST /documents/{id}/versions` · `POST /documents/{id}/versions/{versionId}/restore` (`DocumentVersionsPanel`) | live |
+| `GET /documents/{id}/metadata` · `PUT /documents/{id}/metadata` (inline editor in `DocumentDetailsPanel` when `document:edit`) | live |
+| `DELETE /documents/{id}` (archive — More menu, when `document:delete`) | live |
+| `POST /tasks/{taskId}/action` — `review`, `approve`, `request_changes`, `reject`, `delegate`, `close`, gated by the stage's `actions`. `approve` opens a signature pad (`SignaturePad`), uploads the drawn/chosen image via the multipart uploader, and sends `signature: { fileUrl, mimeType }` + optional `comment` (`useSignAndApprove`). Other actions send their note as `comment`. | live |
+| ~~`POST /documents/{id}/comments` / `/signatures`~~ | **removed** — neither is a document endpoint; both are fields on the task action above. The free-text comment box is gone; activity is read from `GET /workflow-instances/{id}/history`. |
 | policy lookup (`usePolicies`) | **mock** |
 | audit logging (`useCreateAuditLog`) | **mock** |
 
@@ -224,12 +262,14 @@ No network calls — zustand store (`SEED.circulars`). **mock**
 | `GET /documents?page=&limit=100` — every page walked client-side by `fetchAllPages` | live |
 | `GET /workflow-instances?page=&limit=100` — every page walked | live |
 | `GET /tasks?page=&limit=100` — every page walked (`/management` and `/management/departments` only) | live |
+| `GET /workflow-instances/stats` · `GET /documents/stats` (server-computed tiles on `/management`; `/documents/stats` shape unverified, fails silently) | live |
 
 ### `/management/performance`
 
 | Endpoint | Status |
 |---|---|
 | `GET /tasks?page=&limit=100` (all pages) | live |
+| `GET /tasks/stats` (SLA-by-department table; falls back to the client donut) | live |
 
 ### `/management/compliance` (= `/auditor/compliance`)
 
@@ -312,7 +352,7 @@ Facets (cabinet, type, status, confidentiality, urgency) are applied client-side
 |---|---|
 | `GET /tasks/approvals?scope=all&status=pending\|escalated&page=&limit=20` (purpose-built queue, not a generic `/tasks` filter; pending/escalated tabs) | live |
 | `GET /users` | live |
-| `POST /tasks/{id}/action` | live |
+| `POST /tasks/{taskId}/action` — inline **Approve** opens the signature pad, uploads the image, sends `{ action:'approve', signature:{fileUrl,mimeType} }` (`useSignAndApprove`) | live |
 | `PATCH /tasks/{id}/reassign` | live |
 | audit logging | **mock** |
 
@@ -388,7 +428,9 @@ Static page, no calls.
 
 These services/hooks exist and point at real endpoints, but no page imports them:
 
-`GET /delegations/{id}` (`useDelegation` — single-record fetch has a hook but no screen opens one this way; the list, create and end calls are now used — see `/delegations`), `GET /workflow-history/{id}` (the list endpoint `GET /workflow-history` is now called — see `/doc/[id]` and `/supervisor/instances`), `GET /tasks/stats`, `GET /workflow-instances/stats` (both have service + hook, unused — see the Workflow Module API guide's own note that these are basic statistics endpoints, not the full Team Performance/Management Dashboard, and are intentionally left for a later pass), `GET /documents/stats`, `GET|PUT /documents/{id}/metadata`, `GET|POST /documents/{id}/versions` (and `/restore`), `DELETE /documents/{id}`, `DELETE /users/{id}`, `DELETE /roles/{id}`, `PATCH /roles/{id}`, `PATCH /folders/{id}`, `GET /folders/{id}`, `PATCH /cabinets/{id}/metadata-fields/{fieldId}`, plus the legacy base64 uploaders in `s3.service.ts`. (`POST /workflow-instances/{id}/hold|resume|close`, `GET /workflow-instances/status-counts`, `GET /workflow-instances/team-status-matrix`, `GET /workflow-instances/open-items-by-cabinet`, `GET /workflow-instances/bottlenecks-ageing`, `GET /tasks/approvals`, `GET /tasks/workload` and `GET /sla/breaches` are now all called too — see `/supervisor/instances`, `/staff`, `/supervisor`, `/supervisor/approvals`, `/supervisor/bottlenecks` and `/supervisor/workload`.)
+`GET /delegations/{id}` (`useDelegation` — single-record fetch has a hook but no screen opens one this way; the list, create and end calls are used — see `/delegations`), `GET /workflow-history/{id}` (the list endpoint is used), `GET /workflows/{id}` (`useWorkflow` single fetch), `GET /tasks/{id}` (`useTask` single fetch — no task-detail route), plus the legacy base64 uploaders in `s3.service.ts`.
+
+**Wired on 2026-09-10:** `GET|PUT /documents/{id}/metadata`, `GET|POST /documents/{id}/versions` + `GET /versions/{versionId}` + `POST /versions/{versionId}/restore` (`/doc/[id]` versions panel + metadata editor), `DELETE /documents/{id}` (archive), `DELETE /users/{id}` (deactivate), `PATCH|DELETE /roles/{id}` (rename/delete), `POST|DELETE /users/{id}/roles(/{roleId})` (role assign/remove), `PATCH /folders/{id}` (rename), `PATCH /cabinets/{id}/metadata-fields/{fieldId}` (edit field), `GET /tasks/stats` (`/management/performance`), `GET /workflow-instances/stats` + `GET /documents/stats` (`/management` tiles). Signature/comment are the `signature`/`comment` fields on `POST /tasks/{id}/action`, not document endpoints.
 
 ---
 
@@ -419,6 +461,8 @@ Only screens that make at least one live call. ✅ implemented, ❌ absent.
 | Screen | Loading | Error | Empty | 403 / permission-denied | Server pagination `{page, limit, total, totalPages}` |
 |---|---|---|---|---|---|
 | `/` | ✅ button shows "Authenticating…" | ✅ toast on failure | n/a | ❌ | n/a |
+| `/forgot-password` | ✅ button shows "Sending…" | ✅ toast — currently always fires, endpoint is 404 | n/a | ❌ | n/a |
+| `/reset-password` | ✅ button shows "Resetting…" | ✅ toast — currently always fires, endpoint is 404 | ✅ "invalid reset link" state when `?token=` is absent | ❌ | n/a |
 | `/admin` | ❌ | ❌ | ❌ | ❌ | ❌ — reads `pagination.total` for counters only |
 | `/admin/audit` | ✅ `Spinner` | ✅ `ErrorMessage` + retry | ✅ via `Table` | ❌ | ❌ |
 | `/admin/cabinets` | ✅ skeleton (full page + per-panel) | ✅ `ErrorMessage` + retry | ✅ cabinets, folders, fields, grants, documents | ❌ | ✅ per-folder document list only (`<Pagination>`); the cabinet/folder trees themselves are unpaginated API responses |
@@ -465,6 +509,8 @@ Only screens that make at least one live call. ✅ implemented, ❌ absent.
 - **Refresh token** — never reaches client JavaScript. Login goes to the Next.js proxy `POST /api/auth/login`, which strips `refreshToken` out of the backend response and sets it as an HttpOnly, `sameSite: 'lax'`, path `/`, 7-day cookie before returning the rest to the browser (`src/app/api/auth/login/route.ts`).
 
 The authenticated user object is held in zustand (`useStore.currentUser`, persisted), and `AppShell` re-validates it against `GET /auth/me` on every mount.
+
+**Password recovery — frontend built, backend doesn't exist yet.** `/forgot-password` and `/reset-password` (both unauthenticated, outside `(app)`) post to `authService.forgotPassword`/`resetPassword`, which call `POST /auth/forgot-password` and `POST /auth/reset-password` directly via `apiClient` (no Next proxy needed — neither touches a cookie). Both 404 against the deployed backend today. See `docs/BACKEND_REQUESTS.md` (BE-12).
 
 **Attachment.** A request interceptor on the shared axios instance ([api-client.ts:62](src/lib/api-client.ts#L62)) reads the `accessToken` cookie and sets `Authorization: Bearer <token>` on every outgoing request. Requests made outside that instance — the three `/api/auth/*` proxy calls and the S3/multipart upload calls — carry no Authorization header.
 

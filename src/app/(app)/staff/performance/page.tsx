@@ -104,7 +104,7 @@ export default function MyPerformancePage() {
         </div>
       ) : (
         <>
-          <div className="grid cols-4 mb16">
+          <div className="grid cols-4 mb-4">
             {metrics.map((m, i) => (
               <div key={i} className="card kpi">
                 <div className="kv">{m.value}</div>
@@ -116,7 +116,7 @@ export default function MyPerformancePage() {
             ))}
           </div>
 
-          <div className="grid cols-2 mb16">
+          <div className="grid cols-2 mb-4">
             <div className="card">
               <div className="card-head">
                 <span className="h3">Weekly throughput</span>
@@ -197,8 +197,8 @@ export default function MyPerformancePage() {
             ) : (
               <div className="empty">
                 <Icon name="approve" size={32} />
-                <div className="h3 mt16 mb8">Nothing closed yet</div>
-                <p className="caption mb16">Items you complete will appear here.</p>
+                <div className="h3 mt-4 mb-2">Nothing closed yet</div>
+                <p className="caption mb-4">Items you complete will appear here.</p>
               </div>
             )}
           </div>

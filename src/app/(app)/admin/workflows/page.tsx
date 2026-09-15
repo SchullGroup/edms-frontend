@@ -56,6 +56,16 @@ export default function WorkflowDesignerPage() {
   const [slaDraft, setSlaDraft] = useState(48);
   const [actionsDraft, setActionsDraft] = useState([]);
 
+  // The reorder save is debounced (below) and, even once it fires, has to round-trip
+  // the network before the invalidated query refetches — so `wf.definition.stages`
+  // doesn't reflect a drop for a few hundred ms at least. Rendering straight off
+  // server data made a just-dropped card snap back to its old slot immediately,
+  // then jump to its real one once the save landed. This holds the dropped order
+  // locally so the canvas reflects it the instant you let go, and is cleared once
+  // the server's stage order actually catches up to it (or the drag is abandoned
+  // by switching workflows, or the save fails).
+  const [stageOrderOverride, setStageOrderOverride] = useState(null);
+
   useEffect(() => {
     if (workflows.length > 0 && !wfId) {
       setWfId(workflows[0].id);
@@ -63,13 +73,31 @@ export default function WorkflowDesignerPage() {
   }, [workflows, wfId]);
 
   const wf = workflows?.find((w) => w.id === wfId) || workflows?.[0];
-  const stages = wf?.definition?.stages || [];
+  const serverStages = wf?.definition?.stages || [];
+  const stages = stageOrderOverride || serverStages;
   const switcherWorkflows = showArchived ? workflows : workflows.filter((w) => w.status !== 'archived' || w.id === wf?.id);
   const archivedCount = workflows.filter((w) => w.status === 'archived').length;
 
   useEffect(() => {
     setNameDraft(wf?.name || '');
   }, [wf?.id, wf?.name]);
+
+  useEffect(() => {
+    setStageOrderOverride(null);
+  }, [wf?.id]);
+
+  // Drop the override once the server order actually matches it — never on a
+  // timer or eagerly in the mutation's onSuccess, either of which could flash
+  // back to the stale pre-drag order while the invalidated query is still
+  // refetching.
+  useEffect(() => {
+    if (!stageOrderOverride) return;
+    const same =
+      stageOrderOverride.length === serverStages.length &&
+      stageOrderOverride.every((s, i) => s.id === serverStages[i]?.id);
+    if (same) setStageOrderOverride(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverStages]);
 
   const selectedStage = stages.find((s) => s.id === selectedStageId);
 
@@ -95,7 +123,14 @@ export default function WorkflowDesignerPage() {
   // is dragging a stage to reorder it, and even that is debounced so a
   // flurry of quick drags collapses into one write instead of one per drop.
   const debouncedReorder = useDebouncedCallback((id, updates) => {
-    updateWorkflow(id, updates);
+    updateWfMutation.mutate(
+      { id, updates },
+      {
+        // Revert to server truth if the save fails — otherwise the optimistic
+        // order would be stuck showing a reorder that never actually happened.
+        onError: () => setStageOrderOverride(null),
+      },
+    );
   }, SAVE_DEBOUNCE_MS);
 
   const nameDirty = nameDraft !== (wf?.name || '');
@@ -141,8 +176,8 @@ export default function WorkflowDesignerPage() {
     return (
       <div className="p-8">
         <div className="card card-pad text-center">
-          <div className="h3 mb8">No workflows yet</div>
-          <div className="caption mb16">Create your first workflow to get started.</div>
+          <div className="h3 mb-2">No workflows yet</div>
+          <div className="caption mb-4">Create your first workflow to get started.</div>
           <button className="btn btn-primary" onClick={handleCreateWorkflow}>
             Create workflow
           </button>
@@ -207,6 +242,8 @@ export default function WorkflowDesignerPage() {
   };
 
   const handleReorderStages = (updatedStages) => {
+    // Paint the drop immediately; the actual save is debounced below.
+    setStageOrderOverride(updatedStages);
     debouncedReorder(wf.id, { definition: { stages: updatedStages, transitions: rebuildTransitions(updatedStages) } });
   };
 

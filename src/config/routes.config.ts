@@ -3,8 +3,13 @@ import { PermissionType } from '@/types/models';
 export interface RouteRule {
   path: string;
   matchType: 'exact' | 'prefix' | 'whitelist';
+  /** Fallback / exception gate by role name. Only used where no permission key
+   *  fits — currently just `/platform` (there is no `platform` resource). */
   roles?: string[];
+  /** ALL of these `resource:action` keys are required. */
   permissions?: PermissionType[];
+  /** AT LEAST ONE of these `resource:action` keys is required. */
+  anyPermissions?: PermissionType[];
   exclude?: string[];
   include?: string[];
 }
@@ -14,6 +19,8 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/platform',
     matchType: 'prefix',
+    // No `platform` resource in the permission vocabulary; vendor-only + Phase-2
+    // mock data, so this one stays role-gated by design.
     roles: ['schulltech_admin'],
   },
 
@@ -21,7 +28,7 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/management',
     matchType: 'whitelist',
-    roles: ['management'],
+    anyPermissions: ['dashboard:view'],
     include: [
       '/management/reports',
       '/management/compliance',
@@ -36,7 +43,7 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/staff',
     matchType: 'prefix',
-    roles: ['staff', 'supervisor', 'management', 'internal_auditor'],
+    anyPermissions: ['document:view', 'dashboard:view'],
     exclude: ['/staff/restricted-example'], // Add explicit exceptions here if needed
   },
 
@@ -44,22 +51,30 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/admin',
     matchType: 'prefix',
-    roles: ['client_admin'],
+    anyPermissions: [
+      'user:create',
+      'user:edit',
+      'user:delete',
+      'role:view',
+      'role:edit',
+      'cabinet:create',
+      'workflow:create',
+    ],
   },
 
   {
     path: '/auditor',
     matchType: 'prefix',
-    roles: ['internal_auditor'],
+    anyPermissions: ['audit:view'],
   },
 
   {
     path: '/supervisor',
     matchType: 'prefix',
-    roles: ['supervisor', 'management'],
+    anyPermissions: ['workflow:route'],
   },
 
-  // 4. Global authenticated paths (No roles specified = any authenticated user)
+  // 4. Global authenticated paths (no gate = any authenticated user)
   { path: '/search', matchType: 'prefix' },
   { path: '/circulars', matchType: 'prefix' },
   { path: '/notifications', matchType: 'prefix' },
@@ -68,6 +83,6 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/upload',
     matchType: 'prefix',
-    roles: ['staff', 'supervisor', 'management', 'client_admin'],
+    anyPermissions: ['document:create'],
   },
 ];

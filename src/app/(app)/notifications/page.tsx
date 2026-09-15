@@ -161,7 +161,7 @@ export default function NotificationCenterPage() {
         )}
       </div>
 
-      <div className="card mt16">
+      <div className="card mt-4">
         <div className="card-head">
           <span className="h3">
             <Icon name="settings" size={16} /> Delivery preferences
@@ -187,7 +187,7 @@ export default function NotificationCenterPage() {
           ].map((row) => (
             <div
               key={row.key}
-              className="flex jcb aic g12"
+              className="flex justify-between items-center gap-3"
               style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}
             >
               <div>

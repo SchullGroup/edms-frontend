@@ -82,8 +82,14 @@
   color-scheme: dark;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
+/* Nothing here sets a sizing model (Preflight is deliberately skipped — see the
+   header note), so every element defaults to `content-box`: a `width: 100%`
+   element with any padding or border renders wider than its container. That's
+   the input-overflow bug — border-box is the sane default and doesn't change
+   how anything looks, only the width math. */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; padding: 0; margin: 0; }
 body {
   font-family: var(--font-geist), "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: var(--fs-body); color: var(--ink);
@@ -455,14 +461,14 @@ input[type="checkbox"] { accent-color: var(--focus); }
 [data-theme="dark"] .viewer { background: #08090C; }
 .viewer-bar { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,.3); padding: 8px 12px; color: #C9CEDC; font-size: 12px; }
 .viewer-bar .icon-btn { color: #C9CEDC; border-color: transparent; } .viewer-bar .icon-btn:hover { background: rgba(255,255,255,.1); }
-.viewer-page-wrap { padding: 22px; display: flex; justify-content: center; max-height: 620px; overflow: auto; }
-.doc-page { background: #fff; color: #333; width: 480px; min-height: 620px; padding: 44px 42px; box-shadow: 0 6px 24px rgba(0,0,0,.4); border-radius: 4px; position: relative; font-family: Georgia, serif; font-size: 12px; line-height: 1.7; flex-shrink: 0; }
+.viewer-page-wrap { padding: 12px; display: flex; justify-content: center; max-height: 620px; overflow: auto; }
+/* Wraps the real file (iframe/img) — not a mock paper page, so no inset padding:
+   the file should fill it edge to edge. Width fills the viewer up to a sane cap
+   instead of the fixed 480px column this was left at from an earlier fixture
+   mockup, which squeezed real documents into a narrow strip. */
+.doc-page { background: #fff; width: 100%; max-width: 900px; min-height: 500px; box-shadow: 0 6px 24px rgba(0,0,0,.4); border-radius: 4px; position: relative; overflow: hidden; flex-shrink: 0; }
 .doc-page .watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: hidden; }
 .doc-page .watermark span { transform: rotate(-32deg); font-size: 42px; font-weight: 800; color: rgba(222,91,109,.12); letter-spacing: .1em; white-space: nowrap; text-transform: uppercase; font-family: Inter, Arial, sans-serif; }
-.doc-page h4 { font-family: Inter, Arial, sans-serif; font-size: 15px; margin-bottom: 14px; color: #1F3864; }
-.doc-page p { margin-bottom: 11px; }
-.redact-region { position: absolute; background: #101820; border: 2px solid var(--brand-accent); opacity: .92; cursor: pointer; border-radius: 2px; }
-.redact-region.released { border-color: transparent; }
 .sig-field { position: absolute; border: 2px dashed var(--status-progress); background: rgba(59,111,212,.07); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-family: Inter, Arial, sans-serif; font-size: 10px; color: var(--status-progress); font-weight: 700; }
 .sig-field.signed { border-style: solid; border-color: var(--status-closed); background: rgba(33,154,111,.06); color: var(--status-closed); font-family: "Segoe Script", cursive; font-size: 16px; }
 
@@ -548,20 +554,23 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
 
 .wfd-toolbar { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
 .wfd-crumbrow { padding: 10px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-.wfd-crumb-select { appearance: none; background: none repeat scroll 0 0 / auto padding-box border-box; border: none; font: inherit; font-weight: 700; font-size: 13px; color: var(--ink); cursor: pointer; padding: 2px 18px 2px 2px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23878FA1' stroke-width='1.5' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right center; }
+.wfd-crumb-select { appearance: none; background: transparent repeat scroll 0 0 / auto padding-box border-box; border: none; font: inherit; font-weight: 700; font-size: 13px; color: var(--ink); cursor: pointer; padding: 2px 18px 2px 2px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23878FA1' stroke-width='1.5' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right center; }
 .wfd-archived-toggle { background: none; border: 0; padding: 0; cursor: pointer; color: var(--focus); margin-left: auto; }
 .wfd-toolrow { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .wfd-saved-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--status-closed); opacity: 0; transform: translateY(2px); transition: opacity .2s cubic-bezier(.2,0,0,1), transform .2s cubic-bezier(.2,0,0,1); pointer-events: none; }
 .wfd-saved-pill.show { opacity: 1; transform: translateY(0); }
 
-.wfd-canvas { position: relative; overflow-x: auto; background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px); background-size: 22px 22px; border-radius: var(--radius); padding: 22px 20px; }
-.wf-node-row { display: flex; align-items: stretch; gap: 0; width: max-content; min-width: 100%; }
-.wf-connector { flex-shrink: 0; width: 34px; display: flex; align-items: center; justify-content: center; color: var(--muted); }
-.wf-node { flex-shrink: 0; width: 172px; background: var(--panel); border: 1.5px solid var(--border-strong); border-radius: 13px; padding: 11px 14px; box-shadow: var(--shadow); cursor: grab; user-select: none; touch-action: none; }
+.wfd-canvas { position: relative; background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px); background-size: 22px 22px; border-radius: var(--radius); padding: 20px; }
+/* Stages wrap onto as many rows as needed instead of scrolling off to the right. */
+.wf-node-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px; }
+.wf-node { flex: 0 0 176px; background: var(--panel); border: 1.5px solid var(--border-strong); border-radius: 13px; padding: 11px 14px; box-shadow: var(--shadow); cursor: grab; user-select: none; touch-action: none; transition: border-color .12s ease, box-shadow .12s ease; }
+.wf-node:hover { border-color: var(--muted); }
 .wf-node:active { cursor: grabbing; }
 .wf-node.selected { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 16%, transparent); }
 .wf-node.dragging { opacity: .5; }
-.wf-node-order { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+.wf-node-order { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+.wf-node-order::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--border-strong); flex-shrink: 0; }
+.wf-node.selected .wf-node-order::before { background: var(--focus); }
 .wf-node-name { font-size: 13px; font-weight: 700; line-height: 1.3; }
 .wf-node-meta { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
 .wf-node-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
@@ -592,8 +601,9 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
 .tag button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 13px; line-height: 1; padding: 0; }
 .kbd { font-family: "Cascadia Code", Consolas, monospace; font-size: 10.5px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1.5px 7px; }
 .divider { height: 1px; background: var(--border); margin: 16px 0; }
-.flex { display: flex; } .aic { align-items: center; } .jcb { justify-content: space-between; } .g8 { gap: 8px; } .g12 { gap: 12px; } .wrap { flex-wrap: wrap; }
-.mt8 { margin-top: 8px; } .mt16 { margin-top: 16px; } .mt24 { margin-top: 24px; } .mb8 { margin-bottom: 8px; } .mb16 { margin-bottom: 16px; }
+/* Flex/spacing aliases removed — use Tailwind utilities directly:
+   .flex→flex  .aic→items-center  .jcb→justify-between  .g8→gap-2  .g12→gap-3
+   .wrap→flex-wrap  .mt8/16/24→mt-2/4/6  .mb8/16→mb-2/4 */
 
 /* responsive shell (§15) */
 @media (max-width: 1023px) {
@@ -610,4 +620,15 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
 @media print {
   .sidebar, .topbar { display: none; }
   .shell { display: block; }
+  /* The in-app viewer is view-only by design (see DocumentViewerPanel) — block
+     the browser's own Ctrl+P/File>Print path too, not just the native PDF
+     viewer's own print button (handled via the #toolbar=0 open-parameter). */
+  .viewer-bar, .viewer-page-wrap { display: none !important; }
+  .viewer::before {
+    content: "Printing this document is disabled.";
+    display: block;
+    padding: 40px 20px;
+    text-align: center;
+    color: #666;
+  }
 }
