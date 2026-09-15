@@ -242,7 +242,8 @@ export const JOURNEY_STEPS: Step[] = [
     title: 'Send for approval',
     detail:
       'The document enters the workflow the administrator designed, with a deadline attached, instead of an email that might be missed.',
-    status: 'available',
+    status: 'progress',
+    note: 'Available to administrators today; being extended to staff and supervisors.',
   },
   {
     lane: 2,
@@ -344,7 +345,7 @@ export const HANDOFFS: Handoff[] = [
     from: 'Staff',
     to: 'Supervisor',
     title: 'Routing for approval',
-    status: 'available',
+    status: 'progress',
     body: 'The most important handoff in the product: a filed document enters a workflow, and a task appears in a supervisor’s queue with a deadline attached. Stage rules, service levels and role-based assignment all apply automatically.',
   },
   {
@@ -469,14 +470,15 @@ export const EPICS: Epic[] = [
   {
     letter: 'C',
     name: 'Routing, review & approval',
-    verdict: 'The core loop works end to end',
+    verdict: 'Task execution works; routing access is being finished',
     stories: [
       {
         id: 'C1',
         title: 'Route a document into an approval workflow',
         statement:
           'As Chika, I want to send a filed invoice into the “Standard Invoice Approval” workflow, so that it reaches my supervisor with a deadline attached instead of an email that might be missed.',
-        status: 'available',
+        status: 'progress',
+        note: 'Available to administrators today. Access for staff and supervisors is being finished.',
       },
       {
         id: 'C2',
