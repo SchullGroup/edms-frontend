@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { STAGE_ACTIONS } from './constants';
 import { Combobox } from '@/components/ui/Combobox';
 
@@ -74,7 +73,7 @@ export function StagePropertiesPanel({
 
           <div className="field">
             <label>Allowed actions</label>
-            <div className="flex g8 wrap">
+            <div className="flex gap-2 flex-wrap">
               {STAGE_ACTIONS.map((a) => {
                 const active = actionsDraft.includes(a.value);
                 return (
@@ -136,7 +135,7 @@ export function StagePropertiesPanel({
             />
           </div>
 
-          <div className="flex g8" style={{ marginTop: '4px' }}>
+          <div className="flex gap-2" style={{ marginTop: '4px' }}>
             <button className="btn btn-primary btn-sm" onClick={onSave} disabled={!dirty || saving}>
               {saving ? 'Saving…' : 'Save changes'}
             </button>
@@ -147,7 +146,7 @@ export function StagePropertiesPanel({
             )}
           </div>
 
-          <button className="btn btn-danger btn-sm mt16" onClick={onDelete}>
+          <button className="btn btn-danger btn-sm mt-4" onClick={onDelete}>
             Delete stage
           </button>
         </div>

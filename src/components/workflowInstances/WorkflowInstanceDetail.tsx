@@ -42,7 +42,7 @@ export function WorkflowInstanceDetail({ instanceId, onOpenDocument }: WorkflowI
 
   return (
     <div>
-      <div className="flex g8 aic wrap mb16">
+      <div className="flex gap-2 items-center flex-wrap mb-4">
         <StatusBadge status={STATUS_LABEL[instance.status]} />
         <span className="caption">
           {instance.workflowDefinition?.name || 'Workflow'}
@@ -64,7 +64,7 @@ export function WorkflowInstanceDetail({ instanceId, onOpenDocument }: WorkflowI
         )}
       </div>
 
-      <div className="flex g12 wrap mb16">
+      <div className="flex gap-3 flex-wrap mb-4">
         <div>
           <div className="caption">Started</div>
           <div style={{ fontSize: '12.5px', fontWeight: 600 }}>
@@ -82,7 +82,7 @@ export function WorkflowInstanceDetail({ instanceId, onOpenDocument }: WorkflowI
       </div>
 
       <div className="divider"></div>
-      <div className="h3 mb8">Stages</div>
+      <div className="h3 mb-2">Stages</div>
       {stages?.length ? (
         <WorkflowStageProgress
           stages={stages}
@@ -106,7 +106,7 @@ export function WorkflowInstanceDetail({ instanceId, onOpenDocument }: WorkflowI
       )}
 
       <div className="divider"></div>
-      <div className="h3 mb8">Activity trail</div>
+      <div className="h3 mb-2">Activity trail</div>
       <WorkflowHistoryTimeline
         workflowInstanceId={instance.id}
         scope="all"
@@ -117,7 +117,7 @@ export function WorkflowInstanceDetail({ instanceId, onOpenDocument }: WorkflowI
       {!closed && (
         <>
           <div className="divider"></div>
-          <div className="flex g8 wrap">
+          <div className="flex gap-2 flex-wrap">
             {instance.status === 'on_hold' ? (
               <button
                 className="btn btn-secondary btn-sm"
@@ -154,7 +154,7 @@ export function WorkflowInstanceDetail({ instanceId, onOpenDocument }: WorkflowI
 function WorkflowInstanceDetailSkeleton() {
   return (
     <div>
-      <div className="flex g8 aic wrap mb16">
+      <div className="flex gap-2 items-center flex-wrap mb-4">
         <Skeleton height={20} width={80} radius={99} />
         <Skeleton height={12} width={120} />
       </div>
@@ -164,12 +164,12 @@ function WorkflowInstanceDetailSkeleton() {
         <Skeleton height={14} width="70%" />
       </div>
 
-      <div className="flex g12 wrap mb16">
+      <div className="flex gap-3 flex-wrap mb-4">
         <Skeleton height={30} width={100} />
       </div>
 
       <div className="divider"></div>
-      <div className="h3 mb8">Stages</div>
+      <div className="h3 mb-2">Stages</div>
       {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="wf-stage" style={{ cursor: 'default' }} aria-hidden="true">
           <Skeleton width={24} height={24} circle />
@@ -181,7 +181,7 @@ function WorkflowInstanceDetailSkeleton() {
       ))}
 
       <div className="divider"></div>
-      <div className="h3 mb8">Activity trail</div>
+      <div className="h3 mb-2">Activity trail</div>
       <SkeletonText lines={4} />
     </div>
   );

@@ -5,9 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { useCabinets } from '@/apis/hooks/useCabinets';
-import { useAllDocuments } from '@/apis/hooks/useDocuments';
+import { useAllDocuments, useDocumentStats } from '@/apis/hooks/useDocuments';
 import { useAllTasks } from '@/apis/hooks/useTasks';
-import { useAllWorkflowInstances } from '@/apis/hooks/useWorkflowInstances';
+import {
+  useAllWorkflowInstances,
+  useWorkflowInstanceStats,
+} from '@/apis/hooks/useWorkflowInstances';
 import { exportCsv } from '@/utils/exportCsv';
 import { HBarChart, LineChart } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
@@ -46,6 +49,11 @@ export default function ManagementDashboard() {
   const { data: documents = [], isLoading: loadingDocs } = useAllDocuments();
   const { data: tasksPage, isLoading: loadingTasks } = useAllTasks();
   const { data: instances = [], isLoading: loadingInstances } = useAllWorkflowInstances();
+
+  // Server-computed aggregates — shown when the endpoints are available, next to
+  // the client-side numbers derived from the full-list walk above.
+  const { data: wfStats } = useWorkflowInstanceStats();
+  const { data: docStats } = useDocumentStats();
 
   const departments = departmentsRes?.data ?? [];
   const cabinets = cabinetsRes?.data ?? [];
@@ -161,7 +169,7 @@ export default function ManagementDashboard() {
           </div>
         </div>
         <div className="actions">
-          <div className="flex g8 wrap">
+          <div className="flex gap-2 flex-wrap">
             <select
               className="input"
               style={{ width: 'auto', height: '32px' }}
@@ -194,7 +202,7 @@ export default function ManagementDashboard() {
         </div>
       </div>
 
-      <div className="grid cols-4 mb16">
+      <div className="grid cols-4 mb-4">
         {kpis.map((k, i) => (
           <div
             key={i}
@@ -211,7 +219,38 @@ export default function ManagementDashboard() {
         ))}
       </div>
 
-      <div className="grid cols-2 mb16">
+      {(wfStats || (docStats && docStats.total != null)) && (
+        <div className="card mb-4">
+          <div className="card-head">
+            <span className="h3">Server-computed aggregates</span>
+            <span className="caption">GET /documents/stats · GET /workflow-instances/stats</span>
+          </div>
+          <div className="card-body">
+            <div className="grid cols-4">
+              {docStats?.total != null && (
+                <div className="kpi">
+                  <div className="kv">{docStats.total.toLocaleString()}</div>
+                  <div className="kl">Documents (total)</div>
+                </div>
+              )}
+              {wfStats?.avgTurnaroundDays != null && (
+                <div className="kpi">
+                  <div className="kv">{wfStats.avgTurnaroundDays.toFixed(1)} d</div>
+                  <div className="kl">Avg turnaround (server)</div>
+                </div>
+              )}
+              {wfStats?.buckets?.map((b) => (
+                <div className="kpi" key={b.key}>
+                  <div className="kv">{b.count.toLocaleString()}</div>
+                  <div className="kl">{b.key}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid cols-2 mb-4">
         <div className="card">
           <div className="card-head">
             <span className="h3">Inflow vs closure</span>

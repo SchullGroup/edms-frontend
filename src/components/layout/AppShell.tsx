@@ -9,6 +9,7 @@ import { Topbar } from './Topbar';
 import { useUIStore } from '@/store/useUIStore';
 import { authService } from '@/apis/services/auth.service';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useHydratePermissions } from '@/hooks/useHydratePermissions';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -27,12 +28,16 @@ function lighten(hex: string, amt: number) {
 export const AppShell = ({ children }: AppShellProps) => {
   const router = useRouter();
   const pathname = usePathname();
-  const { currentUser, branding, prefs } = useStore();
+  const { currentUser, branding, prefs, patchCurrentUser } = useStore();
   const { pageTitle } = useUIStore();
   const [collapsed, setCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isReady: permsReady } = usePermissions();
+
+  // Top up currentUser.permissions with any role permission keys the live
+  // login/`/auth/me` payload didn't include; never overwrites live entries.
+  useHydratePermissions();
 
   useEffect(() => {
     const unsub = useStore.persist.onFinishHydration(() => setHydrated(true));
@@ -47,12 +52,23 @@ export const AppShell = ({ children }: AppShellProps) => {
   }, []);
 
   useEffect(() => {
-    // --- Route Guard Logic ---
+    // --- Route Guard Logic (cosmetic — the backend is the real gate) ---
     if (!isMounted || !hydrated) return;
+    // Wait until we actually know the user's permissions, otherwise a custom
+    // role (empty fallback grants) would be bounced to /unauthorized on first paint.
+    if (!permsReady) return;
 
     if (currentUser && pathname && pathname !== '/unauthorized') {
       let isAllowed = true;
       let matchedRule = false;
+
+      const checkOne = (p: string | { resource: string; action: string }) => {
+        if (typeof p === 'string') {
+          const [res, act] = p.split(':');
+          return hasPermission(res, act || '*');
+        }
+        return hasPermission(p.resource, p.action);
+      };
 
       for (const rule of routeConfig) {
         let match = false;
@@ -68,22 +84,15 @@ export const AppShell = ({ children }: AppShellProps) => {
 
         if (match) {
           matchedRule = true;
-          // Check role first
-          if (!rule.roles || rule.roles.length === 0) {
-            isAllowed = true;
-          } else {
+
+          if (rule.roles && rule.roles.length > 0) {
             isAllowed = currentUser.roles.some((r) => rule.roles!.includes(r));
           }
-
-          // Then check granular permissions if required
+          if (isAllowed && rule.anyPermissions && rule.anyPermissions.length > 0) {
+            isAllowed = rule.anyPermissions.some(checkOne);
+          }
           if (isAllowed && rule.permissions && rule.permissions.length > 0) {
-            isAllowed = rule.permissions.every((p) => {
-              if (typeof p === 'string') {
-                const [res, act] = p.split(':');
-                return hasPermission(res, act || '*');
-              }
-              return hasPermission(p.resource, p.action);
-            });
+            isAllowed = rule.permissions.every(checkOne);
           }
 
           break; // Stop at first match
@@ -94,8 +103,13 @@ export const AppShell = ({ children }: AppShellProps) => {
         router.replace('/unauthorized');
       }
     }
-  }, [currentUser, pathname, router, isMounted]);
+  }, [currentUser, pathname, router, isMounted, hydrated, permsReady, hasPermission]);
 
+  // Verify the session once per signed-in user, and adopt fresh `roles` /
+  // `permissions` from `/auth/me` (both are now live — see docs/01 DRIFT-03).
+  // Gap-filling from `GET /roles` is handled separately, reactively, by
+  // `useHydratePermissions`. Keyed on `currentUser?.id` (a primitive) — NOT the
+  // object — so the `patchCurrentUser` below can't retrigger it.
   useEffect(() => {
     if (!isMounted || !hydrated) return;
 
@@ -104,18 +118,38 @@ export const AppShell = ({ children }: AppShellProps) => {
       return;
     }
 
-    // Verify session in background
+    let cancelled = false;
     authService
       .me()
       .then((res) => {
-        // Could optionally update currentUser here if needed
+        if (cancelled || !res) return;
+        const cur = useStore.getState().currentUser;
+        if (!cur) return;
+        const patch: Record<string, unknown> = {};
+        if (res.roles && JSON.stringify(res.roles) !== JSON.stringify(cur.roles)) {
+          patch.roles = res.roles;
+        }
+        if (
+          res.permissions &&
+          res.permissions.length > 0 &&
+          JSON.stringify(res.permissions) !== JSON.stringify(cur.permissions)
+        ) {
+          patch.permissions = res.permissions;
+        }
+        if (Object.keys(patch).length) patchCurrentUser(patch);
       })
       .catch(() => {
-        // interceptor handles the 401, we just need to clear state
+        if (cancelled) return;
+        // interceptor handles the 401 — we just clear local state
         useStore.getState().setCurrentUser(null);
         router.push('/');
       });
-  }, [currentUser, router, isMounted]);
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, isMounted, hydrated]);
 
   useEffect(() => {
     if (branding && prefs) {

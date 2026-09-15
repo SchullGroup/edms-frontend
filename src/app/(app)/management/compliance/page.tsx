@@ -91,7 +91,7 @@ export default function CompliancePosturePage() {
         </div>
       </div>
 
-      <div className="grid cols-4 mb16">
+      <div className="grid cols-4 mb-4">
         <div className="card kpi">
           <div
             className="kv"
@@ -115,7 +115,7 @@ export default function CompliancePosturePage() {
         </div>
       </div>
 
-      <div className="grid cols-2 mb16">
+      <div className="grid cols-2 mb-4">
         <div className="card">
           <div className="card-head">
             <span className="h3">Findings by status</span>

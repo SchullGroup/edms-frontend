@@ -41,7 +41,7 @@ export default function ExceptionsPage() {
     { key: 'sev', label: 'Severity', render: r => <SevBadge sev={r.sev} /> },
     { key: 'status', label: 'Status', render: r => <span className={`badge ${r.status === 'Closed' ? 'b-status-closed' : r.status === 'Open' ? 'b-status-overdue' : 'b-status-pending'}`}>{r.status}</span> },
     { key: 'act', label: '', render: r => (
-        <div className="flex g8">
+        <div className="flex gap-2">
           <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); router.push(`/doc/${r.doc}`); }}>Open file</button>
           {r.status === 'Open' && (
             <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); handleAcknowledge(r.id, r.doc, r.type); }}>Acknowledge</button>
@@ -60,7 +60,7 @@ export default function ExceptionsPage() {
         </div>
       </div>
 
-      <div className="banner warning mb16">
+      <div className="banner warning mb-4">
         <span style={{ marginRight: '8px' }}><Icon name="shield" size={15} /></span>
         Exceptions are shared with Internal Audit automatically. Acknowledging records your review; remediation is tracked as a finding.
       </div>

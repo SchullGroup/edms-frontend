@@ -319,7 +319,7 @@ export default function DepartmentsAdminPage() {
       render: (r: FlatDepartment) => {
         const isOpen = expanded.has(r.id);
         return (
-          <span style={{ paddingLeft: `${r.depth * 18}px` }} className="flex aic g8">
+          <span style={{ paddingLeft: `${r.depth * 18}px` }} className="flex items-center gap-2">
             {r.childCount > 0 ? (
               <button
                 type="button"
@@ -352,7 +352,7 @@ export default function DepartmentsAdminPage() {
       key: 'act',
       label: '',
       render: (r: FlatDepartment) => (
-        <div className="flex jce">
+        <div className="flex justify-end">
           <RowMenu
             onAddSub={() => openForm(null, findNode(r.id)!)}
             onEdit={() => openForm(findNode(r.id)!)}
@@ -376,7 +376,7 @@ export default function DepartmentsAdminPage() {
           </div>
         </div>
         <div className="actions">
-          <button className="btn btn-primary flex aic" onClick={() => openForm(null)}>
+          <button className="btn btn-primary flex items-center" onClick={() => openForm(null)}>
             <span style={{ marginRight: '8px' }}>
               <Icon name="plus" size={15} />
             </span>

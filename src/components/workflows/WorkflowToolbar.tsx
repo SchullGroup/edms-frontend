@@ -109,13 +109,11 @@ export function WorkflowToolbar({
   return (
     <div className="wfd-toolbar">
       <div className="wfd-crumbrow">
-        <span className="caption" style={{ fontWeight: 600 }}>
-          Workflows
-        </span>
+        <span className="caption font-semibold">Workflows</span>
         <Icon name="chevR" size={12} />
         <div className="wfd-crumb-switch">
           <select
-            className="wfd-crumb-select"
+            className="input"
             value={workflow.id}
             onChange={(e) => onSwitchWorkflow(e.target.value)}
             aria-label="Switch workflow"
@@ -128,14 +126,18 @@ export function WorkflowToolbar({
           </select>
         </div>
         {archivedCount > 0 && (
-          <button type="button" className="caption wfd-archived-toggle" onClick={onToggleShowArchived}>
+          <button
+            type="button"
+            className="caption wfd-archived-toggle"
+            onClick={onToggleShowArchived}
+          >
             {showArchived ? 'Hide' : 'Show'} archived ({archivedCount})
           </button>
         )}
       </div>
 
       <div className="wfd-toolrow">
-        <div className="flex aic g8 wrap" style={{ minWidth: 0 }}>
+        <div className="flex items-center gap-2 flex-wrap" style={{ minWidth: 0 }}>
           <input
             className="input"
             value={nameDraft}
@@ -146,7 +148,12 @@ export function WorkflowToolbar({
             }}
             aria-label="Workflow name"
           />
-          <button type="button" className="btn btn-primary btn-sm" onClick={onSaveName} disabled={!nameDirty || saving}>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={onSaveName}
+            disabled={!nameDirty || saving}
+          >
             {saving && nameDirty ? 'Saving…' : 'Save'}
           </button>
           <span className={`wfd-saved-pill ${justSaved ? 'show' : ''}`}>
@@ -160,8 +167,12 @@ export function WorkflowToolbar({
           </span>
         </div>
 
-        <div className="flex aic g8">
-          <button className="btn btn-primary btn-sm" onClick={onPublish} disabled={publishing || workflow.status === 'published'}>
+        <div className="flex items-center gap-2">
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={onPublish}
+            disabled={publishing || workflow.status === 'published'}
+          >
             {workflow.status === 'published' ? 'Published' : 'Publish'}
           </button>
           <div ref={menuRef} style={{ position: 'relative' }}>
@@ -181,58 +192,58 @@ export function WorkflowToolbar({
               menuRect &&
               typeof document !== 'undefined' &&
               createPortal(
-              <div
-                className="menu"
-                ref={menuPopRef}
-                style={{
-                  position: 'fixed',
-                  top: menuRect.bottom + 8,
-                  right: Math.max(8, window.innerWidth - menuRect.right),
-                  minWidth: '190px',
-                }}
-                role="menu"
-              >
-                <button
-                  className="menu-item"
-                  role="menuitem"
-                  disabled={creating}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onCreateNew();
+                <div
+                  className="menu"
+                  ref={menuPopRef}
+                  style={{
+                    position: 'fixed',
+                    top: menuRect.bottom + 8,
+                    right: Math.max(8, window.innerWidth - menuRect.right),
+                    minWidth: '190px',
                   }}
+                  role="menu"
                 >
-                  <Icon name="plus" size={15} /> New workflow
-                </button>
-                <button
-                  className="menu-item"
-                  role="menuitem"
-                  disabled={creating}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onClone();
-                  }}
-                >
-                  <Copy name="copy" size={15} /> Clone this workflow
-                </button>
-                {workflow.status !== 'archived' && (
-                  <>
-                    <div className="menu-sep"></div>
-                    <button
-                      className="menu-item danger"
-                      role="menuitem"
-                      disabled={archiving}
-                      onClick={() => {
-                        setMenuOpen(false);
-                        onArchive();
-                      }}
-                    >
-                      <Icon name="alert" size={15} /> Archive
-                    </button>
-                  </>
-                )}
-              </div>,
-              document.body,
-            )}
+                  <button
+                    className="menu-item"
+                    role="menuitem"
+                    disabled={creating}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onCreateNew();
+                    }}
+                  >
+                    <Icon name="plus" size={15} /> New workflow
+                  </button>
+                  <button
+                    className="menu-item"
+                    role="menuitem"
+                    disabled={creating}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onClone();
+                    }}
+                  >
+                    <Copy name="copy" size={15} /> Clone this workflow
+                  </button>
+                  {workflow.status !== 'archived' && (
+                    <>
+                      <div className="menu-sep"></div>
+                      <button
+                        className="menu-item danger"
+                        role="menuitem"
+                        disabled={archiving}
+                        onClick={() => {
+                          setMenuOpen(false);
+                          onArchive();
+                        }}
+                      >
+                        <Icon name="alert" size={15} /> Archive
+                      </button>
+                    </>
+                  )}
+                </div>,
+                document.body,
+              )}
           </div>
         </div>
       </div>

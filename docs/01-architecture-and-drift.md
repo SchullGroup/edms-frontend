@@ -276,6 +276,14 @@ The call returns Express's default HTML 404. `logoutWithBackend` wraps it in
 `try/catch` and only `console.error`s, so **logout appears to succeed**: the HttpOnly
 cookie is cleared client-side and the user is signed out of the UI.
 
+**Update 2026-09-10 (frontend).** The Sidebar "Sign out" button previously only did
+`setCurrentUser(null)` + redirect. It now `await`s `authService.logout()` — which POSTs
+`/api/auth/logout` **with the `Authorization: Bearer` header** — then clears the React
+Query cache and the local session. The BFF route deletes the `refreshToken` cookie and
+forwards to the backend. So the frontend side of BE-2 is done; the backend route and a
+refresh-token denylist are still outstanding, so the token remains cryptographically
+valid until it expires.
+
 **What actually breaks:** the refresh token remains cryptographically valid for its full
 7 days. Because the backend has no denylist, revocation table, or rotation, a refresh
 token captured before "logout" still mints access tokens afterwards. The backend also
@@ -295,15 +303,18 @@ which layer denies a request is the single most common source of confusion in th
 ```
 ┌─ LAYER 1 ── Frontend route guard ──────────────────────────────────────────────┐
 │ WHERE   src/components/layout/AppShell.tsx (a useEffect), config/routes.config │
-│ INPUT   currentUser.roles, from localStorage-persisted Zustand                  │
-│ EFFECT  router.replace('/unauthorized')                                         │
+│ INPUT   currentUser.permissions (resource:action keys) via routeConfig          │
+│         anyPermissions/permissions; /platform still by role name                │
+│ EFFECT  router.replace('/unauthorized')  (only once permissions have resolved)  │
 │ TRUST   ⚠️ ZERO. Cosmetic only — see DRIFT-02.                                  │
 └────────────────────────────────────────────────────────────────────────────────┘
 ┌─ LAYER 2 ── Frontend component guard ──────────────────────────────────────────┐
-│ WHERE   src/hooks/usePermissions.ts, src/components/common/Guard.tsx            │
-│ INPUT   currentUser.permissions if non-empty, else role heuristics              │
-│ EFFECT  renders children or a fallback                                          │
-│ TRUST   ⚠️ ZERO. Cosmetic only — and see DRIFT-03 for a format mismatch.        │
+│ WHERE   src/hooks/usePermissions.ts, src/lib/permissions.ts, useNavigation      │
+│ INPUT   currentUser.permissions (live from login/`/auth/me`; gaps topped up     │
+│         from GET /roles by useHydratePermissions); SYSTEM_ROLE_PERMISSIONS      │
+│         fallback pre-hydration                                                  │
+│ EFFECT  renders/hides nav items & controls; picks the portal shell             │
+│ TRUST   ⚠️ ZERO. Cosmetic only. DRIFT-03/04 format+heuristic issues fixed.      │
 └────────────────────────────────────────────────────────────────────────────────┘
 ┌─ LAYER 3 ── Backend RBAC ──────────────────────────────────────────────────────┐
 │ WHERE   middlewares/role.middleware.ts → requirePermission(resource, action)     │
@@ -341,37 +352,59 @@ breach. It becomes a real vulnerability the moment those pages are wired to live
 server-side (or calls `/auth/me`) and redirects before the page is ever served. Keep the
 `AppShell` guard as a UX nicety, not as the control.
 
-### 🔴 DRIFT-03 — Permission string formats do not match
+### ✅ DRIFT-03 — Permission string formats do not match — **Resolved (backend 2026-09-15)**
 
 | Side | Format | Example | Source |
 |---|---|---|---|
 | Backend emits | `resource:action:scope` | `document:view:global` | `auth.middleware.ts:56` |
-| Frontend compares | `resource:action` | `document:view` | `usePermissions.ts:12` |
+| Frontend compares | `resource:action` (scope parsed separately) | `document:view` | `src/lib/permissions.ts` |
 
-```ts
-// src/hooks/usePermissions.ts
-return p === `${resource}:${action}` || p === `${resource}:*` || p === `*:*`;
-//     "document:view:global" === "document:view"  → false, always
-```
+*Original finding:* `usePermissions.ts` compared whole strings
+(`p === "${resource}:${action}"`), so a three-segment `document:view:global` never
+matched and the moment `/auth/me` returned a `permissions` array every `<Guard>` would
+go dark.
 
-The mismatch is currently **latent, not active**, for one reason: the backend's
-`POST /auth/login` and `GET /auth/me` responses return only
-`{ id, email, name, status, roles }` — **no `permissions` array**
-(`auth.service.ts`, `LoginResponse`/`UserResponse`). So `currentUser.permissions` is
-always empty, `usePermissions` falls through to its role-heuristic branch, and the UI
-behaves plausibly.
+*What shipped on the frontend (2026-09-10):*
 
-**This is a trap.** The moment anyone adds `permissions` to the `/auth/me` payload —
-an obvious, desirable change — `hasPermission()` starts returning `false` for
-*everything*, and every `<Guard>` in the app goes dark simultaneously. The failure will
-look like a permissions regression, not a string-format bug.
+- `src/lib/permissions.ts` — `normalizePermission()` drops the scope segment for
+  gating; `parseScope()` keeps it; `permissionMatches()` compares only the first two
+  segments and honours `*` wildcards.
+- `usePermissions` now sources `currentUser.permissions`, exposes `can` / `hasAny` /
+  `hasAll` / `scopeFor` / `isReady` / `portal`, and no longer has a role-name heuristic
+  block (that was DRIFT-04). A small `SYSTEM_ROLE_PERMISSIONS` fallback approximates the
+  six seeded roles only until real permissions load.
 
-**Fix (do both, in this order):**
-1. Make `usePermissions` split on `:` and compare only the first two segments, keeping
-   the third as the scope. Ship this **before** step 2.
-2. Add `permissions` to the `/auth/me` response so the UI stops guessing.
+*What shipped on the backend (confirmed 2026-09-15):* `POST /auth/login` and
+`GET /auth/me` both now return a scoped `permissions: string[]` array
+(`"document:view:department"`, `"document_version:create:own"`, …), including
+resources (`document_version`, `document_lock`, `document_metadata`, `department`, …)
+outside the write-side enum — see `RolePermissionResource`/`RolePermissionAction` in
+`types/models.ts`. This is the precise, per-user grant set and is written straight to
+`currentUser.permissions` (`app/page.tsx` on login, `AppShell`'s `authService.me()`
+callback thereafter).
 
-### 🟠 DRIFT-04 — The frontend's role heuristics contradict the backend's grants
+`useHydratePermissions` (role-derived, un-scoped `resource:action` keys from
+`GET /roles`) is now strictly a gap-filler on top of that live data, not the primary
+source — it used to *replace* `currentUser.permissions` wholesale on any mismatch,
+which would have silently discarded real scopes and per-user grants the moment the
+backend started sending them. Fixed 2026-09-15 to only append derived keys that are
+actually missing.
+
+### 🟨 DRIFT-04 — The frontend's role heuristics contradict the backend's grants — **REVISED (frontend fixed 2026-09-10)**
+
+The `usePermissions` role-name heuristic block described below was **deleted** on
+2026-09-10. Gating now runs off `resource:action` permission keys
+(`currentUser.permissions`, derived from `GET /roles`), and route rules
+(`src/config/routes.config.ts`) declare `anyPermissions` / `permissions` instead of
+`roles` — except `/platform`, which stays role-gated (`schulltech_admin`) because there
+is no `platform` resource in the vocabulary. A `SYSTEM_ROLE_PERMISSIONS` map in
+`src/lib/permissions.ts` still approximates the six seeded roles, but only as a
+pre-hydration fallback, and its `client_admin` entry is the honest "all resources ×
+all actions". The portal shell a user lands in is chosen by `resolvePortal()` — by role
+name for the six built-ins (their permission sets overlap too much to disambiguate),
+by entry permission for custom roles.
+
+*Original finding, for history:*
 
 `usePermissions.ts:26-31` grants `client_admin` **everything** except `resource === 'platform'`.
 `routes.config.ts` gives `schulltech_admin` the entire `/platform` prefix.
@@ -652,8 +685,8 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 |---|---|---|
 | `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists | ✅ |
 | `POST /api/auth/refresh` → `/api/v1/auth/refresh` | ✅ exists | ✅ |
-| `POST /api/auth/logout` → `/api/v1/auth/logout` | ❌ **not registered** | 🔴 **DRIFT-01** |
-| `GET /auth/me` | ✅ exists | ✅ (payload lacks `permissions` — DRIFT-03) |
+| `POST /api/auth/logout` → `/api/v1/auth/logout` | ❌ **not registered** | 🟨 **DRIFT-01** — frontend now *calls* it (Sidebar sign-out → `authService.logout()`, with the bearer token, 2026-09-10); backend route still missing so revocation is still a no-op |
+| `GET /auth/me` | ✅ exists | ✅ (`permissions` now included — DRIFT-03 resolved) |
 
 ### Documents
 
@@ -671,8 +704,8 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents/:id/versions` | ✅ | ✅ |
 | `GET /documents/:id/versions/:versionId` | ✅ | ✅ |
 | `POST /documents/:id/versions` | ✅ | ✅ |
-| `POST /documents/:id/comments` | ❌ **no such route** | 🔴 **DRIFT-08** |
-| `POST /documents/:id/signatures` | ❌ **no such route** | 🔴 **DRIFT-08** |
+| ~~`POST /documents/:id/comments`~~ | ❌ no such route — **not a document operation** | ✅ **DRIFT-08 resolved (frontend, 2026-09-10)** — comments are the `comment` field on `POST /tasks/:id/action` |
+| ~~`POST /documents/:id/signatures`~~ | ❌ no such route — **not a document operation** | ✅ **DRIFT-08 resolved (frontend, 2026-09-10)** — a signature is the `signature: {fileUrl,mimeType}` image on the `approve` task action |
 | — | `DELETE /documents/:id` (archive) | ⚠️ backend only, UI never calls it |
 | — | `POST /documents/:id/versions/:versionId/restore` | ⚠️ backend only |
 
@@ -1003,10 +1036,10 @@ suspiciously few documents.
 | ~~DRIFT-09~~ | ✅ **Resolved** | ~~`POST /workflow-instances/start` 404s~~ — two-call sequence shipped 2026-09 | Frontend | Was: document routing did not work from the UI at all |
 | DRIFT-10 | 🔴 High | **Revised** — notifications module and UI now both exist, but **nothing calls `notifyUser`**, so the table is always empty | Backend | Task assignment, SLA warnings and returned work are all silent |
 | DRIFT-10b | 🟠 Med | No JSON 404 handler — Express returns HTML | Backend | Any missing route surfaces as an axios parse error, not a clean 404 |
-| DRIFT-03 | 🔴 High | `resource:action` vs `resource:action:scope` | Both | Latent — detonates the moment `/auth/me` returns `permissions` |
-| DRIFT-01 | 🟠 Med | `POST /auth/logout` missing | Backend | Refresh token stays valid 7 days after "logout"; no revocation |
-| DRIFT-08 | 🟠 Med | `/documents/:id/comments` + `/signatures` 404 | Backend | Two prominent doc-detail actions fail |
-| DRIFT-04 | 🟠 Med | Frontend role heuristics contradict backend grants | Frontend | `schulltech_admin` and `management` UIs promise rights they don't have |
+| DRIFT-03 | ✅ **Resolved 2026-09-15** | `resource:action` vs `resource:action:scope` | — | `src/lib/permissions.ts` compares first two segments + parses scope; backend now sends scoped `permissions` on login + `/auth/me` |
+| DRIFT-01 | 🟨 **Frontend fixed 2026-09-10** | `POST /auth/logout` missing | Backend | Sidebar sign-out now calls it with the bearer token; backend route + denylist still outstanding |
+| DRIFT-08 | ✅ **Resolved (frontend 2026-09-10)** | `/documents/:id/comments` + `/signatures` 404 | Frontend | Neither is a document operation. Comments = `comment` on `POST /tasks/:id/action`; signature = `signature` image on its `approve` action. `/doc/[id]` and the supervisor approvals queue rewired; a signature pad (`SignaturePad` + `useSignAndApprove`) captures/uploads the image. Dead `documents.service` methods + hooks removed. |
+| DRIFT-04 | ✅ **Frontend resolved 2026-09-10** | Frontend role heuristics contradict backend grants | Frontend | Heuristic block deleted; gating is permission-key based (`routes.config` `anyPermissions`), `/platform` still role-gated by design |
 | DRIFT-12 | 🟠 Med | Login test accounts don't exist | Frontend | Every autofill button fails; blocks new-dev onboarding |
 | — | 🟠 Med | Prisma client stale → all users forced to `department` scope | Backend | Run `npx prisma generate` |
 | DRIFT-13 | 🟠 Med | `effStatus()` is a no-op on real data — two divergent copies, no `due` field on `Document`, capitalized status compares | Frontend | Every overdue count, badge and ageing bucket is permanently zero across 8 call sites |
@@ -1043,8 +1076,9 @@ item 1 jumped the queue.*
    Seven of the eight have no caller; `useDocuments`, `useTasks`, `useCabinets` and
    `useWorkflowInstances` still page whole collections.
 8. Fix the login test-account emails to the `tjoel+…` set (DRIFT-12)
-9. Make `usePermissions` parse three-segment strings **before** anyone touches
-   `/auth/me` (DRIFT-03)
+9. ✅ ~~Make `usePermissions` parse three-segment strings before anyone touches
+   `/auth/me`~~ — **done**; backend now sends scoped `permissions` on login/`/auth/me`
+   (DRIFT-03 resolved)
 10. Fix `effStatus()` — one implementation, against a field that exists (DRIFT-13)
 
 **Then — make the governance half real**

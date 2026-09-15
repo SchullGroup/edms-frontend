@@ -1,8 +1,29 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { Icon } from '@/components/ui/Icons';
 import s from './userStories.module.css';
+
+type Theme = 'light' | 'dark';
+
+/** This page renders outside the app shell, so nothing sets `data-theme` for it.
+ *  Seed from the theme the signed-in app persisted (if any), else the OS setting. */
+function detectInitialTheme(): Theme {
+  if (typeof window === 'undefined') return 'light';
+  try {
+    const raw = localStorage.getItem('edms-guide-theme');
+    if (raw === 'light' || raw === 'dark') return raw;
+    const persisted = localStorage.getItem('edms-state-v3');
+    if (persisted) {
+      const t = JSON.parse(persisted)?.state?.prefs?.theme;
+      if (t === 'light' || t === 'dark') return t;
+    }
+  } catch {
+    /* private mode / bad JSON — fall through */
+  }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 import {
   ALL_STORIES,
   EPICS,
@@ -109,6 +130,21 @@ function Swimlane({
 export default function ProductGuidePage() {
   const [view, setView] = useState<View>('flow');
   const [filter, setFilter] = useState<Status | 'all'>('all');
+  const [theme, setTheme] = useState<Theme>('light');
+
+  // Resolve the real theme after mount (avoids an SSR/CSR mismatch) and apply it
+  // to <html>, which is the same hook the app shell uses.
+  useEffect(() => {
+    setTheme(detectInitialTheme());
+  }, []);
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem('edms-guide-theme', theme);
+    } catch {
+      /* ignore */
+    }
+  }, [theme]);
 
   const visibleEpics = useMemo(
     () =>
@@ -128,9 +164,20 @@ export default function ProductGuidePage() {
           <span className={s.brand}>
             SchullTech <strong>EDMS</strong>
           </span>
-          <Link href="/" className={`btn btn-sm btn-secondary ${s.signIn}`}>
-            Sign in
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            >
+              <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
+            </button>
+            <Link href="/" className={`btn btn-sm btn-secondary ${s.signIn}`}>
+              Sign in
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -165,27 +212,27 @@ export default function ProductGuidePage() {
         >
           <div className="card kpi">
             <div className="kl">Roles</div>
-            <div className="kv tnum">{PERSONAS.length}</div>
+            <div className="kv tabular-nums">{PERSONAS.length}</div>
           </div>
           <div className="card kpi">
             <div className="kl">Setup steps</div>
-            <div className="kv tnum">{SETUP_STEPS.length}</div>
+            <div className="kv tabular-nums">{SETUP_STEPS.length}</div>
           </div>
           <div className="card kpi">
             <div className="kl">Handoffs</div>
-            <div className="kv tnum">{HANDOFFS.length}</div>
+            <div className="kv tabular-nums">{HANDOFFS.length}</div>
           </div>
           <div className="card kpi">
             <div className="kl">Epics</div>
-            <div className="kv tnum">{EPICS.length}</div>
+            <div className="kv tabular-nums">{EPICS.length}</div>
           </div>
           <div className="card kpi">
             <div className="kl">Stories</div>
-            <div className="kv tnum">{ALL_STORIES.length}</div>
+            <div className="kv tabular-nums">{ALL_STORIES.length}</div>
           </div>
           <div className="card kpi">
             <div className="kl">Available now</div>
-            <div className="kv tnum">{STATUS_COUNTS.available}</div>
+            <div className="kv tabular-nums">{STATUS_COUNTS.available}</div>
           </div>
         </div>
 
@@ -313,7 +360,7 @@ export default function ProductGuidePage() {
                 className={`btn btn-sm ${filter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setFilter('all')}
               >
-                All <span className="tnum">&nbsp;{ALL_STORIES.length}</span>
+                All <span className="tabular-nums">&nbsp;{ALL_STORIES.length}</span>
               </button>
               {STATUS_ORDER.filter((st) => STATUS_COUNTS[st] > 0).map((st) => (
                 <button
@@ -321,7 +368,7 @@ export default function ProductGuidePage() {
                   className={`btn btn-sm ${filter === st ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={() => setFilter(st)}
                 >
-                  {STATUS_LABEL[st]} <span className="tnum">&nbsp;{STATUS_COUNTS[st]}</span>
+                  {STATUS_LABEL[st]} <span className="tabular-nums">&nbsp;{STATUS_COUNTS[st]}</span>
                 </button>
               ))}
             </div>

@@ -106,7 +106,7 @@ export default function DeptComparisonPage() {
           <div className="page-sub">Volumes and SLA compliance, side by side.</div>
         </div>
         <div className="actions">
-          <div className="flex g8 wrap">
+          <div className="flex gap-2 flex-wrap">
             <select
               className="input"
               style={{ width: 'auto', height: '32px' }}
@@ -142,7 +142,7 @@ export default function DeptComparisonPage() {
         </div>
       ) : (
         <>
-          <div className="grid cols-2 mb16">
+          <div className="grid cols-2 mb-4">
             <div className="card">
               <div className="card-head">
                 <span className="h3">Volume by department (period)</span>

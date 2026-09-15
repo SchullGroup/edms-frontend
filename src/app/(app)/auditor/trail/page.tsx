@@ -161,7 +161,7 @@ export default function AuditorTrailPage() {
       <div className="card">
         <div className="card-head">
           <span className="h3">{rows.length} immutable events</span>
-          <div className="flex g8">
+          <div className="flex gap-2">
             <button className="btn btn-secondary btn-sm" onClick={handleExport}>Export extract</button>
           </div>
         </div>

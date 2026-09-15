@@ -51,15 +51,50 @@ export const authService = {
   // Note: The endpoints below are implemented in the Express backend, but are not formally
   // documented in the Swagger api-docs.json. We keep them available here for convenience.
 
-  logout: async (): Promise<void> => {
-    // The Next.js proxy will clear the HttpOnly cookie
-    await axios.post('/api/auth/logout');
+  /**
+   * Fire-and-forget. The local `accessToken` cookie is removed synchronously so
+   * the caller can redirect immediately; the request to the BFF (which clears
+   * the HttpOnly refresh cookie and asks the backend to revoke the refresh
+   * token) runs in the background and its outcome is not awaited.
+   */
+  logout: (): void => {
+    const token = Cookies.get('accessToken');
     Cookies.remove('accessToken');
+    axios
+      .post(
+        '/api/auth/logout',
+        {},
+        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
+      )
+      .catch(() => {
+        /* best-effort — the session is already torn down client-side */
+      });
   },
 
   me: async (): Promise<AuthUser> => {
     // This goes straight to the Express backend via apiClient (attaches Authorization header)
     const response = await apiClient.get<ApiResponse<AuthUser>>('/auth/me');
     return response.data.data;
+  },
+
+  // Neither of the two below touches a cookie, so — unlike login/refresh/logout —
+  // there's no need to go via the Next proxy; they hit the Express backend directly.
+  //
+  // ⚠️ Not in the deployed Swagger doc yet (checked 2026-09-05) — these will 404 until
+  // the backend ships `POST /auth/forgot-password` and `POST /auth/reset-password`.
+  // See docs/BACKEND_REQUESTS.md (BE-12).
+
+  /** The backend should always resolve with 200 here regardless of whether the
+   *  email is registered, so a caller can't enumerate accounts by trying emails. */
+  forgotPassword: async (email: string): Promise<void> => {
+    await apiClient.post('/auth/forgot-password', { email });
+  },
+
+  resetPassword: async (payload: {
+    token: string;
+    newPassword: string;
+    confirmPassword: string;
+  }): Promise<void> => {
+    await apiClient.post('/auth/reset-password', payload);
   },
 };

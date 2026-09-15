@@ -84,7 +84,7 @@ export default function CabinetBrowserPage() {
             </option>
           ))}
         </select>
-        <div className="mt4 flex jce" style={{ gap: '8px' }}>
+        <div className="mt-1 flex justify-end" style={{ gap: '8px' }}>
           <button className="btn" onClick={closeModal}>
             Cancel
           </button>
@@ -242,7 +242,7 @@ export default function CabinetBrowserPage() {
 
         {/* List Card */}
         <div className="min-w-0">
-          <div className="flex jcb aic mb8" style={{ gap: '10px', flexWrap: 'wrap' }}>
+          <div className="flex flex-wrap justify-between items-center gap-2.5 mb-2">
             <div className="crumbs">
               <a
                 onClick={() => {
@@ -346,8 +346,8 @@ export default function CabinetBrowserPage() {
             <div className="card">
               <div className="empty">
                 <Icon name="folder" size={32} />
-                <div className="h3 mt16 mb8">This folder is empty</div>
-                <p className="caption mb16">Upload a document to get started.</p>
+                <div className="h3 mt-4 mb-2">This folder is empty</div>
+                <p className="caption mb-4">Upload a document to get started.</p>
                 <button className="btn btn-primary btn-sm" onClick={() => router.push('/upload')}>
                   Upload
                 </button>
@@ -371,7 +371,7 @@ export default function CabinetBrowserPage() {
                     >
                       {d.title}
                     </div>
-                    <div className="flex g8 wrap">
+                    <div className="flex gap-2 flex-wrap">
                       <StatusBadge status={effStatus(d)} />
                       <ConfBadge level={d.confidentiality} />
                     </div>

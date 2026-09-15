@@ -11,13 +11,12 @@ import {
 } from '@dnd-kit/core';
 import {
   SortableContext,
-  horizontalListSortingStrategy,
+  rectSortingStrategy,
   useSortable,
   arrayMove,
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Icon } from '@/components/ui/Icons';
 import { actionLabel } from './constants';
 
 function SortableStageNode({ stage, index, selected, onSelect, assigneeSummary }: any) {
@@ -91,29 +90,23 @@ export function WorkflowCanvas({ stages, selectedStageId, onSelect, onReorder, a
   return (
     <div className="wfd-canvas">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={stages.map((s) => s.id)} strategy={horizontalListSortingStrategy}>
+        <SortableContext items={stages.map((s) => s.id)} strategy={rectSortingStrategy}>
           <div className="wf-node-row">
             {stages.map((s, i) => (
-              <React.Fragment key={s.id}>
-                {i > 0 && (
-                  <div className="wf-connector">
-                    <Icon name="chevR" size={16} />
-                  </div>
-                )}
-                <SortableStageNode
-                  stage={s}
-                  index={i}
-                  selected={selectedStageId === s.id}
-                  onSelect={onSelect}
-                  assigneeSummary={assigneeSummary}
-                />
-              </React.Fragment>
+              <SortableStageNode
+                key={s.id}
+                stage={s}
+                index={i}
+                selected={selectedStageId === s.id}
+                onSelect={onSelect}
+                assigneeSummary={assigneeSummary}
+              />
             ))}
           </div>
         </SortableContext>
       </DndContext>
       <div className="caption" style={{ marginTop: '12px' }}>
-        Drag a stage to reorder it — the sequence always runs left to right.
+        Drag a stage to reorder it — the workflow always runs in numbered order.
       </div>
     </div>
   );

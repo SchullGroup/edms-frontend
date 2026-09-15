@@ -195,7 +195,7 @@ export default function PoliciesPage() {
         </div>
       </div>
 
-      <div className="tabs mb16">
+      <div className="tabs mb-4">
         <button className={`tab ${tab === 'conf' ? 'active' : ''}`} onClick={() => setTab('conf')}>
           Confidentiality
         </button>

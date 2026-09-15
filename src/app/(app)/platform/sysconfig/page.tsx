@@ -48,7 +48,7 @@ export default function PlatformSysConfigPage() {
     },
     { key: 'rollout', label: 'Rollout', render: f => (
         <div style={{ minWidth: '190px' }}>
-          <div className="flex aic g8">
+          <div className="flex items-center gap-2">
             <input 
               type="range" 
               min={0} max={100} 
@@ -64,13 +64,13 @@ export default function PlatformSysConfigPage() {
                 addToast(`${f.name} rollout set to ${f.rollout}% of tenants`, 'success');
               }}
             />
-            <span className="tnum" style={{ fontWeight: 700, width: '40px' }}>{f.rollout}%</span>
+            <span className="tabular-nums" style={{ fontWeight: 700, width: '40px' }}>{f.rollout}%</span>
           </div>
         </div>
       ) 
     },
     { key: 'act', label: '', render: f => (
-        <div className="flex g8">
+        <div className="flex gap-2">
           {f.rollout < 100 && (
             <button className="btn btn-secondary btn-sm" onClick={(e) => {
               e.stopPropagation();
@@ -159,7 +159,7 @@ export default function PlatformSysConfigPage() {
           : 'All systems operational.'}
       </div>
 
-      <div className="grid cols-4 mb16">
+      <div className="grid cols-4 mb-4">
         {[
           ['99.96%', 'Platform uptime (30d)'],
           ['1.2 M', 'API calls today'],

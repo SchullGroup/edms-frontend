@@ -56,7 +56,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid cols-4 mb16">
+      <div className="grid cols-4 mb-4">
         <div className="card kpi">
           <div className="kv">{users}</div>
           <div className="kl">Users</div>
@@ -73,7 +73,7 @@ export default function AdminDashboard() {
         <div className="card kpi">
           <div className="kv">812 GB</div>
           <div className="kl">Storage used of 1 TB</div>
-          <div className="mt8">
+          <div className="mt-2">
             <div className="pbar warn">
               <i style={{ width: '79%' }}></i>
             </div>
@@ -86,7 +86,7 @@ export default function AdminDashboard() {
           <div className="card-head">
             <span className="h3">Setup health</span>
             <b
-              className="tnum"
+              className="tabular-nums"
               style={{ color: pct === 100 ? 'var(--status-closed)' : 'var(--status-pending)' }}
             >
               {pct}%
@@ -103,7 +103,7 @@ export default function AdminDashboard() {
                 style={{ cursor: 'pointer' }}
                 onClick={() => router.push(s.to)}
               >
-                <span className="flex aic g8">
+                <span className="flex items-center gap-2">
                   <span
                     style={{ color: s.done ? 'var(--status-closed)' : 'var(--status-pending)' }}
                   >

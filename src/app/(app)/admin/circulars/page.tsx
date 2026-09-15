@@ -148,7 +148,7 @@ export default function CircularsAdminPage() {
       title: 'Acknowledgement tracking — ' + c.title,
       body: (
         <div>
-          <div className="h3 mb8">Outstanding ({pending.length})</div>
+          <div className="h3 mb-2">Outstanding ({pending.length})</div>
           {pending.length ? (
             pending.map((nm: string) => (
               <div key={nm} className="metric-li">
@@ -161,7 +161,7 @@ export default function CircularsAdminPage() {
           )}
           {pending.length > 0 && (
             <button
-              className="btn btn-secondary btn-sm mt16"
+              className="btn btn-secondary btn-sm mt-4"
               onClick={() => addToast(`Reminders sent to ${pending.length} user(s)`, 'success')}
             >
               Send reminders
@@ -198,7 +198,7 @@ export default function CircularsAdminPage() {
       render: (c) =>
         c.requiresAck ? (
           <div style={{ minWidth: '130px' }}>
-            <div className="caption mb8">
+            <div className="caption mb-2">
               {c.ackBy?.length || 0} of {totalUsers} acknowledged
             </div>
             <div className={`pbar ${(c.ackBy?.length || 0) / totalUsers > 0.7 ? 'ok' : 'warn'}`}>
@@ -215,7 +215,7 @@ export default function CircularsAdminPage() {
       key: 'act',
       label: '',
       render: (c) => (
-        <div className="flex g8">
+        <div className="flex gap-2">
           <button
             className="btn btn-secondary btn-sm"
             onClick={(e) => {

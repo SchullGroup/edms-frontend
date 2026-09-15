@@ -1,5 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { tasksService, TaskFilters, TaskStatsParams } from '../services/tasks.service';
+import {
+  tasksService,
+  ApprovalTaskFilters,
+  DepartmentScopedTaskParams,
+  TaskFilters,
+  TaskStatsParams,
+} from '../services/tasks.service';
 import { TaskActionRequest } from '@/types/models';
 import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 
@@ -12,10 +18,11 @@ export const taskKeys = {
   detail: (id: string) => [...taskKeys.all, 'detail', id] as const,
 };
 
-export const useTasks = (params?: TaskFilters) => {
+export const useTasks = (params?: TaskFilters, options?: { enabled?: boolean }) => {
   return useQuery({
     queryKey: taskKeys.list(params),
     queryFn: () => tasksService.getAll(params),
+    enabled: options?.enabled ?? true,
   });
 };
 
@@ -49,6 +56,29 @@ export const useTaskStats = (params?: TaskStatsParams, options?: { enabled?: boo
   return useQuery({
     queryKey: [...taskKeys.all, 'stats', params ?? {}],
     queryFn: () => tasksService.getStats(params),
+    enabled: options?.enabled ?? true,
+  });
+};
+
+/** Supervisor Approvals Queue — the purpose-built endpoint, ordered by
+ *  urgency then due date server-side. Use `scope: 'all'` for the team queue. */
+export const useApprovalTasks = (params?: ApprovalTaskFilters, options?: { enabled?: boolean }) => {
+  return useQuery({
+    queryKey: [...taskKeys.all, 'approvals', params ?? {}],
+    queryFn: () => tasksService.getApprovals(params),
+    enabled: options?.enabled ?? true,
+  });
+};
+
+/** Supervisor Workload & Reassign — per-member counts against a fixed
+ *  capacity. Omit `departmentId`; the backend resolves it for a supervisor. */
+export const useTaskWorkload = (
+  params?: DepartmentScopedTaskParams,
+  options?: { enabled?: boolean },
+) => {
+  return useQuery({
+    queryKey: [...taskKeys.all, 'workload', params ?? {}],
+    queryFn: () => tasksService.getWorkload(params),
     enabled: options?.enabled ?? true,
   });
 };

@@ -6,6 +6,7 @@ import {
   TaskActionRequest,
   TaskSlaStatsResponse,
   TaskStatus,
+  TaskWorkloadData,
 } from '@/types/models';
 
 export interface TaskStatsParams {
@@ -27,6 +28,20 @@ export interface TaskFilters {
   assignedRoleId?: string;
   stage?: string;
   scope?: 'mine' | 'all';
+}
+
+/** Query for `GET /tasks/approvals` — the purpose-built supervisor queue. */
+export interface ApprovalTaskFilters {
+  page?: number;
+  limit?: number;
+  status?: 'pending' | 'escalated';
+  scope?: 'mine' | 'all';
+}
+
+/** A supervisor should normally omit `departmentId` — the backend resolves
+ *  their own department automatically. */
+export interface DepartmentScopedTaskParams {
+  departmentId?: string;
 }
 
 /** The backend caps `limit` at 100. */
@@ -79,6 +94,23 @@ export const tasksService = {
   // Completed-task SLA rollup by department (`GET /tasks/stats`).
   getStats: async (params?: TaskStatsParams): Promise<TaskSlaStatsResponse> => {
     const response = await apiClient.get<ApiResponse<TaskSlaStatsResponse>>('/tasks/stats', {
+      params,
+    });
+    return response.data.data;
+  },
+
+  /** Purpose-built supervisor approvals queue — ordered by urgency then due
+   *  date server-side. Prefer this over `getAll({status:'pending'})` for the
+   *  Approvals Queue screen. */
+  getApprovals: async (params?: ApprovalTaskFilters): Promise<PaginatedResponse<Task>> => {
+    const response = await apiClient.get<PaginatedResponse<Task>>('/tasks/approvals', { params });
+    return response.data;
+  },
+
+  /** Per-member open-task counts against a fixed capacity, for Workload &
+   *  Reassign. Only directly assigned, active, current-stage tasks count. */
+  getWorkload: async (params?: DepartmentScopedTaskParams): Promise<TaskWorkloadData> => {
+    const response = await apiClient.get<ApiResponse<TaskWorkloadData>>('/tasks/workload', {
       params,
     });
     return response.data.data;

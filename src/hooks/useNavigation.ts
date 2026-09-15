@@ -4,7 +4,7 @@ import { useUnreadNotificationCount } from '@/apis/hooks/useNotifications';
 
 export const useNavigation = () => {
   const { currentUser, documents, circulars, findings } = useStore();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, portal } = usePermissions();
   // Must be called before the `!me` early return below — hooks cannot be
   // conditional. The query itself is cheap and cached.
   const { data: unreadNotifications = 0 } = useUnreadNotificationCount();
@@ -31,13 +31,19 @@ export const useNavigation = () => {
             { route: '/staff', label: 'Dashboard', icon: 'home' },
             { route: '/staff/tasks', label: 'My Tasks', icon: 'inbox', badge: myOpenTasks },
             { route: '/notifications', label: 'Notifications', icon: 'bell', badge: unreadCount },
+            { route: '/delegations', label: 'Delegations', icon: 'calendar' },
           ],
         },
         {
           label: 'Documents',
           items: [
             { route: '/staff/cabinets', label: 'Cabinets', icon: 'cabinet' },
-            { route: '/upload', label: 'Upload & Capture', icon: 'upload' },
+            {
+              route: '/upload',
+              label: 'Upload & Capture',
+              icon: 'upload',
+              anyPermissions: ['document:create'],
+            },
             { route: '/search', label: 'Search', icon: 'search' },
           ],
         },
@@ -75,6 +81,7 @@ export const useNavigation = () => {
             { route: '/supervisor/instances', label: 'Workflow Monitor', icon: 'flow' },
             { route: '/supervisor/bottlenecks', label: 'Bottlenecks & Ageing', icon: 'clock' },
             { route: '/supervisor/workload', label: 'Workload & Reassign', icon: 'swap' },
+            { route: '/delegations', label: 'Delegations', icon: 'calendar' },
           ],
         },
         {
@@ -131,7 +138,8 @@ export const useNavigation = () => {
           label: 'Administration',
           items: [
             { route: '/admin', label: 'Admin Home', icon: 'home' },
-            { route: '/admin/users', label: 'Users & Roles', icon: 'users' },
+            { route: '/admin/users', label: 'Users', icon: 'users' },
+            { route: '/admin/roles', label: 'Roles & permissions', icon: 'key' },
             { route: '/admin/departments', label: 'Departments', icon: 'building' },
           ],
         },
@@ -215,33 +223,38 @@ export const useNavigation = () => {
     },
   };
 
-  // Map the primary role (or fallback to 'staff')
-  const rolePriority = [
-    'schulltech_admin',
-    'client_admin',
-    'management',
-    'internal_auditor',
-    'supervisor',
-    'staff',
-  ];
-  const primaryRole = rolePriority.find((r) => me.roles?.includes(r)) || 'staff';
-  const navTemplate = NAV[primaryRole] || NAV['staff'];
+  // Pick the portal shell by which portal's entry permission the user holds —
+  // not by role name — so custom roles land somewhere sensible.
+  const NAV_KEY_BY_PORTAL: Record<string, string> = {
+    platform: 'schulltech_admin',
+    admin: 'client_admin',
+    auditor: 'internal_auditor',
+    management: 'management',
+    supervisor: 'supervisor',
+    staff: 'staff',
+  };
+  const navTemplate = NAV[NAV_KEY_BY_PORTAL[portal] || 'staff'] || NAV['staff'];
 
-  // Filter sections and items based on granular permissions if provided
+  const checkPerm = (p: any) => {
+    if (typeof p === 'string') {
+      const [res, act] = p.split(':');
+      return hasPermission(res, act || '*');
+    }
+    return hasPermission(p.resource, p.action);
+  };
+
+  // Filter sections and items by their declared permission requirements:
+  //  - `permissions`     → ALL required
+  //  - `anyPermissions`  → at least one required
   const filteredNav = {
     ...navTemplate,
     sections: navTemplate.sections
       .map((section: any) => ({
         ...section,
         items: section.items.filter((item: any) => {
-          if (!item.permissions || item.permissions.length === 0) return true;
-          return item.permissions.every((p: any) => {
-            if (typeof p === 'string') {
-              const [res, act] = p.split(':');
-              return hasPermission(res, act || '*');
-            }
-            return hasPermission(p.resource, p.action);
-          });
+          if (item.permissions?.length && !item.permissions.every(checkPerm)) return false;
+          if (item.anyPermissions?.length && !item.anyPermissions.some(checkPerm)) return false;
+          return true;
         }),
       }))
       .filter((section: any) => section.items.length > 0),
