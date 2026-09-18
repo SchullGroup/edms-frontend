@@ -293,6 +293,35 @@ written.
 **Fix:** either build `POST /auth/logout` with a refresh-token denylist (Redis is already
 a dependency), or delete the call and document that logout is client-side only.
 
+### ✅ DRIFT-15 — `POST /auth/reset-password` sent the wrong field name — **Resolved (frontend 2026-09-18)**
+
+`auth.service.ts#resetPassword` sent `{ token, newPassword, confirmPassword }`. The
+backend's schema requires `{ token, password }` — confirmed live against
+`edms-backend-zmfm.onrender.com`:
+
+| Payload | Result |
+|---|---|
+| `{token, newPassword, confirmPassword}` (old) | `422 VALIDATION_ERROR` — `"password": "Invalid input: expected string, received undefined"` |
+| `{token, password}` (correct) | Passes validation; reaches the token check (`400 INVALID_OR_EXPIRED_TOKEN` on a bogus token, as expected) |
+
+**Blast radius was total.** Per the backend's own description, this one endpoint is the
+shared landing point for **both** flows — "consumes a one-time token from either an
+invitation or a password-reset email." So until this fixed, **no user could ever
+complete a password reset or accept an invitation**, regardless of role — the
+`/set-password` page always failed at the final submit with no working path forward. This
+predates today's session; it surfaced while wiring `POST /users/:id/invitation`
+(the "Resend invite" feature — see §7 Identity), since that feature's emailed link lands
+on this same page.
+
+**What shipped:** `auth.service.ts#resetPassword` now sends `{ token, password }`;
+`set-password/page.tsx` passes its `newPassword` field under that name.
+`confirmPassword` was never a real backend field — password-match checking stays a
+client-side-only guard before submit, as it already was.
+
+Also removed a stale comment on `forgotPassword`/`resetPassword` claiming both were "not
+in the deployed Swagger doc yet" — both are live and documented now;
+`forgotPassword`'s `{ email }` payload was already correct.
+
 ---
 
 ## 4. Authorization: four independent layers
@@ -687,6 +716,8 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `POST /api/auth/refresh` → `/api/v1/auth/refresh` | ✅ exists | ✅ |
 | `POST /api/auth/logout` → `/api/v1/auth/logout` | ❌ **not registered** | 🟨 **DRIFT-01** — frontend now *calls* it (Sidebar sign-out → `authService.logout()`, with the bearer token, 2026-09-10); backend route still missing so revocation is still a no-op |
 | `GET /auth/me` | ✅ exists | ✅ (`permissions` now included — DRIFT-03 resolved) |
+| `POST /auth/forgot-password` | ✅ exists | ✅ |
+| `POST /auth/reset-password` | ✅ exists | ✅ **DRIFT-15 resolved (frontend, 2026-09-18)** — was sending `newPassword`/`confirmPassword`; backend wants `password`. Fixed both sides of the shared invitation/reset-link landing page |
 
 ### Documents
 
@@ -704,10 +735,12 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents/:id/versions` | ✅ | ✅ |
 | `GET /documents/:id/versions/:versionId` | ✅ | ✅ |
 | `POST /documents/:id/versions` | ✅ | ✅ |
-| ~~`POST /documents/:id/comments`~~ | ❌ no such route — **not a document operation** | ✅ **DRIFT-08 resolved (frontend, 2026-09-10)** — comments are the `comment` field on `POST /tasks/:id/action` |
-| ~~`POST /documents/:id/signatures`~~ | ❌ no such route — **not a document operation** | ✅ **DRIFT-08 resolved (frontend, 2026-09-10)** — a signature is the `signature: {fileUrl,mimeType}` image on the `approve` task action |
-| — | `DELETE /documents/:id` (archive) | ⚠️ backend only, UI never calls it |
-| — | `POST /documents/:id/versions/:versionId/restore` | ⚠️ backend only |
+| — (historical) `POST /documents/:id/comments`/`/signatures` as document ops | ❌ no such route at the time — **DRIFT-08, 2026-09-10** | ✅ resolved by piggybacking comments/signatures onto `POST /tasks/:id/action`'s `comment` field / `approve` action's `signature` image. **Superseded 2026-09-18** — see next two rows; the task-action path still exists too, for workflow-tied sign-off |
+| `GET/POST /documents/:id/comments` | ✅ (added since DRIFT-08) | ✅ wired 2026-09-18 — `DocumentCommentsPanel` on `/doc/[id]`, real endpoint, independent of any task |
+| `GET/POST /documents/:id/signatures` | ✅ (added since DRIFT-08) | ✅ wired 2026-09-18 — `DocumentSignaturesPanel` on `/doc/[id]`, flat record (no positional field data), independent of any task |
+| `GET/POST /documents/:id/access-requests`, `/grant`, `/deny`, admin inbox `GET /documents/access-requests` | ✅ | ✅ wired 2026-09-18 — "Request access" on `/doc/[id]` is real now (was audit-log-only, see BE-1); grant/deny at `/admin/access-requests` (client_admin-only, new page) |
+| `DELETE /documents/:id` (archive) | ✅ | ✅ wired — "Archive document" in `/doc/[id]`'s overflow menu (`useArchiveDocument`) |
+| `POST /documents/:id/versions/:versionId/restore` | ✅ | ✅ wired — "Restore" in `DocumentVersionsPanel` (`useRestoreDocumentVersion`). Both rows were stale here — caught in passing 2026-09-18, not otherwise part of that day's work |
 
 ### Workflows, instances, tasks
 
@@ -721,7 +754,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /tasks`, `GET /tasks/:id` | ✅ | ✅ |
 | `POST /tasks/:id/action` | ✅ | ✅ |
 | `PATCH /tasks/:id/reassign` | ✅ | ✅ |
-| — | `GET/POST /delegations`, `POST /delegations/:id/end` | ⚠️ backend only — **no UI at all** |
+| `GET/POST /delegations`, `POST /delegations/:id/end` | ✅ | ✅ wired — `/delegations` (344 lines) exists; this row was stale, caught 2026-09-18 while investigating DRIFT-11 |
 | — | `GET /workflow-history`, `GET /workflow-history/:id` | ⚠️ backend only — **no UI at all** |
 
 **DRIFT-09 — ✅ RESOLVED (verified 2026-09-04).**
@@ -748,6 +781,7 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 |---|---|---|
 | `GET/POST /users`, `GET/PATCH/DELETE /users/:id` | ✅ | ✅ |
 | `POST /users/:id/roles`, `DELETE /users/:id/roles/:roleId` | ✅ | ✅ |
+| `POST /users/:id/invitation` | ✅ | ✅ wired 2026-09-18 — "Resend invite" button, shown for active users with no `lastLoginAt` |
 | `GET/POST /roles`, `GET/PATCH/DELETE /roles/:id` | ✅ | ✅ |
 | `PUT /roles/:id/permissions` | ✅ | ✅ |
 | `GET/POST /departments`, `GET/PATCH/DELETE /departments/:id` | ✅ | ✅ |
@@ -771,7 +805,6 @@ product can grant or revoke a cabinet permission.** The Cabinet Designer at
 
 | Frontend service | Endpoints called | Backend | Status |
 |---|---|---|---|
-| `audit.service.ts` | none — returns `SEED.audit` after a 400 ms `setTimeout` | **module directory is empty** | 🔴 **DRIFT-11** |
 | `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 |
 | `branding.service.ts` | none — returns `SEED.branding` | no module, no schema | 🔴 |
 | `circulars.service.ts` | none — returns `SEED.circulars` | no module, no schema | 🔴 |
@@ -818,24 +851,61 @@ badge and the staff notification panel were permanently broken.
 > owner** — it records the audit action only, pending a server-side endpoint
 > (see `BACKEND_REQUESTS.md` → BE-1).
 
-**DRIFT-11 (audit):** more serious than it looks. The backend `audit_entries` table is
-designed as a hash-chained, append-only compliance trail (`prevHash`/`entryHash`,
-INSERT-only DB role). **Nothing in the backend ever writes to it** —
-`src/middlewares/audit.middleware.ts` is a 0-byte file and there are zero references to
-`auditEntry` in `src/`. Meanwhile the auditor portal renders `SEED.audit` and
-`useCreateAuditLog()` resolves successfully without doing anything. **The compliance
-story of the product is currently a mock on both sides.**
+**DRIFT-11 (audit) — ✅ RESOLVED (verified 2026-09-18).**
+
+*The original finding:* the backend `audit_entries` table was designed as a
+hash-chained, append-only compliance trail (`prevHash`/`entryHash`, INSERT-only DB
+role), but nothing ever wrote to it, and `audit.service.ts` returned `SEED.audit` with
+no backend behind it at all — "the compliance story of the product is currently a mock
+on both sides."
+
+*What changed on both sides:*
+
+- **Backend** — the audit module is now real and writes automatically. `GET /audit`
+  (search/filter, `audit:view`), `GET /audit/:id`, `GET /audit/export` (CSV,
+  `audit:export`) and `GET /audit/verify` (recomputes the hash chain over a window) all
+  exist and were confirmed live 2026-09-18. Unlike notifications (DRIFT-10), entries are
+  **written server-side automatically** as a side effect of other actions — a live pull
+  against a real tenant showed 27 real entries (`user.login`, `user.invited`,
+  `user.token_refreshed`, …) with an intact hash chain, no explicit "log this" call
+  required from the frontend. There is still no POST endpoint — nor should there be; a
+  client-writable audit log defeats the point.
+- **Frontend** — `audit.service.ts` gained `search`/`getEntryById`/`exportCsv`/
+  `verifyChain` against the real endpoints (`useAuditEntries`, `useAuditEntry`,
+  `useExportAuditCsv`, `useVerifyAuditChain` in `useAudit.ts`), and `/admin/audit` (Tenant
+  Audit) now reads and paginates the real trail, with a "Verify integrity" action.
+
+*Update 2026-09-18 (later the same day):* `auditor/trail` and `management/compliance`'s
+"sensitive activity" panel are both migrated now. Pulled a 78-entry live sample first to
+get the *real* action vocabulary (`user.login`, `document.access_denied`,
+`role.permissions_updated`, `document.viewed`, `document.comment_added`, …) rather than
+guessing — the old `REDACT_RELEASE`/`SIGN`/`PRINT`/`DOWNLOAD`/`SLA_ESCALATION`/
+`ACCESS_REQUEST` codes were entirely app-invented and matched nothing real.
+`auditor/trail` now reads `useAuditEntries` with real pagination, actor/action/date
+filters and CSV export; `management/compliance`'s panel filters on a confirmed-real
+`SENSITIVE_ACTIONS` list (access-control and role/permission-change events specifically,
+not a generic recent-activity feed).
+
+`platform/audit` is the one exception, and stays on `SEED.audit` — not an oversight.
+Confirmed its whole premise has no backend equivalent: `GET /audit` is scoped to the
+caller's own tenant with no cross-tenant query, and there is no platform-level
+multi-tenant API anywhere in this backend at all — every other `/platform/*` page
+(tenants, provisioning, billing, flags) is equally fixture-only. Migrating audit alone
+wouldn't be meaningful without the rest of the platform module having something real to
+query first; that's a separate, materially bigger backend ask than "point this hook at
+an endpoint." `useCreateAuditLog()` is still a no-op mock for the reason already given
+above: there is no write endpoint to point it at, by design.
 
 ### 🟡 Backend capabilities with no UI
 
-Worth a backlog line each:
+> ⚠️ **Correction (2026-09-18).** Every item previously listed here (version restore,
+> archive, cabinet access grants, cabinet metadata fields, delegations, workflow history)
+> is wired now — verified by reading the actual consuming pages, not re-derived from
+> scratch. This list is deliberately empty rather than deleted, so it's obvious the
+> category was checked and came up clean, not skipped.
 
-- `POST /documents/:id/versions/:versionId/restore` — version rollback
-- `DELETE /documents/:id` — archive
-- `GET/POST /cabinets/:id/access` — the entire cabinet-permissions model
-- `POST/PATCH/DELETE /cabinets/:id/metadata-fields` — custom metadata schema designer
-- `GET/POST /delegations`, `POST /delegations/:id/end` — out-of-office delegation
-- `GET /workflow-history` — the immutable stage-transition timeline
+Nothing currently known to be backend-complete with zero UI. If a future scan finds one,
+it goes here.
 
 ---
 
@@ -1029,7 +1099,8 @@ suspiciously few documents.
 | ID | Severity | Title | Owner | Blast radius |
 |---|---|---|---|---|
 | **DRIFT-14** | 🔴 **Critical** | Workflow definitions are readable only by `client_admin`/`schulltech_admin`, so `staff` and `supervisor` cannot list the workflows they hold `workflow:route` for | Backend | **Document routing is unreachable again.** The picker reports "no published workflows", which is neither true nor the reason. Also contradicts `management` and `internal_auditor`'s seeded `workflow:view:global` |
-| DRIFT-11 | 🔴 **Critical** | Audit trail unimplemented on both sides | Backend | The product's compliance claim is a mock; `audit_entries` is never written |
+| ~~DRIFT-11~~ | ✅ **Resolved** | Backend audit module real & auto-writing; `/admin/audit`, `auditor/trail` and `management/compliance` all migrated 2026-09-18 | — | `platform/audit` stays on `SEED` — no cross-tenant `GET /audit` exists, and no platform-level API exists at all to migrate it *to* |
+| ~~DRIFT-15~~ | ✅ **Resolved** | ~~`POST /auth/reset-password` sent `newPassword`/`confirmPassword`~~ — backend wants `password` | Frontend | Was: blocked **every** password reset and invitation acceptance, on every role |
 | DRIFT-06 | 🔴 **Critical** | Upload target ≠ Textract source bucket | **Frontend** *(was Both)* | OCR always fails → search index never built → search silently returns nothing. Backend half now correct: async Textract, presigned GET, OCR archiving |
 | ~~DRIFT-05~~ | ✅ **Resolved** | ~~Workflow routes have zero permission checks~~ — all five workflow services now assert roles and return `403` | Backend | Was: any staff account could publish or archive workflow definitions |
 | DRIFT-02 | 🔴 High | Frontend route guard is client-side only, no `middleware.ts` | Frontend | Any role forgeable via localStorage; fully exposes all `SEED`-backed portals |
@@ -1082,9 +1153,10 @@ item 1 jumped the queue.*
 10. Fix `effStatus()` — one implementation, against a field that exists (DRIFT-13)
 
 **Then — make the governance half real**
-11. Build the audit module and call `AuditService.log()` from every mutating service
-    (DRIFT-11). `AUDIT_ACTIONS` now lists 25 action types and
-    `src/middlewares/audit.middleware.ts` is still a 0-byte file.
+11. ~~Build the audit module~~ — **done** (DRIFT-11 resolved). `/admin/audit`,
+    `auditor/trail` and `management/compliance` all migrated to the real trail
+    2026-09-18. `platform/audit` stays mocked by design — no cross-tenant backend
+    exists to migrate it to.
 12. ~~Build the notifications module~~ — **built.** What remains is to *call* it:
     `notifyUser` from task assignment, reassignment, rejection and the SLA worker
     (DRIFT-10). Still **zero** callers outside the module. Small change, high value — the

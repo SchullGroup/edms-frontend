@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import {
@@ -13,7 +13,7 @@ import {
 import { isSystemRoleName } from '@/lib/permissions';
 import { Icon } from '@/components/ui/Icons';
 import { Spinner } from '@/components/common/Spinner';
-import { Role, RolePermission } from '@/types/models';
+import { Role, RolePermission, RolePermissionScope } from '@/types/models';
 
 /** Friendly grouping of the (data-driven) resource list into modules. Anything the
  *  backend adds that isn't listed here still shows up, under "Other". */
@@ -51,7 +51,15 @@ const ACTION_ORDER = [
 
 const titleize = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const permKey = (p: { resource: string; action: string }) => `${p.resource}:${p.action}`;
-const keySet = (perms: RolePermission[] | undefined) => new Set((perms ?? []).map(permKey));
+const SCOPES: RolePermissionScope[] = ['own', 'department', 'global'];
+const DEFAULT_SCOPE: RolePermissionScope = 'global';
+
+/** key -> scope, for every *granted* permission. A key's absence means "not
+ *  granted" — distinct from a Set, this also carries each grant's scope, so
+ *  saving never has to guess (and silently default to `global`, which is
+ *  the bug this replaced — see `RolePermission.scope` and `normalizeRole`). */
+const keyScopeMap = (perms: RolePermission[] | undefined): Map<string, RolePermissionScope> =>
+  new Map((perms ?? []).map((p) => [permKey(p), p.scope ?? DEFAULT_SCOPE]));
 
 export default function RolesPermissionsPage() {
   const { auditAction } = useStore();
@@ -65,9 +73,11 @@ export default function RolesPermissionsPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
-  // Editable copy of the selected role's permission keys, plus the last-saved baseline.
-  const [draft, setDraft] = useState<Set<string>>(new Set());
-  const [baseline, setBaseline] = useState<Set<string>>(new Set());
+  // Editable copy of the selected role's granted permissions (key -> scope),
+  // plus the last-saved baseline. A Map, not a Set, so scope travels with
+  // each grant instead of being lost and silently defaulted on save.
+  const [draft, setDraft] = useState<Map<string, RolePermissionScope>>(new Map());
+  const [baseline, setBaseline] = useState<Map<string, RolePermissionScope>>(new Map());
   // Each module section saves/discards independently and can be collapsed on its own.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [savingModule, setSavingModule] = useState<string | null>(null);
@@ -93,9 +103,9 @@ export default function RolesPermissionsPage() {
 
   // Re-seed the editor whenever the selected role (or its stored permissions) changes.
   useEffect(() => {
-    const s = keySet(selectedRole?.permissions);
+    const s = keyScopeMap(selectedRole?.permissions);
     setBaseline(s);
-    setDraft(new Set(s));
+    setDraft(new Map(s));
   }, [selectedRole?.id, JSON.stringify(selectedRole?.permissions)]);
 
   // Built-in roles keep their name and existence protected (rename/delete are
@@ -140,6 +150,17 @@ export default function RolesPermissionsPage() {
     return out;
   }, [catalog]);
 
+  // Sections start collapsed — seeded once, the first time the module list
+  // is known, so it doesn't fight the user's own expand/collapse clicks on
+  // every later recompute (e.g. after a save).
+  const collapseSeeded = useRef(false);
+  useEffect(() => {
+    if (!collapseSeeded.current && modules.length > 0) {
+      setCollapsed(new Set(modules.map((m) => m.label)));
+      collapseSeeded.current = true;
+    }
+  }, [modules]);
+
   // --- editing -------------------------------------------------------------------
   // There's no per-section save on the API — `PUT /roles/:id/permissions` always
   // replaces the whole set — so "saving a module" builds the full payload from the
@@ -149,8 +170,24 @@ export default function RolesPermissionsPage() {
   // or forcing one page-wide save/discard.
   const toggleKey = (key: string, on: boolean) => {
     setDraft((prev) => {
-      const next = new Set(prev);
-      on ? next.add(key) : next.delete(key);
+      const next = new Map(prev);
+      if (on) {
+        // Re-checking something that was already granted (e.g. toggled off
+        // and back on in the same session) restores its prior scope instead
+        // of resetting to the default.
+        next.set(key, baseline.get(key) ?? DEFAULT_SCOPE);
+      } else {
+        next.delete(key);
+      }
+      return next;
+    });
+  };
+
+  const setScope = (key: string, scope: RolePermissionScope) => {
+    setDraft((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Map(prev);
+      next.set(key, scope);
       return next;
     });
   };
@@ -166,14 +203,24 @@ export default function RolesPermissionsPage() {
   };
 
   const moduleDirty = (mod: { resources: string[] }) =>
-    moduleKeys(mod).some((k) => draft.has(k) !== baseline.has(k));
+    moduleKeys(mod).some(
+      (k) => draft.has(k) !== baseline.has(k) || draft.get(k) !== baseline.get(k),
+    );
 
   const toggleModule = (mod: { resources: string[] }) => {
     const keys = moduleKeys(mod);
     const grant = !moduleFully(mod);
     setDraft((prev) => {
-      const next = new Set(prev);
-      keys.forEach((k) => (grant ? next.add(k) : next.delete(k)));
+      const next = new Map(prev);
+      keys.forEach((k) => {
+        if (grant) {
+          // Leave an already-granted key's scope untouched; only newly
+          // granted keys get a default.
+          if (!next.has(k)) next.set(k, baseline.get(k) ?? DEFAULT_SCOPE);
+        } else {
+          next.delete(k);
+        }
+      });
       return next;
     });
   };
@@ -181,8 +228,11 @@ export default function RolesPermissionsPage() {
   const discardModule = (mod: { resources: string[] }) => {
     const keys = moduleKeys(mod);
     setDraft((prev) => {
-      const next = new Set(prev);
-      keys.forEach((k) => (baseline.has(k) ? next.add(k) : next.delete(k)));
+      const next = new Map(prev);
+      keys.forEach((k) => {
+        if (baseline.has(k)) next.set(k, baseline.get(k)!);
+        else next.delete(k);
+      });
       return next;
     });
   };
@@ -190,13 +240,16 @@ export default function RolesPermissionsPage() {
   const saveModule = (mod: { label: string; resources: string[] }) => {
     if (!selectedRole) return;
     const keys = moduleKeys(mod);
-    const desired = new Set(baseline);
-    keys.forEach((k) => (draft.has(k) ? desired.add(k) : desired.delete(k)));
+    const desired = new Map(baseline);
+    keys.forEach((k) => {
+      if (draft.has(k)) desired.set(k, draft.get(k)!);
+      else desired.delete(k);
+    });
 
-    const permissions: RolePermission[] = [...desired].map((key) => {
+    const permissions: RolePermission[] = [...desired.entries()].map(([key, scope]) => {
       const [resource, action] = key.split(':');
       const cat = catalog.byKey.get(key);
-      return cat?.id ? { id: cat.id, resource, action } : { resource, action };
+      return cat?.id ? { id: cat.id, resource, action, scope } : { resource, action, scope };
     });
 
     setSavingModule(mod.label);
@@ -204,7 +257,7 @@ export default function RolesPermissionsPage() {
       { id: selectedRole.id, permissions },
       {
         onSuccess: (updated) => {
-          setBaseline(keySet(updated.permissions));
+          setBaseline(keyScopeMap(updated.permissions));
           setSavingModule(null);
           auditAction('ROLE_EDIT', selectedRole.name, `Updated ${mod.label} permissions`);
           addToast(`${mod.label} permissions saved`, 'success');
@@ -564,49 +617,97 @@ export default function RolesPermissionsPage() {
                         </div>
 
                         {!isCollapsed && (
-                          <div className="tbl-wrap">
-                            <table className="tbl pm-grid">
-                              <thead>
-                                <tr>
-                                  <th>Resource</th>
-                                  {catalog.actionCols.map((a) => (
-                                    <th key={a}>{titleize(a)}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {mod.resources.map((res) => (
-                                  <tr key={res}>
-                                    <td>{titleize(res)}</td>
-                                    {catalog.actionCols.map((a) => {
-                                      const supported = (
-                                        catalog.actionsByResource.get(res) ?? []
-                                      ).includes(a);
-                                      if (!supported) {
-                                        return (
-                                          <td key={a} className="muted">
-                                            —
-                                          </td>
-                                        );
-                                      }
+                          <div className="flex flex-col gap-3">
+                            {mod.resources.map((res) => {
+                              const resActions = catalog.actionCols.filter((a) =>
+                                (catalog.actionsByResource.get(res) ?? []).includes(a),
+                              );
+                              const resGrantedCount = resActions.filter((a) =>
+                                draft.has(`${res}:${a}`),
+                              ).length;
+                              return (
+                                <div
+                                  key={res}
+                                  style={{
+                                    background: 'var(--panel)',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: 12,
+                                    overflow: 'hidden',
+                                  }}
+                                >
+                                  <div
+                                    className="flex items-center justify-between"
+                                    style={{
+                                      padding: '10px 16px',
+                                      borderBottom: '1px solid var(--border)',
+                                      background: 'var(--surface)',
+                                    }}
+                                  >
+                                    <span style={{ fontSize: 13, fontWeight: 700 }}>
+                                      {titleize(res)}
+                                    </span>
+                                    <span className="caption">
+                                      {resGrantedCount}/{resActions.length}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    {resActions.map((a) => {
                                       const key = `${res}:${a}`;
+                                      const granted = draft.has(key);
                                       return (
-                                        <td key={a}>
+                                        <div
+                                          key={a}
+                                          className="flex items-center gap-3"
+                                          style={{
+                                            padding: '9px 16px',
+                                            borderTop: '1px solid var(--border)',
+                                          }}
+                                        >
                                           <label className="switch">
                                             <input
                                               type="checkbox"
-                                              checked={draft.has(key)}
+                                              checked={granted}
                                               onChange={(e) => toggleKey(key, e.target.checked)}
                                             />
                                             <i />
                                           </label>
-                                        </td>
+                                          <span
+                                            style={{
+                                              fontSize: 12.5,
+                                              fontWeight: 600,
+                                              flexGrow: 1,
+                                              color: granted
+                                                ? 'var(--ink)'
+                                                : 'var(--text-soft)',
+                                            }}
+                                          >
+                                            {titleize(a)}
+                                          </span>
+                                          {granted && (
+                                            <div
+                                              className="seg"
+                                              role="group"
+                                              aria-label={`Scope for ${titleize(res)} ${titleize(a)}`}
+                                            >
+                                              {SCOPES.map((s) => (
+                                                <button
+                                                  key={s}
+                                                  type="button"
+                                                  className={draft.get(key) === s ? 'active' : ''}
+                                                  onClick={() => setScope(key, s)}
+                                                >
+                                                  {titleize(s)}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
                                       );
                                     })}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>

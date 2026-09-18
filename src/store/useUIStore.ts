@@ -38,8 +38,14 @@ export interface ConfirmConfig {
   message: string;
   confirmLabel?: string;
   danger?: boolean;
-  /** Return a Promise (e.g. `mutateAsync(...)`) to show a loading state on the confirm button until it settles. */
-  onConfirm: () => void | Promise<void>;
+  /**
+   * Return a Promise (e.g. `mutateAsync(...)`) to show a loading state on the
+   * confirm button until it settles. This is forwarded as-is to a `ModalAction.onClick`
+   * under the hood, so the same `false` convention applies: resolve (or return) `false`
+   * to keep the modal open — e.g. `.catch(() => false)` after a rejected mutation, so a
+   * failed confirm doesn't silently close as if it had succeeded.
+   */
+  onConfirm: () => boolean | void | Promise<boolean | void>;
 }
 
 interface UIStore {

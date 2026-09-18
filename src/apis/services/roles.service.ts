@@ -7,14 +7,28 @@ import {
   UpdateRoleRequest,
 } from '@/types/models';
 
-/** The API's actual `GET /roles` response nests permissions under the raw
- *  `rolePermissions[].permission` Prisma join, not the flat `permissions` array
- *  its own Swagger schema documents. Normalize here so the rest of the app can
- *  rely on `role.permissions` as typed. */
+/**
+ * The API's actual `GET /roles` response nests permissions under the raw
+ * `rolePermissions[].permission` Prisma join, not the flat `permissions` array
+ * its own Swagger schema documents. Normalize here so the rest of the app can
+ * rely on `role.permissions` as typed.
+ *
+ * `scope` lives on the join row itself (`rolePermissions[i].scope`), not on
+ * the nested `.permission` object — confirmed live 2026-09-18:
+ * `{roleId, permissionId, scope: "department", permission: {id,resource,action}}`.
+ * A prior version of this function mapped `rp => rp.permission` only, which
+ * silently discarded `scope` on every read. Since `PUT` defaults a missing
+ * `scope` to `'global'`, that loss meant every save through the role editor
+ * quietly widened every one of the role's grants to `global` scope, whether
+ * or not that permission was actually touched in that save.
+ */
 function normalizeRole(raw: any): Role {
   return {
     ...raw,
-    permissions: raw.permissions ?? raw.rolePermissions?.map((rp: any) => rp.permission) ?? [],
+    permissions:
+      raw.permissions ??
+      raw.rolePermissions?.map((rp: any) => ({ ...rp.permission, scope: rp.scope })) ??
+      [],
   };
 }
 

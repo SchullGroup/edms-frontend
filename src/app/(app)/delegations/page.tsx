@@ -59,7 +59,7 @@ function scopeLabel(d: Delegation, cabinetNameById: Record<string, string>): str
 
 export default function DelegationsPage() {
   const { currentUser } = useStore();
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+  const { setPageTitle, openModal, addToast } = useUIStore();
 
   const { data, isLoading, isError, refetch } = useDelegations({ scope: 'mine', limit: 100 });
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
@@ -112,22 +112,27 @@ export default function DelegationsPage() {
             const { delegateId, startsAt, endsAt, scope } = formRef.current;
             if (!delegateId) {
               addToast('Please select a delegate', 'error');
-              return;
+              return false;
             }
             if (!startsAt || !endsAt) {
               addToast('Please set a start and end date', 'error');
-              return;
+              return false;
             }
             const start = new Date(startsAt);
             const end = new Date(endsAt);
             if (end <= start) {
               addToast('End date must be after the start date', 'error');
-              return;
+              return false;
             }
-            createDelegation.mutate(
-              { delegateId, startsAt: start.toISOString(), endsAt: end.toISOString(), scope },
-              { onSuccess: () => closeModal() },
-            );
+            return createDelegation
+              .mutateAsync({
+                delegateId,
+                startsAt: start.toISOString(),
+                endsAt: end.toISOString(),
+                scope,
+              })
+              .then(() => {})
+              .catch(() => false);
           },
         },
       ],

@@ -107,35 +107,34 @@ export default function CircularsAdminPage() {
           onClick: () => {
             if (!title.trim() || !bodyText.trim()) {
               addToast('Title and body are required', 'error');
-              return;
+              return false;
             }
             if (existing) {
-              updateCircular.mutate(
-                { id: existing.id, updates: { title, body: bodyText, audience, requiresAck } },
-                {
-                  onSuccess: () => {
-                    auditAction('CIRCULAR_EDIT', existing.id, 'Edited ' + title);
-                    closeModal();
-                  },
-                },
-              );
-            } else {
-              const c = {
-                title: title.trim(),
-                body: bodyText.trim(),
-                published: Date.now(),
-                by: currentUser?.id,
-                requiresAck,
-                ackBy: [],
-                audience,
-              };
-              createCircular.mutate(c, {
-                onSuccess: (newCirc) => {
-                  auditAction('PUBLISH_CIRCULAR', newCirc.id, 'Published ' + newCirc.title);
-                  closeModal();
-                },
-              });
+              return updateCircular
+                .mutateAsync({
+                  id: existing.id,
+                  updates: { title, body: bodyText, audience, requiresAck },
+                })
+                .then(() => {
+                  auditAction('CIRCULAR_EDIT', existing.id, 'Edited ' + title);
+                })
+                .catch(() => false);
             }
+            const c = {
+              title: title.trim(),
+              body: bodyText.trim(),
+              published: Date.now(),
+              by: currentUser?.id,
+              requiresAck,
+              ackBy: [],
+              audience,
+            };
+            return createCircular
+              .mutateAsync(c)
+              .then((newCirc) => {
+                auditAction('PUBLISH_CIRCULAR', newCirc.id, 'Published ' + newCirc.title);
+              })
+              .catch(() => false);
           },
         },
       ],

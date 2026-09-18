@@ -9,6 +9,7 @@ import {
   useCheckoutDocument,
   useCheckinDocument,
   useArchiveDocument,
+  useRequestDocumentAccess,
 } from '@/apis/hooks/useDocuments';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useSignAndApprove } from '@/hooks/useSignAndApprove';
@@ -26,6 +27,8 @@ import { fmtDateTime, fmtDate } from '@/utils/helpers';
 import { DocumentViewerPanel } from '@/components/documents/DocumentViewerPanel';
 import { DocumentDetailsPanel } from '@/components/documents/DocumentDetailsPanel';
 import { DocumentVersionsPanel } from '@/components/documents/DocumentVersionsPanel';
+import { DocumentCommentsPanel } from '@/components/documents/DocumentCommentsPanel';
+import { DocumentSignaturesPanel } from '@/components/documents/DocumentSignaturesPanel';
 import { WorkflowActivityPanel } from '@/components/workflowInstances/WorkflowActivityPanel';
 import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/components/documents/types';
 import type { WorkflowStageAction } from '@/types/models';
@@ -49,23 +52,69 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const archiveDocument = useArchiveDocument();
   const { promptSignAndApprove } = useSignAndApprove();
   const createAuditLog = useCreateAuditLog();
+  const requestAccess = useRequestDocumentAccess();
   const taskAction = useTaskAction();
   const checkoutDocument = useCheckoutDocument();
   const checkinDocument = useCheckinDocument();
   const { routeDocuments } = useRouteToWorkflow();
 
+  // Shared by the two "you can't see this" states below (confidentiality
+  // 403, and the currentUser-not-yet-hydrated race) — same request flow
+  // either way, just triggered by different conditions.
+  const openRequestAccessModal = (targetId: string) => {
+    let reason = '';
+    openModal({
+      title: 'Request access',
+      body: (
+        <div className="field">
+          <label>Reason (optional)</label>
+          <textarea
+            className="input"
+            placeholder="Why do you need access to this document?"
+            onChange={(e) => (reason = e.target.value)}
+          />
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Send request',
+          kind: 'btn-primary',
+          onClick: () =>
+            requestAccess
+              .mutateAsync({ id: targetId, reason: reason.trim() || undefined })
+              .then(() => {
+                createAuditLog.mutate({
+                  action: 'ACCESS_REQUEST',
+                  target: targetId,
+                  detail: 'Requested access',
+                });
+              })
+              .catch(() => false),
+        },
+      ],
+    });
+  };
+
   const [zoom, setZoom] = useState(1);
   const [showMenu, setShowMenu] = useState(false);
 
-  const { data: rawDoc, isLoading } = useDocument(docId);
+  const { data: rawDoc, isLoading, error: docError } = useDocument(docId);
+  // Confirmed live 2026-09-18: a document outside the caller's confidentiality
+  // clearance 403s (code `FORBIDDEN`) rather than 404ing — distinct from "the
+  // document doesn't exist". Render that as its own state below instead of
+  // collapsing it into the generic "not found" branch.
+  const accessDenied = (docError as any)?.response?.status === 403;
   const me = currentUser;
 
-  // `comments`/`signatures`/`sealed`/`legalHold` are not Document fields on the
-  // real API. There is no document-level comment or signature endpoint at all —
-  // both live on `POST /tasks/{taskId}/action` (a `comment` string, and a
-  // `signature` image on the `approve` action). The document-level activity
-  // narrative comes from `GET /workflow-history`. These shims stay empty/false;
-  // see types.ts for why they're kept explicitly typed.
+  // `comments`/`signatures`/`sealed`/`legalHold` are not `Document` fields on
+  // the real API, and stay empty/false shims here. `comments`/`signatures`
+  // specifically are the viewer's *positional* overlay shape (`x`/`y`/`w`/`h`
+  // placement) — there's no backend field for that. Dedicated, non-positional
+  // `GET/POST /documents/:id/comments` and `/signatures` endpoints do exist now
+  // (see `DocumentCommentsPanel`/`DocumentSignaturesPanel` below), and a
+  // workflow-task signature still lives on `POST /tasks/{taskId}/action`'s
+  // `approve` action. Three separate things; see types.ts for the shim's shape.
   const doc: DocumentWithUiExtras | null = rawDoc
     ? {
         ...rawDoc,
@@ -115,6 +164,28 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     return <DocumentDetailSkeleton />;
   }
 
+  if (accessDenied) {
+    return (
+      <div className="card" style={{ marginTop: '30px' }}>
+        <div className="empty">
+          <Icon name="lock" size={32} />
+          <div className="h3 mt-4 mb-2">You don't have clearance to view this document</div>
+          <p className="caption mb-4" style={{ maxWidth: '400px', margin: '0 auto 16px' }}>
+            Its confidentiality level is above what your role is cleared for. Request access
+            below, or ask the document owner directly.
+          </p>
+          <button
+            className="btn btn-primary"
+            disabled={requestAccess.isPending}
+            onClick={() => openRequestAccessModal(docId)}
+          >
+            Request access
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!doc) {
     return (
       <div className="card">
@@ -143,18 +214,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           </p>
           <button
             className="btn btn-primary"
-            onClick={() => {
-              createAuditLog.mutate({
-                action: 'ACCESS_REQUEST',
-                target: doc.id,
-                detail: 'Requested access',
-              });
-              // The document owner is notified server-side once the
-              // access-request endpoint exists. The client deliberately does
-              // not mint a notification for another user — see
-              // docs/BACKEND_REQUESTS.md (BE-1).
-              addToast('Access request recorded', 'info');
-            }}
+            disabled={requestAccess.isPending}
+            onClick={() => openRequestAccessModal(doc.id)}
           >
             Request access
           </button>
@@ -240,24 +301,25 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   // stage's `actions` list actually allows — `request_changes` (send the file
   // back a stage) and `reject` (terminate the workflow) are deliberately
   // separate, where they used to be conflated behind one "Reject" button.
+  // Returns the mutation's promise so every caller's confirm/modal stays
+  // open (with a loading state) until the action actually lands, instead of
+  // closing the moment the button is clicked.
   const runAction = (
     actionReq: Parameters<typeof taskAction.mutate>[0]['actionReq'],
     audit: { action: string; detail: string },
     toast: { message: string; kind: 'success' | 'warning' | 'error' },
   ) => {
     if (!currentTask) return;
-    taskAction.mutate(
-      { id: currentTask.id, actionReq },
-      {
-        onSuccess: () => {
-          createAuditLog.mutate({ action: audit.action, target: doc.id, detail: audit.detail });
-          addToast(toast.message, toast.kind);
-        },
-        onError: (err: any) => {
-          addToast(err?.response?.data?.message || 'Action failed', 'error');
-        },
-      },
-    );
+    return taskAction
+      .mutateAsync({ id: currentTask.id, actionReq })
+      .then(() => {
+        createAuditLog.mutate({ action: audit.action, target: doc.id, detail: audit.detail });
+        addToast(toast.message, toast.kind);
+      })
+      .catch((err: any) => {
+        addToast(err?.response?.data?.message || 'Action failed', 'error');
+        return false;
+      });
   };
 
   const stageLabel = stage ? stage.name : 'Current stage';
@@ -328,7 +390,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               addToast('A reason is required', 'error');
               return false;
             }
-            runAction(
+            return runAction(
               { action: 'request_changes', comment: reasonText.trim() },
               { action: 'REQUEST_CHANGES', detail: 'Changes requested: ' + reasonText.trim() },
               { message: 'Returned to previous stage with reason', kind: 'warning' },
@@ -373,7 +435,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               addToast('A reason is required', 'error');
               return false;
             }
-            runAction(
+            return runAction(
               { action: 'reject', comment: reasonText.trim() },
               { action: 'REJECT', detail: 'Rejected: ' + reasonText.trim() },
               { message: 'Rejected — workflow ended', kind: 'warning' },
@@ -432,7 +494,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               return false;
             }
             const name = users.find((u) => u.id === delegateId)?.name || 'another user';
-            runAction(
+            return runAction(
               { action: 'delegate', delegateId, ...(note.trim() ? { comment: note.trim() } : {}) },
               { action: 'DELEGATE', detail: `Delegated “${stageLabel}” to ${name}` },
               { message: `Delegated to ${name}`, kind: 'success' },
@@ -742,7 +804,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                                     detail: doc.title,
                                   });
                                   router.push('/staff/cabinets');
-                                }),
+                                })
+                                .catch(() => false),
                           });
                         }}
                       >
@@ -845,6 +908,18 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             canView={can('document', 'view')}
             canEdit={can('document', 'edit') && !closed && !lockedByOther}
             getUploaderName={(userId) => userById(users, userId)?.name || 'User'}
+          />
+
+          <DocumentSignaturesPanel
+            documentId={doc.id}
+            canView={can('document_signature', 'view')}
+            canSign={can('document_signature', 'create') && !closed}
+          />
+
+          <DocumentCommentsPanel
+            documentId={doc.id}
+            canView={can('document_comment', 'view')}
+            canPost={can('document_comment', 'create')}
           />
 
           <WorkflowActivityPanel

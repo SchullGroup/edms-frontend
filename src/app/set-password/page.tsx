@@ -39,7 +39,7 @@ function ResetPasswordForm() {
   const [done, setDone] = useState(false);
 
   const resetPasswordMutation = useMutation({
-    mutationFn: () => authService.resetPassword({ token: token as string, newPassword, confirmPassword }),
+    mutationFn: () => authService.resetPassword({ token: token as string, password: newPassword }),
     onSuccess: () => {
       setDone(true);
       addToast('Password reset. Please sign in.', 'success');

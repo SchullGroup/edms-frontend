@@ -275,7 +275,16 @@ export default function WorkflowDesignerPage() {
   // in the properties panel — confirm first so that isn't a silent loss.
   const selectStage = (id) => {
     if (id === selectedStageId) return;
-    if (stageDirty && !window.confirm('Discard unsaved changes to this stage?')) return;
+    if (stageDirty) {
+      openConfirm({
+        title: 'Discard unsaved changes?',
+        message: 'You have unsaved changes to this stage. Discard them and switch stages?',
+        confirmLabel: 'Discard changes',
+        danger: true,
+        onConfirm: () => setSelectedStageId(id),
+      });
+      return;
+    }
     setSelectedStageId(id);
   };
 
@@ -336,7 +345,19 @@ export default function WorkflowDesignerPage() {
         showArchived={showArchived}
         onToggleShowArchived={() => setShowArchived((v) => !v)}
         onSwitchWorkflow={(id) => {
-          if ((nameDirty || stageDirty) && !window.confirm('You have unsaved changes. Switch workflow anyway?')) return;
+          if (nameDirty || stageDirty) {
+            openConfirm({
+              title: 'Discard unsaved changes?',
+              message: 'You have unsaved changes. Switch workflow anyway?',
+              confirmLabel: 'Switch workflow',
+              danger: true,
+              onConfirm: () => {
+                setWfId(id);
+                setSelectedStageId(null);
+              },
+            });
+            return;
+          }
           setWfId(id);
           setSelectedStageId(null);
         }}

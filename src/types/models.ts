@@ -64,12 +64,23 @@ export interface User {
  */
 export type RolePermissionResource = string;
 export type RolePermissionAction = string;
+export type RolePermissionScope = 'own' | 'department' | 'global';
 
 export type RolePermission = {
   /** Present on rows returned by `GET /roles`; echoed back on `PUT`. */
   id?: string;
   resource: RolePermissionResource;
   action: RolePermissionAction;
+  /**
+   * Lives on the `rolePermissions[]` join row in the raw API response, not on
+   * the nested `permission` object — `roles.service.ts#normalizeRole` must
+   * lift it up explicitly, and it's easy to silently drop (it was, for a
+   * while: see DRIFT in doc 01). `PUT /roles/:id/permissions` defaults a
+   * missing `scope` to `'global'`, so omitting it on save doesn't just fail
+   * to persist a chosen scope — it silently **widens** an existing
+   * `own`/`department` grant to `global` the next time the role is saved.
+   */
+  scope?: RolePermissionScope;
 };
 
 /** Body for `POST /roles`. `name` 1–100 chars, `description` max 500. */
@@ -159,6 +170,61 @@ export interface CheckoutLock {
   lockedBy: string;
   lockedAt: string;
   expectedReturnAt?: string | null;
+}
+
+/** A `{id, name, email}` person embed — used for a request's requester/reviewer,
+ *  a comment's author, and a signature's signer. */
+export interface PersonSummary {
+  id: string;
+  name: string;
+  email: string;
+}
+
+/**
+ * `GET/POST /documents/:id/access-requests`, grant/deny, and the admin inbox
+ * `GET /documents/access-requests`. Verified live 2026-09-18 — `reviewer` and
+ * (inbox only) `document` are present once populated; absent/undefined
+ * otherwise, not `null`.
+ */
+export interface AccessRequest {
+  id: string;
+  documentId: string;
+  requesterId: string;
+  requester: PersonSummary;
+  reason: string | null;
+  status: 'pending' | 'approved' | 'denied';
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  /** Present once `status !== 'pending'`. */
+  reviewer?: PersonSummary;
+  /** Present only on the admin inbox (`GET /documents/access-requests`), not
+   *  the per-document list — the caller already knows the document there. */
+  document?: { id: string; title: string; referenceNumber: string };
+}
+
+/** `GET/POST /documents/:id/comments` — a dedicated document-level comment
+ *  thread, independent of any workflow task. Verified live 2026-09-18. */
+export interface DocumentComment {
+  id: string;
+  documentId: string;
+  authorId: string;
+  author: PersonSummary;
+  content: string;
+  createdAt: string;
+}
+
+/** `GET/POST /documents/:id/signatures` — a flat "who signed this document"
+ *  record, independent of any workflow task and with no positional/field
+ *  placement data (unlike the in-viewer signature fields on `approve` task
+ *  actions). Verified live 2026-09-18. */
+export interface DocumentSignature {
+  id: string;
+  documentId: string;
+  signedBy: string;
+  signer: PersonSummary;
+  url: string;
+  createdAt: string;
 }
 
 export interface DocumentMetadataField {
@@ -882,6 +948,27 @@ export interface AuditLog {
   target: string;
   detail: string;
   tenant: string;
+}
+
+/** `GET /audit` — the real, hash-chained backend audit trail. Distinct from
+ *  the mock `AuditLog` shape above, which the local `useStore.audit`
+ *  client-side log still uses. */
+export interface AuditEntry {
+  id: string;
+  seq: number;
+  /** Null for system-originated actions. */
+  actorId: string | null;
+  actorType: 'user' | 'system';
+  /** e.g. `"document.uploaded"`. */
+  action: string;
+  objectType: string;
+  /** Null for actions with no single subject, such as `search.executed`. */
+  objectId: string | null;
+  /** Request context (IP, user agent) and, where applicable, a field-level diff. */
+  metadata: Record<string, any> | null;
+  occurredAt: string;
+  prevHash: string | null;
+  entryHash: string;
 }
 
 // --- Branding ---

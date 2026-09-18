@@ -28,7 +28,7 @@ export default function WorkloadPage() {
   const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
 
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+  const { setPageTitle, openModal, addToast } = useUIStore();
 
   useEffect(() => {
     setPageTitle('Workload & Reassign');
@@ -81,24 +81,21 @@ export default function WorkloadPage() {
           onClick: () => {
             if (!newAssignee) {
               addToast('Please select a new assignee', 'error');
-              return;
+              return false;
             }
             const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
             const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
-            reassignTask.mutate(
-              { id: t.id, assigneeId: newAssignee, note: note || undefined },
-              {
-                onSuccess: () => {
-                  createAuditLog.mutate({
-                    action: 'REASSIGN',
-                    target: t.workflowInstance?.documentId || t.id,
-                    detail: `Reassigned from ${prevName} to ${newName}`,
-                  });
-                  addToast(`Reassigned to ${newName}`, 'success');
-                  closeModal();
-                },
-              },
-            );
+            return reassignTask
+              .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
+              .then(() => {
+                createAuditLog.mutate({
+                  action: 'REASSIGN',
+                  target: t.workflowInstance?.documentId || t.id,
+                  detail: `Reassigned from ${prevName} to ${newName}`,
+                });
+                addToast(`Reassigned to ${newName}`, 'success');
+              })
+              .catch(() => false);
           },
         },
       ],

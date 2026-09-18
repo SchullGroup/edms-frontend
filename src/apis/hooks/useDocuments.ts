@@ -1,5 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { documentsService, DocumentFilters } from '@/apis/services/documents.service';
+import {
+  documentsService,
+  DocumentFilters,
+  AccessRequestInboxFilters,
+} from '@/apis/services/documents.service';
 import { CreateVersionRequest, Document, DocumentMetadataValueInput } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
 import { fetchAllPages } from '@/apis/utils/fetchAllPages';
@@ -12,12 +16,21 @@ export const documentKeys = {
   detail: (id: string) => [...documentKeys.details(), id] as const,
   metadata: (id: string) => [...documentKeys.detail(id), 'metadata'] as const,
   versions: (id: string) => [...documentKeys.detail(id), 'versions'] as const,
+  accessRequests: (id: string) => [...documentKeys.detail(id), 'access-requests'] as const,
+  comments: (id: string) => [...documentKeys.detail(id), 'comments'] as const,
+  signatures: (id: string) => [...documentKeys.detail(id), 'signatures'] as const,
 };
 
-export function useDocuments(filters: DocumentFilters = {}) {
+export const accessRequestInboxKeys = {
+  all: ['access-requests', 'inbox'] as const,
+  list: (filters: AccessRequestInboxFilters) => [...accessRequestInboxKeys.all, filters] as const,
+};
+
+export function useDocuments(filters: DocumentFilters = {}, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: documentKeys.list(filters),
     queryFn: () => documentsService.getAll(filters),
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -25,11 +38,20 @@ export function useDocuments(filters: DocumentFilters = {}) {
  * INTERIM STOPGAP for pages that need the full document set (management
  * dashboards). Loops every page — see fetchAllPages.ts for why this exists
  * and why it should be replaced once the backend has aggregation endpoints.
+ *
+ * `enabled` defaults to true so existing unconditional callers are unaffected
+ * — pass `false` explicitly for a caller that only wants this scoped to a
+ * cabinet/folder once one is selected, rather than walking every document in
+ * the tenant while nothing is selected yet.
  */
-export function useAllDocuments(filters: Omit<DocumentFilters, 'page' | 'limit'> = {}) {
+export function useAllDocuments(
+  filters: Omit<DocumentFilters, 'page' | 'limit'> = {},
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: [...documentKeys.list(filters), 'all'],
     queryFn: () => fetchAllPages(documentsService.getAll, filters),
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -141,10 +163,128 @@ export function useCheckinDocument() {
   });
 }
 
-// Document-level comments and signatures do not exist on the API. Comments are
-// the `comment` field on `POST /tasks/{taskId}/action`; a signature is the
-// `signature` image on that endpoint's `approve` action. See
-// `src/app/(app)/doc/[id]/page.tsx` (`actApprove`).
+// Dedicated document-level comments/signatures — independent of the
+// workflow-action path `src/app/(app)/doc/[id]/page.tsx` (`actApprove`) uses:
+// a `comment` field on `POST /tasks/{taskId}/action`, and a `signature` image
+// on its `approve` action. These are a separate thread/record, not a replacement.
+
+export function useDocumentComments(id?: string) {
+  return useQuery({
+    queryKey: documentKeys.comments(id || ''),
+    queryFn: () => documentsService.getComments(id as string),
+    enabled: !!id,
+  });
+}
+
+export function useAddDocumentComment() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, content }: { id: string; content: string }) =>
+      documentsService.addComment(id, content),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: documentKeys.comments(id) });
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to post comment', 'error');
+    },
+  });
+}
+
+export function useDocumentSignatures(id?: string) {
+  return useQuery({
+    queryKey: documentKeys.signatures(id || ''),
+    queryFn: () => documentsService.getSignatures(id as string),
+    enabled: !!id,
+  });
+}
+
+export function useAddDocumentSignature() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, url }: { id: string; url: string }) =>
+      documentsService.addSignature(id, url),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: documentKeys.signatures(id) });
+      addToast('Signature added', 'success');
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to add signature', 'error');
+    },
+  });
+}
+
+/** Any authenticated user may request access to any document by id — 409 if
+ *  they already have a pending request on it. */
+export function useRequestDocumentAccess() {
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      documentsService.requestAccess(id, reason),
+    onSuccess: () => {
+      addToast('Access request sent', 'success');
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to send access request', 'error');
+    },
+  });
+}
+
+export function useDocumentAccessRequests(id?: string) {
+  return useQuery({
+    queryKey: documentKeys.accessRequests(id || ''),
+    queryFn: () => documentsService.getAccessRequests(id as string),
+    enabled: !!id,
+  });
+}
+
+/** client_admin-only admin inbox across every document. */
+export function useAccessRequestsInbox(filters: AccessRequestInboxFilters = {}) {
+  return useQuery({
+    queryKey: accessRequestInboxKeys.list(filters),
+    queryFn: () => documentsService.getAccessRequestsInbox(filters),
+  });
+}
+
+export function useGrantAccessRequest() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, requestId }: { id: string; requestId: string }) =>
+      documentsService.grantAccessRequest(id, requestId),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: documentKeys.accessRequests(id) });
+      queryClient.invalidateQueries({ queryKey: accessRequestInboxKeys.all });
+      addToast('Access granted', 'success');
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to grant access', 'error');
+    },
+  });
+}
+
+export function useDenyAccessRequest() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, requestId }: { id: string; requestId: string }) =>
+      documentsService.denyAccessRequest(id, requestId),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: documentKeys.accessRequests(id) });
+      queryClient.invalidateQueries({ queryKey: accessRequestInboxKeys.all });
+      addToast('Access request denied', 'info');
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to deny access request', 'error');
+    },
+  });
+}
 
 export function useArchiveDocument() {
   const queryClient = useQueryClient();

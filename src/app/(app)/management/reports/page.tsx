@@ -10,7 +10,7 @@ const DEPTS = ['Operations', 'Finance', 'Legal', 'Procurement', 'Audit & Complia
 
 export default function ReportsExportPage() {
   const createAuditLog = useCreateAuditLog();
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+  const { setPageTitle, openModal, addToast } = useUIStore();
 
   const [type, setType] = useState('Throughput summary');
   const [dept, setDept] = useState('All departments');
@@ -59,11 +59,13 @@ export default function ReportsExportPage() {
         {
           label: 'Schedule',
           kind: 'btn-primary',
-          onClick: () => {
-            createAuditLog.mutate({ action: 'REPORT_SCHEDULE', target: 'Reports', detail: 'Scheduled ' + type });
-            addToast('Report scheduled', 'success');
-            closeModal();
-          }
+          onClick: () =>
+            createAuditLog
+              .mutateAsync({ action: 'REPORT_SCHEDULE', target: 'Reports', detail: 'Scheduled ' + type })
+              .then(() => {
+                addToast('Report scheduled', 'success');
+              })
+              .catch(() => false),
         }
       ]
     });

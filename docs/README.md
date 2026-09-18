@@ -68,7 +68,11 @@ setting up an environment.
 
 ## The short version
 
-**42 frontend pages · 74 backend routes · 6 roles · 0 tests.**
+**51 frontend pages · 106 backend routes · 6 roles · 0 tests.**
+*(Re-derived 2026-09-18 — was 42 pages / 90 routes at last full count. Route count is
+solid, from the live Swagger spec. Page count is solid; the 9 newly-counted pages beyond
+`/admin/access-requests` haven't been individually classified — see doc 05's Portfolio
+summary.)*
 
 ```
 The DOCUMENT half is real
@@ -77,9 +81,9 @@ The DOCUMENT half is real
                                                     ✅ works end to end
 
 The GOVERNANCE half is a UI over fixtures
-  audit · notifications · circulars · policies
+  notifications · circulars · policies
   findings · retention · platform operations
-                                                    🟥 20 of 42 pages
+                                                    🟥 at least 19 of 51 pages
 ```
 
 ### The four defects that matter most
@@ -87,7 +91,7 @@ The GOVERNANCE half is a UI over fixtures
 | # | Defect | Where | Effect |
 |---|---|---|---|
 | 1 | **Staff and supervisors cannot read workflow definitions** | `WORKFLOW_DEFINITION_VIEW_ROLES` is set equal to `MANAGE_ROLES` — `client_admin` and `schulltech_admin` only — in `src/shared/constants/workflow.constants.ts` | **Document routing is unreachable for the roles that do it.** `useRouteToWorkflow` gets a `403`, so its picker says "no published workflows" — neither true nor the reason. Also contradicts `management` and `internal_auditor`'s seeded `workflow:view:global` |
-| 2 | **The audit trail has never recorded an event** | `audit.middleware.ts` is a **0-byte file**; zero `auditEntry` references in the backend `src/`, against 25 defined `AUDIT_ACTIONS` | The product's compliance positioning is currently unsupported by the code |
+| ~~2~~ | ✅ **Resolved 2026-09-18.** ~~The real audit trail is invisible to the role whose job is to read it~~ | Backend is real and auto-writing (DRIFT-11 in doc 01); `/admin/audit`, `/auditor/trail` and `management/compliance` all read it now. `/platform/audit` stays mocked by design — no cross-tenant backend exists to read | The compliance story now has real data behind it, and the auditor role can see it |
 | 3 | **Nothing ever creates a notification** | The module, its 6 routes, the queue, the worker and the whole frontend surface exist — but there are **zero references to `notifyUser` outside `src/modules/notifications/`** | Task assignment, returned work and SLA breaches are all silent; the list is permanently empty |
 | 4 | **`effStatus()` is a no-op on real data** | Two divergent copies; `Document` has no due-date field; status compares are capitalized against lowercase values | Every overdue badge, count and ageing bucket reads zero across 8 call sites |
 
@@ -152,6 +156,90 @@ is the precise per-user source of truth; `useHydratePermissions` (role-derived, 
 outright on any mismatch with the role-derived set — harmless while the payload was
 empty, but silently scope-dropping the moment it wasn't — so it was fixed to only add
 genuinely missing keys. See DRIFT-03 in doc 01.
+
+**Correction (2026-09-18).** Every doc previously stated the backend audit module was
+entirely unbuilt — `audit_entries` "never written to," `audit.middleware.ts` "0 bytes,"
+`GET /audit` "no endpoint." All wrong, confirmed live against
+`edms-backend-zmfm.onrender.com`: `GET /audit`, `GET /audit/:id`, `GET /audit/export` and
+`GET /audit/verify` exist, entries are written automatically as a side effect of other
+actions (no client call needed), and the hash chain checked out intact via
+`GET /audit/verify`. `/admin/audit` was wired to it the same day. This was re-checked
+against **live API behavior**, not by re-reading `edms-backend/src/` — so DB-level
+specifics (an INSERT-only Postgres role, monthly partitioning) are marked unverified
+rather than confirmed. `auditor/trail`, `platform/audit` and `management/compliance`
+still read the old `SEED`-backed mock and are unchanged; see DRIFT-11 (revised) in doc 01
+for the full writeup, and doc 05 §4/§5 for the per-page detail. Doc 04's H7 section
+(`Every role → Internal Auditor`) and its Role 4/Role 6 sections still describe the old,
+now-wrong state in several places — corrected only where doc 04 is read as the
+authoritative cross-role summary (H7, and the Role 4/Role 6 headline claims); the
+per-step tables in those sections weren't individually swept and may still say "no
+endpoint" in places doc 05 has already corrected.
+
+**Correction (2026-09-18, later the same day).** `auditor/trail` and
+`management/compliance`'s sensitive-activity panel are migrated now too — pulled a
+78-entry live sample first to get the *real* action vocabulary (`user.login`,
+`document.viewed`, `document.edited`, `role.permissions_updated`,
+`document.access_denied`, 15 others) rather than guessing; the old
+`REDACT_RELEASE`/`SIGN`/`PRINT`/`DOWNLOAD`/`SLA_ESCALATION` codes matched nothing real.
+`platform/audit` stays on `SEED.audit`, confirmed as a genuine backend gap rather than
+unfinished frontend work: `GET /audit` is tenant-scoped with no cross-tenant query, and
+no platform-level multi-tenant API exists anywhere in this backend. Docs 01, 04 and 05
+updated accordingly.
+
+**Correction (2026-09-18, later still).** Found and fixed a real, active bug while
+investigating why custom roles can't be granted confidentiality-tier clearance:
+`PUT /roles/:id/permissions` accepts an optional `scope` (`own`/`department`/`global`,
+default `global`) per the live schema, and `GET /roles`' raw response carries it on the
+`rolePermissions[]` join row — but `roles.service.ts#normalizeRole` only ever mapped
+`rp => rp.permission`, dropping `scope` on every read. Since the role editor never had
+scope to send back, and a missing `scope` defaults to `global`, **every save through
+`/admin/roles` was silently widening every one of that role's grants to `global` scope**,
+not just the permission being edited — including for built-in system roles, which this
+page allows editing. Checked the six seeded roles plus one real custom role
+("Budget Officer") already in this tenant for signs of prior corruption — all show a
+healthy mix of scopes, no evidence of damage. Fixed: `normalizeRole` now lifts `scope`
+onto each permission, and `/admin/roles`'s editor tracks and lets an admin choose scope
+per permission instead of dropping it. Verified end-to-end against the live API (create
+role → set mixed `own`/`department` scopes → confirm they round-trip → clean up).
+
+Also: `POST /users` no longer needs a `password` — confirmed live it now accepts
+omitting it entirely and returns `{invited: true}`, triggering a real invite email
+instead of the frontend setting a hardcoded default. `admin/users/page.tsx`'s
+create-user flow stopped sending one.
+
+Also found and fixed while wiring the above: `POST /auth/reset-password` — the shared
+landing point for both password-reset **and** invitation-acceptance links — was sending
+`newPassword`/`confirmPassword` instead of the backend's required `password` field,
+confirmed via a live `422` before the fix. This blocked every reset/invitation completion
+on every role and predates this session; it surfaced only because `POST
+/users/:id/invitation` ("Resend invite") was being wired at the same time. See DRIFT-15
+in doc 01.
+
+**Correction (2026-09-18, later the same day).** Continued integrating the rest of the
+endpoints found unwired: document access-requests (`POST/GET
+/documents/:id/access-requests`, grant, deny, admin inbox — new page
+`/admin/access-requests`) and dedicated document comments/signatures
+(`GET/POST /documents/:id/comments` / `/signatures`, both new panels on `/doc/[id]`,
+separate from the pre-existing task-action `comment` field and `approve`-action
+signature). All verified live via real create/list/grant/deny/comment/sign round-trips
+against `edms-backend-zmfm.onrender.com` before being called done — see BE-1, BE-6, BE-7
+in `BACKEND_REQUESTS.md`.
+
+While wiring these, a much larger cluster of **unrelated stale claims** surfaced —
+things already wired that the docs still described as missing: cabinet access-grant UI,
+cabinet metadata-field designer, the role-permission-matrix editor (this one directly
+contradicted another line in the *same* doc), document version-restore, document
+archive, and the `/delegations` page. All corrected in place across docs 01, 04 and 05,
+each tagged with "stale, caught 2026-09-18" rather than presented as new work. One open
+question flagged, not resolved: whether cabinet access grants are enforced on the
+**read** path (not just written via the CRUD UI) is unverified.
+
+Also: `find src/app -name 'page.tsx' | wc -l` now returns **51**, not the **42** this
+whole document's portfolio counts are built on — one of the nine is
+`/admin/access-requests` (classified above), the other eight were not individually
+re-classified in this pass. Every count in doc 05 derived from "42" is now a known
+undercount until a full re-audit happens; see doc 05's "Portfolio summary" for the same
+flag in place.
 
 ---
 

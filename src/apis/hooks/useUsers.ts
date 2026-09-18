@@ -126,3 +126,18 @@ export function useRemoveUserRole() {
     },
   });
 }
+
+/** `POST /users/:id/invitation` — resends the set-password email. */
+export function useResendInvitation() {
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: (id: string) => usersService.resendInvitation(id),
+    onSuccess: (data) => {
+      addToast(`Invitation resent to ${data.email}`, 'success');
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to resend invitation', 'error');
+    },
+  });
+}

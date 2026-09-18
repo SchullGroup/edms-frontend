@@ -742,8 +742,8 @@ the product.
 
 | Expectation | Reality |
 |---|---|
-| "Show me everything Chika did last month" | ⛔ `audit_entries` has never been written to. `audit.middleware.ts` is a 0-byte file. `/auditor/trail` renders `SEED.audit`. |
-| "Prove this trail hasn't been altered" | ⛔ The hash chain (`prevHash`/`entryHash`) is designed, indexed, documented — and empty. |
+| "Show me everything Chika did last month" | 🟨 **Revised 2026-09-18 (DRIFT-11).** `audit_entries` is real and auto-written now — confirmed live. But `/auditor/trail`, the screen an auditor would actually use, still renders `SEED.audit`; only `/admin/audit` reads the real trail. |
+| "Prove this trail hasn't been altered" | 🟨 `GET /audit/verify` exists, works, and confirmed the hash chain intact live — but no auditor-facing screen calls it (`/admin/audit`'s "Verify integrity" does). |
 | "Track this finding to closure" | ⛔ No `Finding` model in Prisma. `/auditor/findings` (367 lines) operates entirely on `SEED.findings`. |
 | "Which documents are past retention?" | ⛔ `RetentionPolicy` exists in the schema; no endpoint, no UI, no job ever applies it. |
 | "Enforce separation of duties" | ⛔ Described in the older docs as a platform feature. No SoD logic exists in either codebase. |

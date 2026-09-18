@@ -19,9 +19,14 @@ it. Then BE-1 and BE-4, which are security items rather than features.
 
 ## Summary
 
+> **Resolved (2026-09-18):** this doc used to have two unrelated items both numbered
+> BE-12 — "Split `WORKFLOW_DEFINITION_VIEW_ROLES`" and "password recovery". The
+> password-recovery one is renumbered to **BE-13** below; BE-12 now refers only to the
+> workflow-roles split.
+
 | ID        | Ask                                               | Type         | Priority    | Blocking?                  |
 | --------- | ------------------------------------------------- | ------------ | ----------- | -------------------------- |
-| **BE-1**  | `POST /documents/:id/access-request`              | New endpoint | 🔴 High     | Yes — feature disabled     |
+| ~~BE-1~~  | ~~`POST /documents/:id/access-request`~~          | ✅ **Done**  | —           | —                          |
 | **BE-2**  | `POST /auth/logout` + refresh-token revocation    | New endpoint | 🔴 High     | No — fails silently today  |
 | **BE-12** | Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES` | Small fix | 🔴 **Critical** | **Yes — routing is dead**  |
 | ~~BE-3~~  | ~~Authorization on the workflow routes~~          | ✅ **Done**  | —           | —                          |
@@ -32,8 +37,10 @@ it. Then BE-1 and BE-4, which are security items rather than features.
 | **BE-8**  | Presigned upload URL                              | New endpoint | 🟠 Med      | Yes — OCR/search broken    |
 | **BE-9**  | `policies` module                                 | New module   | 🟠 Med      | No — frontend on fixtures  |
 | **BE-10** | JSON 404 handler                                  | Small fix    | 🟡 Low      | No                         |
-| **BE-11** | `audit` module                                    | New module   | 🟡 Low      | No — but nothing is logged |
-| **BE-12** | `forgot-password` / `reset-password`              | New endpoint | 🟠 Med      | Yes — UI built, 404s       |
+| ~~BE-11~~ | ~~`audit` module~~                                | ✅ **Done**  | —           | —                          |
+| ~~BE-13~~ | ~~`forgot-password` / `reset-password`~~          | ✅ **Done**  | —           | —                          |
+| **BE-14** | Confidentiality-tier clearance option on roles    | New field/endpoint | 🟠 Med | No — per-document grants work meanwhile |
+| **BE-15** | Revoke a granted `DocumentAccessGrant`            | New endpoint | 🟠 Med      | No — grants just accumulate |
 
 ---
 
@@ -63,6 +70,15 @@ These were broken and are now working. Frontend has been repointed accordingly.
   stats. This is more than we asked for and it retires our client-side aggregation
   problem. **We have only adopted `/tasks/stats` so far — that is on us**, and we are
   tracking it.
+- **Access requests (BE-1)** — `POST/GET /documents/:id/access-requests`, grant, deny, and
+  the admin inbox, all confirmed live 2026-09-18. See BE-1 below.
+- **Audit module (BE-11)** — `GET /audit`, `/audit/:id`, `/audit/export`, `/audit/verify`,
+  all confirmed live 2026-09-18, entries written automatically. See BE-11 below for the
+  full note (including a swagger path-prefix quirk worth a fix).
+- **Password recovery (BE-13)** — `POST /auth/forgot-password` / `reset-password`, both
+  confirmed live 2026-09-18. Also doubles as the invitation-acceptance flow. See BE-13
+  below — the shipped body shape differs from what we asked for, which caused a
+  frontend-side bug we've since fixed.
 
 One naming note: we were calling `/notifications/mark-all-read`; the route is
 `/notifications/read-all`. **We changed our side** — `read-all` is the better name and
@@ -70,7 +86,23 @@ pairs with `unread-count`. No action needed.
 
 ---
 
-## 🔴 BE-1 · `POST /documents/:id/access-request`
+## ✅ BE-1 · `POST /documents/:id/access-request` — **DONE, thank you (confirmed 2026-09-18)**
+
+Built, as `POST /documents/:id/access-requests` (plural — small naming difference from what
+we asked, no action needed on our side, we matched it). Verified live end-to-end: create →
+appears in `GET /documents/:id/access-requests` and the admin inbox
+`GET /documents/access-requests` → `grant`/`deny` both work and set `reviewedBy`/`reviewedAt`.
+Frontend wired 2026-09-18: the "Request access" button on `/doc/[id]` is real now, and
+`/admin/access-requests` (new page, client_admin-only) handles grant/deny.
+
+**One thing we couldn't verify:** whether the document owner actually gets notified.
+The shipped design is a manual client_admin review queue rather than the auto-notify-owner
+flow we originally sketched (point 3 below) — which may be the better design (auditable,
+actionable, no risk of the owner missing a fly-by notification), but we don't have
+visibility into whether `notifyUser` fires on creation, since checking would require
+logging in as the specific document's owner. Flagging as unverified, not broken.
+
+**Original ask, for reference:**
 
 **Priority: High. This is a security item, not a feature request.**
 
@@ -330,6 +362,12 @@ comment is the optional `comment` string on `POST /tasks/:id/action` (`minLength
 `/doc/[id]` (which posted to the non-existent route) has been removed; the stage-action
 modals now send their note as `comment`. No backend work required.
 
+> **Update 2026-09-18 — you built it anyway, as a separate thing.** A dedicated
+> `GET/POST /documents/:id/comments` now exists — confirmed live, real document-level
+> comment thread, independent of any task. This isn't a contradiction of the withdrawal
+> above: the task-action `comment` is still the only thing tied to the approval trail;
+> this is a second, general-purpose thread. Wired on `/doc/[id]` as `DocumentCommentsPanel`.
+
 ---
 
 ## ~~BE-7 · `POST /documents/:id/signatures`~~ — WITHDRAWN (2026-09-10)
@@ -342,6 +380,13 @@ Also already defined in the live spec, and also not a document operation. `POST
 image (`SignaturePad`), uploads it via the multipart uploader, and sends it on the
 approve action (`useSignAndApprove`, used by `/doc/[id]` and the supervisor approvals
 queue). No backend work required.
+
+> **Update 2026-09-18 — same story as BE-6.** `GET/POST /documents/:id/signatures` now
+> exists — confirmed live. It's a flat `{signedBy, signer, url, createdAt}` record with
+> **no positional/field-placement data**, unlike the task-action signature which the
+> viewer places at a specific spot on the document image. Useful for a sign-off that
+> isn't tied to any pending workflow task. Wired as `DocumentSignaturesPanel` on
+> `/doc/[id]`, reusing the same `SignaturePad` capture UI.
 
 ---
 
@@ -446,67 +491,92 @@ app.use((_req, res) => ApiResponse.notFound(res, 'Route not found', 'ROUTE_NOT_F
 
 ---
 
-## 🟡 BE-11 · `audit` module
+## ✅ BE-11 · `audit` module — **DONE, thank you (confirmed 2026-09-18)**
 
-`src/middlewares/audit.middleware.ts` is a **0-byte file**. There are zero references to
-`auditEntry` anywhere in `src/`. The `audit_entries` table has never been written to.
+Built, and more than we asked for: `GET /audit` (filters: `actorId`, `objectType`,
+`objectId`, `action`, `from`, `to`), `GET /audit/:id`, `GET /audit/export` (CSV,
+`audit:export`) and `GET /audit/verify` (hash-chain check) all exist and work — confirmed
+live, not just against the swagger doc. A real pull returned entries auto-written for
+`user.login`, `user.invited` and `user.token_refreshed`; `GET /audit/verify` recomputed
+the chain and reported it intact.
 
-The schema is well designed — hash-chained via `prevHash`/`entryHash`, documented as
-INSERT-only, indexed for object history and actor timeline, intended to be
-month-partitioned. `AUDIT_ACTIONS` lists 25 action types. None are ever emitted.
+One documentation-only note: the swagger spec lists these four paths with a literal
+`/api/v1` baked into the path string (`/api/v1/audit`) while every other tag is relative
+(`/documents`, `/cabinets`, …) under the `/api/v1` server URL — harmless once you know to
+call the relative `/audit`, but worth fixing in the OpenAPI annotation so it doesn't trip
+up the next integration.
 
-Meanwhile `internal_auditor` is granted `audit:view:global` and **there is no `/audit`
-endpoint to use it**, and our auditor dashboard renders fixtures.
-
-We're flagging this as Low priority only because nothing is _blocked_ on it. In terms of
-product risk it is arguably the most significant gap: the compliance story rests on it.
-
-What we'd eventually need:
-
-```
-GET /api/v1/audit          filters: actor, objectType, objectId, action, from, to
-GET /api/v1/audit/verify   chain-integrity proof
-```
+Frontend wired `/admin/audit` to it the same day, and `/auditor/trail` and
+`management/compliance` followed shortly after (`useAuditEntries` etc. in
+`useAudit.ts`) — all three now read the real trail with a confirmed real action
+vocabulary (`user.login`, `document.viewed`, `role.permissions_updated`, 17 others seen
+in one sample). `/platform/audit` is the one page that stays mocked, and that's on us to
+flag rather than fix: there's no cross-tenant `GET /audit`, and no platform-level
+multi-tenant API in this backend at all, so there's nothing to migrate that page *to*.
+Not asking for it here — just noting it so it doesn't read as an oversight.
 
 ---
 
-## 🟠 BE-12 · Self-service password recovery
+## ✅ BE-13 · Self-service password recovery — **DONE, thank you (confirmed 2026-09-18)**
 
-**Priority: Medium. Blocking — the screens are built and have nowhere to submit.**
+*Renumbered from BE-12 (2026-09-18) — this doc previously had two unrelated items both
+numbered BE-12; see the note at the top of the Summary table.*
 
-### What we found
+Built, and it doubles as the invitation-acceptance flow too — nice design, one endpoint
+covers both cases. `POST /auth/forgot-password` (`{email}`, always 200) and
+`POST /auth/reset-password` (`{token, password}`) both exist and work.
 
-There is no account-recovery path anywhere in the API. Checked against the deployed
-Swagger doc (2026-09-05): `/auth` exposes only `login`, `refresh` and `me`. This is the
-same gap story I2 already named: "no self-service password reset."
+**One thing worth flagging: the shipped body shape differs from what we originally
+asked for**, and it bit us. We'd requested
+`{ token, newPassword, confirmPassword }` (below, for the record); the backend
+reasonably shipped a single `{ token, password }` instead — simpler, and confirm-match
+is a client-side concern anyway. But our frontend was never updated to match, and kept
+sending the old three-field shape, so `/set-password` **completely failed for everyone**
+(`422 VALIDATION_ERROR` — `password` "expected string, received undefined") until we
+caught it 2026-09-18 wiring an unrelated feature (invite-resend) that shares this same
+landing page. Fixed on our side (`auth.service.ts#resetPassword`, `set-password/page.tsx`)
+— no backend action needed, just flagging the shape mismatch in case any other client
+integration assumed the originally-requested shape. See DRIFT-15 in doc 01.
 
-### What we built anyway
-
-`/forgot-password` (email in, confirmation screen) and `/reset-password` (new password +
-confirm, reading `?token=` from the URL) are live in the frontend, posting to
-`authService.forgotPassword` / `resetPassword`. Both currently 404 — there's nothing to
-demo end to end until the routes below exist.
-
-### What we need
+Original ask, for reference:
 
 ```
 POST /api/v1/auth/forgot-password
   body: { email: string }
-  → always 200, regardless of whether the email is registered — this is the standard
-    anti-enumeration mitigation, and it has to be enforced server-side; the frontend
-    can't do it for you. Issues a signed, expiring token and (once a mail transport
-    exists — see the "no mail transport" note under I2) emails a link containing it.
 
 POST /api/v1/auth/reset-password
-  body: { token: string, newPassword: string, confirmPassword: string }
-  → validates the token (signature + expiry + single-use), checks newPassword ===
-    confirmPassword and against whatever complexity policy exists, updates
-    passwordHash, and should invalidate the token immediately so it can't be replayed.
+  body: { token: string, newPassword: string, confirmPassword: string }   ← not what shipped; shipped as { token, password }
 ```
 
-Whatever the reset token's format, it needs to be safe to sit in a URL query string
-(we read it via `?token=`) and short-lived — this is exactly the kind of value that ends
-up in browser history and referrer headers.
+---
+
+## 🟡 BE-14 · Confidentiality-tier clearance for custom roles — **in progress, per conversation 2026-09-18**
+
+**What we found:** `RESTRICTED_TIER_ROLES`/`CONFIDENTIAL_TIER_ROLES` are hardcoded role-*name*
+allowlists (`confidential` → `supervisor`/`management`/`client_admin`/`internal_auditor`;
+`restricted` → `client_admin` only), not permission-driven. A custom role created via
+`POST /roles` can hold every `document:*` permission there is and still never pass the
+confidentiality-tier gate on a `confidential`+ document — there's no mechanism, UI or
+API, to grant a new role into those tiers. The only existing workaround is a per-document
+`DocumentAccessGrant` via the access-request flow (BE-1), which is real but doesn't scale
+to "this whole role should see this whole tier."
+
+**Status:** you've said you're adding a way to set a confidentiality-clearance option on
+a role, with system/seeded roles' clearance staying fixed (not admin-editable). No
+endpoint for this exists yet as of 2026-09-18 — nothing to verify or wire up on our side
+until it ships. Flagging here so it's tracked rather than lost in chat.
+
+---
+
+## 🟡 BE-15 · Revoke a granted `DocumentAccessGrant` — **in progress, per conversation 2026-09-18**
+
+**What we found:** `POST /documents/:id/access-requests/:id/grant` creates a standing,
+view-only access grant (BE-1), but there's no endpoint to revoke one afterward. Once
+granted, always granted, with no admin-facing way to undo it short of a database change.
+
+**Status:** you've said a revoke endpoint is being built. No shape confirmed yet
+(`DELETE /documents/:id/access-requests/:id`? A dedicated revoke action?) — will wire it
+into `/admin/access-requests` once it ships and the shape is known.
 
 ---
 

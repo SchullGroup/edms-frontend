@@ -35,7 +35,7 @@ export default function BottlenecksPage() {
 
   const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+  const { setPageTitle, openModal, addToast } = useUIStore();
 
   useEffect(() => {
     setPageTitle('Bottlenecks & Ageing');
@@ -110,24 +110,21 @@ export default function BottlenecksPage() {
           onClick: () => {
             if (!newAssignee) {
               addToast('Please select a new assignee', 'error');
-              return;
+              return false;
             }
             const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
-            reassignTask.mutate(
-              { id: currentTaskId, assigneeId: newAssignee, note: note || undefined },
-              {
-                onSuccess: () => {
-                  createAuditLog.mutate({
-                    action: 'REASSIGN',
-                    target: item.documentId,
-                    detail: `Reassigned from ${item.assigneeName} to ${newName}`,
-                  });
-                  addToast(`Reassigned to ${newName}`, 'success');
-                  closeModal();
-                  refetch();
-                },
-              },
-            );
+            return reassignTask
+              .mutateAsync({ id: currentTaskId, assigneeId: newAssignee, note: note || undefined })
+              .then(() => {
+                createAuditLog.mutate({
+                  action: 'REASSIGN',
+                  target: item.documentId,
+                  detail: `Reassigned from ${item.assigneeName} to ${newName}`,
+                });
+                addToast(`Reassigned to ${newName}`, 'success');
+                refetch();
+              })
+              .catch(() => false);
           },
         },
       ],
