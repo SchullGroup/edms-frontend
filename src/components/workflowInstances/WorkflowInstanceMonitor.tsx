@@ -137,7 +137,7 @@ export function WorkflowInstanceMonitor() {
       key: 'started',
       label: 'Started',
       sortable: true,
-      render: (r) => <span className="tnum">{r.started ? fmtDate(r.started) : '—'}</span>,
+      render: (r) => <span className="tabular-nums">{r.started ? fmtDate(r.started) : '—'}</span>,
     },
     {
       key: 'due',
@@ -157,7 +157,7 @@ export function WorkflowInstanceMonitor() {
       key: 'id',
       label: '',
       render: (r) => (
-        <div className="flex g8">
+        <div className="flex gap-2">
           {r.instance.status === 'on_hold' && (
             <button
               className="btn btn-secondary btn-sm"
@@ -237,7 +237,7 @@ export function WorkflowInstanceMonitor() {
               </button>
             ))}
           </div>
-          <div className="flex g8 aic wrap">
+          <div className="flex gap-2 items-center flex-wrap">
             <select
               className="input"
               style={{ width: 'auto' }}

@@ -3,44 +3,26 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useUsers, useCreateUser, useUpdateUser } from '@/apis/hooks/useUsers';
-import { useRoles, useCreateRole, useSetRolePermissions } from '@/apis/hooks/useRoles';
+import {
+  useUsers,
+  useCreateUser,
+  useUpdateUser,
+  useAssignUserRoles,
+  useRemoveUserRole,
+  useResendInvitation,
+} from '@/apis/hooks/useUsers';
+import { useRoles } from '@/apis/hooks/useRoles';
 import { useDepartments } from '@/apis/hooks/useDepartments';
-import { usePolicies, useUpdatePolicyControl } from '@/apis/hooks/usePolicies';
 import { buildDepartmentIndex, departmentName } from '@/apis/utils/managementAggregation';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
-import { Role } from '@/types/models';
 
 const USERS_PAGE_SIZE = 10;
 
-const PERMISSION_RESOURCES: { value: string; label: string }[] = [
-  { value: 'document', label: 'Documents' },
-  { value: 'cabinet', label: 'Cabinets' },
-  { value: 'folder', label: 'Folders' },
-  { value: 'workflow', label: 'Workflows' },
-  { value: 'audit', label: 'Audit' },
-  { value: 'user', label: 'Users' },
-  { value: 'dashboard', label: 'Dashboard' },
-];
-
-const PERMISSION_ACTIONS: { value: string; label: string }[] = [
-  { value: 'view', label: 'View' },
-  { value: 'create', label: 'Create' },
-  { value: 'edit', label: 'Edit' },
-  { value: 'delete', label: 'Delete' },
-  { value: 'route', label: 'Route' },
-  { value: 'export', label: 'Export' },
-  { value: 'download', label: 'Download' },
-  { value: 'print', label: 'Print' },
-];
-
-export default function UsersRolesPage() {
+export default function UsersPage() {
   const { auditAction } = useStore();
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
-  const [tab, setTab] = useState<'users' | 'roles' | 'groups'>('users');
-  const [permResource, setPermResource] = useState<string>('document');
+  const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
 
   const [page, setPage] = useState(1);
   const [departmentFilter, setDepartmentFilter] = useState('');
@@ -54,14 +36,11 @@ export default function UsersRolesPage() {
   });
   const rawUsers = usersData?.data || [];
 
-  // Only needed for the Roles tab's permission matrix — the invite/edit
-  // modal's own role picker fetches independently (see `RoleSelect` below),
-  // so this doesn't need to switch on for the modal too.
-  const { data: roles, isLoading: isRolesLoading } = useRoles({
-    enabled: tab === 'roles',
-  });
-  const setRolePermissions = useSetRolePermissions();
-  const createRole = useCreateRole();
+  const createUser = useCreateUser();
+  const updateUser = useUpdateUser();
+  const assignUserRoles = useAssignUserRoles();
+  const removeUserRole = useRemoveUserRole();
+  const resendInvitation = useResendInvitation();
 
   const { data: departmentsData } = useDepartments();
   const departmentIndex = useMemo(
@@ -69,14 +48,6 @@ export default function UsersRolesPage() {
     [departmentsData],
   );
   const departmentList = useMemo(() => Array.from(departmentIndex.values()), [departmentIndex]);
-
-  // Segregation-of-duties controls only render on the Groups & SoD tab.
-  // const { data: policiesData } = usePolicies({ enabled: tab === 'groups' });
-  // const policies = policiesData as any;
-  // const updatePolicyControl = useUpdatePolicyControl();
-
-  const createUser = useCreateUser();
-  const updateUser = useUpdateUser();
 
   const roleLabel = (u: any) => {
     const names =
@@ -93,7 +64,7 @@ export default function UsersRolesPage() {
   }));
 
   useEffect(() => {
-    setPageTitle('Users & Roles');
+    setPageTitle('Users');
   }, [setPageTitle]);
 
   const handleUserModal = (user: any | null) => {
@@ -106,11 +77,15 @@ export default function UsersRolesPage() {
       roleId: existingRoleId,
       departmentId: user?.departmentId || departmentList[0]?.id || '',
     };
+    // Modal actions aren't real <form> submits, so `required`/`type="email"`
+    // alone won't pop the browser's native validation UI — this ref lets the
+    // Save/Send invite handler trigger it explicitly via reportValidity().
+    const emailInputRef = { current: null as HTMLInputElement | null };
 
     openModal({
       title: isNew ? 'Invite user' : 'Edit user — ' + u.name,
       body: (
-        <div className="grid cols-2" style={{ gap: '12px' }}>
+        <div className="grid grid-cols-2 gap-3">
           <div className="field">
             <label>
               Name <span className="req">*</span>
@@ -127,7 +102,12 @@ export default function UsersRolesPage() {
               Email <span className="req">*</span>
             </label>
             <input
+              ref={(el) => {
+                emailInputRef.current = el;
+              }}
               className="input"
+              type="email"
+              required
               defaultValue={u.email}
               placeholder="name@firstatlantic.com"
               onChange={(e) => (u.email = e.target.value)}
@@ -159,39 +139,64 @@ export default function UsersRolesPage() {
           label: isNew ? 'Send invite' : 'Save',
           kind: 'btn-primary',
           onClick: () => {
+            if (emailInputRef.current && !emailInputRef.current.checkValidity()) {
+              emailInputRef.current.reportValidity();
+              return false;
+            }
             if (!u.name.trim() || !u.email.trim()) {
               addToast('Name and email are required', 'error');
-              return;
+              return false;
             }
             if (isNew) {
-              createUser.mutate(
-                {
+              // No `password` — the backend now accepts creation without one
+              // and sends a real invite email (`invited: true` in the
+              // response) instead of us setting a caller-chosen default.
+              return createUser
+                .mutateAsync({
                   email: u.email,
                   name: u.name,
-                  password: 'password', // Default
                   departmentId: u.departmentId || undefined,
                   roleIds: u.roleId ? [u.roleId] : undefined,
-                },
-                {
-                  onSuccess: (newUser: any) => {
-                    auditAction('USER_INVITE', newUser.id, 'Invited ' + u.email);
-                  },
-                },
-              );
-            } else {
-              updateUser.mutate(
-                {
+                })
+                .then((newUser: any) => {
+                  auditAction('USER_INVITE', newUser.id, 'Invited ' + u.email);
+                })
+                .catch(() => false);
+            }
+            // Returning the combined promise keeps the modal open (with a
+            // loading state) until the profile update — and, if changed, the
+            // role swap — actually land, instead of closing immediately and
+            // hoping they succeed in the background.
+            const tasks: Promise<any>[] = [
+              updateUser
+                .mutateAsync({
                   id: u.id,
                   updates: { name: u.name, email: u.email, departmentId: u.departmentId } as any,
-                },
-                {
-                  onSuccess: () => {
-                    auditAction('USER_EDIT', u.id, 'Updated profile/role');
-                  },
-                },
+                })
+                .then(() => {
+                  auditAction('USER_EDIT', u.id, 'Updated profile');
+                }),
+            ];
+            // Persist a role change — the modal only tracks a single role.
+            // Assign the new one before removing the old one, sequenced
+            // rather than parallel, so the user is never briefly role-less.
+            if (u.roleId && u.roleId !== existingRoleId) {
+              tasks.push(
+                assignUserRoles
+                  .mutateAsync({ id: u.id, roleIds: [u.roleId] })
+                  .then(() => {
+                    if (existingRoleId) {
+                      return removeUserRole.mutateAsync({ id: u.id, roleId: existingRoleId });
+                    }
+                  })
+                  .then(() => {
+                    auditAction('USER_ROLE_CHANGE', u.id, `Role → ${u.roleId}`);
+                  }),
               );
             }
-            closeModal();
+            return Promise.all(tasks)
+              .then(() => {})
+              .catch(() => false);
           },
         },
       ],
@@ -200,17 +205,30 @@ export default function UsersRolesPage() {
 
   const handleToggleStatus = (u: any) => {
     if (u.status === 'Active') {
-      const confirmed = window.confirm(
-        `Suspend ${u.name}? The user loses access immediately. In-flight tasks remain assigned and should be reassigned by a supervisor.`,
-      );
-      if (confirmed) {
-        updateUser.mutate({ id: u.id, updates: { status: 'suspended' } });
-        auditAction('USER_SUSPEND', u.id, 'Suspended');
-      }
+      openConfirm({
+        title: `Suspend ${u.name}?`,
+        message:
+          'The user loses access immediately. In-flight tasks remain assigned and should be reassigned by a supervisor.',
+        confirmLabel: 'Suspend user',
+        danger: true,
+        onConfirm: () =>
+          updateUser
+            .mutateAsync({ id: u.id, updates: { status: 'suspended' } })
+            .then(() => {
+              auditAction('USER_SUSPEND', u.id, 'Suspended');
+            })
+            .catch(() => false),
+      });
     } else {
       updateUser.mutate({ id: u.id, updates: { status: 'active' } });
       auditAction('USER_ACTIVATE', u.id, 'Re-activated');
     }
+  };
+
+  const handleResendInvitation = (u: any) => {
+    resendInvitation.mutate(u.id, {
+      onSuccess: () => auditAction('USER_INVITE_RESEND', u.id, `Resent invitation to ${u.email}`),
+    });
   };
 
   const userCols: Column<any>[] = [
@@ -219,7 +237,7 @@ export default function UsersRolesPage() {
       label: 'User',
       sortable: true,
       render: (u) => (
-        <span className="flex aic g8">
+        <span className="flex items-center gap-2">
           <div className="avatar">{u.name.charAt(0)}</div>
           <span>
             <div style={{ fontWeight: 700 }}>{u.name}</div>
@@ -243,7 +261,7 @@ export default function UsersRolesPage() {
       key: 'act',
       label: '',
       render: (u) => (
-        <div className="flex g8">
+        <div className="flex gap-2">
           <button
             className="btn btn-secondary btn-sm"
             onClick={(e) => {
@@ -262,325 +280,99 @@ export default function UsersRolesPage() {
           >
             {u.status === 'Active' ? 'Suspend' : 'Activate'}
           </button>
+          {u.status === 'Active' && !u.lastLoginAt && (
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={resendInvitation.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleResendInvitation(u);
+              }}
+            >
+              Resend invite
+            </button>
+          )}
         </div>
       ),
     },
   ];
 
-  const handleNewRole = () => {
-    const form = { name: '', description: '' };
-    openModal({
-      title: 'New role',
-      body: (
-        <div className="grid" style={{ gap: '12px' }}>
-          <div className="field">
-            <label>
-              Role name <span className="req">*</span>
-            </label>
-            <input
-              className="input"
-              placeholder="e.g. finance_reviewer"
-              maxLength={100}
-              onChange={(e) => (form.name = e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label>Description</label>
-            <input
-              className="input"
-              placeholder="Optional — what this role is for"
-              maxLength={500}
-              onChange={(e) => (form.description = e.target.value)}
-            />
-          </div>
-        </div>
-      ),
-      actions: [
-        { label: 'Cancel' },
-        {
-          label: 'Create role',
-          kind: 'btn-primary',
-          onClick: () => {
-            const name = form.name.trim();
-            if (!name) {
-              addToast('Role name is required', 'error');
-              return false;
-            }
-            return createRole
-              .mutateAsync({ name, description: form.description.trim() || undefined })
-              .then((created) => {
-                auditAction('ROLE_CREATE', created.name, `Created role ${name}`);
-                setTab('roles');
-                closeModal();
-              })
-              .catch(() => false);
-          },
-        },
-      ],
-    });
-  };
-
-  const roleHasPermission = (role: Role, resource: string, action: string) =>
-    !!role.permissions?.some((p) => p.resource === resource && p.action === action);
-
-  const toggleRolePermission = (role: Role, resource: string, action: string, checked: boolean) => {
-    const current = role.permissions || [];
-    const next = checked
-      ? [...current, { resource, action } as NonNullable<Role['permissions']>[number]]
-      : current.filter((p) => !(p.resource === resource && p.action === action));
-
-    setRolePermissions.mutate(
-      { id: role.id, permissions: next },
-      {
-        onSuccess: () => {
-          auditAction(
-            'ROLE_EDIT',
-            role.name,
-            `${checked ? 'Granted' : 'Revoked'} ${resource}:${action}`,
-          );
-          addToast(
-            `${role.name}: ${resource}:${action} ${checked ? 'granted' : 'revoked'}`,
-            'info',
-          );
-        },
-      },
-    );
-  };
-
   return (
     <div>
       <div className="page-head">
         <div>
-          <div className="page-title">Users & Roles</div>
-          <div className="page-sub">Manage users, permissions, groups and SoD rules.</div>
+          <div className="page-title">Users</div>
+          <div className="page-sub">
+            Invite people, edit their profile and department, and assign a role.
+          </div>
         </div>
         <div className="actions">
-          {tab === 'roles' ? (
-            <button className="btn btn-primary flex aic" onClick={handleNewRole}>
-              <span style={{ marginRight: '8px' }}>
-                <Icon name="plus" size={15} />
-              </span>{' '}
-              New role
-            </button>
-          ) : (
-            <button className="btn btn-primary flex aic" onClick={() => handleUserModal(null)}>
-              <span style={{ marginRight: '8px' }}>
-                <Icon name="plus" size={15} />
-              </span>{' '}
-              Invite user
-            </button>
-          )}
+          <button className="btn btn-primary flex items-center" onClick={() => handleUserModal(null)}>
+            <span style={{ marginRight: '8px' }}>
+              <Icon name="plus" size={15} />
+            </span>{' '}
+            Invite user
+          </button>
         </div>
       </div>
 
-      <div className="tabs mb16">
-        <button
-          className={`tab ${tab === 'users' ? 'active' : ''}`}
-          onClick={() => setTab('users')}
-        >
-          Users
-        </button>
-        <button
-          className={`tab ${tab === 'roles' ? 'active' : ''}`}
-          onClick={() => setTab('roles')}
-        >
-          Roles & permissions
-        </button>
-        {/* <button
-          className={`tab ${tab === 'groups' ? 'active' : ''}`}
-          onClick={() => setTab('groups')}
-        >
-          Groups & SoD
-        </button> */}
+      <div className="card">
+        <div className="card-head">
+          <span className="h3">{usersData?.pagination?.total ?? 0} users</span>
+          <div className="flex items-center gap-2">
+            <select
+              className="input"
+              style={{ width: 'auto', height: '32px' }}
+              aria-label="Filter by department"
+              value={departmentFilter}
+              onChange={(e) => {
+                setDepartmentFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All departments</option>
+              {departmentList.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="input"
+              style={{ width: 'auto', height: '32px' }}
+              aria-label="Filter by status"
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as typeof statusFilter);
+                setPage(1);
+              }}
+            >
+              <option value="">--Select Status--</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="suspended">Suspended</option>
+            </select>
+          </div>
+        </div>
+        {isLoading ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-soft)' }}>
+            Loading users...
+          </div>
+        ) : (
+          <>
+            <Table cols={userCols} rows={users} />
+            {usersData?.pagination && (
+              <Pagination
+                page={usersData.pagination.page}
+                totalPages={usersData.pagination.totalPages}
+                total={usersData.pagination.total}
+                limit={usersData.pagination.limit}
+                onPageChange={setPage}
+              />
+            )}
+          </>
+        )}
       </div>
-
-      {tab === 'users' && (
-        <div className="card">
-          <div className="card-head">
-            <span className="h3">{usersData?.pagination?.total ?? 0} users</span>
-            <div className="flex aic g8">
-              <select
-                className="input"
-                style={{ width: 'auto', height: '32px' }}
-                aria-label="Filter by department"
-                value={departmentFilter}
-                onChange={(e) => {
-                  setDepartmentFilter(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">All departments</option>
-                {departmentList.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="input"
-                style={{ width: 'auto', height: '32px' }}
-                aria-label="Filter by status"
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value as typeof statusFilter);
-                  setPage(1);
-                }}
-              >
-                <option value="">--Select Status--</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="suspended">Suspended</option>
-              </select>
-            </div>
-          </div>
-          {isLoading ? (
-            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-soft)' }}>
-              Loading users...
-            </div>
-          ) : (
-            <>
-              <Table cols={userCols} rows={users} />
-              {usersData?.pagination && (
-                <Pagination
-                  page={usersData.pagination.page}
-                  totalPages={usersData.pagination.totalPages}
-                  total={usersData.pagination.total}
-                  limit={usersData.pagination.limit}
-                  onPageChange={setPage}
-                />
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {tab === 'roles' && (
-        <div className="card">
-          <div className="card-head">
-            <span className="h3">Permission matrix</span>
-            <span className="flex aic g8">
-              <span className="caption">Resource</span>
-              <select
-                className="input"
-                style={{ width: 'auto', height: '32px' }}
-                value={permResource}
-                onChange={(e) => setPermResource(e.target.value)}
-              >
-                {PERMISSION_RESOURCES.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-            </span>
-          </div>
-          <div className="tbl-wrap">
-            <table className="tbl pm-grid">
-              <thead>
-                <tr>
-                  <th>Role</th>
-                  {PERMISSION_ACTIONS.map((a) => (
-                    <th key={a.value}>{a.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {roles?.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <b>{r.name}</b>
-                    </td>
-                    {PERMISSION_ACTIONS.map((a) => (
-                      <td key={a.value}>
-                        <label className="switch">
-                          <input
-                            type="checkbox"
-                            checked={roleHasPermission(r, permResource, a.value)}
-                            onChange={(e) =>
-                              toggleRolePermission(r, permResource, a.value, e.target.checked)
-                            }
-                          />
-                          <i></i>
-                        </label>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* {tab === 'groups' && (
-        <div className="grid cols-2" style={{ alignItems: 'start' }}>
-          <div className="card">
-            <div className="card-head">
-              <span className="h3">Groups</span>
-            </div>
-            <div className="card-body" style={{ paddingTop: '6px' }}>
-              {[
-                ['Finance Approvers', 4],
-                ['Legal Reviewers', 3],
-                ['Procurement Committee', 5],
-                ['Executive Signatories', 2],
-              ].map(([g, n]) => (
-                <div key={g as string} className="metric-li">
-                  <span>{g as string}</span>
-                  <span className="caption">{n as number} members</span>
-                </div>
-              ))}
-              <button
-                className="btn btn-secondary btn-sm mt16"
-                onClick={() =>
-                  addToast(
-                    'Group editor would open here (add/remove members, map to workflow roles)',
-                    'info',
-                  )
-                }
-              >
-                + New group
-              </button>
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-head">
-              <span className="h3">Segregation-of-duties rules</span>
-            </div>
-            <div className="card-body" style={{ paddingTop: '6px' }}>
-              {policies?.controls?.map((c: any) => (
-                <div key={c.rule} className="metric-li">
-                  <span style={{ lineHeight: 1.5 }}>
-                    {c.rule}
-                    <div className="caption">Scope: {c.scope}</div>
-                  </span>
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      checked={c.enabled}
-                      onChange={(e) => {
-                        updatePolicyControl.mutate(
-                          { ruleName: c.rule, enabled: e.target.checked },
-                          {
-                            onSuccess: () => {
-                              auditAction(
-                                'CONTROL_TOGGLE',
-                                c.rule,
-                                e.target.checked ? 'Enabled' : 'Disabled',
-                              );
-                            },
-                          },
-                        );
-                      }}
-                    />
-                    <i></i>
-                  </label>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )} */}
     </div>
   );
 }
@@ -589,16 +381,12 @@ export default function UsersRolesPage() {
  * The invite/edit modal's role picker. Split out into its own component so it
  * fetches roles itself rather than reading a `roles` value captured by the
  * surrounding `openModal(...)` call — that value is frozen at the moment the
- * modal button is clicked, so if the query hadn't resolved yet (e.g. the very
- * first time the modal is opened on a fresh page load) the `<select>` was
- * permanently stuck without roles until the modal was closed and reopened.
- * A real component re-renders on its own once the query settles, so this
- * can't go stale the same way.
+ * modal button is clicked, so if the query hadn't resolved yet the `<select>`
+ * was stuck without roles until the modal was closed and reopened.
  *
- * `key={isLoading ...}` forces a remount once roles arrive, so an edit
- * modal's `defaultValue` (the user's existing role) gets re-applied against
- * the now-available `<option>` list instead of quietly falling back to
- * "Unassigned" because that option didn't exist yet at mount time.
+ * `key={isLoading ...}` forces a remount once roles arrive, so an edit modal's
+ * `defaultValue` (the user's existing role) gets re-applied against the
+ * now-available `<option>` list instead of falling back to "Unassigned".
  */
 function RoleSelect({
   initialRoleId,

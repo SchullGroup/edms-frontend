@@ -22,13 +22,13 @@ export function Pagination({ page, totalPages, total, limit, onPageChange }: Pag
 
   return (
     <div
-      className="flex jcb aic wrap g12"
+      className="flex justify-between items-center flex-wrap gap-3"
       style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}
     >
-      <span className="caption tnum">
+      <span className="caption tabular-nums">
         {from}–{to} of {total}
       </span>
-      <div className="flex aic g8">
+      <div className="flex items-center gap-2">
         <button
           type="button"
           className="icon-btn"
@@ -41,7 +41,7 @@ export function Pagination({ page, totalPages, total, limit, onPageChange }: Pag
             <Icon name="chevR" size={16} />
           </span>
         </button>
-        <span className="caption tnum" style={{ minWidth: '84px', textAlign: 'center' }}>
+        <span className="caption tabular-nums" style={{ minWidth: '84px', textAlign: 'center' }}>
           Page {page} of {totalPages}
         </span>
         <button

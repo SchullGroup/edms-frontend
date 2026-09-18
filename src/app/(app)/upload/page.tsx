@@ -121,8 +121,7 @@ export default function UploadCapturePage() {
         </div>
         <div style={{ fontWeight: 700, fontSize: '14px' }}>Drag & drop documents here</div>
         <div className="muted" style={{ marginTop: '5px', fontSize: '12.5px' }}>
-          or click to browse · PDF, DOCX, XLSX, TIFF, JPG up to 100 MB · email-in and scanner
-          channels are also connected
+          or click to browse · PDF, DOCX, XLSX, TIFF, JPG up to 100 MB
         </div>
       </div>
       <input
@@ -136,28 +135,7 @@ export default function UploadCapturePage() {
         }}
       />
 
-      <div className="flex g8 mt16">
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => {
-            const f = new File([''], 'Scanned_Agreement_0034.pdf', { type: 'application/pdf' });
-            ingest([f]);
-          }}
-        >
-          Simulate scanner intake
-        </button>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => {
-            const f = new File([''], 'FWD_Invoice_MeridianLtd.pdf', { type: 'application/pdf' });
-            ingest([f]);
-          }}
-        >
-          Simulate email-in
-        </button>
-      </div>
-
-      <div className="mt16">
+      <div className="mt-4">
         {files.map((file) => {
           if (file.status === 'uploading' || file.status === 'processing') {
             return (
@@ -194,7 +172,7 @@ export default function UploadCapturePage() {
           }
           if (file.status === 'filed') {
             return (
-              <div key={file.id} className="banner success mt16">
+              <div key={file.id} className="banner success mt-4">
                 <span>
                   <Icon name="check" size={15} />
                 </span>{' '}
@@ -361,9 +339,9 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
   };
 
   return (
-    <div className="idu-card mt16">
-      <div className="flex jcb aic mb8">
-        <div className="flex aic g8">
+    <div className="idu-card mt-4">
+      <div className="flex justify-between items-center mb-2">
+        <div className="flex items-center gap-2">
           <span style={{ color: 'var(--brand-primary-light)' }}>
             <Icon name="doc" size={18} />
           </span>
@@ -482,11 +460,11 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
       </div>
 
       {Object.keys(guess.fields).length > 0 && (
-        <div className="mb8">
+        <div className="mb-2">
           <div className="caption" style={{ fontWeight: 700, marginBottom: '6px' }}>
             EXTRACTED METADATA (IDU)
           </div>
-          <div className="flex g8 wrap">
+          <div className="flex gap-2 flex-wrap">
             {Object.entries(guess.fields).map(([k, v]) => (
               <span key={k} className="tag">
                 {k}: {String(v)}
@@ -496,7 +474,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         </div>
       )}
 
-      <div className="flex g8" style={{ justifyContent: 'flex-end', marginTop: '10px' }}>
+      <div className="flex gap-2" style={{ justifyContent: 'flex-end', marginTop: '10px' }}>
         <button
           className="btn btn-secondary btn-sm"
           onClick={() => {

@@ -107,35 +107,34 @@ export default function CircularsAdminPage() {
           onClick: () => {
             if (!title.trim() || !bodyText.trim()) {
               addToast('Title and body are required', 'error');
-              return;
+              return false;
             }
             if (existing) {
-              updateCircular.mutate(
-                { id: existing.id, updates: { title, body: bodyText, audience, requiresAck } },
-                {
-                  onSuccess: () => {
-                    auditAction('CIRCULAR_EDIT', existing.id, 'Edited ' + title);
-                    closeModal();
-                  },
-                },
-              );
-            } else {
-              const c = {
-                title: title.trim(),
-                body: bodyText.trim(),
-                published: Date.now(),
-                by: currentUser?.id,
-                requiresAck,
-                ackBy: [],
-                audience,
-              };
-              createCircular.mutate(c, {
-                onSuccess: (newCirc) => {
-                  auditAction('PUBLISH_CIRCULAR', newCirc.id, 'Published ' + newCirc.title);
-                  closeModal();
-                },
-              });
+              return updateCircular
+                .mutateAsync({
+                  id: existing.id,
+                  updates: { title, body: bodyText, audience, requiresAck },
+                })
+                .then(() => {
+                  auditAction('CIRCULAR_EDIT', existing.id, 'Edited ' + title);
+                })
+                .catch(() => false);
             }
+            const c = {
+              title: title.trim(),
+              body: bodyText.trim(),
+              published: Date.now(),
+              by: currentUser?.id,
+              requiresAck,
+              ackBy: [],
+              audience,
+            };
+            return createCircular
+              .mutateAsync(c)
+              .then((newCirc) => {
+                auditAction('PUBLISH_CIRCULAR', newCirc.id, 'Published ' + newCirc.title);
+              })
+              .catch(() => false);
           },
         },
       ],
@@ -148,7 +147,7 @@ export default function CircularsAdminPage() {
       title: 'Acknowledgement tracking — ' + c.title,
       body: (
         <div>
-          <div className="h3 mb8">Outstanding ({pending.length})</div>
+          <div className="h3 mb-2">Outstanding ({pending.length})</div>
           {pending.length ? (
             pending.map((nm: string) => (
               <div key={nm} className="metric-li">
@@ -161,7 +160,7 @@ export default function CircularsAdminPage() {
           )}
           {pending.length > 0 && (
             <button
-              className="btn btn-secondary btn-sm mt16"
+              className="btn btn-secondary btn-sm mt-4"
               onClick={() => addToast(`Reminders sent to ${pending.length} user(s)`, 'success')}
             >
               Send reminders
@@ -198,7 +197,7 @@ export default function CircularsAdminPage() {
       render: (c) =>
         c.requiresAck ? (
           <div style={{ minWidth: '130px' }}>
-            <div className="caption mb8">
+            <div className="caption mb-2">
               {c.ackBy?.length || 0} of {totalUsers} acknowledged
             </div>
             <div className={`pbar ${(c.ackBy?.length || 0) / totalUsers > 0.7 ? 'ok' : 'warn'}`}>
@@ -215,7 +214,7 @@ export default function CircularsAdminPage() {
       key: 'act',
       label: '',
       render: (c) => (
-        <div className="flex g8">
+        <div className="flex gap-2">
           <button
             className="btn btn-secondary btn-sm"
             onClick={(e) => {

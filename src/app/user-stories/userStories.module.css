@@ -510,3 +510,14 @@
     grid-column: 1 / -1;
   }
 }
+
+/* ---------- dark theme ---------- */
+/* Every colour above is a design-system token that already has a dark value in
+   globals.css. The one exception is --brand-primary (a deep navy that is never
+   remapped for dark, because the app shell sets it per-tenant at runtime and
+   this public page doesn't). Point the two labels that use it at the dark
+   accent instead. */
+:global([data-theme='dark']) .handoffId,
+:global([data-theme='dark']) .epicLetter {
+  color: var(--focus);
+}

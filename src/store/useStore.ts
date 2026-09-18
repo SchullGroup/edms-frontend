@@ -13,6 +13,7 @@ export type AppState = typeof SEED & {
 export interface AppStore extends AppState {
   currentUser: AuthUser | null;
   setCurrentUser: (user: AuthUser | null) => void;
+  patchCurrentUser: (partial: Partial<AuthUser>) => void;
   resetData: () => void;
   auditAction: (action: string, target: string, detail: string) => void;
   notifyUser: (
@@ -62,6 +63,19 @@ export const useStore = create<AppStore>()(
       findings: FINDINGS,
       currentUser: null,
       setCurrentUser: (user) => set({ currentUser: user }),
+      patchCurrentUser: (partial) =>
+        set((s) => {
+          if (!s.currentUser) return s;
+          // No-op if every patched key already deep-equals what's stored —
+          // otherwise a new object reference is produced on every call and any
+          // effect that depends on `currentUser` re-runs forever.
+          const cur = s.currentUser as any;
+          const changed = Object.keys(partial).some(
+            (k) => JSON.stringify(cur[k]) !== JSON.stringify((partial as any)[k]),
+          );
+          if (!changed) return s;
+          return { currentUser: { ...s.currentUser, ...partial } };
+        }),
       setPrefs: (prefs) => set({ prefs }),
       resetData: () => set(SEED),
       auditAction: (action, target, detail) => {
@@ -227,7 +241,16 @@ export const useStore = create<AppStore>()(
     }),
     {
       name: 'edms-state-v3',
-      version: 3,
+      version: 4,
+      // v4: drop any stale `currentUser.permissions` persisted by an older build
+      // so it gets re-derived cleanly from `GET /roles` / `GET /auth/me`.
+      migrate: (persisted: any, version) => {
+        if (version < 4 && persisted?.currentUser) {
+          const { permissions, ...rest } = persisted.currentUser;
+          return { ...persisted, currentUser: rest };
+        }
+        return persisted;
+      },
     },
   ),
 );

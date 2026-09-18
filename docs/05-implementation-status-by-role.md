@@ -71,8 +71,20 @@ For each of the six role dashboards this document lists:
 
 ## Portfolio summary
 
-**42 pages across 6 role dashboards.** Every classification below was verified by
-inspecting what each page destructures from `useStore` versus which API hooks it calls.
+**51 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
+2026-09-18 — was 42 at last full classification).
+
+> ⚠️ **Count updated, classification not yet caught up.** Of the +9 pages, this document
+> classifies one (`/admin/access-requests`, below). The other eight —
+> `admin/workflows/instances`, `staff/performance`, `staff/tasks`, `supervisor/instances`,
+> `user-stories`, and others — have **not** been individually classified (data source,
+> API hooks, mock vs. live). That's a full doc 05 re-audit, not yet done. Every count and
+> percentage below this line that's derived from "42 pages" (portfolio ratios, the "20 of
+> 42" mock-page tally, etc.) is a **known undercount** until that re-audit happens —
+> flagged rather than guessed at.
+
+Every classification below was verified by inspecting what each page destructures from
+`useStore` versus which API hooks it calls.
 
 > **Classification rule.** Reading `currentUser` / `prefs` from the store is *legitimate
 > client session state* and does not make a page hybrid. A page is **Hybrid** only when it
@@ -211,7 +223,7 @@ GET  /documents/search                       ⚠️ works but always returns [] 
 |---|---|---|
 | `POST /workflow-instances` + `/:id/start` | Frontend calls the wrong URL (DRIFT-09) | **Cannot route a document for approval** |
 | `GET/PATCH /notifications*` | Backend module is an empty directory | Bell badge and notification panel dead |
-| `POST /documents/:id/comments` | Not built | Cannot add context to a document |
+| ~~`POST /documents/:id/comments`~~ | Not a real endpoint — use the `comment` field on `POST /tasks/:id/action` | — |
 | `GET /documents/:id/download` | Not built | No way to retrieve the file |
 | `GET /circulars`, `POST /circulars/:id/ack` | No model, no endpoint | Circulars page is fixture-only |
 
@@ -247,7 +259,7 @@ GET  /documents/search                       ⚠️ works but always returns [] 
 1. **Fix routing** — two-call `POST /workflow-instances` then `/:id/start`. *~1 hour. Unblocks the entire approval half of the product.*
 2. **Fix the upload→OCR bucket** so search works at all.
 3. **Build notifications** (backend module + wire the bell).
-4. **Add `POST /documents/:id/comments`.**
+4. ~~Add `POST /documents/:id/comments`~~ — **done differently (2026-09-10):** comments are the `comment` field on `POST /tasks/:id/action`; the stage-action modals now send it.
 5. **Add a download endpoint** gated by `requireConfidentiality('download')`.
 6. **Replace `IDU_GUESSES`** with real extraction, or clearly label it as a preview.
 7. **Render cabinet metadata fields** in the upload form.
@@ -287,8 +299,8 @@ GET   /cabinets                 cabinet context
 
 | Needed | Status | Impact |
 |---|---|---|
-| `GET /sla-breaches` or breach data on tasks | `SlaBreach` rows exist; **no endpoint reads them** | Bottlenecks page invents ageing from `SEED` |
-| `GET/POST /delegations`, `POST /delegations/:id/end` | **Backend complete, no UI** | A supervisor on leave cannot hand over |
+| `GET /sla/breaches` | ✅ **Wired** (`sla.service.ts`) — was stale here; not yet consumed by `/supervisor/bottlenecks`, which still recomputes ageing client-side instead of reading it | Bottlenecks page invents ageing from `SEED`-derived math instead of the real breach table |
+| `GET/POST /delegations`, `POST /delegations/:id/end` | ✅ **Wired** — `/delegations` (344 lines, `useDelegations`/`useCreateDelegation`/`useEndDelegation`) exists; was stale here. Not re-verified end-to-end in this pass. | — |
 | Team aggregation endpoint | Not built | Workload counts computed client-side |
 | Notifications | Module missing | No SLA warning ever reaches them |
 
@@ -333,14 +345,21 @@ already holds warning and escalation rows written by the SLA worker.
 | Reassign a task | ✅ | Gated correctly |
 | See team workload | 🟨 | Real, but walks up to 50 pages client-side |
 | See ageing / bottlenecks | 🟨 | Ageing real; **overdue count permanently 0** (DRIFT-13); ignores `SlaBreach` |
-| Get warned before an SLA breach | ⛔ | Worker detects it and tells nobody |
-| Delegate while on leave | ⛔ | **No UI exists** |
+| Get warned before an SLA breach | ⛔ | Worker detects it and tells nobody (notifications gap, DRIFT-10) — `GET /sla/breaches` itself is wired |
+| Delegate while on leave | ✅ | `/delegations` exists and is wired — was stale here; not re-verified end-to-end |
 | Review exceptions | 🟥 | Hardcoded |
 | Export team stats | ✅ | CSV |
 
+> ⚠️ **This whole section (`Supervisor Console`) predates recent wiring work** — the
+> delegation UI and `GET /sla/breaches` corrections above were caught only because they
+> surfaced while investigating the audit module (DRIFT-11) on 2026-09-18. The rest of
+> this section (bottlenecks math, workload paging, exceptions/performance mock status)
+> was **not** re-audited in this pass and may also be stale.
+
 ### What's left, in order
 
-1. **Build the delegation UI** — the backend is finished and unreachable. *Highest value for this role.*
+1. ~~Build the delegation UI~~ — **exists**; verify it end-to-end and demote/remove this
+   item if confirmed working.
 2. **Fix `effStatus()`** — delete one of the two copies, derive overdue from the task's
    `dueAt` or the instance's `stageDueAt` (both of which exist), and normalise status
    casing at the API boundary. *Small fix, 8 call sites, restores every overdue indicator
@@ -367,7 +386,7 @@ already holds warning and escalation rows written by the SLA worker.
 | `/management/departments` | 176 | **none** | 5 hooks ✅ | ✅ Live ⚠️ same |
 | `/management/trends` | 186 | **none** | 4 hooks ✅ | ✅ Live ⚠️ same |
 | `/management/performance` | 43 | **none** | `useAllTasks` + `taskSlaRate` ✅ | ✅ Live ⚠️ same |
-| `/management/compliance` | 169 | **`findings`** | `useUsers` ✅ · `useAuditLogs` 🟥 | 🟨 Hybrid |
+| `/management/compliance` | 169 | **`findings`** | `useUsers` ✅ · `useAuditEntries` ✅ (migrated 2026-09-18) | 🟨 Hybrid — `findings`/hbar chart still `SEED` |
 | `/management/reports` | 161 | — | **inline `DEPTS`** · `useCreateAuditLog` 🟥 | 🟥 Mock |
 | `/management/findings` | 7 | — | ↪️ re-exports `/auditor/findings` | 🟥 Mock |
 
@@ -422,7 +441,7 @@ Invisible at demo scale. A 30-second page load at 10,000 documents.
 
 | Where | Fixture |
 |---|---|
-| `/management/compliance` | `useAuditLogs` → `SEED.audit`, plus `SEED` blends |
+| `/management/compliance` | `findings`/hbar chart still `SEED.findings` — the sensitive-activity panel is real now (migrated 2026-09-18) |
 | `/management/reports` | inline `DEPTS`; the report builder produces nothing real |
 | `/management/findings` | ↪️ auditor's page → `SEED.findings` |
 | SLA compliance figures | derived from documents/tasks, **not** from `SlaBreach` |
@@ -463,13 +482,15 @@ Invisible at demo scale. A 30-second page load at 10,000 documents.
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
 | `/admin` | 114 | `currentUser` | `useUsers`, `useCabinets` ✅ | ✅ Live |
-| `/admin/users` | 423 | **`rolesMatrix`, `policies`** + `updateRoleMatrix` | `useUsers` + mutations ✅ | 🟨 Hybrid — ⚠️ **the role matrix writes to `SEED`, not the API** |
+| `/admin/users` | ~320 | `auditAction` only | `useUsers` + mutations, `useRoles` (picker), `useAssign/RemoveUserRole`, `useResendInvitation` ✅ | ✅ Live — users only since 2026-09-10 (roles split out); "Resend invite" added 2026-09-18 |
+| `/admin/roles` | ~470 | `auditAction` only | `useRoles`, `useCreate/Update/DeleteRole`, `useSetRolePermissions` ✅ | ✅ Live — rail + data-driven permission matrix; catalog derived from the `GET /roles` union (no `GET /permissions` exists); built-in roles read-only |
 | `/admin/cabinets` | 346 | `auditAction` only | `useCabinets`, `useCabinetFolders`, `useDepartments` ✅ | ✅ Live |
 | `/admin/workflows` | 493 | `auditAction` only | `useWorkflows` + mutations ✅ · `@ts-nocheck` | ✅ Live ⚠️ **no authorization on the endpoints** |
 | `/admin/policies` | 244 | `auditAction` | `usePolicies` 🟥 | 🟥 Mock |
 | `/admin/branding` | 397 | `auditAction` | `useBranding` 🟥 | 🟥 Mock |
 | `/admin/circulars` | 263 | `auditAction`, `currentUser` | `useCirculars` 🟥 | 🟥 Mock |
-| `/admin/audit` | 150 | — | `useAuditLogs` 🟥 · `useUsers` ✅ | 🟥 Mock |
+| `/admin/audit` | 150 | — | `useAuditEntries`, `useExportAuditCsv`, `useVerifyAuditChain` ✅ · `useUsers` ✅ | ✅ Live — wired 2026-09-18 (was `SEED.audit`) |
+| `/admin/access-requests` | ~200 | — | `useAccessRequestsInbox`, `useGrantAccessRequest`, `useDenyAccessRequest` ✅ | ✅ Live — **new page, 2026-09-18**. client_admin-only grant/deny inbox for `POST /documents/:id/access-requests` |
 
 ### APIs wired ✅
 
@@ -477,6 +498,7 @@ Invisible at demo scale. A 30-second page load at 10,000 documents.
 GET/POST/PATCH/DELETE  /users              full lifecycle
 POST   /users/:id/roles                    role assignment
 DELETE /users/:id/roles/:roleId            role removal
+POST   /users/:id/invitation               resend invite email (added 2026-09-18)
 GET    /roles                              role list
 GET/POST/PATCH/DELETE  /cabinets
 GET/POST  /cabinets/:cabinetId/folders
@@ -484,21 +506,29 @@ PATCH/DELETE /folders/:id
 GET/POST/PATCH/DELETE  /departments
 GET/POST/PATCH  /workflows
 POST   /workflows/:id/publish  /archive
+GET    /audit                              search/filter (added 2026-09-18)
+GET    /audit/:id
+GET    /audit/export                       CSV — requires `audit:export`, which
+                                            `client_admin` does not hold by default
+GET    /audit/verify                       hash-chain integrity check
+POST   /documents/:id/access-requests/:reqId/grant   client_admin-only (added 2026-09-18)
+POST   /documents/:id/access-requests/:reqId/deny    client_admin-only
+GET    /documents/access-requests                    admin inbox, all documents
 ```
 
 ### APIs missing ⛔
 
 | Needed | Backend status | Impact |
 |---|---|---|
-| `POST/PATCH/DELETE /cabinets/:id/metadata-fields` | **Exists — no UI** | No cabinet has metadata fields |
-| `GET/POST /cabinets/:id/access`, `DELETE .../:grantId` | **Exists — no UI** | **Cannot grant cabinet access to anyone** |
-| `PUT /roles/:id/permissions` | **Exists — UI writes to `SEED` instead** | Permission edits silently don't persist |
-| `POST /users/invite` | Not built | Admin sets and communicates every password |
-| Password reset | Not built | |
+| `POST/PATCH/DELETE /cabinets/:id/metadata-fields` | ✅ **Wired** — `admin/cabinets/page.tsx` has a metadata-field designer (this row was stale, caught 2026-09-18) | — |
+| `GET/POST /cabinets/:id/access`, `DELETE .../:grantId` | ✅ **Wired** — `useCabinetAccessGrants`/`useGrantCabinetAccess` in `admin/cabinets/page.tsx` (stale here; caught 2026-09-18) | — |
+| `PUT /roles/:id/permissions` | ✅ **Wired** via `useSetRolePermissions` — this row contradicted the page's own inventory entry above (`/admin/roles`), which already correctly said so; see the README's 2026-09-10 correction note | — |
+| `POST /users/:id/invitation` | ✅ **Built & wired 2026-09-18** | "Resend invite" button, shown for active users with no `lastLoginAt` |
+| Password reset | ✅ **Built** — `POST /auth/reset-password`; was broken by a field-name bug until fixed 2026-09-18 (DRIFT-15) | New users/resets both land on `/set-password` |
 | Retention policy CRUD + enforcement job | Model only | Nothing ever expires |
 | Branding model + endpoints | Not built | Theming resets on cache clear |
 | Circulars model + endpoints | Not built | |
-| `GET /audit` | Not built | Tenant audit view is fabricated |
+| `GET /audit` | ✅ **Built & wired 2026-09-18** | Tenant audit view is real now |
 
 ### Dummy data 🟥
 
@@ -507,7 +537,6 @@ POST   /workflows/:id/publish  /archive
 | `/admin/policies` | `SEED.policies` | Confidentiality/urgency/control config is decorative |
 | `/admin/branding` | `SEED.branding` | ⚠️ **Theming genuinely applies** via CSS custom properties in `AppShell`, including a dark-mode `lighten()` — so it looks completely real and persists nowhere |
 | `/admin/circulars` | `SEED.circulars` | |
-| `/admin/audit` | `SEED.audit` | |
 | Role matrix editor | `SEED.rolesMatrix` via `updateRoleMatrix` | **Permission changes appear to save and don't** |
 
 ### Flows
@@ -517,31 +546,39 @@ POST   /workflows/:id/publish  /archive
 | Create departments | ✅ | ⚠️ 200 cap, no cycle detection |
 | Create cabinets, assign to departments | ✅ | ⚠️ 100 cap |
 | Build folder trees | ✅ | ⚠️ `folderId` not validated against `cabinetId` |
-| Define cabinet metadata fields | ⛔ | Backend done, no UI |
-| Grant cabinet access | ⛔ | Backend done, no UI |
-| Create users with dept + roles | ✅ | ⛔ no invite flow |
+| Define cabinet metadata fields | ✅ | Wired in `admin/cabinets/page.tsx` — row was stale, caught 2026-09-18 |
+| Grant cabinet access | ✅ | Wired in `admin/cabinets/page.tsx` — row was stale, caught 2026-09-18 |
+| Create users with dept + roles | ✅ | ⚠️ new users get a default password (`password`), not an emailed invite — see backlog |
+| Resend a user's invitation email | ✅ | Added 2026-09-18; shown for active users with no `lastLoginAt` |
 | Assign / remove roles | ✅ | |
 | Deactivate a user | ✅ | Login then 403 |
-| Edit the role permission matrix | ⛔ | Writes to localStorage, not the API |
+| Edit the role permission matrix | ✅ | `PUT /roles/:id/permissions` via `useSetRolePermissions` — row was stale, caught 2026-09-18 |
 | Design and publish a workflow | ✅ | ⛔ **but so can any authenticated user** |
 | Configure retention policy | 🟥 | |
 | Apply branding | 🟥 | Applies visually, persists nowhere |
 | Publish a circular | 🟥 | |
-| Review the tenant audit trail | 🟥 | |
+| Review the tenant audit trail | ✅ | Wired 2026-09-18 — filter by actor/action/date, paginated, "Verify integrity" action; "Export" 403s for `client_admin` (no `audit:export` grant) |
 
 ### What's left, in order
 
-1. **Build the cabinet access-grant UI** — the need-to-know model is currently unreachable.
-   **Ship it together with backend read-path enforcement**, or fixing one without the other
-   locks every non-admin out of everything.
-2. **Point the role matrix editor at `PUT /roles/:id/permissions`.** *Silent data loss today.*
-3. **Build the cabinet metadata-field designer** — backend is complete.
-4. **Add `POST /users/invite`** + mail transport + password reset + login rate limiting.
+1. ~~Build the cabinet access-grant UI~~ — **done**, wired in `admin/cabinets/page.tsx`.
+   These three items (1–3) were all stale, caught 2026-09-18; not otherwise part of that
+   day's work. Whether backend **read-path** enforcement actually uses these grants
+   (not just the write-path CRUD) is unverified — worth a targeted check before
+   trusting the need-to-know model end to end.
+2. ~~Point the role matrix editor at `PUT /roles/:id/permissions`.~~ — **done**, via
+   `useSetRolePermissions` (contradicted this doc's own `/admin/roles` row above).
+3. ~~Build the cabinet metadata-field designer~~ — **done**, wired in
+   `admin/cabinets/page.tsx`.
+4. **Make new-user creation send a real invite email** instead of a hardcoded default
+   password — `POST /users/:id/invitation` (resend) is wired; the *initial* invite on
+   creation still isn't email-driven. Login rate limiting still unaddressed.
 5. **Add authorization to the workflow endpoints** (backend — DRIFT-05).
 6. **Build branding**: model, endpoints, logo upload.
 7. **Build circulars**: model, endpoints, audience targeting, acknowledgement tracking.
 8. **Build retention**: endpoints + an enforcement job.
-9. **Build the audit module** and point `/admin/audit` at it.
+9. ~~Build the audit module and point `/admin/audit` at it.~~ **Done 2026-09-18**
+   (DRIFT-11 revised).
 10. **Remove `@ts-nocheck`** from `/admin/workflows`.
 
 ---
@@ -549,78 +586,101 @@ POST   /workflows/:id/publish  /archive
 ## 5. Audit & Compliance (`internal_auditor`)
 
 **Landing:** `/auditor` · **Sidebar:** Review / Findings / Posture
-**Overall: 🟥 Every page is fixture data. The weakest dashboard in the product.**
+**Overall: 🟨 `/auditor/trail` now reads the real audit backend (migrated 2026-09-18).**
+**`/auditor` (the dashboard) and `/auditor/findings` are still fixture-only — findings**
+**tracking has no `Finding` model in Prisma at all, backend or frontend.**
+
+> ⚠️ **Correction (2026-09-18).** This section previously stated the audit backend was
+> entirely unbuilt (`GET /audit` "no endpoint", `audit.middleware.ts` "0 bytes", table
+> "never written to"). Confirmed live against `edms-backend-zmfm.onrender.com`: `GET
+> /audit`, `GET /audit/:id`, `GET /audit/export` and `GET /audit/verify` all exist and
+> work, entries are written automatically as a side effect of other actions. A larger,
+> later pull (78 entries) confirmed a real action vocabulary — `user.login`,
+> `document.viewed`, `document.edited`, `role.permissions_updated`,
+> `document.access_denied`, and 15 others — and `GET /audit/verify` confirmed the hash
+> chain intact. See `01` → DRIFT-11 (resolved) for the full writeup. `/auditor/trail` was
+> migrated onto it the same day (`useAuditEntries` in `useAudit.ts`), alongside
+> `/admin/audit` and `management/compliance`'s sensitive-activity panel.
 
 ### Page inventory
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
 | `/auditor` | 128 | `findings`, `audit`, `users` | **none** | 🟥 Mock |
-| `/auditor/trail` | 172 | `audit`, `users`, `auditAction` | **none** | 🟥 Mock |
-| `/auditor/findings` | 367 | `findings`, `users`, `addFinding`, `updateFinding` | **none** | 🟥 Mock |
-| `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟥 Mock |
+| `/auditor/trail` | 277 | `auditAction` (finding-raise only) | `useAuditEntries`, `useExportAuditCsv` ✅ | ✅ Live — migrated 2026-09-18 |
+| `/auditor/findings` | 367 | `findings`, `users`, `addFinding`, `updateFinding` | **none** | 🟥 Mock — no backend model regardless |
+| `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟨 Hybrid — inherits the now-real sensitive-activity panel |
 
 *The auditor also uses the shared `/staff/cabinets` (✅ live) and `/search` (⛔ empty).*
 
 ### APIs wired
 
-**None.** Not one page in this dashboard calls the backend. `useAuditLogs` resolves
-`SEED.audit` after a `setTimeout`.
+**`/auditor/trail`**: `GET /audit` (search/filter, `useAuditEntries`) and `GET
+/audit/export` (`useExportAuditCsv`) — the same real integration `admin/audit` (§4) uses.
+Migrating this page wasn't a hook swap: it now filters on the real, confirmed action
+vocabulary (`user.login`, `document.viewed`, `role.permissions_updated`, …) instead of
+the old app-invented codes (`REDACT_RELEASE`, `SIGN`, …), which matched nothing real. The
+"Raise a finding" feature is untouched — it still writes to the local `auditAction`
+pseudo-log, since findings has no real backend to migrate *to* either.
 
 ### APIs missing ⛔
 
 | Needed | Backend status |
 |---|---|
-| `GET /audit` with actor / object / action / date filters | **No endpoint** — yet `internal_auditor` holds `audit:view:global` |
-| `GET /audit/verify` (hash-chain integrity proof) | Not built |
+| `GET /audit` with actor / object / action / date filters | ✅ **Built and wired** — `/auditor/trail`, migrated 2026-09-18 |
+| `GET /audit/verify` (hash-chain integrity proof) | ✅ **Built** — confirmed live, returns `{intact, entriesChecked, rangeStart, rangeEnd}`; not yet surfaced on `/auditor/trail` itself (only `/admin/audit`'s "Verify integrity" button calls it) |
 | `GET/POST/PATCH /findings` | **No `Finding` model in Prisma at all** |
 | `GET /cabinets/:id/access` (who can see this cabinet) | Endpoint exists; **no screen calls it**, though `cabinet_access:view` is granted |
-| Document view/download logging | No download endpoint; views not logged |
+| Document view logging | ✅ confirmed — `document.viewed` is a real, auto-emitted action (seen live 2026-09-18); no download endpoint exists to log downloads |
 | SoD violation detection | No logic anywhere |
 
-### The core problem
+### The core problem (historical — see correction above)
 
 ```
-DESIGNED in audit.prisma                     BUILT
+DESIGNED in audit.prisma                     BUILT (as of 2026-09-18)
 ──────────────────────────────────────────   ─────────────────────────────
-Append-only via an INSERT-only Postgres      ⛔ role never created
+Append-only via an INSERT-only Postgres      unverified — not checked at the DB level
   role — no code, admin, or migration
   can UPDATE/DELETE
-Hash chain: entryHash = SHA-256(id +         ⛔ never computed
-  actor + action + object + time + prevHash)
-Indexes: object history, actor timeline,     ✅ exist — on an empty table
+Hash chain: entryHash = SHA-256(id +         ✅ confirmed live — GET /audit/verify
+  actor + action + object + time + prevHash)    recomputed and reported the chain intact
+Indexes: object history, actor timeline,     ✅ exist — table now has real rows
   action filter, time range
-Monthly range partitioning                   ⛔ not applied
-25 documented action types                   ⛔ none ever emitted
-AuditService.log() on every mutation,        ⛔ no AuditService exists;
-  view and download                             audit.middleware.ts is 0 bytes
+Monthly range partitioning                   unverified — not checked at the DB level
+25 documented action types                   ✅ 20 distinct actions confirmed in a single
+                                                 78-entry sample, including document.viewed,
+                                                 document.edited, role.permissions_updated
+AuditService.log() on every mutation,        ✅ entries write automatically — confirmed for
+  view and download                             auth/user/role/document actions; downloads
+                                                 can't be logged (no download endpoint exists)
 ```
 
-**Zero references to `auditEntry` exist in the backend `src/`. The table has never been
-written to.**
+**This whole section was written against source inspection that's now stale — the
+claims above were re-checked against live API behavior 2026-09-18, not by re-reading
+`edms-backend/src/`.**
 
 ### Flows
 
 | Flow | Status |
 |---|---|
-| View the audit trail | 🟥 `SEED.audit` |
-| Filter by actor / object / action / date | 🟥 filters fixture data |
-| Verify chain integrity | ⛔ |
+| View the audit trail | ✅ migrated 2026-09-18 |
+| Filter by actor / action / date | ✅ against the real trail (`from`, `actorId`, `action`) |
+| Verify chain integrity | ⛔ on this page — `GET /audit/verify` exists and works, but only `/admin/audit`'s "Verify integrity" button calls it |
 | Sample documents | ✅ shared `/staff/cabinets` |
 | Search for evidence | ⛔ index never built |
 | Raise a finding | 🟥 localStorage |
 | Assign an owner and due date | 🟥 localStorage |
 | Track a finding to closure | 🟥 localStorage |
-| Review compliance posture | 🟥 re-export of a partly-mock page |
+| Review compliance posture | 🟨 re-export of `/management/compliance` — its sensitive-activity panel is real now too |
 | See who can access a cabinet | ⛔ |
-| Export evidence for a regulator | ⛔ would export fixtures |
+| Export evidence for a regulator | ✅ confirmed live 2026-09-18 — `internal_auditor` holds `audit:export:global` (unlike `client_admin`, which doesn't) and a real export succeeds |
 
 ### What's left, in order
 
-1. **Build the audit module.** Model exists; needs `AuditService.log()` called from every
-   mutating service, plus view and download logging.
-2. **Implement the hash chain** and an INSERT-only database role.
-3. **Add `GET /audit`** with filters, and a chain-verification endpoint.
+1. ~~Build the audit module~~ and ~~migrate `/auditor/trail`~~ — **both done** (DRIFT-11
+   resolved, 2026-09-18).
+2. ~~Implement the hash chain.~~ **Done** — confirmed live via `GET /audit/verify`.
+3. ~~Add `GET /audit` with filters, and a chain-verification endpoint.~~ **Done.**
 4. **Build `Finding`** — model, endpoints, and wire `/auditor/findings` to it.
 5. **Add a cabinet-access viewer** so `cabinet_access:view` becomes usable.
 6. **Give `/auditor/compliance` its own view** rather than re-exporting management's.
@@ -645,7 +705,7 @@ written to.**
 | `/platform/plans` | 116 | `plans`, `tenants`, `updateTenant` | **none** | 🟥 Mock |
 | `/platform/billing` | 133 | `tenants` | **none** | 🟥 Mock |
 | `/platform/sysconfig` | 203 | `featureFlags`, `updateFeatureFlag` | **none** | 🟥 Mock |
-| `/platform/audit` | 89 | `audit`, `tenants`, `users` | **none** | 🟥 Mock |
+| `/platform/audit` | 89 | `audit`, `tenants`, `users` | **none** | 🟥 Mock — intentional, not a gap: no cross-tenant `GET /audit` exists, nor any platform-level multi-tenant API |
 | `/platform/flags` | 7 | — | ↪️ **re-exports `/platform/sysconfig`** | 🟥 ⚠️ **wrong page** |
 
 > ⚠️ Note the inversion: `updateFeatureFlag` is destructured by **`/platform/sysconfig`**,
@@ -709,7 +769,7 @@ This is a **phase**, not a backlog item:
 | Page | LOC | Roles | Store reads | API | Status |
 |---|---:|---|---|---|---|
 | `/` (login) | 316 | all | `currentUser`, `setCurrentUser` | `authService` ✅ | ✅ Live ⚠️ **all 12 test accounts are wrong** |
-| `/doc/[id]` | 776 | all | `currentUser` | 5 real ✅ · 3 mock 🟥 · `@ts-nocheck` | 🟨 Hybrid |
+| `/doc/[id]` | 956 | all | `currentUser` | mostly real ✅ · `usePolicies` 🟥 mock | 🟨 Hybrid — grew substantially 2026-09-18 (access requests, comments, signatures); `@ts-nocheck` is gone, was stale here |
 | `/search` | 258 | all | `docTypes`, `savedSearches` | `useDocumentSearch`, `useDocuments`, `useCabinets` ✅ · `@ts-nocheck` | 🟨 Hybrid — **and always empty** |
 | `/upload` | 475 | staff, supervisor, management, client_admin | `docTypes`, `session`, `users` | `useCabinets`, `useCabinetFolders`, `documentsService`, `s3` ✅ | ✅ Live |
 | `/notifications` | 106 | all | `notifications`, `session` | **none** | 🟥 Mock |
@@ -721,18 +781,22 @@ This is a **phase**, not a backlog item:
 | Feature | Status |
 |---|---|
 | Load document | ✅ `GET /documents/:id` |
-| Metadata panel | ✅ `GET /documents/:id/metadata` |
-| Version history | ✅ `GET /documents/:id/versions` |
+| Metadata panel | ✅ `GET` + inline editor `PUT /documents/:id/metadata` (when `document:edit`) |
+| Version history | ✅ `GET /documents/:id/versions` · open · `POST /versions/:vid/restore` · upload new version |
+| Archive | ✅ `DELETE /documents/:id` (More menu, when `document:delete`) |
 | Edit document | ✅ `PATCH /documents/:id` |
 | Checkout / check-in | ✅ |
 | Task action from this screen | ✅ `POST /tasks/:id/action` |
 | Cabinet + folder context | ✅ |
-| **Comments** | ⛔ `POST /documents/:id/comments` → 404 |
-| **Signatures** | ⛔ `POST /documents/:id/signatures` → 404 |
-| **Activity timeline** | 🟥 `SEED.audit` |
+| **Comments (task-tied)** | ✅ the `comment` field on `POST /tasks/:id/action`, part of the approval trail |
+| **Comments (general)** | ✅ **added 2026-09-18** — dedicated `GET/POST /documents/:id/comments`, `DocumentCommentsPanel` |
+| **Signatures (task-tied)** | ✅ `signature: {fileUrl,mimeType}` image on the `approve` task action — `SignaturePad` draws/uploads it (`useSignAndApprove`) |
+| **Signatures (general)** | ✅ **added 2026-09-18** — dedicated `GET/POST /documents/:id/signatures` (flat record, no positional data), `DocumentSignaturesPanel`, reuses `SignaturePad` |
+| **Access requests** | ✅ **added 2026-09-18** — "Request access" now really calls `POST /documents/:id/access-requests`; previously recorded an audit action only |
+| **Activity timeline** | ✅ `GET /workflow-instances/:id/history` (`WorkflowHistoryTimeline`) |
 | **Policies (confidentiality options)** | 🟥 `SEED.policies` — offers `Top Secret`, which the upload form correctly omits |
 | **File preview / download** | ⛔ no endpoint exists |
-| Type safety | ⚠️ `@ts-nocheck` |
+| Type safety | ✅ `@ts-nocheck` is gone — was stale here, not dated when actually removed |
 
 ### `/notifications` — note the detail
 
@@ -745,17 +809,13 @@ missing module.**
 
 ## Backend endpoints with no UI
 
-Built, permission-gated, and unreachable from the product.
+> ⚠️ **Correction (2026-09-18).** Every row previously listed here (cabinet
+> metadata-fields, cabinet access, version restore, archive, delegations, workflow
+> history, role matrix persistence) was checked against the actual consuming pages and
+> is wired. Table left empty rather than deleted, so it's visible the category was
+> checked, not skipped.
 
-| Endpoint | Capability | Effort to expose |
-|---|---|---|
-| `POST /cabinets/:id/metadata-fields` (+ PATCH, DELETE) | Custom metadata schema | Medium — designer panel + dynamic form renderer |
-| `GET/POST /cabinets/:id/access`, `DELETE /:id/access/:grantId` | **The entire cabinet permission model** | Medium — **ship with backend read enforcement** |
-| `POST /documents/:id/versions/:versionId/restore` | Version rollback | **Low** — one button in the version panel |
-| `DELETE /documents/:id` | Archive | **Low** |
-| `GET/POST /delegations`, `POST /delegations/:id/end` | Out-of-office delegation | Medium — new page; backend is complete |
-| `GET /workflow-history`, `GET /workflow-history/:id` | Immutable stage-transition timeline | **Low** — a tab on `/doc/[id]` |
-| `PUT /roles/:id/permissions` | Role matrix persistence | **Low** — repoint the existing editor |
+Nothing currently known to be backend-complete with zero UI.
 
 **`GET /workflow-history` is the quiet win.** It is the closest thing the backend has to a
 real audit trail — actor, from-stage, to-stage, note, `elapsedSeconds` — and it would
@@ -768,17 +828,19 @@ module is built.
 
 | Call | Result today | Fix |
 |---|---|---|
-| `POST /api/v1/auth/logout` | HTML 404, swallowed by `try/catch` | Build it with a refresh-token denylist |
+| `POST /api/v1/auth/logout` | Now called with the bearer token (Sidebar sign-out, 2026-09-10); backend route still 404s | Build it with a refresh-token denylist |
 | ~~`POST /workflow-instances/start`~~ | ✅ **resolved** | Frontend now uses the two-call sequence |
-| `POST /documents/:id/comments` | HTML 404 | Build the endpoint |
-| `POST /documents/:id/signatures` | HTML 404 | Build the endpoint |
+| ~~`POST /documents/:id/comments`~~ | ✅ **resolved (frontend)** | Not a real endpoint — comments are the `comment` field on `POST /tasks/:id/action`; box removed |
+| ~~`POST /documents/:id/signatures`~~ | ✅ **resolved (frontend)** | Not a real endpoint — signature is the `signature` image on the `approve` task action |
 | ~~`GET /notifications`~~ | ✅ **resolved** | Backend module built; frontend rewired |
 | ~~`PATCH /notifications/:id/read`~~ | ✅ **resolved** | — |
 | ~~`POST /notifications/mark-all-read`~~ | ✅ **resolved** | Route is `POST /notifications/read-all`; **fixed on the frontend** |
 | ~~`POST /notifications`~~ | 🔒 **withdrawn** | Deliberately removed — see below |
 
-**Revised 2026-09-04.** Five of the original eight are resolved. **Two remain**
-(`comments`, `signatures`), and one was withdrawn rather than fixed.
+**Revised 2026-09-04, again 2026-09-10.** All of the original eight are now resolved or
+withdrawn. `comments` and `signatures` were never real endpoints — they are fields on
+`POST /tasks/:id/action` (`comment` string; `signature` image on `approve`), and the
+frontend was rewired accordingly on 2026-09-10.
 
 > 🔒 **Why `POST /notifications` was withdrawn.** The frontend used it to notify a
 > document's owner when someone requested access, passing an arbitrary `userId` and
@@ -809,7 +871,7 @@ for as long as it did.
 | 3 | ~~Authorization on the workflow routes~~ — ✅ **done 2026-09-04**, enforced in all five workflow services. **New:** split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES` so `staff`/`supervisor` can read definitions (DRIFT-14) | Backend | 1 day | **Routing is blocked for the roles that hold `workflow:route`** |
 | 4 | Fix the 12 login test-account emails to the `tjoel+…` set | Frontend | 10 min | Every autofill button fails today |
 | 5 | JSON 404 handler in `app.ts` | Backend | 5 min | Makes 8 broken calls fail legibly |
-| 6 | Make `usePermissions` parse three-segment strings | Frontend | 30 min | **Must ship before `/auth/me` returns `permissions`**, or every `<Guard>` goes dark at once |
+| 6 | ✅ ~~Make `usePermissions` parse three-segment strings~~ — **done 2026-09-10, backend caught up 2026-09-15.** `src/lib/permissions.ts` normalises/matches on `resource:action`, parses scope separately; role-name heuristics removed; gating now permission-key based (`routes.config` `anyPermissions`). Login + `GET /auth/me` now return a live, scoped `permissions` array — that's the source of truth; `useHydratePermissions` (from `GET /roles`) only tops up keys it's missing | Frontend + Backend | — | Was: every `<Guard>` would go dark the moment `/auth/me` returned `permissions`; that day has arrived and it didn't |
 | 7 | Fix `effStatus()` — one copy, derive overdue from `dueAt`/`stageDueAt`, normalise status casing | Frontend | 2 hr | Every overdue badge, count and ageing bucket in the product currently reads zero (DRIFT-13) |
 
 *Items 1, 2, 4, 5 and 6 total under two hours and move the product from "demo with a broken
@@ -822,12 +884,12 @@ ageing indicator.*
 |---|---|---|---|
 | 8 | Presigned upload endpoint + async Textract + **unconditional** search indexing | Both | OCR **and** search together |
 | 9 | Notifications module + wire the SLA worker to it | Backend | Task assignment, SLA warnings, circular acks |
-| 10 | Audit module: `AuditService.log()` everywhere + hash chain + `GET /audit` | Backend | **The entire auditor dashboard and the compliance claim** |
+| 10 | ✅ ~~Audit module: `AuditService.log()` everywhere + hash chain + `GET /audit`~~ — **done, both halves** (DRIFT-11 resolved, 2026-09-18). `admin/audit`, `auditor/trail` and `management/compliance` all read the real trail; `platform/audit` stays mocked by design (no cross-tenant backend exists) | — | **The auditor dashboard and the compliance claim are both real now** for every tenant-scoped role |
 | 11 | Next.js `middleware.ts` for server-side route protection | Frontend | Closes the forgeable-role hole |
 | 12 | Cabinet access-grant UI **+ backend read-path enforcement, shipped together** | Both | Need-to-know actually works |
-| 13 | Delegation UI | Frontend | Supervisors can take leave |
-| 14 | Repoint the role matrix editor at `PUT /roles/:id/permissions` | Frontend | Stops silent data loss |
-| 15 | `POST /users/invite` + mail transport + password reset + login rate limiting | Backend | Removes admin password handling |
+| 13 | ✅ ~~Delegation UI~~ — `/delegations` exists, wired to `useDelegations`/`useCreateDelegation`/`useEndDelegation`. Was stale here; caught 2026-09-18. Not re-verified end-to-end. | Frontend | Supervisors can take leave |
+| 14 | ✅ ~~Repoint the role matrix editor~~ — already on `PUT /roles/:id/permissions` via `useSetRolePermissions`. **2026-09-10** also added role **rename**/**delete** (`useUpdateRole`/`useDeleteRole`), user **role assign/remove** on save (`POST`/`DELETE /users/:id/roles`), and moved the resource/action vocabulary into `src/lib/permissions.ts` | Frontend | Was: silent data loss |
+| 15 | ✅ ~~`POST /users/invite`~~ + mail transport + password reset — **`POST /users/:id/invitation`** (resend, not initial-creation invite) **and `POST /auth/reset-password` both wired 2026-09-18**; remaining: make *initial* user creation send a real invite instead of a hardcoded default password, and login rate limiting | Backend/Frontend | Removes most of the admin password handling |
 
 ### 🟡 P2 — the following month
 
@@ -836,15 +898,15 @@ ageing indicator.*
 | 16 | Aggregation/reporting endpoints; then delete `fetchAllPages.ts` | Backend |
 | 17 | `Finding` model + endpoints + a management-oriented view | Both |
 | 18 | Cabinet metadata-field designer + dynamic upload form | Frontend |
-| 19 | Comments and signatures endpoints | Backend |
+| 19 | ✅ ~~Comments and signatures endpoints~~ — task-action fields sufficed as of 2026-09-10 (`comment` string, `approve`'s required `signature` image). **Update 2026-09-18:** dedicated `GET/POST /documents/:id/comments` and `/signatures` exist now too — separate, general-purpose records, wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel`. | — |
 | 20 | Document download/export/print, gated by the existing tier allowlists | Backend |
 | 21 | Circulars: model, endpoints, audience targeting, ack tracking | Both |
 | 22 | Retention policy endpoints + enforcement job | Backend |
 | 23 | Branding model + endpoints + logo upload | Both |
-| 24 | Version-restore and archive buttons (backend already done) | Frontend |
-| 25 | `GET /workflow-history` tab on `/doc/[id]` — replaces the fake timeline | Frontend |
+| 24 | ✅ ~~Version-restore and archive buttons~~ — **done 2026-09-10.** `/doc/[id]` right column has a `DocumentVersionsPanel` (list · open · restore · upload new version) and an "Archive document" item in the More menu; `DocumentDetailsPanel` gains an inline metadata editor when the user holds `document:edit` | Frontend |
+| 25 | ✅ ~~`GET /workflow-history` tab on `/doc/[id]`~~ — **already done**, this row was inconsistent with the page's own feature table above (which correctly marked it ✅) | — |
 | 26 | Paginate cabinets, folders, roles, departments | Backend |
-| 27 | Remove `@ts-nocheck` from the three files that carry it | Frontend |
+| 27 | Remove `@ts-nocheck` from the two files that still carry it (`admin/workflows`, `search`) — `doc/[id]` lost it already, count corrected 2026-09-18 | Frontend |
 | 28 | Fix `/platform/flags` re-exporting the wrong page | Frontend |
 | 29 | Role switcher in the Topbar for multi-role users | Frontend |
 | 30 | **Tests.** There are currently zero in either codebase. | Both |
@@ -871,9 +933,12 @@ classification, task queues and approval decisions all work end to end, and the 
 layer discipline is genuinely good — `db` passed as a parameter everywhere, RBAC scope
 resolved in SQL, confidentiality filtered in the query rather than after it.
 
-**The governance half is a convincing UI over fixture data.** Audit, notifications,
-circulars, policies, findings and platform operations account for 20 of 42 pages rendering
-`initialData.ts` — and they cluster: the Auditor dashboard is 4/4 mock, Platform is 6/6.
+**The governance half is a convincing UI over fixture data.** Notifications, circulars,
+policies, findings and platform operations account for at least 19 of the 51 pages
+rendering `initialData.ts` (was 20 of 42 — `/admin/audit` moved off `SEED.audit`
+2026-09-18; the other eight newly-counted pages aren't classified yet, so this is a
+floor, not a final count) — and they cluster: the Auditor dashboard is still 4/4 mock,
+Platform is still 6/6.
 
 **Four defects sit on the seam and matter more than any individual gap:** workflow routes
 have **no authorization at all**; the audit trail the product's compliance positioning

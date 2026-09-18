@@ -19,7 +19,7 @@ estimated.
 | [`docs/02-user-stories.md`](docs/02-user-stories.md) | 6 personas, 11 epics, 41 stories with per-story build status |
 | [`docs/03-onboarding-flow-end-to-end.md`](docs/03-onboarding-flow-end-to-end.md) | Tenant setup as one dependency chain (Phases 0–10), day-one runbook |
 | [`docs/04-role-onboarding-and-connections.md`](docs/04-role-onboarding-and-connections.md) | Per-role journeys and the 7 role-to-role handoffs |
-| [`docs/05-implementation-status-by-role.md`](docs/05-implementation-status-by-role.md) | All 42 pages: data source, APIs wired/missing, dummy data, 38-item prioritised backlog |
+| [`docs/05-implementation-status-by-role.md`](docs/05-implementation-status-by-role.md) | 51 pages exist; 43 individually classified so far: data source, APIs wired/missing, dummy data, 38-item prioritised backlog |
 
 `docs/README.md` is the index. Start there.
 
@@ -70,7 +70,7 @@ specific claim your change depends on.
 
 ```bash
 # page count (doc 05 portfolio table)
-find src/app -name 'page.tsx' | wc -l                       # -> 42
+find src/app -name 'page.tsx' | wc -l                       # -> 51
 
 # per-page data source: what each page reads from the store (doc 05 classification)
 find src/app -name 'page.tsx' -exec sh -c \

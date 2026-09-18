@@ -6,11 +6,13 @@ import { useStore, cabById, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import {
   useDocument,
-  useAddDocumentComment,
-  useAddDocumentSignature,
   useCheckoutDocument,
   useCheckinDocument,
+  useArchiveDocument,
+  useRequestDocumentAccess,
 } from '@/apis/hooks/useDocuments';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useSignAndApprove } from '@/hooks/useSignAndApprove';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { useUsers } from '@/apis/hooks/useUsers';
@@ -24,6 +26,9 @@ import { StatusBadge, UrgBadge, ConfBadge } from '@/components/ui/Badges';
 import { fmtDateTime, fmtDate } from '@/utils/helpers';
 import { DocumentViewerPanel } from '@/components/documents/DocumentViewerPanel';
 import { DocumentDetailsPanel } from '@/components/documents/DocumentDetailsPanel';
+import { DocumentVersionsPanel } from '@/components/documents/DocumentVersionsPanel';
+import { DocumentCommentsPanel } from '@/components/documents/DocumentCommentsPanel';
+import { DocumentSignaturesPanel } from '@/components/documents/DocumentSignaturesPanel';
 import { WorkflowActivityPanel } from '@/components/workflowInstances/WorkflowActivityPanel';
 import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/components/documents/types';
 import type { WorkflowStageAction } from '@/types/models';
@@ -43,26 +48,73 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const cabinets = cabinetsData?.data || [];
   const users = usersData?.data || [];
 
-  const addDocumentComment = useAddDocumentComment();
-  const addDocumentSignature = useAddDocumentSignature();
+  const { can } = usePermissions();
+  const archiveDocument = useArchiveDocument();
+  const { promptSignAndApprove } = useSignAndApprove();
   const createAuditLog = useCreateAuditLog();
+  const requestAccess = useRequestDocumentAccess();
   const taskAction = useTaskAction();
   const checkoutDocument = useCheckoutDocument();
   const checkinDocument = useCheckinDocument();
   const { routeDocuments } = useRouteToWorkflow();
 
-  const [mode, setMode] = useState<'view' | 'redact'>('view');
-  const [previewRelease, setPreviewRelease] = useState(false);
+  // Shared by the two "you can't see this" states below (confidentiality
+  // 403, and the currentUser-not-yet-hydrated race) — same request flow
+  // either way, just triggered by different conditions.
+  const openRequestAccessModal = (targetId: string) => {
+    let reason = '';
+    openModal({
+      title: 'Request access',
+      body: (
+        <div className="field">
+          <label>Reason (optional)</label>
+          <textarea
+            className="input"
+            placeholder="Why do you need access to this document?"
+            onChange={(e) => (reason = e.target.value)}
+          />
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Send request',
+          kind: 'btn-primary',
+          onClick: () =>
+            requestAccess
+              .mutateAsync({ id: targetId, reason: reason.trim() || undefined })
+              .then(() => {
+                createAuditLog.mutate({
+                  action: 'ACCESS_REQUEST',
+                  target: targetId,
+                  detail: 'Requested access',
+                });
+              })
+              .catch(() => false),
+        },
+      ],
+    });
+  };
+
   const [zoom, setZoom] = useState(1);
   const [showMenu, setShowMenu] = useState(false);
 
-  const { data: rawDoc, isLoading } = useDocument(docId);
+  const { data: rawDoc, isLoading, error: docError } = useDocument(docId);
+  // Confirmed live 2026-09-18: a document outside the caller's confidentiality
+  // clearance 403s (code `FORBIDDEN`) rather than 404ing — distinct from "the
+  // document doesn't exist". Render that as its own state below instead of
+  // collapsing it into the generic "not found" branch.
+  const accessDenied = (docError as any)?.response?.status === 403;
   const me = currentUser;
 
-  // `comments`/`signatures`/`sealed`/`legalHold` have no backing endpoint at
-  // all (confirmed live: POST /documents/{id}/comments and /signatures both
-  // 404) — always empty/false in practice. See types.ts for why these stay
-  // explicitly typed instead of just disappearing behind @ts-nocheck.
+  // `comments`/`signatures`/`sealed`/`legalHold` are not `Document` fields on
+  // the real API, and stay empty/false shims here. `comments`/`signatures`
+  // specifically are the viewer's *positional* overlay shape (`x`/`y`/`w`/`h`
+  // placement) — there's no backend field for that. Dedicated, non-positional
+  // `GET/POST /documents/:id/comments` and `/signatures` endpoints do exist now
+  // (see `DocumentCommentsPanel`/`DocumentSignaturesPanel` below), and a
+  // workflow-task signature still lives on `POST /tasks/{taskId}/action`'s
+  // `approve` action. Three separate things; see types.ts for the shim's shape.
   const doc: DocumentWithUiExtras | null = rawDoc
     ? {
         ...rawDoc,
@@ -112,13 +164,35 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     return <DocumentDetailSkeleton />;
   }
 
+  if (accessDenied) {
+    return (
+      <div className="card" style={{ marginTop: '30px' }}>
+        <div className="empty">
+          <Icon name="lock" size={32} />
+          <div className="h3 mt-4 mb-2">You don't have clearance to view this document</div>
+          <p className="caption mb-4" style={{ maxWidth: '400px', margin: '0 auto 16px' }}>
+            Its confidentiality level is above what your role is cleared for. Request access
+            below, or ask the document owner directly.
+          </p>
+          <button
+            className="btn btn-primary"
+            disabled={requestAccess.isPending}
+            onClick={() => openRequestAccessModal(docId)}
+          >
+            Request access
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!doc) {
     return (
       <div className="card">
         <div className="empty">
           <Icon name="doc" size={32} />
-          <div className="h3 mt16 mb8">Document not found</div>
-          <p className="caption mb16">It may have been moved or deleted.</p>
+          <div className="h3 mt-4 mb-2">Document not found</div>
+          <p className="caption mb-4">It may have been moved or deleted.</p>
           <button className="btn btn-primary btn-sm" onClick={() => router.push('/staff/cabinets')}>
             Browse cabinets
           </button>
@@ -132,26 +206,16 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       <div className="card" style={{ marginTop: '30px' }}>
         <div className="empty">
           <Icon name="lock" size={32} />
-          <div className="h3 mt16 mb8">Restricted document</div>
-          <p className="caption mb16" style={{ maxWidth: '400px', margin: '0 auto 16px' }}>
+          <div className="h3 mt-4 mb-2">Restricted document</div>
+          <p className="caption mb-4" style={{ maxWidth: '400px', margin: '0 auto 16px' }}>
             “{doc.title}” is classified {doc.confidentiality} and access is limited to named
             individuals. You can request access — the request is written to the audit log for the
             owner to action.
           </p>
           <button
             className="btn btn-primary"
-            onClick={() => {
-              createAuditLog.mutate({
-                action: 'ACCESS_REQUEST',
-                target: doc.id,
-                detail: 'Requested access',
-              });
-              // The document owner is notified server-side once the
-              // access-request endpoint exists. The client deliberately does
-              // not mint a notification for another user — see
-              // docs/BACKEND_REQUESTS.md (BE-1).
-              addToast('Access request recorded', 'info');
-            }}
+            disabled={requestAccess.isPending}
+            onClick={() => openRequestAccessModal(doc.id)}
           >
             Request access
           </button>
@@ -215,37 +279,47 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         : !isMine
           ? `Assigned to ${currentStageActorName}`
           : null;
-  const canAct = !closed && !lockedByOther && !!currentTask && isMine && mode === 'view';
+  const canAct = !closed && !lockedByOther && !!currentTask && isMine;
 
   // What the assignee may do here is whatever the stage definition allows. The
   // approve/return pair is only a fallback for when the definition didn't come
   // back with the instance, so the strip is never empty for a live task.
-  const allowedActions: WorkflowStageAction[] = stageDef?.actions?.length
+  //
+  // `review` requires no signature at all (only `approve` does — the backend
+  // has no `signature` field on the `review` action variant), so if a stage was
+  // configured with both, `review` would be a way to advance it without ever
+  // signing. Drop it whenever `approve` is also on offer; a stage with only
+  // `review` (no `approve`) — genuine review-only stages — is unaffected.
+  const allowedActionsRaw: WorkflowStageAction[] = stageDef?.actions?.length
     ? stageDef.actions
     : ['approve', 'request_changes'];
+  const allowedActions: WorkflowStageAction[] = allowedActionsRaw.filter(
+    (a, _i, arr) => a !== 'review' || !arr.includes('approve'),
+  );
 
   // Every stage action the API accepts is emitted from here, gated by what the
   // stage's `actions` list actually allows — `request_changes` (send the file
   // back a stage) and `reject` (terminate the workflow) are deliberately
   // separate, where they used to be conflated behind one "Reject" button.
+  // Returns the mutation's promise so every caller's confirm/modal stays
+  // open (with a loading state) until the action actually lands, instead of
+  // closing the moment the button is clicked.
   const runAction = (
     actionReq: Parameters<typeof taskAction.mutate>[0]['actionReq'],
     audit: { action: string; detail: string },
     toast: { message: string; kind: 'success' | 'warning' | 'error' },
   ) => {
     if (!currentTask) return;
-    taskAction.mutate(
-      { id: currentTask.id, actionReq },
-      {
-        onSuccess: () => {
-          createAuditLog.mutate({ action: audit.action, target: doc.id, detail: audit.detail });
-          addToast(toast.message, toast.kind);
-        },
-        onError: (err: any) => {
-          addToast(err?.response?.data?.message || 'Action failed', 'error');
-        },
-      },
-    );
+    return taskAction
+      .mutateAsync({ id: currentTask.id, actionReq })
+      .then(() => {
+        createAuditLog.mutate({ action: audit.action, target: doc.id, detail: audit.detail });
+        addToast(toast.message, toast.kind);
+      })
+      .catch((err: any) => {
+        addToast(err?.response?.data?.message || 'Action failed', 'error');
+        return false;
+      });
   };
 
   const stageLabel = stage ? stage.name : 'Current stage';
@@ -258,25 +332,27 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       message: `“${stageLabel}” will be marked reviewed and the file advances to the next stage. This is recorded in the audit trail.`,
       onConfirm: () =>
         runAction(
-          { action: 'review', note: 'Reviewed by ' + me.name },
+          { action: 'review', comment: 'Reviewed by ' + me.name },
           { action: 'REVIEW', detail: `Reviewed stage “${stageLabel}”` },
           { message: 'Reviewed — advanced to next stage', kind: 'success' },
         ),
     });
   };
 
+  // Approving an approval stage requires a signature image (backend 422s without
+  // one). `useSignAndApprove` opens the signature pad, uploads the image and
+  // calls the `approve` task action.
   const actApprove = () => {
     if (!currentTask) return;
-    openConfirm({
-      title: 'Approve this stage?',
-      confirmLabel: 'Approve',
-      message: `“${stageLabel}” will be marked complete and the file will advance to the next stage. This action is recorded in the audit trail.`,
-      onConfirm: () =>
-        runAction(
-          { action: 'approve', note: 'Approved by ' + me.name },
-          { action: 'APPROVE', detail: `Approved stage “${stageLabel}”` },
-          { message: 'Approved — advanced to next stage', kind: 'success' },
-        ),
+    promptSignAndApprove({
+      taskId: currentTask.id,
+      title: stageLabel,
+      onSuccess: () =>
+        createAuditLog.mutate({
+          action: 'APPROVE',
+          target: doc.id,
+          detail: `Signed & approved stage “${stageLabel}”`,
+        }),
     });
   };
 
@@ -314,8 +390,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               addToast('A reason is required', 'error');
               return false;
             }
-            runAction(
-              { action: 'request_changes', note: reasonText.trim() },
+            return runAction(
+              { action: 'request_changes', comment: reasonText.trim() },
               { action: 'REQUEST_CHANGES', detail: 'Changes requested: ' + reasonText.trim() },
               { message: 'Returned to previous stage with reason', kind: 'warning' },
             );
@@ -359,8 +435,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               addToast('A reason is required', 'error');
               return false;
             }
-            runAction(
-              { action: 'reject', note: reasonText.trim() },
+            return runAction(
+              { action: 'reject', comment: reasonText.trim() },
               { action: 'REJECT', detail: 'Rejected: ' + reasonText.trim() },
               { message: 'Rejected — workflow ended', kind: 'warning' },
             );
@@ -418,8 +494,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               return false;
             }
             const name = users.find((u) => u.id === delegateId)?.name || 'another user';
-            runAction(
-              { action: 'delegate', delegateId, ...(note.trim() ? { note: note.trim() } : {}) },
+            return runAction(
+              { action: 'delegate', delegateId, ...(note.trim() ? { comment: note.trim() } : {}) },
               { action: 'DELEGATE', detail: `Delegated “${stageLabel}” to ${name}` },
               { message: `Delegated to ${name}`, kind: 'success' },
             );
@@ -438,7 +514,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       message: `The workflow ends at “${stageLabel}” — any remaining stages are skipped and the document is finalised. This cannot be undone.`,
       onConfirm: () =>
         runAction(
-          { action: 'close', note: 'Closed by ' + me.name },
+          { action: 'close', comment: 'Closed by ' + me.name },
           { action: 'CLOSE', detail: `Closed workflow at stage “${stageLabel}”` },
           { message: 'Workflow closed', kind: 'success' },
         ),
@@ -555,113 +631,22 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     createAuditLog.mutate({ action: 'SHARE', target: doc.id, detail: 'Generated share link' });
   };
 
-  const handleSign = (fieldIdx: number) => {
-    const sigField = doc.signatures[fieldIdx] || { field: 'Signature Field' };
-
-    let signMode: 'typed' | 'drawn' | 'stamp' = 'typed';
-    let typedText = me.name;
-    let passwordVal = '';
-    const fieldLabel = sigField.field || sigField.fieldName || 'Signature Field';
-
-    openModal({
-      title: `Sign Document — ${fieldLabel}`,
-      size: 'lg',
-      body: (
-        <div>
-          <div className="banner info mb16">
-            <span>
-              <Icon name="shield" size={15} />
-            </span>{' '}
-            <b>Cryptographic & Tamper-Evident Signatures</b> — Your signature will be timestamped,
-            linked to user ID <b>{me.id}</b> ({me.roles?.[0] || 'User'}), and recorded in the audit
-            trail.
-          </div>
-
-          <div className="field mb16">
-            <label>Signer Name / Title</label>
-            <input
-              className="input"
-              defaultValue={typedText}
-              onChange={(e) => (typedText = e.target.value)}
-            />
-          </div>
-
-          <div className="field mb16">
-            <label>
-              Re-enter Password to Confirm Signature <span className="req">*</span>
-            </label>
-            <input
-              type="password"
-              className="input"
-              placeholder="Enter your account password…"
-              onChange={(e) => (passwordVal = e.target.value)}
-            />
-          </div>
-
-          <div
-            className="card card-pad mb16"
-            style={{
-              background: '#f8fafe',
-              border: '1px dashed var(--brand-primary-light)',
-              textAlign: 'center',
-            }}
-          >
-            <div className="caption mb8">Signature Preview</div>
-            <div
-              style={{
-                fontFamily: 'Georgia, cursive, serif',
-                fontSize: '28px',
-                fontStyle: 'italic',
-                color: '#1F3864',
-                padding: '12px 0',
-              }}
-            >
-              {typedText || me.name}
-            </div>
-            <div className="caption" style={{ fontSize: '11px', opacity: 0.7 }}>
-              Digitally signed by {me.name} on {new Date().toLocaleDateString('en-GB')} at{' '}
-              {new Date().toLocaleTimeString()}
-            </div>
-          </div>
-
-          <div className="caption" style={{ fontSize: '11px', lineHeight: 1.5, color: '#666' }}>
-            By clicking "Apply Signature", you agree that this electronic signature is the legally
-            binding equivalent of your handwritten signature on this document.
-          </div>
-        </div>
-      ),
-      actions: [
-        { label: 'Cancel' },
-        {
-          label: 'Apply Signature',
-          kind: 'btn-success',
-          onClick: () => {
-            if (!passwordVal.trim()) {
-              addToast('Password re-entry is required to apply signature', 'error');
-              return false;
-            }
-            addDocumentSignature.mutate(
-              {
-                id: doc.id,
-                fieldName: fieldLabel,
-                method: signMode,
-                password: passwordVal,
-              },
-              {
-                onSuccess: () => {
-                  createAuditLog.mutate({
-                    action: 'SIGN',
-                    target: doc.id,
-                    detail: `Signed field "${fieldLabel}" via ${signMode} signature`,
-                  });
-                  closeModal();
-                },
-              },
-            );
-          },
-        },
-      ],
-    });
+  // Signing is not a document-level operation on the real API — it is the
+  // `approve` task action carrying a signature image. `actApprove` above owns
+  // that flow; this alias keeps the viewer's signature-field click working.
+  //
+  // Deliberately not gated behind a `disabled` attribute on its trigger: a
+  // disabled button's onClick never fires at all, which turned "why can't I
+  // sign?" into total silence. This always runs and explains the specific
+  // reason instead.
+  const handleSign = () => {
+    if (closed) return addToast('This document is closed — there is nothing left to sign', 'info');
+    if (!currentTask) return addToast('No task is currently pending on this document', 'info');
+    if (!isMine)
+      return addToast(`This task is assigned to ${currentStageActorName}, not you`, 'info');
+    if (!allowedActions.includes('approve'))
+      return addToast(`"${stageLabel}" doesn't require a signature — it's review-only`, 'info');
+    actApprove();
   };
 
   // Rendered in this order so the destructive/secondary choices sit left of the
@@ -725,7 +710,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <div className="page-title" style={{ fontSize: '19px' }}>
             {doc.title}
           </div>
-          <div className="flex g8 mt8 wrap">
+          <div className="flex gap-2 mt-2 flex-wrap">
             <StatusBadge status={eff} />
             <ConfBadge
               level={doc.confidentiality.charAt(0).toUpperCase() + doc.confidentiality.slice(1)}
@@ -737,8 +722,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           </div>
         </div>
 
-        {mode === 'view' && (
-          <div className="actions">
+        <div className="actions">
             <button className="btn btn-secondary" onClick={actShare}>
               <Icon name="share" size={14} /> Share
             </button>
@@ -786,44 +770,52 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                 >
                   <button
                     className="menu-item"
-                    disabled={closed}
                     onClick={() => {
                       setShowMenu(false);
-                      setMode('redact');
-                    }}
-                  >
-                    <span>
-                      <Icon name="redact" size={15} />
-                    </span>{' '}
-                    Redact & release
-                  </button>
-                  <button
-                    className="menu-item"
-                    disabled={closed || doc.sealed}
-                    onClick={() => {
-                      setShowMenu(false);
-                      if (doc.signatures.length) handleSign(0);
-                      else addToast('No signature fields on this document', 'info');
+                      handleSign();
                     }}
                   >
                     <span>
                       <Icon name="sign" size={15} />
                     </span>{' '}
-                    Sign document
+                    Sign &amp; approve
                   </button>
-                  <div className="menu-sep"></div>
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      setShowMenu(false);
-                      addToast('Printed', 'success');
-                    }}
-                  >
-                    <span>
-                      <Icon name="print" size={15} />
-                    </span>{' '}
-                    Print (watermarked)
-                  </button>
+                  {can('document', 'delete') && (
+                    <>
+                      <div className="menu-sep"></div>
+                      <button
+                        className="menu-item danger"
+                        disabled={doc.legalHold || archiveDocument.isPending}
+                        onClick={() => {
+                          setShowMenu(false);
+                          openConfirm({
+                            title: `Archive "${doc.title}"?`,
+                            message:
+                              'The document is hidden from normal listings and search. It can be restored by an administrator.',
+                            confirmLabel: 'Archive',
+                            danger: true,
+                            onConfirm: () =>
+                              archiveDocument
+                                .mutateAsync(doc.id)
+                                .then(() => {
+                                  createAuditLog.mutate({
+                                    action: 'ARCHIVE',
+                                    target: doc.id,
+                                    detail: doc.title,
+                                  });
+                                  router.push('/staff/cabinets');
+                                })
+                                .catch(() => false),
+                          });
+                        }}
+                      >
+                        <span>
+                          <Icon name="redact" size={15} />
+                        </span>{' '}
+                        Archive document
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -839,8 +831,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                   {actionBtn(b.label, b.kind, b.run, b.icon ? { icon: b.icon } : {})}
                 </React.Fragment>
               ))}
-          </div>
-        )}
+        </div>
       </div>
 
       {doc.legalHold && (
@@ -880,45 +871,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           Sealed & closed — tamper-evident seal applied.{' '}
         </div>
       )}
-      {mode === 'redact' && (
-        <div className="banner error">
-          <span>
-            <Icon name="redact" size={15} />
-          </span>{' '}
-          <b>Redaction mode</b> — drag on the page to mark a region; click a region to remove it.
-          Nothing is permanent until you release.
-        </div>
-      )}
 
-      {mode === 'redact' && (
-        <div className="card card-pad mb16">
-          <div className="flex jcb aic wrap g12">
-            <div>
-              <div className="h3">Marked regions: 0</div>
-              <div className="caption">AI suggestions and manual regions, each with a reason.</div>
-            </div>
-            <div className="flex g8 wrap">
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setPreviewRelease(!previewRelease)}
-              >
-                {previewRelease ? 'Exit preview' : 'Preview released copy'}
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => {
-                  setMode('view');
-                  setPreviewRelease(false);
-                }}
-              >
-                Exit redaction
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-[2fr_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
         <DocumentViewerPanel
           documentTitle={doc.title}
           confidentiality={doc.confidentiality}
@@ -945,29 +899,33 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             assigneeName={currentTask ? currentStageActorName : 'Unassigned'}
             createdAtLabel={fmtDateTime(doc.createdAt)}
             metadata={doc.metadata || []}
+            canEditMetadata={can('document', 'edit') && !closed && !lockedByOther}
+          />
+
+          <DocumentVersionsPanel
+            documentId={doc.id}
+            currentVersionId={doc.currentVersionId}
+            canView={can('document', 'view')}
+            canEdit={can('document', 'edit') && !closed && !lockedByOther}
+            getUploaderName={(userId) => userById(users, userId)?.name || 'User'}
+          />
+
+          <DocumentSignaturesPanel
+            documentId={doc.id}
+            canView={can('document_signature', 'view')}
+            canSign={can('document_signature', 'create') && !closed}
+          />
+
+          <DocumentCommentsPanel
+            documentId={doc.id}
+            canView={can('document_comment', 'view')}
+            canPost={can('document_comment', 'create')}
           />
 
           <WorkflowActivityPanel
             workflowInstance={workflowInstance}
             currentStageActorName={currentStageActorName}
-            comments={doc.comments}
-            getCommentAuthor={(c) => c.creator || userById(users, c.createdBy)}
-            isAddingComment={addDocumentComment.isPending}
             onRoute={hasNoWorkflow && !closed ? routeThisDocument : undefined}
-            onAddComment={(text) => {
-              addDocumentComment.mutate(
-                { id: doc.id, text },
-                {
-                  onSuccess: () => {
-                    createAuditLog.mutate({
-                      action: 'COMMENT',
-                      target: doc.id,
-                      detail: text.slice(0, 80),
-                    });
-                  },
-                },
-              );
-            }}
           />
         </div>
       </div>
@@ -987,7 +945,7 @@ function DocumentDetailSkeleton() {
       <div className="page-head">
         <div style={{ minWidth: 0, flex: 1 }}>
           <Skeleton height={19} width="40%" style={{ marginBottom: '10px' }} />
-          <div className="flex g8 mt8 wrap">
+          <div className="flex gap-2 mt-2 flex-wrap">
             <Skeleton height={20} width={70} radius={99} />
             <Skeleton height={20} width={90} radius={99} />
             <Skeleton height={20} width={80} radius={99} />

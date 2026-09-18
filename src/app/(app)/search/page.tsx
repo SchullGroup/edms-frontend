@@ -168,7 +168,7 @@ export default function SearchPage() {
         </div>
       </div>
 
-      <div className="mb16">
+      <div className="mb-4">
         <input 
           className="input" 
           type="search" 
@@ -183,7 +183,7 @@ export default function SearchPage() {
         {/* Facets */}
         <div className="card">
           <div className="facet-group">
-            <div className="flex jcb aic">
+            <div className="flex justify-between items-center">
               <span className="fg-title" style={{ marginBottom: 0 }}>Saved searches</span>
               <button className="btn btn-ghost btn-sm" title="Save current search" onClick={saveSearch}>+ Save</button>
             </div>
@@ -206,7 +206,7 @@ export default function SearchPage() {
 
         {/* Results */}
         <div className="min-w-0">
-          <div className="flex jcb aic mb8">
+          <div className="flex justify-between items-center mb-2">
             <span className="muted" style={{ fontSize: '12.5px' }}>
               {results.length} result{results.length === 1 ? '' : 's'}{q ? ` for “${q}”` : ''} · semantic + keyword search across OCR text
             </span>
@@ -217,8 +217,8 @@ export default function SearchPage() {
             <div className="card">
               <div className="empty">
                 <Icon name="search" size={32} />
-                <div className="h3 mt16 mb8">{isLoading ? 'Loading...' : 'No results'}</div>
-                <p className="caption mb16">{isLoading ? 'Fetching documents...' : (q ? `Nothing matched “${q}”. Try fewer words, or clear some facets.` : 'Type a query or pick facets on the left.')}</p>
+                <div className="h3 mt-4 mb-2">{isLoading ? 'Loading...' : 'No results'}</div>
+                <p className="caption mb-4">{isLoading ? 'Fetching documents...' : (q ? `Nothing matched “${q}”. Try fewer words, or clear some facets.` : 'Type a query or pick facets on the left.')}</p>
               </div>
             </div>
           ) : (

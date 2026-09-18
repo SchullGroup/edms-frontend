@@ -94,7 +94,7 @@ export default function TrendsForecastPage() {
           </div>
         </div>
         <div className="actions">
-          <div className="flex g8 wrap">
+          <div className="flex gap-2 flex-wrap">
             <select
               className="input"
               style={{ width: 'auto', height: '32px' }}
@@ -134,7 +134,7 @@ export default function TrendsForecastPage() {
         {backlog[backlog.length - 1] ?? 0} open items.
       </div>
 
-      <div className="grid cols-2 mb16 mt16">
+      <div className="grid cols-2 mb-4 mt-4">
         <div className="card">
           <div className="card-head">
             <span className="h3">Inflow vs closure + forecast</span>
@@ -163,7 +163,7 @@ export default function TrendsForecastPage() {
                 },
               ]}
             />
-            <div className="caption mt8">
+            <div className="caption mt-2">
               * Forecast (linear projection of last 3 periods). Charts always label ranges; axes
               never truncated.
             </div>

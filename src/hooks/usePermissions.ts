@@ -1,58 +1,82 @@
+import { useCallback, useMemo } from 'react';
 import { useStore } from '@/store/useStore';
-import { useMemo } from 'react';
+import {
+  fallbackPermissionsForRoles,
+  normalizePermission,
+  parseScope,
+  permissionMatches,
+  resolvePortal,
+  type PermissionScope,
+  type PortalKey,
+} from '@/lib/permissions';
 
+/**
+ * Permission-aware access checks for the UI.
+ *
+ * Source of truth is `currentUser.permissions` — populated at login (if the
+ * backend embeds it), refreshed from `GET /auth/me`, or derived from
+ * `GET /roles` by `useHydratePermissions`. If none of those have resolved yet
+ * we fall back to an approximate grant set for the six seeded system roles so
+ * the app is usable during the first render.
+ */
 export const usePermissions = () => {
-  const { currentUser } = useStore();
+  const currentUser = useStore((s) => s.currentUser);
 
-  const hasPermission = (resource: string, action: string): boolean => {
-    if (!currentUser) return false;
-
-    // 1. If backend provided granular permissions, use them
-    if (currentUser.permissions && currentUser.permissions.length > 0) {
-      return currentUser.permissions.some((p) => {
-        if (typeof p === 'string') {
-          return p === `${resource}:${action}` || p === `${resource}:*` || p === `*:*`;
-        }
-        return p.resource === resource && p.action === action;
-      });
+  const { granted, isReady } = useMemo(() => {
+    const roleNames = currentUser?.roles ?? [];
+    const live = (currentUser?.permissions ?? []).map(normalizePermission);
+    if (live.length > 0) {
+      return { granted: live, isReady: true };
     }
+    // No live permissions yet — approximate from the seeded system roles. That
+    // approximation is only trustworthy for the six built-in roles; a custom
+    // role has no fallback, so it stays "not ready" until useHydratePermissions
+    // fills `currentUser.permissions` from GET /roles.
+    const fallback = fallbackPermissionsForRoles(roleNames);
+    return { granted: fallback, isReady: fallback.length > 0 };
+  }, [currentUser]);
 
-    // 2. Fallback: Role-based heuristics (Mocking for now until backend matrix is ready)
-    const roles = currentUser.roles || [];
+  const grantedSet = useMemo(() => new Set(granted), [granted]);
 
-    // System Admins have super access
-    if (roles.includes('schulltech_admin')) return true;
+  // Stable identity while the grant set is unchanged, so effects that depend on
+  // it (e.g. the AppShell route guard) don't re-run on every render.
+  const hasPermission = useCallback(
+    (resource: string, action: string): boolean => {
+      if (!currentUser) return false;
+      for (const g of grantedSet) {
+        if (permissionMatches(g, resource, action)) return true;
+      }
+      return false;
+    },
+    [grantedSet, currentUser],
+  );
 
-    // Client Admins have all client-side permissions
-    if (roles.includes('client_admin')) {
-      // Except platform-level stuff
-      if (resource === 'platform') return false;
+  const hasAny = useCallback(
+    (pairs: [string, string][]): boolean => pairs.some(([r, a]) => hasPermission(r, a)),
+    [hasPermission],
+  );
 
-      return true;
+  const hasAll = useCallback(
+    (pairs: [string, string][]): boolean => pairs.every(([r, a]) => hasPermission(r, a)),
+    [hasPermission],
+  );
+
+  /** Most permissive scope held for a `resource:action`, or null. */
+  const scopeFor = (resource: string, action: string): PermissionScope | null => {
+    const order: PermissionScope[] = ['own', 'department', 'global'];
+    let best: PermissionScope | null = null;
+    for (const p of currentUser?.permissions ?? []) {
+      if (!permissionMatches(normalizePermission(p), resource, action)) continue;
+      const s = parseScope(p);
+      if (s && (best === null || order.indexOf(s) > order.indexOf(best))) best = s;
     }
-
-    // Role-specific mocks
-    if (roles.includes('internal_auditor')) {
-      if (resource === 'audit' && action === 'view') return true;
-      if (resource === 'finding') return true;
-      if (resource === 'document' && action === 'view') return true;
-      return false; // Auditors shouldn't mutate data
-    }
-
-    if (roles.includes('supervisor') || roles.includes('management')) {
-      if (resource === 'document' && ['view', 'approve', 'reject', 'route'].includes(action))
-        return true;
-      if (resource === 'dashboard' && action === 'view') return true;
-    }
-
-    if (roles.includes('staff')) {
-      if (resource === 'document' && ['view', 'create', 'edit', 'route'].includes(action))
-        return true;
-      if (resource === 'dashboard' && action === 'view') return true;
-    }
-
-    return false;
+    return best;
   };
 
-  return { hasPermission };
+  const portal: PortalKey = useMemo(
+    () => resolvePortal(granted, currentUser?.roles),
+    [granted, currentUser],
+  );
+
+  return { hasPermission, can: hasPermission, hasAny, hasAll, scopeFor, isReady, portal };
 };

@@ -204,7 +204,9 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 2. ⛔ **The frontend grants unlimited permissions** the backend explicitly withholds — a
    correctness bug waiting to surface the day `/platform` is wired to real endpoints.
 3. ⛔ **No control-plane database.** Phase 0 of doc 03 is entirely manual.
-4. ⛔ **`audit:view:global` is granted with no `/audit` endpoint** to use it.
+4. 🟨 **`GET /audit` exists now** (confirmed 2026-09-18) **but is tenant-scoped** — there's
+   no cross-tenant audit query, so `/platform/audit`'s "cross-tenant action log" framing
+   has no real backend equivalent to wire to as-is; it still reads `SEED.audit`.
 
 ---
 
@@ -237,15 +239,15 @@ This must be done in order; each step produces the input for the next.
 | 4 | **Build folder trees** | `/admin/cabinets` | `POST /cabinets/:id/folders` | ✅ |
 | 5 | Define cabinet metadata fields | — | `POST /cabinets/:id/metadata-fields` | ⛔ **no UI** |
 | 6 | Grant cabinet access to roles/users | — | `POST /cabinets/:id/access` | ⛔ **no UI** |
-| 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles` | 🟨 no invite flow |
+| 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles`, `POST /users/:id/invitation` | 🟨 new users get a hardcoded default password, not an emailed invite; **resending** an invite (for existing active users) is wired |
 | 8 | **Design and publish workflows** | `/admin/workflows` | `POST /workflows`, `/publish` | 🟨 **no authorization** |
 | 9 | Set retention and confidentiality policy | `/admin/policies` | — | 🟥 `SEED.policies` |
 | 10 | Apply branding | `/admin/branding` | — | 🟥 `SEED.branding` |
 | 11 | Publish a welcome circular | `/admin/circulars` | — | 🟥 `SEED.circulars` |
-| 12 | Review the tenant audit trail | `/admin/audit` | — | 🟥 `SEED.audit` |
+| 12 | Review the tenant audit trail | `/admin/audit` | `GET /audit`, `/audit/verify` | ✅ wired 2026-09-18 (was `SEED.audit`) |
 
-**Steps 2, 3, 4, 7 and 8 are real.** Everything else is either missing a UI or writes only
-to localStorage.
+**Steps 2, 3, 4, 7, 8 and 12 are real.** Everything else is either missing a UI or writes
+only to localStorage.
 
 ### First week
 
@@ -256,7 +258,7 @@ to localStorage.
 | Create a new cabinet for a new business line | ✅ | |
 | Fix a workflow that stalls | ✅ | Create a new version; published definitions are immutable |
 | Deactivate a leaver | ✅ | `PATCH /users/:id {status:'inactive'}` → login returns 403 |
-| Reset someone's password | ⛔ | No reset flow. Only `PATCH /users/:id` with a new password. |
+| Reset someone's password | ✅ | Self-service via `POST /auth/forgot-password` → `/set-password`; was broken by a field-name bug until fixed 2026-09-18 (DRIFT-15). No admin-initiated "force reset" button, but `PATCH /users/:id` with a new password still works as a manual fallback. |
 | Answer "who can see the Contracts cabinet?" | ⛔ | `GET /cabinets/:id/access` exists; **no screen calls it** |
 | Configure retention | ⛔ | Model exists, no endpoint, no enforcement job |
 
@@ -281,7 +283,7 @@ consistently fails.
 | Configure retention | ❌ | 🟥 |
 | Configure branding | ❌ | 🟥 |
 | Publish circulars | ❌ | 🟥 |
-| View the audit trail | ❌ no endpoint | 🟥 |
+| View the audit trail | ✅ | ✅ wired 2026-09-18 |
 
 ### Where it breaks, ranked
 
@@ -291,9 +293,12 @@ consistently fails.
    they are responsible for.
 3. ⛔ **The role matrix editor writes to localStorage**, so permission changes appear to
    work and silently don't.
-4. ⛔ **No invite flow** — they handle every user's password personally.
+4. ⛔ **New-user creation still hardcodes a default password** rather than emailing a real
+   invite — they hand-communicate every initial password. (Resending an invite to an
+   already-created active user *is* wired, via `POST /users/:id/invitation`.)
 5. 🟥 **Branding, policies and circulars all reset on cache clear.**
-6. ⛔ **Their audit view is fabricated data.**
+6. ✅ ~~Their audit view is fabricated data.~~ **Fixed 2026-09-18** — `/admin/audit` reads
+   the real, hash-chained trail.
 
 ---
 
@@ -562,7 +567,13 @@ the single largest backend gap for this role, and it is invisible at demo scale.
 
 > **Persona:** Femi · compliance and assurance · independent of operations
 > **Landing page:** `/auditor` · **Sidebar:** Audit & Compliance
-> **Overall status:** 🟥 **Every screen is fixture data. The most broken role in the product.**
+> **Overall status:** ✅ **Resolved 2026-09-18 — the backend audit trail is real, and**
+> **`/auditor/trail` reads it.** See the correction below.
+
+> ⚠️ **Correction (2026-09-18).** This whole section previously described the audit
+> backend as entirely unbuilt — confirmed wrong (or since shipped) against live behavior.
+> See H7 above and DRIFT-11 (resolved) in doc 01 for the full writeup. `/auditor/trail`
+> was migrated to the real trail the same day this section was corrected.
 
 ### Identity and rights
 
@@ -580,8 +591,9 @@ Plus membership of `CONFIDENTIAL_TIER_ROLES`, so they can read `confidential`-ti
 documents. **Deliberately cannot mutate anything** — that independence is the point of the
 role.
 
-Two of these grants point at endpoints that don't exist:
-- `audit:view:global` → **there is no `/audit` route**
+One of these grants now has a real screen behind it, and one still doesn't:
+- `audit:view:global` → `GET /audit` **exists and works**, and `/auditor/trail` reads it
+  as of 2026-09-18 (alongside `/admin/audit` for client_admin)
 - `cabinet_access:view:global` → the endpoint exists, but **no screen calls it**
 
 ### Day one
@@ -589,7 +601,7 @@ Two of these grants point at endpoints that don't exist:
 | # | Step | Screen | Status |
 |---|---|---|---|
 | 1 | Log in, land on Audit Dashboard | `/auditor` | 🟥 `SEED.findings`, `SEED.audit` |
-| 2 | Open the audit trail | `/auditor/trail` | 🟥 `SEED.audit` — 172 lines of fixtures |
+| 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
 | 4 | Search for evidence | `/search` | ⛔ index never built |
 | 5 | Raise a finding | `/auditor/findings` | 🟥 367 lines on `SEED.findings` |
@@ -599,46 +611,50 @@ Two of these grants point at endpoints that don't exist:
 
 | Task | Reality |
 |---|---|
-| "Show me everything Chika did last month" | ⛔ **`audit_entries` has never been written to.** `audit.middleware.ts` is a 0-byte file; there are zero `auditEntry` references in `src/`. |
-| "Who viewed this confidential contract?" | ⛔ Document views are not logged. |
+| "Show me everything Chika did last month" | ✅ `/auditor/trail` migrated 2026-09-18 — `actorId`/`action`/`from` filters against the real trail |
+| "Who viewed this confidential contract?" | ✅ confirmed live 2026-09-18 — `document.viewed` is a real, auto-emitted action (seen in a live 78-entry sample); `/auditor/trail`'s action filter surfaces it, though there's no per-document "who viewed this one" view yet, only actor/action/date |
 | "Who downloaded it?" | ⛔ There is no download endpoint to log. |
-| "Prove the trail hasn't been altered" | ⛔ The hash chain (`prevHash`/`entryHash`) is designed, indexed and empty. |
+| "Prove the trail hasn't been altered" | ✅ `GET /audit/verify` exists and works, confirmed live; `/admin/audit`'s "Verify integrity" button calls it. Not yet surfaced on `/auditor/trail` itself. |
 | "Who can see the Contracts cabinet?" | ⛔ `cabinet_access:view` granted; no screen calls the endpoint. |
 | "Track this finding to closure" | 🟥 No `Finding` model in Prisma. Everything is lost on cache clear. |
 | "Verify separation of duties" | ⛔ No SoD logic exists in either codebase. |
 | "Export evidence for the regulator" | ⛔ Would export fixture data. |
 
-### The gap between design and reality
+### The gap between design and reality (historical — see correction above)
 
-This is worth stating plainly, because the design here is **good** and the implementation
-is **absent**:
+This table was written against source inspection that's now known stale. Re-checked
+against live API behavior 2026-09-18, not by re-reading `edms-backend/src/`:
 
 ```
-DESIGNED (audit.prisma)                      BUILT
+DESIGNED (audit.prisma)                      BUILT (as of 2026-09-18)
 ─────────────────────────────────────────    ─────────────────────────────────
-Append-only, enforced by an INSERT-only      ⛔ Never created
+Append-only, enforced by an INSERT-only      unverified — not checked at the DB level
   Postgres role — no application code,
   admin, or migration can UPDATE/DELETE
-Hash-chained: entryHash = SHA-256 of         ⛔ Never computed
-  id + actor + action + object + time
+Hash-chained: entryHash = SHA-256 of         ✅ confirmed live — GET /audit/verify
+  id + actor + action + object + time           recomputed and reported it intact
   + prevHash
-Indexed for: object history, actor           ✅ Indexes exist (on an empty table)
+Indexed for: object history, actor           ✅ indexes exist, table has real rows
   timeline, action filter, time range
-Range-partitioned by month                   ⛔ Not applied
-25 documented action types                   ⛔ None emitted
-AuditService.log() on every create,          ⛔ No AuditService exists
-  update, delete, view and download
+Range-partitioned by month                   unverified — not checked at the DB level
+25 documented action types                   ✅ at least `user.login`, `user.invited`,
+                                                 `user.token_refreshed` confirmed emitted
+AuditService.log() on every create,          ✅ entries write automatically — confirmed
+  update, delete, view and download             for auth/user actions; document
+                                                 create/view/download unverified
 ```
 
-**A product positioned on "every action logged immutably for compliance" has, to date,
-logged zero actions.** The schema is already correct — this is a build, not a redesign, and
-it is the highest-value item in the backlog after the workflow authorization hole.
+**The product's compliance claim now has a real backend behind it.** What's missing is
+this role's own screens reading it — a frontend migration, not a backend build.
 
 ### Where it breaks, ranked
 
-1. 🔴 **The audit trail has never recorded a single event** — this role's entire purpose
+1. ✅ ~~The auditor's own screens don't read the real trail~~ — `/auditor/trail`
+   migrated 2026-09-18, alongside `/admin/audit` and `management/compliance`'s
+   sensitive-activity panel. `/platform/audit` stays mocked by design (no cross-tenant
+   backend exists).
 2. 🔴 **No `Finding` model** — 367 lines of UI over localStorage
-3. ⛔ **No `/audit` endpoint** despite the permission being granted
+3. ✅ ~~No `/audit` endpoint despite the permission being granted~~ — **exists now**
 4. 🟥 **`/auditor/compliance` re-exports the management page** — partly `SEED`-backed
 5. ⛔ **Search is empty**, so document sampling by content is impossible
 6. ⛔ **No SoD enforcement** despite it being claimed in the older docs
@@ -677,16 +693,21 @@ credentials.
 assignment and removal, deactivation.
 
 **Broken:**
-- ⛔ **No invite flow.** The admin sets the password and communicates it personally.
+- ⛔ **No emailed invite on initial creation.** The admin sets a hardcoded default
+  password and communicates it personally. (`POST /users/:id/invitation` *resends* an
+  invite for an already-created active user — wired 2026-09-18 — but creation itself
+  still doesn't trigger one.)
 - ⛔ **No forced change on first login**, so the admin permanently knows it.
-- ⛔ **No password reset.**
+- ✅ ~~No password reset.~~ **Exists** — `POST /auth/forgot-password` → `/set-password`;
+  was broken by a field-name bug (DRIFT-15) until fixed 2026-09-18.
 - ⛔ **No rate limiting on login** — unlimited guessing against known credentials.
 - ⚠️ **No department = silent scope collapse.** A staff user without a `departmentId`
   fails closed from `department` to `own` scope. They see only their own documents and
   nobody is told why.
 
-**To fix:** `POST /users/invite` with a signed expiring token (Redis is already a
-dependency), a mail transport, an `/accept-invite` page, and `express-rate-limit` on login.
+**To fix:** make new-user creation call the invite/reset infrastructure that already
+exists (`POST /auth/reset-password` + emailed token, `/set-password` page) instead of
+setting a hardcoded default password, and add `express-rate-limit` on login.
 
 ---
 
@@ -759,9 +780,14 @@ different person.
 - ⛔ **No notification** to the person receiving the work back — they discover it by
   chance. The notifications module now exists and the UI is wired to it, but
   `tasks.service` never calls `notifyUser`, so nothing is delivered (DRIFT-10).
-- ⛔ **No delegation UI**, so a supervisor on leave cannot hand over at all
-- ⛔ **No `audit_entries`** — workflow history is a different table with a different
-  purpose and no hash chain
+- ✅ ~~No delegation UI, so a supervisor on leave cannot hand over at all~~ — **stale.**
+  `/delegations` (344 lines) is wired to `useDelegations`/`useCreateDelegation`/
+  `useEndDelegation` against the real `GET/POST /delegations`, `POST /delegations/:id/end`
+  endpoints. Not verified end-to-end in this pass — flagging the correction, not
+  re-confirming the whole flow.
+- 🟨 Only `WorkflowHistory` is confirmed written here — a different table, different
+  purpose, no hash chain. `audit_entries` is real and auto-written now (DRIFT-11 revised,
+  2026-09-18), but whether a task action itself produces an entry is unverified
 
 ---
 
@@ -780,28 +806,53 @@ correct department attribution through the cabinet→department hop.
 
 ---
 
-### H7 · Every role → Internal Auditor (the audit trail) · ⛔ **COMPLETELY BROKEN**
+### H7 · Every role → Internal Auditor (the audit trail) · ✅ **RESOLVED 2026-09-18 — backend real, `/auditor/trail` migrated**
+
+> ⚠️ **Correction (2026-09-18).** This subsection previously claimed the backend audit
+> trail was entirely unbuilt — "not one event, ever," `audit.middleware.ts` "a 0-byte
+> file," zero `auditEntry` references anywhere. That was wrong, or has since shipped.
+> Confirmed live against `edms-backend-zmfm.onrender.com`: `GET /audit`, `GET /audit/:id`,
+> `GET /audit/export` and `GET /audit/verify` all exist and work, a real pull returned 27
+> entries including `user.login`, `user.invited` and `user.token_refreshed`, and
+> `GET /audit/verify` confirmed the hash chain intact. See DRIFT-11 (revised) in doc 01.
 
 **What should pass:** every create, update, delete, view, download, approval and permission
 change, as an immutable hash-chained entry.
 
-**What actually passes: nothing. Not one event, ever.**
+**What's confirmed vs. unverified, per action:**
 
 ```
-Chika uploads a document      → ⛔ no entry  ("document.uploaded" defined, unused)
-Chika views a document        → ⛔ no entry  ("document.viewed"   defined, unused)
-David approves                → ⛔ no entry  ("workflow.approved" defined, unused)
-Bola changes a permission     → ⛔ no entry
-Anyone logs in                → ⛔ no entry  ("user.login"        defined, unused)
-Anyone downloads              → ⛔ no endpoint to log
+Anyone logs in                → ✅ confirmed  ("user.login")
+An invite is sent/resent      → ✅ confirmed  ("user.invited")
+A token is refreshed          → ✅ confirmed  ("user.token_refreshed")
+Chika edits a document        → ✅ confirmed  ("document.edited")
+Chika views a document        → ✅ confirmed  ("document.viewed")
+Bola changes a permission     → ✅ confirmed  ("role.permissions_updated")
+Access is requested/granted/denied → ✅ confirmed ("document.access_requested/_granted/_denied")
+David approves a workflow     → unverified — no workflow/task action seen in the sample pulled
+Anyone downloads              → unverified — no download endpoint exists yet regardless
 ```
 
-The `audit_entries` table, its hash chain, its indexes and its 25 documented action types
-all exist. `src/middlewares/audit.middleware.ts` is a **0-byte file**. There are **zero**
-references to `auditEntry` in the entire backend `src/`.
+*(Confirmed 2026-09-18 against a 78-entry live sample — full distinct list also included
+`user.created`, `user.updated`, `user.deactivated`, `user.password_reset`, `user.invited`,
+`role.created`, `role.deleted`, `document.signature_added`, `document.comment_added`,
+`folder.created`, `cabinet.created`, `department.created`.)*
 
-**This is the handoff that determines whether the product can be sold as a compliance
-system.** It is currently a mock on both sides of the seam.
+The `audit_entries` table, its hash chain and its indexes are confirmed real and populated
+via live API behavior, not by re-reading `edms-backend/src/` — so DB-level specifics
+(INSERT-only role, monthly partitioning) remain unverified even though the entries
+themselves are now well-confirmed.
+
+**Update 2026-09-18 (later the same day): the auditor's own pages read this now.**
+`/auditor/trail` and `management/compliance`'s sensitive-activity panel are both migrated
+to the real trail (`useAuditEntries`), alongside `/admin/audit` (client_admin). The
+migration used the real action vocabulary above, not the old app-invented codes
+(`REDACT_RELEASE`, `SIGN`, …), which matched nothing real. `/platform/audit` is the one
+exception and stays on `SEED.audit` by design — there is no cross-tenant `GET /audit` to
+migrate it to, and no platform-level multi-tenant API at all. **This was the handoff that
+determined whether the product could be sold as a compliance system** — both halves are
+now real for the tenant-scoped roles; only the platform-level view remains a mock, and
+that's a backend gap, not a frontend one.
 
 ---
 
@@ -821,7 +872,7 @@ acted yet.
 | Filed documents | `staff` | Supervisors have nothing to approve; management has nothing to report |
 | Approval decisions | `supervisor` | Documents never close; management sees permanent backlog |
 | Task activity | `staff` + `supervisor` | Management dashboards are empty |
-| Audit entries | ⛔ **nobody** | The auditor has nothing to audit |
+| Audit entries | ✅ backend, auto-written | Real now (see H7) — but the auditor's own pages don't read them yet, so in practice they still have nothing to audit |
 | Findings | `internal_auditor` (🟥 mock) | `/management/findings` just re-exports the auditor's screen, so both roles see the same `SEED` fixtures |
 
 **Read the table bottom-up and the shape of the product becomes clear:** the operational

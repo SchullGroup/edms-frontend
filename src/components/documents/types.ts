@@ -2,11 +2,13 @@ import { Document, Task, WorkflowInstance } from '@/types/models';
 
 /**
  * Fields the UI historically expected on a document that don't exist on the
- * real API response — comments, signatures, legal hold, and the sealed flag
- * have no backing endpoint at all (confirmed live: `POST /documents/{id}/comments`
- * and `/signatures` both 404). They're always empty/false in practice; kept
- * typed explicitly here rather than left as implicit `any` behind @ts-nocheck,
- * so the gap stays visible instead of silently disappearing.
+ * real API response. There is **no** document-level comments or signatures
+ * endpoint — comments are the `comment` field on `POST /tasks/{taskId}/action`
+ * and a signature is the `signature` image on that endpoint's `approve` action;
+ * the document-level narrative comes from `GET /workflow-history`. `legalHold`
+ * and `sealed` have no backing field either. All are empty/false in practice;
+ * kept typed explicitly rather than left as implicit `any` so the gap stays
+ * visible.
  */
 export interface DocumentCommentUI {
   id?: string;

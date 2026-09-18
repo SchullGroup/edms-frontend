@@ -90,3 +90,54 @@ export function useDeleteUser() {
     },
   });
 }
+
+/** `POST /users/:id/roles` — adds the given role ids to a user. */
+export function useAssignUserRoles() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, roleIds }: { id: string; roleIds: string[] }) =>
+      usersService.assignRoles(id, roleIds),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: userKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to assign roles', 'error');
+    },
+  });
+}
+
+/** `DELETE /users/:id/roles/:roleId` — removes one role from a user. */
+export function useRemoveUserRole() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, roleId }: { id: string; roleId: string }) =>
+      usersService.removeRole(id, roleId),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: userKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to remove role', 'error');
+    },
+  });
+}
+
+/** `POST /users/:id/invitation` — resends the set-password email. */
+export function useResendInvitation() {
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: (id: string) => usersService.resendInvitation(id),
+    onSuccess: (data) => {
+      addToast(`Invitation resent to ${data.email}`, 'success');
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to resend invitation', 'error');
+    },
+  });
+}

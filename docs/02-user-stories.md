@@ -19,6 +19,23 @@ not just `/staff/cabinets`. **B3**'s workflow activity trail is now read from li
 mock). One story added: **F4 — Monitor running workflows** (✅ Done, same DRIFT-05
 authorization caveat as C1/C5). [§15](#15-story-map-summary) counts updated: Done 11 → 12.
 
+**Revised a third time 2026-09-04**, after wiring the frontend to the backend's Workflow
+Module read models (all endpoints confirmed live against the deployed Swagger doc; no
+backend changes). **F1 (team workload) moves from Partial to Done** — `/supervisor/workload`
+and `/supervisor` (Team Overview) now call `GET /tasks/workload` and
+`GET /workflow-instances/team-status-matrix`/`open-items-by-cabinet` instead of walking
+every task page in the browser. **F2 (SLA ageing)** ticks one more box — `/supervisor/bottlenecks`
+now reads `GET /workflow-instances/bottlenecks-ageing` instead of computing ageing from
+`SEED`, with SLA status and workflow status rendered as two separate badges — but stays
+Partial: nothing still calls `notifyUser` on a breach. **C4 (delegation) moves from
+Partial-with-no-UI to a fuller Partial** — `/delegations` now exists (create, list, end;
+"Delegated by you" / "Delegated to you"), leaving only the delegation-arrived visual marker
+and the activation notification. `/supervisor/approvals` also moved onto the purpose-built
+`GET /tasks/approvals` endpoint (with `scope=all`, fixing a real bug where it only showed
+tasks assigned directly to the supervisor, plus a new escalated-tasks tab) and gained
+pagination, error states and a retry, as did `/supervisor/bottlenecks`. [§15](#15-story-map-summary)
+counts updated: Done 12 → 13, Partial 16 → 15.
+
 Each story carries a **build status** so this document doubles as a backlog rather than a
 wish list. Statuses are defined once, here:
 
@@ -153,8 +170,10 @@ what the operations team says.
 **Backend rights (10 grants):** all read-only and `global`-scoped — `document:view`,
 `document:search`, `document_version:view`, `document_metadata:view`, `cabinet:view`,
 `folder:view`, `department:view`, `user:view`, `workflow:view`, plus `workflow:route`.
-**Management cannot create, edit, or delete anything.** (The frontend's
-`usePermissions` heuristic wrongly grants them approve/reject — see DRIFT-04 in doc 01.)
+**Management cannot create, edit, or delete anything.** (Fixed 2026-09-10: the
+`usePermissions` role-name heuristic was deleted — the UI now derives each user's
+`resource:action` keys from `GET /roles` and gates on those. Management's approve/reject
+affordances only appear where the seeded grants actually allow them. See DRIFT-04.)
 
 ---
 
@@ -222,9 +241,12 @@ architecture note in `access-control.constants.ts` is explicit that any future s
 access must be a separate, audited, time-boxed impersonation mechanism — not a standing
 role grant.
 
-> ⚠️ The frontend contradicts this. `usePermissions.ts:24` returns `true` for every
-> permission check when the user has `schulltech_admin`. The entire `/platform` portal
-> reads from `SEED` fixtures, so nothing enforces the real posture in the UI. See DRIFT-04.
+> ✅ Fixed 2026-09-10. The `usePermissions` "return true for schulltech_admin" heuristic
+> is gone. `schulltech_admin`'s effective keys are now just its 3 seeded grants
+> (`workflow:view`, `workflow:route`, `audit:view`); `hasPermission('document', …)` etc.
+> return `false`. The `/platform` portal is still `SEED`-backed so this is latent until
+> those pages are wired, but the UI no longer *claims* the vendor can read documents. See
+> DRIFT-04.
 
 ---
 
@@ -444,14 +466,23 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
 - [x] Edit title, type, folder, confidentiality, urgency, status
 - [x] Workflow stage rail + activity trail from live `GET /workflow-history` (since the
       `feature/management` merge)
-- [ ] 🔴 **Comments 404.** `POST /documents/:id/comments` does not exist (DRIFT-08).
-- [ ] 🔴 **Signatures 404.** `POST /documents/:id/signatures` does not exist (DRIFT-08).
-- [ ] 🔴 **The tamper-evident audit log is still fake** — `useCreateAuditLog` resolves to
-      nothing and any audit-event view reads `SEED.audit` (DRIFT-11). Only the *workflow*
-      history above is real; document views, edits and downloads are still unrecorded.
+- [x] ✅ **Comments — resolved 2026-09-18.** `GET/POST /documents/:id/comments` now
+      exists (didn't when DRIFT-08 was written) and is wired as `DocumentCommentsPanel` —
+      a general-purpose thread, separate from the task-action `comment` field.
+- [x] ✅ **Signatures — resolved 2026-09-18.** `GET/POST /documents/:id/signatures` now
+      exists and is wired as `DocumentSignaturesPanel` — a flat sign-off record with no
+      positional placement, separate from the task-action approve-flow signature.
+- [ ] 🟨 **The backend audit trail is real now (DRIFT-11 revised, 2026-09-18)** — it
+      auto-writes hash-chained entries server-side and `/admin/audit` reads it live. But
+      this page still calls the old no-op `useCreateAuditLog` (there's no write endpoint
+      to point it at — entries are a side effect of other actions, not client-logged),
+      and doesn't render anything from the real trail. Only the *workflow* history above
+      is real on this page; whether document views/edits/downloads land in the real
+      trail as backend-side actions is unverified.
 - [ ] ⚠️ **There is no download or preview endpoint.** The backend has no route that
       serves file bytes or issues a presigned GET. The preview pane renders a placeholder.
-- [ ] ⚠️ The file is `// @ts-nocheck` — type safety is off for the whole page.
+- [x] ✅ `@ts-nocheck` is gone — the file type-checks cleanly now (confirmed 2026-09-18,
+      stale here; not dated when it was actually removed)
 
 ---
 
@@ -568,12 +599,15 @@ and role-pool assignment, and honours active delegations.
 - [x] Closing the final stage closes the instance
 - [x] Notes are captured and stored
 - [ ] ⚠️ No notification to the next assignee or the originator (DRIFT-10)
-- [ ] ⚠️ No `audit_entries` row — only workflow history, which is a different table with a
-      different purpose and no hash chain (DRIFT-11)
+- [ ] ⚠️ Only `WorkflowHistory` is confirmed written here — a different table, different
+      purpose, no hash chain. `audit_entries` is real and auto-written now (DRIFT-11
+      revised, 2026-09-18 — confirmed for `user.login`/`user.invited`/
+      `user.token_refreshed`), but whether a task action itself produces an entry is
+      unverified
 
 ---
 
-### C4 — Delegate my work while I'm away · 🟨 **Partial** (backend only)
+### C4 — Delegate my work while I'm away · 🟨 **Partial**
 
 > **As** David,
 > **I want to** hand my approvals to a colleague for the two weeks I'm on leave,
@@ -585,15 +619,21 @@ workflows, an `isActive` flag, and full CRUD at `GET/POST /delegations` and
 `POST /delegations/:id/end`. `tasks.service` already resolves delegations when listing and
 actioning tasks.
 
-**There is no UI whatsoever.** No page, no service file, no hook.
+**A UI now exists** (`/delegations`, reachable from the Staff and Supervisor nav): create a
+time-bounded delegation to a colleague, optionally scoped to specific cabinets; separate
+"Delegated by you" / "Delegated to you" lists; end an active delegation. Self-delegation is
+rejected client- and server-side. What's still missing is entirely cosmetic/notification —
+nothing on the task itself shows it arrived by delegation, and the delegate isn't told when
+one activates.
 
 **Acceptance criteria**
 - [x] Backend: date-bounded delegation with optional cabinet/workflow scoping
 - [x] Backend: delegates see and can action delegated tasks
 - [x] Backend: `DELEGATION_VIEW_ALL_ROLES` / `DELEGATION_MANAGE_ALL_ROLES` govern oversight
-- [ ] Any UI at all — create, list, end
+- [x] UI to create, list and end a delegation (`/delegations`)
 - [ ] Visual marker on a task showing it arrived by delegation
-- [ ] Notification to the delegate when a delegation activates
+- [ ] Notification to the delegate when a delegation activates (DRIFT-10 — same
+      "nothing calls `notifyUser`" gap as everywhere else)
 
 ---
 
@@ -770,18 +810,23 @@ outstanding problem is the one that always mattered:
 > **so that** the system matches my organisation's separation-of-duties policy rather than
 > a vendor's assumptions.
 
-**Current state:** `PUT /roles/:id/permissions` exists and works. The frontend has a role
-matrix editor — but it writes to **`SEED.rolesMatrix` in localStorage** via
-`updateRoleMatrix`, not to the API.
+**Current state (updated 2026-09-10):** `PUT /roles/:id/permissions` exists and works, and
+the `/admin/users` matrix editor calls it (`useSetRolePermissions`) — not the local store.
+Role **create / rename / delete** and per-user **role assign / remove** are also wired
+(`POST /roles`, `PATCH|DELETE /roles/:id`, `POST|DELETE /users/:id/roles`). The
+`resource`/`action` vocabulary lives in `src/lib/permissions.ts` and the same keys now
+drive the app's own route/nav/affordance gating (`usePermissions`), so a freshly created
+role takes effect in the UI without a code change.
 
 **Acceptance criteria**
 - [x] Backend: `resource:action:scope` triples assignable per role
 - [x] Backend: scopes `global | department | own`
 - [x] Backend: permissions re-read from the DB on every request, so changes take effect
       immediately without re-login
-- [ ] 🔴 The UI matrix editor calls the API instead of the local store
+- [x] The UI matrix editor calls the API instead of the local store
+- [x] Create / rename / delete roles, assign / remove roles on a user
 - [ ] Guard rails preventing an admin from removing their own admin rights
-- [ ] `role.permissions_updated` audit entry
+- [ ] `role.permissions_updated` audit entry (frontend writes a local `auditAction` only)
 
 ---
 
@@ -789,18 +834,29 @@ matrix editor — but it writes to **`SEED.rolesMatrix` in localStorage** via
 
 ---
 
-### F1 — See my team's workload · 🟨 **Partial**
+### F1 — See my team's workload · ✅ **Done** *(was 🟨 Partial)*
 
 > **As** David,
 > **I want to** see how many open items each team member is carrying,
 > **so that** I can rebalance before someone drowns.
 
+**Current state (verified against the Workflow Module API guide): fixed.** The backend
+shipped purpose-built read models — `GET /tasks/workload` (per-member `open`/`overdue`
+against a real `capacity`/`utilizationPercent`) and `GET /workflow-instances/team-status-matrix`
+/ `open-items-by-cabinet` for the Team Overview screen — and the frontend now calls them
+directly instead of walking every page of `/tasks` and rolling counts up in the browser.
+`/supervisor/workload` and `/supervisor` (Team Overview) both moved off the client-side
+aggregation stopgap; a member's row still lazily fetches their actual task list (capped at
+100) only once expanded/clicked, for the reassign action.
+
 **Acceptance criteria**
-- [x] `/supervisor/workload` renders per-person counts from live `/documents` and `/users`
+- [x] `/supervisor/workload` renders per-person counts from a server-side aggregate
+      (`GET /tasks/workload`), not a client-side walk of every task
+- [x] `/supervisor` (Team Overview) renders the member × status matrix and open-items-by-
+      cabinet from their own dedicated endpoints
 - [x] Reassignment via `PATCH /tasks/:id/reassign`, gated by `TASK_REASSIGN_ROLES`
-- [ ] ⚠️ Counts are computed client-side by walking every page of `/documents`
-      (`fetchAllPages`) — up to 50 sequential requests. No aggregation endpoint exists.
-- [ ] ⚠️ Some panels still read `SEED.documents` rather than the API
+- [x] Supervisor omits `departmentId`; the backend resolves it — no department picker in
+      the UI (per the API guide's §4 rule)
 
 ---
 
@@ -827,8 +883,15 @@ notification module, so `sla.warning` and `sla.breach` — both defined in
 - [x] Auto-escalation of overdue tasks
 - [x] Breach resolution when the task completes
 - [ ] 🔴 Anyone is actually notified (DRIFT-10)
-- [ ] `/supervisor/bottlenecks` reads real SLA data rather than computing ageing from
-      `SEED` documents
+- [x] `/supervisor/bottlenecks` reads real SLA data — `GET /workflow-instances/bottlenecks-ageing`
+      (summary + ageing/stage distributions + paginated detail rows) rather than computing
+      ageing from `SEED` documents. `slaStatus` (`healthy | due_soon | breached | paused |
+      not_started`) and `workflowStatus` render as two separate badges, per the API guide's
+      explicit "don't merge these" rule. The staff dashboard's Overdue/SLA tile and the
+      bottleneck banner now also draw on the persisted `GET /sla/breaches` event feed, not
+      ad-hoc `dueAt < now` math — though the guide itself notes the two totals
+      (`bottlenecks-ageing.summary.breachedItems` vs `sla/breaches.pagination.total`) aren't
+      guaranteed to agree, since one is a live calculation and the other a persisted event log
 - [ ] Configurable SLA thresholds per workflow stage rather than one global env var
 
 ---
@@ -963,10 +1026,12 @@ for real server-side aggregation"* and asks to be deleted once endpoints exist.
   by month.
 - The architecture doc mandates `AuditService.log()` on every create, update, delete, view
   and download.
-- **`src/middlewares/audit.middleware.ts` is a 0-byte file.** There is no audit module.
-  There are **zero** references to `auditEntry` anywhere in `src/`. Nothing has ever been
-  written to that table.
-- The frontend's `/auditor/trail` and `/admin/audit` render `SEED.audit`.
+- **Revised 2026-09-18 (DRIFT-11).** The above was true when written; confirmed wrong (or
+  since shipped) against live behavior: `GET /audit`, `/audit/:id`, `/audit/export` and
+  `/audit/verify` all exist and work, entries write automatically, and the hash chain
+  checked out intact via `/audit/verify`. See doc 01 for the full writeup.
+- The frontend's `/auditor/trail` still renders `SEED.audit`; `/admin/audit` was wired to
+  the real trail 2026-09-18.
   `useCreateAuditLog()` resolves after a 400 ms `setTimeout` and does nothing.
 
 **Acceptance criteria**
@@ -1331,13 +1396,13 @@ error paths and workers).
 | C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; routing **fixed**; still **unauthorized** |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
-| F — Oversight & SLA | 2 | 2 | 0 | 0 | Engine real, instance monitor shipped; **nobody is notified** |
+| F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; **nobody is notified** |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | Works today; will not scale |
 | H — Audit & Compliance | 0 | 0 | 2 | 1 | **Entirely mock — the biggest gap** |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 0 | 1 | 2 | 0 | Circulars mock; notifications **plumbed but silent** |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **12** | **16** | **11** | **3** | 42 functional stories |
+| **Total** | **13** | **15** | **11** | **3** | 42 functional stories |
 
 **The honest one-paragraph summary:** the *document* half of this EDMS — capture, filing,
 versioning, checkout, classification, task execution and approval — is genuinely built and
@@ -1391,3 +1456,17 @@ landed on the backend. This is the first revision where a *cross-cutting* defect
 
 Story statuses themselves are unchanged by this scan. What changed is *why* several of
 them are where they are, and who owns moving them.
+
+**Revised again**, after the frontend was wired to the backend's Workflow Module read
+models (`status-counts`, `team-status-matrix`, `open-items-by-cabinet`,
+`bottlenecks-ageing`, `tasks/approvals`, `tasks/workload`, `sla/breaches`, `delegations`) —
+all confirmed live against the deployed Swagger doc, no backend changes. **F1 moves to
+Done**; **F2** and **C4** both tick further boxes without changing status. Done climbs to
+13, Partial drops to 15. The client-side `/tasks` page-walking stopgap (`useAllTasks` /
+`fetchAllPages`) is now retired from every supervisor screen except the three
+`/management/*` dashboards, which this pass deliberately left alone — the Workflow Module
+API guide itself scopes Team Performance metrics and the Management Dashboard as separate
+modules (§11), and its own §10 flags that several of these read models (including
+`tasks/stats` and `workflow-instances/stats`, which back those dashboards) aren't yet
+department-scoped for supervisors server-side. DRIFT-14 (workflow definitions unreadable
+by `staff`/`supervisor`) is unaffected by this pass — C1 still doesn't complete end to end.

@@ -136,7 +136,7 @@ export default function TenantDirectoryPage() {
       title: t.name,
       body: (
         <div>
-          <div className="flex g8 wrap mb16">
+          <div className="flex gap-2 flex-wrap mb-4">
             <span
               className={`badge ${t.status === 'Active' ? 'b-status-closed' : t.status === 'Suspended' ? 'b-status-overdue' : 'b-status-pending'}`}
             >
@@ -158,15 +158,15 @@ export default function TenantDirectoryPage() {
             </div>
           ))}
 
-          <div className="h3 mt16 mb8">Storage</div>
+          <div className="h3 mt-4 mb-2">Storage</div>
           <div className={`pbar ${usagePct > 85 ? 'crit' : usagePct > 70 ? 'warn' : 'ok'}`}>
             <i style={{ width: usagePct + '%' }}></i>
           </div>
-          <div className="caption mt8">
+          <div className="caption mt-2">
             {t.storageGb} GB of {t.storageLimit} GB ({usagePct}%)
           </div>
 
-          <div className="h3 mt16 mb8">Health</div>
+          <div className="h3 mt-4 mb-2">Health</div>
           <span className={`health ${t.health}`}>
             <span className="hd"></span>
             {t.health === 'ok'
@@ -177,7 +177,7 @@ export default function TenantDirectoryPage() {
           </span>
           <div className="divider"></div>
 
-          <div className="flex g8 wrap">
+          <div className="flex gap-2 flex-wrap">
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => {
@@ -316,7 +316,7 @@ export default function TenantDirectoryPage() {
         </div>
       </div>
 
-      <div className="grid cols-4 mb16">
+      <div className="grid cols-4 mb-4">
         <div className="card kpi">
           <div className="kv">{tenants?.length || 0}</div>
           <div className="kl">Tenants</div>

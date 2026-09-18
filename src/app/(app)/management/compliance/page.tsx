@@ -4,18 +4,39 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useAuditLogs } from '@/apis/hooks/useAudit';
+import { useAuditEntries } from '@/apis/hooks/useAudit';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { Spinner } from '@/components/common/Spinner';
 import { HBarChart } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
 import { SevBadge } from '@/components/ui/Badges';
 
+/**
+ * Access-control and privilege-change events — confirmed live 2026-09-18
+ * against real `GET /audit` data (a 78-entry sample from this tenant), not
+ * guessed. Replaces the old `REDACT_RELEASE`/`SIGN`/`PRINT`/`DOWNLOAD`/
+ * `SLA_ESCALATION` list, which were app-invented codes with no backend
+ * equivalent — none of them were ever real action names.
+ */
+const SENSITIVE_ACTIONS = [
+  'document.access_requested',
+  'document.access_granted',
+  'document.access_denied',
+  'role.permissions_updated',
+  'role.created',
+  'role.deleted',
+  'user.deactivated',
+  'user.password_reset',
+];
+
 export default function CompliancePosturePage() {
   const router = useRouter();
   const { findings } = useStore();
 
-  const { data: auditData, isLoading: isLoadingAudit } = useAuditLogs();
+  const { data: auditData, isLoading: isLoadingAudit } = useAuditEntries({
+    limit: 100,
+    page: 1,
+  });
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
   const audit = auditData?.data || [];
   const users = usersData?.data || [];
@@ -30,17 +51,9 @@ export default function CompliancePosturePage() {
 
   const open = findings?.filter((f: any) => f.status !== 'Closed') || [];
 
-  const sensitiveActions = [
-    'REDACT_RELEASE',
-    'REDACT_MARK',
-    'ACCESS_REQUEST',
-    'SIGN',
-    'PRINT',
-    'DOWNLOAD',
-    'SLA_ESCALATION',
-    'AUDIT_EXPORT',
-  ];
-  const sens = audit?.filter((a: any) => sensitiveActions.includes(a.action)).slice(0, 8) || [];
+  // Newest-first is already how `GET /audit` orders results, so the first
+  // matches are also the most recent — no client-side sort needed.
+  const sens = audit.filter((a) => SENSITIVE_ACTIONS.includes(a.action)).slice(0, 8);
 
   const hbarItems = [
     {
@@ -91,7 +104,7 @@ export default function CompliancePosturePage() {
         </div>
       </div>
 
-      <div className="grid cols-4 mb16">
+      <div className="grid cols-4 mb-4">
         <div className="card kpi">
           <div
             className="kv"
@@ -115,7 +128,7 @@ export default function CompliancePosturePage() {
         </div>
       </div>
 
-      <div className="grid cols-2 mb16">
+      <div className="grid cols-2 mb-4">
         <div className="card">
           <div className="card-head">
             <span className="h3">Findings by status</span>
@@ -136,10 +149,10 @@ export default function CompliancePosturePage() {
           </div>
           <div className="card-body" style={{ paddingTop: '4px' }}>
             {sens.length > 0 ? (
-              sens.map((a: any, idx: number) => (
-                <div key={idx} className="meta-row">
+              sens.map((a) => (
+                <div key={a.id} className="meta-row">
                   <span className="k">
-                    {new Date(a.at).toLocaleString('en-GB', {
+                    {new Date(a.occurredAt).toLocaleString('en-GB', {
                       day: '2-digit',
                       month: 'short',
                       hour: '2-digit',
@@ -147,12 +160,16 @@ export default function CompliancePosturePage() {
                     })}
                   </span>
                   <span className="v" style={{ textAlign: 'left', fontWeight: 500 }}>
-                    {userById(users, a.user as string)?.name} · {a.action} — {a.detail}
+                    {a.actorType === 'system' || !a.actorId
+                      ? 'System'
+                      : userById(users, a.actorId)?.name || a.actorId}{' '}
+                    · {a.action}
+                    {a.objectType ? ` (${a.objectType})` : ''}
                   </span>
                 </div>
               ))
             ) : (
-              <p className="muted">No sensitive events in this window.</p>
+              <p className="muted">No sensitive events in the last 100.</p>
             )}
           </div>
         </div>

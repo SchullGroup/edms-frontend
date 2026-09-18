@@ -25,7 +25,7 @@ export const HBarChart = ({
           onClick={it.onClick}
           style={{ cursor: it.onClick ? 'pointer' : 'default', marginBottom: '12px' }}
         >
-          <div className="flex jcb aic" style={{ fontSize: '12.5px', marginBottom: '4px' }}>
+          <div className="flex justify-between items-center" style={{ fontSize: '12.5px', marginBottom: '4px' }}>
             <span>{it.label}</span>
             <span style={{ fontWeight: 600 }}>
               {it.value}
@@ -147,11 +147,11 @@ export const LineChart = ({ labels, series }: { labels: string[]; series: LineSe
         )}
       </svg>
       <div
-        className="flex g12"
+        className="flex gap-3"
         style={{ justifyContent: 'center', marginTop: '12px', fontSize: '11px' }}
       >
         {series.map((s, i) => (
-          <div key={i} className="flex aic g8">
+          <div key={i} className="flex items-center gap-2">
             <span
               style={{ width: '10px', height: '10px', borderRadius: '50%', background: s.color }}
             ></span>

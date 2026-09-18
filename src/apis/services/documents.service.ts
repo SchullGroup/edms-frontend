@@ -9,7 +9,17 @@ import {
   DocumentMetadataValueInput,
   CreateVersionRequest,
   UploadDocumentRequest,
+  DocumentStatsResponse,
+  AccessRequest,
+  DocumentComment,
+  DocumentSignature,
 } from '@/types/models';
+
+export interface AccessRequestInboxFilters {
+  status?: 'pending' | 'approved' | 'denied';
+  page?: number;
+  limit?: number;
+}
 
 export interface DocumentFilters {
   cabinetId?: string;
@@ -45,6 +55,15 @@ export const documentsService = {
 
   getById: async (id: string): Promise<Document> => {
     const response = await apiClient.get<ApiResponse<Document>>(`/documents/${id}`);
+    return response.data.data;
+  },
+
+  // Server-side count aggregates for the management dashboards. Shape unverified —
+  // see `DocumentStatsResponse`. Callers must tolerate a 404 / partial payload.
+  getStats: async (params?: Record<string, any>): Promise<DocumentStatsResponse> => {
+    const response = await apiClient.get<ApiResponse<DocumentStatsResponse>>('/documents/stats', {
+      params,
+    });
     return response.data.data;
   },
 
@@ -131,17 +150,82 @@ export const documentsService = {
     return response.data.data;
   },
 
-  // Comments & Signatures — implemented on the Express backend, not in the Swagger spec.
-  addComment: async (id: string, text: string): Promise<any> => {
-    const response = await apiClient.post<ApiResponse<any>>(`/documents/${id}/comments`, { text });
+  // Dedicated document-level comments/signatures — independent of any
+  // workflow task (contrast with the `comment` field and `signature` image
+  // on `POST /tasks/{taskId}/action`, still used by the approve flow — see
+  // tasks.service). Verified live 2026-09-18.
+  getComments: async (id: string): Promise<DocumentComment[]> => {
+    const response = await apiClient.get<ApiResponse<DocumentComment[]>>(
+      `/documents/${id}/comments`,
+    );
     return response.data.data;
   },
 
-  addSignature: async (
-    id: string,
-    data: { fieldName: string; method?: string; password: string },
-  ): Promise<any> => {
-    const response = await apiClient.post<ApiResponse<any>>(`/documents/${id}/signatures`, data);
+  addComment: async (id: string, content: string): Promise<DocumentComment> => {
+    const response = await apiClient.post<ApiResponse<DocumentComment>>(
+      `/documents/${id}/comments`,
+      { content },
+    );
     return response.data.data;
+  },
+
+  getSignatures: async (id: string): Promise<DocumentSignature[]> => {
+    const response = await apiClient.get<ApiResponse<DocumentSignature[]>>(
+      `/documents/${id}/signatures`,
+    );
+    return response.data.data;
+  },
+
+  /** `url` must already point at an uploaded image — this only records it. */
+  addSignature: async (id: string, url: string): Promise<DocumentSignature> => {
+    const response = await apiClient.post<ApiResponse<DocumentSignature>>(
+      `/documents/${id}/signatures`,
+      { url },
+    );
+    return response.data.data;
+  },
+
+  // Access requests — any authenticated user may request access to any
+  // document by id (409 if they already have a pending request on it);
+  // grant/deny is client_admin-only. Verified live 2026-09-18.
+  requestAccess: async (id: string, reason?: string): Promise<AccessRequest> => {
+    const response = await apiClient.post<ApiResponse<AccessRequest>>(
+      `/documents/${id}/access-requests`,
+      reason ? { reason } : {},
+    );
+    return response.data.data;
+  },
+
+  getAccessRequests: async (id: string): Promise<AccessRequest[]> => {
+    const response = await apiClient.get<ApiResponse<AccessRequest[]>>(
+      `/documents/${id}/access-requests`,
+    );
+    return response.data.data;
+  },
+
+  grantAccessRequest: async (id: string, requestId: string): Promise<AccessRequest> => {
+    const response = await apiClient.post<ApiResponse<AccessRequest>>(
+      `/documents/${id}/access-requests/${requestId}/grant`,
+    );
+    return response.data.data;
+  },
+
+  denyAccessRequest: async (id: string, requestId: string): Promise<AccessRequest> => {
+    const response = await apiClient.post<ApiResponse<AccessRequest>>(
+      `/documents/${id}/access-requests/${requestId}/deny`,
+    );
+    return response.data.data;
+  },
+
+  /** `GET /documents/access-requests` — client_admin-only admin inbox across
+   *  every document, newest first. */
+  getAccessRequestsInbox: async (
+    filters?: AccessRequestInboxFilters,
+  ): Promise<PaginatedResponse<AccessRequest>> => {
+    const response = await apiClient.get<PaginatedResponse<AccessRequest>>(
+      '/documents/access-requests',
+      { params: filters },
+    );
+    return response.data;
   },
 };

@@ -6,6 +6,18 @@ import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
 
+/**
+ * Deliberately still `SEED`-backed, unlike `/admin/audit` and `/auditor/trail`
+ * (both migrated to the real `GET /audit` trail 2026-09-18). This page's
+ * whole premise — browsing audit events *across tenants* — has no backend
+ * equivalent: `GET /audit` is scoped to the caller's own tenant with no
+ * cross-tenant query, and there is no platform-level multi-tenant API at all
+ * in this backend today (nothing in `/platform/*` is real; tenants,
+ * provisioning, billing and flags are all fixtures too). Migrating audit
+ * alone wouldn't be meaningful without the rest of the platform module
+ * having something real to query — that's a materially bigger, separate
+ * backend ask, not a "point this hook at a real endpoint" change.
+ */
 export default function PlatformAuditPage() {
   const { audit, tenants, users } = useStore();
   const { setPageTitle } = useUIStore();

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
@@ -16,13 +17,19 @@ import {
   useUpdateCabinet,
   useDeleteCabinet,
   useAddMetadataField,
+  useUpdateMetadataField,
   useDeleteMetadataField,
   useCabinetAccessGrants,
   useGrantCabinetAccess,
   useRevokeCabinetAccess,
 } from '@/apis/hooks/useCabinets';
-import { useCabinetFolders, useCreateFolder, useDeleteFolder } from '@/apis/hooks/useFolders';
-import { useDocuments, useDocument } from '@/apis/hooks/useDocuments';
+import {
+  useCabinetFolders,
+  useCreateFolder,
+  useUpdateFolder,
+  useDeleteFolder,
+} from '@/apis/hooks/useFolders';
+import { useDocuments, useAllDocuments, useDocument } from '@/apis/hooks/useDocuments';
 import { documentsService } from '@/apis/services/documents.service';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { useRoles } from '@/apis/hooks/useRoles';
@@ -52,6 +59,7 @@ export default function CabinetDesignerPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { auditAction, currentUser } = useStore();
+  const { can, scopeFor } = usePermissions();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
   const { data: cabinetsResponse, isLoading, isError, refetch } = useCabinets();
@@ -65,10 +73,7 @@ export default function CabinetDesignerPage() {
 
   // Admins see every cabinet. Everyone else sees only cabinets scoped to their
   // own department, plus "general" cabinets that aren't scoped to any (departmentId null).
-  const roleNames = (currentUser?.roles || []).map((r: any) =>
-    typeof r === 'string' ? r : r?.name,
-  );
-  const isAdmin = roleNames.some((r) => r === 'client_admin' || r === 'schulltech_admin');
+  const isAdmin = can('cabinet', 'create') || scopeFor('cabinet', 'view') === 'global';
   const { data: me } = useUser(currentUser?.id || '');
   const myDepartmentId = me?.departmentId ?? null;
 
@@ -90,12 +95,14 @@ export default function CabinetDesignerPage() {
   const { data: folData, isLoading: isLoadingFolders } = useCabinetFolders(activeCab?.id);
   const activeCabFolders = folData?.data || [];
   const createFolder = useCreateFolder();
+  const updateFolder = useUpdateFolder();
   const deleteFolder = useDeleteFolder();
 
   // `metadataFields` only comes back on the single-cabinet GET, not the list.
   const { data: activeCabDetail, isLoading: isLoadingSchema } = useCabinet(activeCab?.id);
   const activeSchema = activeCabDetail?.metadataFields || [];
   const addMetadataField = useAddMetadataField();
+  const updateMetadataField = useUpdateMetadataField();
   const deleteMetadataField = useDeleteMetadataField();
 
   // Access grants for the selected cabinet.
@@ -363,16 +370,13 @@ export default function CabinetDesignerPage() {
           label: 'Add folder',
           kind: 'btn-primary',
           onClick: () => {
-            if (!name.trim()) return;
-            createFolder.mutate(
-              { cabinetId: activeCab.id, data: { name: name.trim() } },
-              {
-                onSuccess: () => {
-                  auditAction('FOLDER_CREATE', activeCab.id, 'Added folder ' + name);
-                  closeModal();
-                },
-              },
-            );
+            if (!name.trim()) return false;
+            return createFolder
+              .mutateAsync({ cabinetId: activeCab.id, data: { name: name.trim() } })
+              .then(() => {
+                auditAction('FOLDER_CREATE', activeCab.id, 'Added folder ' + name);
+              })
+              .catch(() => false);
           },
         },
       ],
@@ -390,16 +394,94 @@ export default function CabinetDesignerPage() {
       message: 'The folder is empty and will be removed from the cabinet structure.',
       confirmLabel: 'Delete folder',
       danger: true,
-      onConfirm: () => {
-        deleteFolder.mutate(
-          { id: f.id, cabinetId: activeCab.id },
-          {
-            onSuccess: () => {
-              auditAction('FOLDER_DELETE', activeCab.id, 'Deleted ' + f.name);
-            },
+      onConfirm: () =>
+        deleteFolder
+          .mutateAsync({ id: f.id, cabinetId: activeCab.id })
+          .then(() => {
+            auditAction('FOLDER_DELETE', activeCab.id, 'Deleted ' + f.name);
+          })
+          .catch(() => false),
+    });
+  };
+
+  const handleRenameFolder = (f: any) => {
+    let name = f.name;
+    openModal({
+      title: `Rename folder "${f.name}"`,
+      body: (
+        <div className="field">
+          <label>Folder name</label>
+          <input
+            className="input"
+            defaultValue={f.name}
+            onChange={(e) => (name = e.target.value)}
+          />
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save',
+          kind: 'btn-primary',
+          onClick: () => {
+            if (!name.trim() || name.trim() === f.name) return;
+            return updateFolder
+              .mutateAsync({ id: f.id, updates: { name: name.trim() } })
+              .then(() => {
+                auditAction('FOLDER_EDIT', activeCab.id, `Renamed folder → ${name}`);
+              })
+              .catch(() => false);
           },
-        );
-      },
+        },
+      ],
+    });
+  };
+
+  const handleEditField = (r: any) => {
+    let fn = r.name;
+    let rq = !!r.isRequired;
+    openModal({
+      title: `Edit field "${r.name}"`,
+      body: (
+        <div className="grid" style={{ gap: '12px' }}>
+          <div className="field">
+            <label>Field name</label>
+            <input
+              className="input"
+              defaultValue={r.name}
+              onChange={(e) => (fn = e.target.value)}
+            />
+          </div>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              defaultChecked={rq}
+              onChange={(e) => (rq = e.target.checked)}
+            />
+            Required
+          </label>
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save',
+          kind: 'btn-primary',
+          onClick: () => {
+            if (!fn.trim()) return false;
+            return updateMetadataField
+              .mutateAsync({
+                cabinetId: activeCab.id,
+                fieldId: r.id,
+                updates: { name: fn.trim(), isRequired: rq },
+              })
+              .then(() => {
+                auditAction('SCHEMA_EDIT', activeCab.id, `Edited field ${fn}`);
+              })
+              .catch(() => false);
+          },
+        },
+      ],
     });
   };
 
@@ -445,9 +527,9 @@ export default function CabinetDesignerPage() {
           label: 'Add field',
           kind: 'btn-primary',
           onClick: () => {
-            if (!fn.trim()) return;
-            addMetadataField.mutate(
-              {
+            if (!fn.trim()) return false;
+            return addMetadataField
+              .mutateAsync({
                 cabinetId: activeCab.id,
                 data: {
                   name: fn.trim(),
@@ -455,14 +537,11 @@ export default function CabinetDesignerPage() {
                   isRequired: rq,
                   displayOrder: activeSchema.length,
                 },
-              },
-              {
-                onSuccess: () => {
-                  auditAction('SCHEMA_EDIT', activeCab.id, 'Added field ' + fn);
-                  closeModal();
-                },
-              },
-            );
+              })
+              .then(() => {
+                auditAction('SCHEMA_EDIT', activeCab.id, 'Added field ' + fn);
+              })
+              .catch(() => false);
           },
         },
       ],
@@ -635,10 +714,17 @@ export default function CabinetDesignerPage() {
     });
   };
 
-  const handleMoveDocument = (doc: any) => {
+  /**
+   * One picker for both the per-row "Move" and the folder list's
+   * "Move selected" — a single document is just the bulk path with one id.
+   * `onMoved` lets the caller clear its checkbox state once the move lands.
+   */
+  const handleMoveDocuments = (docs: any[], onMoved?: () => void) => {
+    if (docs.length === 0) return;
     let dest = { cabinetId: activeCab.id, folderId: '' };
+    const many = docs.length > 1;
     openModal({
-      title: `Move “${doc.title}”`,
+      title: many ? `Move ${docs.length} documents` : `Move “${docs[0].title}”`,
       body: (
         <MoveDocumentModalBody
           cabinets={cabinets}
@@ -649,23 +735,41 @@ export default function CabinetDesignerPage() {
       actions: [
         { label: 'Cancel' },
         {
-          label: 'Move',
+          label: many ? `Move ${docs.length}` : 'Move',
           kind: 'btn-primary',
           onClick: () =>
-            documentsService
-              .update(doc.id, { cabinetId: dest.cabinetId, folderId: dest.folderId || undefined })
+            Promise.all(
+              docs.map((doc) =>
+                documentsService.update(doc.id, {
+                  cabinetId: dest.cabinetId,
+                  folderId: dest.folderId || undefined,
+                }),
+              ),
+            )
               .then(() => {
-                auditAction('DOCUMENT_MOVE', doc.id, `Moved “${doc.title}”`);
+                docs.forEach((doc) =>
+                  auditAction('DOCUMENT_MOVE', doc.id, `Moved “${doc.title}”`),
+                );
                 // Both endpoints embed `_count.documents`, which is what the
                 // folder tree and delete guard read — stale counts here would
                 // reintroduce the exact bug this button exists to avoid.
                 queryClient.invalidateQueries({ queryKey: ['cabinets'] });
                 queryClient.invalidateQueries({ queryKey: ['folders'] });
                 queryClient.invalidateQueries({ queryKey: ['documents'] });
-                addToast('Document moved', 'success');
+                addToast(many ? `${docs.length} documents moved` : 'Document moved', 'success');
+                onMoved?.();
               })
               .catch((err: any) => {
-                addToast(err.response?.data?.message || 'Failed to move document', 'error');
+                // Promise.all rejects on the first failure; the others may
+                // still have landed, so refetch rather than assume nothing moved.
+                queryClient.invalidateQueries({ queryKey: ['cabinets'] });
+                queryClient.invalidateQueries({ queryKey: ['folders'] });
+                queryClient.invalidateQueries({ queryKey: ['documents'] });
+                addToast(
+                  err.response?.data?.message ||
+                    (many ? 'Failed to move some documents' : 'Failed to move document'),
+                  'error',
+                );
                 return false;
               }),
         },
@@ -692,21 +796,26 @@ export default function CabinetDesignerPage() {
       key: 'act',
       label: '',
       render: (r) => (
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => {
-            deleteMetadataField.mutate(
-              { cabinetId: activeCab.id, fieldId: r.id },
-              {
-                onSuccess: () => {
-                  auditAction('SCHEMA_EDIT', activeCab.id, 'Removed field ' + r.name);
+        <span className="flex gap-2">
+          <button className="btn btn-ghost btn-sm" onClick={() => handleEditField(r)}>
+            Edit
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              deleteMetadataField.mutate(
+                { cabinetId: activeCab.id, fieldId: r.id },
+                {
+                  onSuccess: () => {
+                    auditAction('SCHEMA_EDIT', activeCab.id, 'Removed field ' + r.name);
+                  },
                 },
-              },
-            );
-          }}
-        >
-          Remove
-        </button>
+              );
+            }}
+          >
+            Remove
+          </button>
+        </span>
       ),
     },
   ];
@@ -784,7 +893,7 @@ export default function CabinetDesignerPage() {
         </div>
 
         <div className="min-w-0" style={{ flexGrow: 1 }}>
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <span className="h3">
                 {activeCab.name}
@@ -794,7 +903,7 @@ export default function CabinetDesignerPage() {
                   </span>
                 )}
               </span>
-              <span className="flex aic g8">
+              <span className="flex items-center gap-2">
                 <button className="btn btn-secondary btn-sm" onClick={handleEditCabinet}>
                   Edit
                 </button>
@@ -803,13 +912,20 @@ export default function CabinetDesignerPage() {
                 </button>
               </span>
             </div>
-            <div className="card-body caption" style={{ paddingTop: '6px' }}>
-              {activeCab.description || 'No description.'} · {docsInCabinet} docs ·{' '}
-              {foldersInCabinet} folders
+            <div className="card-body" style={{ paddingTop: '6px' }}>
+              <div className="caption">
+                {activeCab.description || 'No description.'} · {docsInCabinet} docs ·{' '}
+                {foldersInCabinet} folders
+              </div>
+              <UnfiledDocuments
+                cabinetId={activeCab.id}
+                onOpenDocument={handleOpenDocument}
+                onMoveDocuments={handleMoveDocuments}
+              />
             </div>
           </div>
 
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <span className="h3">{activeCab.name} — structure</span>
               <button className="btn btn-secondary btn-sm" onClick={handleNewFolder}>
@@ -823,7 +939,7 @@ export default function CabinetDesignerPage() {
                 <>
                   {activeCabFolders.length > 8 && (
                     <input
-                      className="input mb8"
+                      className="input mb-2"
                       type="search"
                       placeholder={`Filter ${activeCabFolders.length} folders…`}
                       value={folderFilter}
@@ -839,7 +955,7 @@ export default function CabinetDesignerPage() {
                           style={{ cursor: 'pointer' }}
                           onClick={() => setOpenFolderId((cur) => (cur === f.id ? null : f.id))}
                         >
-                          <span className="flex aic g8">
+                          <span className="flex items-center gap-2">
                             <span
                               style={{
                                 display: 'inline-flex',
@@ -856,8 +972,17 @@ export default function CabinetDesignerPage() {
                             </span>
                             {f.name}
                           </span>
-                          <span className="flex aic g8">
+                          <span className="flex items-center gap-2">
                             <span className="caption">{f._count?.documents ?? 0} docs</span>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRenameFolder(f);
+                              }}
+                            >
+                              Rename
+                            </button>
                             <button
                               className="btn btn-ghost btn-sm"
                               onClick={(e) => {
@@ -874,7 +999,7 @@ export default function CabinetDesignerPage() {
                             cabinetId={activeCab.id}
                             folderId={f.id}
                             onOpenDocument={handleOpenDocument}
-                            onMoveDocument={handleMoveDocument}
+                            onMoveDocuments={handleMoveDocuments}
                           />
                         )}
                       </div>
@@ -893,7 +1018,7 @@ export default function CabinetDesignerPage() {
             </div>
           </div>
 
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <span className="h3">Metadata schema</span>
               <button className="btn btn-secondary btn-sm" onClick={handleNewField}>
@@ -937,7 +1062,103 @@ export default function CabinetDesignerPage() {
 const FOLDER_DOCS_PAGE_SIZE = 20;
 
 /**
- * Documents inside one folder. Kept as its own component so the
+ * The checkbox + "Move selected" row list shared by every place the Designer
+ * shows documents (a folder's contents, the cabinet's unfiled documents).
+ * Owns the selection; callers reset it by remounting (`key`) when the row set
+ * changes wholesale, e.g. on a page change.
+ */
+function DocumentRowList({
+  docs,
+  selectAllLabel,
+  onOpenDocument,
+  onMoveDocuments,
+}: {
+  docs: any[];
+  selectAllLabel: string;
+  onOpenDocument: (doc: any) => void;
+  onMoveDocuments: (docs: any[], onMoved?: () => void) => void;
+}) {
+  // Selection is by id, not by row object, so it survives the refetch that
+  // follows any mutation (react-query hands back new objects each time).
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const selectedDocs = docs.filter((d: any) => selectedIds.has(d.id));
+  const allSelected = docs.length > 0 && selectedDocs.length === docs.length;
+
+  const toggleAll = (checked: boolean) =>
+    setSelectedIds(checked ? new Set(docs.map((d: any) => d.id)) : new Set());
+  const toggleOne = (id: string, checked: boolean) =>
+    setSelectedIds((cur) => {
+      const next = new Set(cur);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  return (
+    <>
+      <div className="metric-li">
+        <label className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            aria-label={selectAllLabel}
+            checked={allSelected}
+            onChange={(e) => toggleAll(e.target.checked)}
+          />
+          <span className="caption">
+            {selectedDocs.length > 0 ? `${selectedDocs.length} selected` : 'Select all'}
+          </span>
+        </label>
+        <button
+          className="btn btn-secondary btn-sm"
+          disabled={selectedDocs.length === 0}
+          onClick={() => onMoveDocuments(selectedDocs, () => setSelectedIds(new Set()))}
+        >
+          Move selected{selectedDocs.length > 0 ? ` (${selectedDocs.length})` : ''}
+        </button>
+      </div>
+      {docs.map((d: any) => (
+        <div
+          key={d.id}
+          className="metric-li"
+          style={{ cursor: 'pointer' }}
+          onClick={() => onOpenDocument(d)}
+        >
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              aria-label={`Select ${d.title}`}
+              checked={selectedIds.has(d.id)}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => toggleOne(d.id, e.target.checked)}
+            />
+            <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <Icon name="doc" size={14} />
+            </span>
+            {d.title}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="caption">
+              {d.confidentiality} · v{d.currentVersion?.versionNumber ?? 1}
+            </span>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDocuments([d]);
+              }}
+            >
+              Move
+            </button>
+          </span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Lazy per-folder document list. Mounted only for the expanded folder so the
  * `useDocuments({ folderId })` query only runs while the folder is expanded
  * (and unmounts when it collapses), rather than one query per folder always —
  * which also resets `page` back to 1 the next time it's opened, for free.
@@ -950,12 +1171,12 @@ function FolderDocuments({
   cabinetId,
   folderId,
   onOpenDocument,
-  onMoveDocument,
+  onMoveDocuments,
 }: {
   cabinetId: string;
   folderId: string;
   onOpenDocument: (doc: any) => void;
-  onMoveDocument: (doc: any) => void;
+  onMoveDocuments: (docs: any[], onMoved?: () => void) => void;
 }) {
   const [page, setPage] = useState(1);
   const { data, isLoading } = useDocuments({
@@ -983,35 +1204,14 @@ function FolderDocuments({
   }
   return (
     <div style={{ padding: '2px 0 4px 34px' }}>
-      {docs.map((d: any) => (
-        <div
-          key={d.id}
-          className="metric-li"
-          style={{ cursor: 'pointer' }}
-          onClick={() => onOpenDocument(d)}
-        >
-          <span className="flex aic g8">
-            <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-              <Icon name="doc" size={14} />
-            </span>
-            {d.title}
-          </span>
-          <span className="flex aic g8">
-            <span className="caption">
-              {d.confidentiality} · v{d.currentVersion?.versionNumber ?? 1}
-            </span>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMoveDocument(d);
-              }}
-            >
-              Move
-            </button>
-          </span>
-        </div>
-      ))}
+      {/* `key={page}` drops the selection when the visible rows change. */}
+      <DocumentRowList
+        key={page}
+        docs={docs}
+        selectAllLabel="Select all documents in this folder"
+        onOpenDocument={onOpenDocument}
+        onMoveDocuments={onMoveDocuments}
+      />
       {pagination && pagination.totalPages > 1 && (
         <div style={{ marginRight: '-20px' }}>
           <Pagination
@@ -1028,10 +1228,68 @@ function FolderDocuments({
 }
 
 /**
- * Cabinet/folder picker for relocating one document — the Designer's answer
- * to the folder-delete guard's "move them first" message, which otherwise had
- * no in-page way to act on it (the only other Move UI lives on
- * `/staff/cabinets`, and only as a bulk action over a document table).
+ * Documents that sit directly in the cabinet, outside any folder. These were
+ * previously invisible in the Designer — the structure card only lists
+ * folders — so a cabinet could report "5 docs · 0 folders" with nowhere to
+ * see, or move, those five.
+ *
+ * `GET /documents` has no "folderId is null" filter (only an exact-match
+ * `folderId`), so this pulls the cabinet's documents and keeps the ones with
+ * no folder client-side. `useAllDocuments` walks every page — fine for the
+ * per-cabinet volumes the Designer deals with today; swap for a server-side
+ * filter if that ever changes.
+ */
+function UnfiledDocuments({
+  cabinetId,
+  onOpenDocument,
+  onMoveDocuments,
+}: {
+  cabinetId: string;
+  onOpenDocument: (doc: any) => void;
+  onMoveDocuments: (docs: any[], onMoved?: () => void) => void;
+}) {
+  const { data, isLoading } = useAllDocuments({ cabinetId });
+  const unfiled = useMemo(() => (data || []).filter((d: any) => !d.folderId), [data]);
+
+  if (isLoading) {
+    return (
+      <div className="caption" style={{ paddingTop: '8px' }}>
+        Loading unfiled documents…
+      </div>
+    );
+  }
+  if (unfiled.length === 0) {
+    return (
+      <div className="caption" style={{ paddingTop: '8px' }}>
+        No unfiled documents — everything in this cabinet is inside a folder.
+      </div>
+    );
+  }
+  return (
+    <div style={{ paddingTop: '10px' }}>
+      <div className="flex items-center gap-2" style={{ marginBottom: '2px' }}>
+        <span className="h3">Unfiled documents</span>
+        <span className="caption">
+          {unfiled.length} document{unfiled.length === 1 ? '' : 's'} not in any folder
+        </span>
+      </div>
+      <div style={{ maxHeight: '320px', overflowY: 'auto' }}>
+        <DocumentRowList
+          docs={unfiled}
+          selectAllLabel="Select all unfiled documents"
+          onOpenDocument={onOpenDocument}
+          onMoveDocuments={onMoveDocuments}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Cabinet/folder picker for relocating one or more documents — the
+ * Designer's answer to the folder-delete guard's "move them first" message,
+ * which otherwise had no in-page way to act on it (the only other Move UI
+ * lives on `/staff/cabinets`, as a bulk action over a document table).
  */
 function MoveDocumentModalBody({
   cabinets,
@@ -1111,7 +1369,7 @@ function DocumentPreviewBody({ documentId }: { documentId: string }) {
 
   return (
     <div>
-      <div className="flex g8 wrap" style={{ marginBottom: '12px' }}>
+      <div className="flex gap-2 flex-wrap" style={{ marginBottom: '12px' }}>
         <span className="badge b-urg-low">{doc.status}</span>
         <span className="badge b-urg-low">{doc.confidentiality}</span>
         <span className="badge b-urg-low">{doc.urgency}</span>
@@ -1177,14 +1435,14 @@ function CabinetDesignerSkeleton() {
         </div>
 
         <div className="min-w-0" style={{ flexGrow: 1 }}>
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <Skeleton height={18} width="30%" />
               <Skeleton height={12} width="55%" />
             </div>
           </div>
 
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <Skeleton height={16} width="35%" />
             </div>
@@ -1193,7 +1451,7 @@ function CabinetDesignerSkeleton() {
             </div>
           </div>
 
-          <div className="card mb16">
+          <div className="card mb-4">
             <div className="card-head">
               <Skeleton height={16} width="30%" />
             </div>
