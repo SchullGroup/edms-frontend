@@ -159,7 +159,10 @@ export const useNavigation = () => {
         },
         {
           label: 'Governance',
-          items: [{ route: '/admin/audit', label: 'Tenant Audit', icon: 'list' }],
+          items: [
+            { route: '/admin/audit', label: 'Tenant Audit', icon: 'list' },
+            { route: '/admin/access-requests', label: 'Access Requests', icon: 'key' },
+          ],
         },
       ],
     },

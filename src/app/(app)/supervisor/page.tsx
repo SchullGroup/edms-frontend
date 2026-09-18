@@ -21,7 +21,7 @@ import { Task, WorkflowTeamStatusMember } from '@/types/models';
 
 export default function SupervisorDashboard() {
   const router = useRouter();
-  const { setPageTitle, openModal, closeModal, openDrawer, closeDrawer, addToast } = useUIStore();
+  const { setPageTitle, openModal, openDrawer, closeDrawer, addToast } = useUIStore();
 
   // Both endpoints omit departmentId — the backend resolves the supervisor's
   // own department automatically. See the Workflow Module API guide §4.
@@ -119,26 +119,23 @@ export default function SupervisorDashboard() {
           onClick: () => {
             if (!newAssignee) {
               addToast('Please select a new assignee', 'error');
-              return;
+              return false;
             }
             const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
             const newUser = users.find((u) => u.id === newAssignee);
 
-            reassignTask.mutate(
-              { id: t.id, assigneeId: newAssignee, note: note || undefined },
-              {
-                onSuccess: () => {
-                  createAuditLog.mutate({
-                    action: 'REASSIGN',
-                    target: t.workflowInstance?.documentId || t.id,
-                    detail: `Reassigned from ${prevName} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`,
-                  });
-                  addToast(`Reassigned to ${newUser?.name}`, 'success');
-                  closeModal();
-                  if (onDone) onDone();
-                },
-              },
-            );
+            return reassignTask
+              .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
+              .then(() => {
+                createAuditLog.mutate({
+                  action: 'REASSIGN',
+                  target: t.workflowInstance?.documentId || t.id,
+                  detail: `Reassigned from ${prevName} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`,
+                });
+                addToast(`Reassigned to ${newUser?.name}`, 'success');
+                if (onDone) onDone();
+              })
+              .catch(() => false);
           },
         },
       ],

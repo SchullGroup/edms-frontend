@@ -79,10 +79,6 @@ export const authService = {
 
   // Neither of the two below touches a cookie, so — unlike login/refresh/logout —
   // there's no need to go via the Next proxy; they hit the Express backend directly.
-  //
-  // ⚠️ Not in the deployed Swagger doc yet (checked 2026-09-05) — these will 404 until
-  // the backend ships `POST /auth/forgot-password` and `POST /auth/reset-password`.
-  // See docs/BACKEND_REQUESTS.md (BE-12).
 
   /** The backend should always resolve with 200 here regardless of whether the
    *  email is registered, so a caller can't enumerate accounts by trying emails. */
@@ -90,11 +86,10 @@ export const authService = {
     await apiClient.post('/auth/forgot-password', { email });
   },
 
-  resetPassword: async (payload: {
-    token: string;
-    newPassword: string;
-    confirmPassword: string;
-  }): Promise<void> => {
+  /** Consumes a one-time token from either an invitation or a password-reset
+   *  email. Backend field is `password` (singular) — `confirmPassword` never
+   *  goes over the wire; matching is a client-side-only check. */
+  resetPassword: async (payload: { token: string; password: string }): Promise<void> => {
     await apiClient.post('/auth/reset-password', payload);
   },
 };

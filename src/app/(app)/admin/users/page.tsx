@@ -9,6 +9,7 @@ import {
   useUpdateUser,
   useAssignUserRoles,
   useRemoveUserRole,
+  useResendInvitation,
 } from '@/apis/hooks/useUsers';
 import { useRoles } from '@/apis/hooks/useRoles';
 import { useDepartments } from '@/apis/hooks/useDepartments';
@@ -21,7 +22,7 @@ const USERS_PAGE_SIZE = 10;
 
 export default function UsersPage() {
   const { auditAction } = useStore();
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+  const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
 
   const [page, setPage] = useState(1);
   const [departmentFilter, setDepartmentFilter] = useState('');
@@ -39,6 +40,7 @@ export default function UsersPage() {
   const updateUser = useUpdateUser();
   const assignUserRoles = useAssignUserRoles();
   const removeUserRole = useRemoveUserRole();
+  const resendInvitation = useResendInvitation();
 
   const { data: departmentsData } = useDepartments();
   const departmentIndex = useMemo(
@@ -75,6 +77,10 @@ export default function UsersPage() {
       roleId: existingRoleId,
       departmentId: user?.departmentId || departmentList[0]?.id || '',
     };
+    // Modal actions aren't real <form> submits, so `required`/`type="email"`
+    // alone won't pop the browser's native validation UI — this ref lets the
+    // Save/Send invite handler trigger it explicitly via reportValidity().
+    const emailInputRef = { current: null as HTMLInputElement | null };
 
     openModal({
       title: isNew ? 'Invite user' : 'Edit user — ' + u.name,
@@ -96,7 +102,12 @@ export default function UsersPage() {
               Email <span className="req">*</span>
             </label>
             <input
+              ref={(el) => {
+                emailInputRef.current = el;
+              }}
               className="input"
+              type="email"
+              required
               defaultValue={u.email}
               placeholder="name@firstatlantic.com"
               onChange={(e) => (u.email = e.target.value)}
@@ -128,47 +139,64 @@ export default function UsersPage() {
           label: isNew ? 'Send invite' : 'Save',
           kind: 'btn-primary',
           onClick: () => {
+            if (emailInputRef.current && !emailInputRef.current.checkValidity()) {
+              emailInputRef.current.reportValidity();
+              return false;
+            }
             if (!u.name.trim() || !u.email.trim()) {
               addToast('Name and email are required', 'error');
-              return;
+              return false;
             }
             if (isNew) {
-              createUser.mutate(
-                {
+              // No `password` — the backend now accepts creation without one
+              // and sends a real invite email (`invited: true` in the
+              // response) instead of us setting a caller-chosen default.
+              return createUser
+                .mutateAsync({
                   email: u.email,
                   name: u.name,
-                  password: 'password', // Default
                   departmentId: u.departmentId || undefined,
                   roleIds: u.roleId ? [u.roleId] : undefined,
-                },
-                {
-                  onSuccess: (newUser: any) => {
-                    auditAction('USER_INVITE', newUser.id, 'Invited ' + u.email);
-                  },
-                },
-              );
-            } else {
-              updateUser.mutate(
-                {
+                })
+                .then((newUser: any) => {
+                  auditAction('USER_INVITE', newUser.id, 'Invited ' + u.email);
+                })
+                .catch(() => false);
+            }
+            // Returning the combined promise keeps the modal open (with a
+            // loading state) until the profile update — and, if changed, the
+            // role swap — actually land, instead of closing immediately and
+            // hoping they succeed in the background.
+            const tasks: Promise<any>[] = [
+              updateUser
+                .mutateAsync({
                   id: u.id,
                   updates: { name: u.name, email: u.email, departmentId: u.departmentId } as any,
-                },
-                {
-                  onSuccess: () => {
-                    auditAction('USER_EDIT', u.id, 'Updated profile');
-                  },
-                },
+                })
+                .then(() => {
+                  auditAction('USER_EDIT', u.id, 'Updated profile');
+                }),
+            ];
+            // Persist a role change — the modal only tracks a single role.
+            // Assign the new one before removing the old one, sequenced
+            // rather than parallel, so the user is never briefly role-less.
+            if (u.roleId && u.roleId !== existingRoleId) {
+              tasks.push(
+                assignUserRoles
+                  .mutateAsync({ id: u.id, roleIds: [u.roleId] })
+                  .then(() => {
+                    if (existingRoleId) {
+                      return removeUserRole.mutateAsync({ id: u.id, roleId: existingRoleId });
+                    }
+                  })
+                  .then(() => {
+                    auditAction('USER_ROLE_CHANGE', u.id, `Role → ${u.roleId}`);
+                  }),
               );
-              // Persist a role change — the modal only tracks a single role.
-              if (u.roleId && u.roleId !== existingRoleId) {
-                assignUserRoles.mutate({ id: u.id, roleIds: [u.roleId] });
-                if (existingRoleId) {
-                  removeUserRole.mutate({ id: u.id, roleId: existingRoleId });
-                }
-                auditAction('USER_ROLE_CHANGE', u.id, `Role → ${u.roleId}`);
-              }
             }
-            closeModal();
+            return Promise.all(tasks)
+              .then(() => {})
+              .catch(() => false);
           },
         },
       ],
@@ -177,17 +205,30 @@ export default function UsersPage() {
 
   const handleToggleStatus = (u: any) => {
     if (u.status === 'Active') {
-      const confirmed = window.confirm(
-        `Suspend ${u.name}? The user loses access immediately. In-flight tasks remain assigned and should be reassigned by a supervisor.`,
-      );
-      if (confirmed) {
-        updateUser.mutate({ id: u.id, updates: { status: 'suspended' } });
-        auditAction('USER_SUSPEND', u.id, 'Suspended');
-      }
+      openConfirm({
+        title: `Suspend ${u.name}?`,
+        message:
+          'The user loses access immediately. In-flight tasks remain assigned and should be reassigned by a supervisor.',
+        confirmLabel: 'Suspend user',
+        danger: true,
+        onConfirm: () =>
+          updateUser
+            .mutateAsync({ id: u.id, updates: { status: 'suspended' } })
+            .then(() => {
+              auditAction('USER_SUSPEND', u.id, 'Suspended');
+            })
+            .catch(() => false),
+      });
     } else {
       updateUser.mutate({ id: u.id, updates: { status: 'active' } });
       auditAction('USER_ACTIVATE', u.id, 'Re-activated');
     }
+  };
+
+  const handleResendInvitation = (u: any) => {
+    resendInvitation.mutate(u.id, {
+      onSuccess: () => auditAction('USER_INVITE_RESEND', u.id, `Resent invitation to ${u.email}`),
+    });
   };
 
   const userCols: Column<any>[] = [
@@ -239,6 +280,18 @@ export default function UsersPage() {
           >
             {u.status === 'Active' ? 'Suspend' : 'Activate'}
           </button>
+          {u.status === 'Active' && !u.lastLoginAt && (
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={resendInvitation.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleResendInvitation(u);
+              }}
+            >
+              Resend invite
+            </button>
+          )}
         </div>
       ),
     },

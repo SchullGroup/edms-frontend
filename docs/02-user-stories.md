@@ -466,14 +466,23 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
 - [x] Edit title, type, folder, confidentiality, urgency, status
 - [x] Workflow stage rail + activity trail from live `GET /workflow-history` (since the
       `feature/management` merge)
-- [ ] 🔴 **Comments 404.** `POST /documents/:id/comments` does not exist (DRIFT-08).
-- [ ] 🔴 **Signatures 404.** `POST /documents/:id/signatures` does not exist (DRIFT-08).
-- [ ] 🔴 **The tamper-evident audit log is still fake** — `useCreateAuditLog` resolves to
-      nothing and any audit-event view reads `SEED.audit` (DRIFT-11). Only the *workflow*
-      history above is real; document views, edits and downloads are still unrecorded.
+- [x] ✅ **Comments — resolved 2026-09-18.** `GET/POST /documents/:id/comments` now
+      exists (didn't when DRIFT-08 was written) and is wired as `DocumentCommentsPanel` —
+      a general-purpose thread, separate from the task-action `comment` field.
+- [x] ✅ **Signatures — resolved 2026-09-18.** `GET/POST /documents/:id/signatures` now
+      exists and is wired as `DocumentSignaturesPanel` — a flat sign-off record with no
+      positional placement, separate from the task-action approve-flow signature.
+- [ ] 🟨 **The backend audit trail is real now (DRIFT-11 revised, 2026-09-18)** — it
+      auto-writes hash-chained entries server-side and `/admin/audit` reads it live. But
+      this page still calls the old no-op `useCreateAuditLog` (there's no write endpoint
+      to point it at — entries are a side effect of other actions, not client-logged),
+      and doesn't render anything from the real trail. Only the *workflow* history above
+      is real on this page; whether document views/edits/downloads land in the real
+      trail as backend-side actions is unverified.
 - [ ] ⚠️ **There is no download or preview endpoint.** The backend has no route that
       serves file bytes or issues a presigned GET. The preview pane renders a placeholder.
-- [ ] ⚠️ The file is `// @ts-nocheck` — type safety is off for the whole page.
+- [x] ✅ `@ts-nocheck` is gone — the file type-checks cleanly now (confirmed 2026-09-18,
+      stale here; not dated when it was actually removed)
 
 ---
 
@@ -590,8 +599,11 @@ and role-pool assignment, and honours active delegations.
 - [x] Closing the final stage closes the instance
 - [x] Notes are captured and stored
 - [ ] ⚠️ No notification to the next assignee or the originator (DRIFT-10)
-- [ ] ⚠️ No `audit_entries` row — only workflow history, which is a different table with a
-      different purpose and no hash chain (DRIFT-11)
+- [ ] ⚠️ Only `WorkflowHistory` is confirmed written here — a different table, different
+      purpose, no hash chain. `audit_entries` is real and auto-written now (DRIFT-11
+      revised, 2026-09-18 — confirmed for `user.login`/`user.invited`/
+      `user.token_refreshed`), but whether a task action itself produces an entry is
+      unverified
 
 ---
 
@@ -1014,10 +1026,12 @@ for real server-side aggregation"* and asks to be deleted once endpoints exist.
   by month.
 - The architecture doc mandates `AuditService.log()` on every create, update, delete, view
   and download.
-- **`src/middlewares/audit.middleware.ts` is a 0-byte file.** There is no audit module.
-  There are **zero** references to `auditEntry` anywhere in `src/`. Nothing has ever been
-  written to that table.
-- The frontend's `/auditor/trail` and `/admin/audit` render `SEED.audit`.
+- **Revised 2026-09-18 (DRIFT-11).** The above was true when written; confirmed wrong (or
+  since shipped) against live behavior: `GET /audit`, `/audit/:id`, `/audit/export` and
+  `/audit/verify` all exist and work, entries write automatically, and the hash chain
+  checked out intact via `/audit/verify`. See doc 01 for the full writeup.
+- The frontend's `/auditor/trail` still renders `SEED.audit`; `/admin/audit` was wired to
+  the real trail 2026-09-18.
   `useCreateAuditLog()` resolves after a 400 ms `setTimeout` and does nothing.
 
 **Acceptance criteria**

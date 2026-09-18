@@ -121,8 +121,7 @@ export default function UploadCapturePage() {
         </div>
         <div style={{ fontWeight: 700, fontSize: '14px' }}>Drag & drop documents here</div>
         <div className="muted" style={{ marginTop: '5px', fontSize: '12.5px' }}>
-          or click to browse · PDF, DOCX, XLSX, TIFF, JPG up to 100 MB · email-in and scanner
-          channels are also connected
+          or click to browse · PDF, DOCX, XLSX, TIFF, JPG up to 100 MB
         </div>
       </div>
       <input
@@ -135,27 +134,6 @@ export default function UploadCapturePage() {
           e.target.value = '';
         }}
       />
-
-      <div className="flex gap-2 mt-4">
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => {
-            const f = new File([''], 'Scanned_Agreement_0034.pdf', { type: 'application/pdf' });
-            ingest([f]);
-          }}
-        >
-          Simulate scanner intake
-        </button>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => {
-            const f = new File([''], 'FWD_Invoice_MeridianLtd.pdf', { type: 'application/pdf' });
-            ingest([f]);
-          }}
-        >
-          Simulate email-in
-        </button>
-      </div>
 
       <div className="mt-4">
         {files.map((file) => {
