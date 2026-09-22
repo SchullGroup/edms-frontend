@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { effStatus, cabById, userById } from '@/store/useStore';
+import { cabById, userById } from '@/store/useStore';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useDocuments, useAllDocuments } from '@/apis/hooks/useDocuments';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
@@ -11,6 +11,7 @@ import { documentsService } from '@/apis/services/documents.service';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { useUIStore } from '@/store/useUIStore';
+import { documentStatusLabel } from '@/utils/helpers';
 import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
@@ -180,7 +181,7 @@ export default function CabinetBrowserPage() {
       ),
     },
     { key: 'type', label: 'Type', sortable: true },
-    { key: 'status', label: 'Status', render: (d) => <StatusBadge status={effStatus(d)} /> },
+    { key: 'status', label: 'Status', render: (d) => <StatusBadge status={documentStatusLabel(d)} /> },
     {
       key: 'confidentiality',
       label: 'Confidentiality',
@@ -530,7 +531,7 @@ export default function CabinetBrowserPage() {
                       <span>{d.title}</span>
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      <StatusBadge status={effStatus(d)} />
+                      <StatusBadge status={documentStatusLabel(d)} />
                       <ConfBadge level={d.confidentiality} />
                     </div>
                   </div>

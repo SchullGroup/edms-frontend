@@ -28,7 +28,6 @@ export const PERMISSION_RESOURCES: { value: string; label: string }[] = [
   { value: 'user', label: 'Users' },
   { value: 'role', label: 'Roles' },
   { value: 'department', label: 'Departments' },
-  { value: 'dashboard', label: 'Dashboard' },
 ];
 
 export const PERMISSION_ACTIONS: { value: string; label: string }[] = [
@@ -148,21 +147,28 @@ export const PORTALS: Portal[] = [
     home: '/management',
     surface: 'Management Portal',
     priority: 30,
-    entry: { anyPermissions: ['dashboard:view'] },
+    // `dashboard:view` is not a real backend resource — no role can ever hold
+    // it. Gated instead on the union of what the management pages fetch; see
+    // the matching note in `routes.config.ts`.
+    entry: {
+      anyPermissions: ['document:view', 'workflow_instance:view', 'task:view', 'department:view'],
+    },
   },
   {
     key: 'supervisor',
     home: '/supervisor',
     surface: 'Supervisor Console',
     priority: 20,
-    entry: { anyPermissions: ['workflow:route'] },
+    // `workflow:route` was retired by the backend's 2026-09-16 permission
+    // restructuring — see the matching note in `routes.config.ts`.
+    entry: { anyPermissions: ['workflow_instance:route', 'task:action'] },
   },
   {
     key: 'staff',
     home: '/staff',
     surface: 'Staff Workspace',
     priority: 10,
-    entry: { anyPermissions: ['document:view', 'dashboard:view'] },
+    entry: { anyPermissions: ['document:view'] },
   },
 ];
 
@@ -248,7 +254,7 @@ const viewAll = ALL_RESOURCES.map((r) => `${r}:view`);
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   client_admin: everything,
-  schulltech_admin: ['workflow:view', 'workflow:route', 'audit:view'],
+  schulltech_admin: ['workflow:view', 'workflow_instance:route', 'audit:view'],
   internal_auditor: [
     ...viewAll,
     'document:download',
@@ -257,36 +263,30 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   management: [
     ...viewAll,
-    'dashboard:view',
     'document:export',
-    'workflow:route',
+    'workflow_instance:route',
   ],
-  // No `dashboard:view` — keeps the management portal's route gate management-only.
-  // The supervisor portal's own routes gate on `workflow:route`.
   supervisor: [
     'document:view',
     'document:create',
     'document:edit',
-    'document:route',
     'document:export',
     'document:download',
     'document:print',
-    'workflow:view',
-    'workflow:route',
-    'workflow:edit',
+    'workflow_instance:view',
+    'workflow_instance:route',
+    'task:view',
+    'task:action',
     'cabinet:view',
     'folder:view',
     'folder:edit',
     'user:view',
     'audit:view',
   ],
-  // Note: no `dashboard:view` — that key gates the management portal, and staff
-  // dashboards are reached through `document:view` in routes.config.
   staff: [
     'document:view',
     'document:create',
     'document:edit',
-    'document:route',
     'document:export',
     'document:download',
     'document:print',
@@ -294,7 +294,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     'folder:view',
     'folder:create',
     'folder:edit',
-    'workflow:view',
+    'workflow_instance:view',
+    'workflow_instance:route',
+    'task:view',
+    'task:action',
   ],
 };
 

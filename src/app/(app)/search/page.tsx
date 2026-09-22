@@ -3,7 +3,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useStore, effStatus, canView, cabById, userById } from '@/store/useStore';
+import { useStore, canView, cabById, userById } from '@/store/useStore';
+import { documentStatusLabel, titleCase } from '@/utils/helpers';
 import { useUIStore } from '@/store/useUIStore';
 import { useDocuments, useDocumentSearch } from '@/apis/hooks/useDocuments';
 import { useCabinets } from '@/apis/hooks/useCabinets';
@@ -54,10 +55,10 @@ export default function SearchPage() {
   }, [setPageTitle]); // only run once and on title change
 
   const matches = (d: any) => {
-    const status = d.status === 'closed' ? 'Closed' : (d.status === 'in_progress' ? 'In Progress' : 'Pending');
+    const status = documentStatusLabel(d);
     const type = d.documentType;
-    const urgency = d.urgency?.charAt(0).toUpperCase() + d.urgency?.slice(1);
-    const confidentiality = d.confidentiality?.charAt(0).toUpperCase() + d.confidentiality?.slice(1);
+    const urgency = d.urgency ? titleCase(d.urgency) : d.urgency;
+    const confidentiality = d.confidentiality ? titleCase(d.confidentiality) : d.confidentiality;
 
     if (facets.cabinet.size && !facets.cabinet.has(d.cabinetId)) return false;
     if (facets.type.size && !facets.type.has(type)) return false;
@@ -128,10 +129,10 @@ export default function SearchPage() {
             const saved = new Set(facets[key]);
             facets[key] = new Set();
             
-            const status = d.status === 'closed' ? 'Closed' : (d.status === 'in_progress' ? 'In Progress' : 'Pending');
+            const status = documentStatusLabel(d);
             const type = d.documentType;
-            const urgency = d.urgency?.charAt(0).toUpperCase() + d.urgency?.slice(1);
-            const confidentiality = d.confidentiality?.charAt(0).toUpperCase() + d.confidentiality?.slice(1);
+            const urgency = d.urgency ? titleCase(d.urgency) : d.urgency;
+            const confidentiality = d.confidentiality ? titleCase(d.confidentiality) : d.confidentiality;
 
             let dVal = '';
             if (key === 'status') dVal = status;
@@ -226,7 +227,7 @@ export default function SearchPage() {
               <div className="rowlist">
                 {results.map((d: any) => {
                   const restricted = false; // Mock for now
-                  const status = d.status === 'closed' ? 'Closed' : (d.status === 'in_progress' ? 'In Progress' : 'Pending');
+                  const status = documentStatusLabel(d);
                   const confidentiality = d.confidentiality?.charAt(0).toUpperCase() + d.confidentiality?.slice(1);
                   return (
                     <div className="task-row" key={d.id} onClick={() => router.push(`/doc/${d.id}`)} role="button" tabIndex={0}>

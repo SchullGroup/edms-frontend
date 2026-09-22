@@ -1,5 +1,6 @@
 import React from 'react';
 import { Icon } from './Icons';
+import { titleCase } from '@/utils/helpers';
 
 export const StatusBadge = ({ status }: { status: string }) => {
   const statusIco: Record<string, string> = {
@@ -9,10 +10,11 @@ export const StatusBadge = ({ status }: { status: string }) => {
     Overdue: 'alert',
     'On Hold': 'circle',
   };
-  const cls = 'b-status-' + status.toLowerCase().replace(/\s+/g, '-');
+  const label = titleCase(status);
+  const cls = 'b-status-' + label.toLowerCase().replace(/\s+/g, '-');
   return (
     <span className={`badge ${cls}`}>
-      <Icon name={statusIco[status] || 'circle'} size={10} /> {status}
+      <Icon name={statusIco[label] || 'circle'} size={10} /> {label}
     </span>
   );
 };
@@ -51,19 +53,21 @@ export const SlaBadge = ({ status }: { status: string }) => {
 };
 
 export const ConfBadge = ({ level }: { level: string }) => {
-  const cls = 'b-conf-' + level.toLowerCase().replace(/\s+/g, '-');
+  const label = titleCase(level);
+  const cls = 'b-conf-' + label.toLowerCase().replace(/\s+/g, '-');
   return (
-    <span className={`badge ${cls}`} title={`Confidentiality: ${level}`}>
-      <Icon name="lock" size={10} /> {level}
+    <span className={`badge ${cls}`} title={`Confidentiality: ${label}`}>
+      <Icon name="lock" size={10} /> {label}
     </span>
   );
 };
 
 export const UrgBadge = ({ level }: { level: string }) => {
-  const cls = 'b-urg-' + level.toLowerCase();
+  const label = titleCase(level);
+  const cls = 'b-urg-' + label.toLowerCase();
   return (
-    <span className={`badge ${cls}`} title={`Urgency: ${level}`}>
-      <Icon name="flag" size={10} /> {level}
+    <span className={`badge ${cls}`} title={`Urgency: ${label}`}>
+      <Icon name="flag" size={10} /> {label}
     </span>
   );
 };

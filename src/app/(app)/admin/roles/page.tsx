@@ -29,7 +29,6 @@ const MODULE_MAP: { label: string; resources: string[] }[] = [
   { label: 'Workflow', resources: ['workflow'] },
   { label: 'Administration', resources: ['user', 'role', 'department'] },
   { label: 'Audit & Compliance', resources: ['audit'] },
-  { label: 'Dashboards', resources: ['dashboard'] },
 ];
 
 /** Preferred left-to-right order for the action columns; unknown actions append. */

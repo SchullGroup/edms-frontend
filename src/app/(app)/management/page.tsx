@@ -4,11 +4,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useDepartments } from '@/apis/hooks/useDepartments';
-import { useCabinets } from '@/apis/hooks/useCabinets';
-import { useAllDocuments, useDocumentStats } from '@/apis/hooks/useDocuments';
-import { useAllTasks } from '@/apis/hooks/useTasks';
+import { useDocumentStats } from '@/apis/hooks/useDocuments';
+import { useTaskStats } from '@/apis/hooks/useTasks';
 import {
-  useAllWorkflowInstances,
+  useOpenItemsByCabinet,
   useWorkflowInstanceStats,
 } from '@/apis/hooks/useWorkflowInstances';
 import { exportCsv } from '@/utils/exportCsv';
@@ -17,12 +16,9 @@ import { Table, Column } from '@/components/ui/Table';
 import { Spinner } from '@/components/common/Spinner';
 import {
   buildDepartmentIndex,
-  buildCabinetDepartmentIndex,
-  documentDepartmentId,
-  taskDepartmentId,
   departmentName,
-  bucketByMonth,
-  taskSlaRate,
+  alignMonthlyBuckets,
+  lastNMonths,
 } from '@/apis/utils/managementAggregation';
 
 interface DeptRow {
@@ -45,68 +41,79 @@ export default function ManagementDashboard() {
   }, [setPageTitle]);
 
   const { data: departmentsRes, isLoading: loadingDepts } = useDepartments();
-  const { data: cabinetsRes, isLoading: loadingCabinets } = useCabinets();
-  const { data: documents = [], isLoading: loadingDocs } = useAllDocuments();
-  const { data: tasksPage, isLoading: loadingTasks } = useAllTasks();
-  const { data: instances = [], isLoading: loadingInstances } = useAllWorkflowInstances();
-
-  // Server-computed aggregates — shown when the endpoints are available, next to
-  // the client-side numbers derived from the full-list walk above.
-  const { data: wfStats } = useWorkflowInstanceStats();
-  const { data: docStats } = useDocumentStats();
-
   const departments = departmentsRes?.data ?? [];
-  const cabinets = cabinetsRes?.data ?? [];
-  const tasks = tasksPage?.items ?? [];
-
-  const isLoading =
-    loadingDepts || loadingCabinets || loadingDocs || loadingTasks || loadingInstances;
-
   const departmentIndex = useMemo(() => buildDepartmentIndex(departments), [departments]);
-  const cabinetIndex = useMemo(() => buildCabinetDepartmentIndex(cabinets), [cabinets]);
   const deptOptions = useMemo(() => Array.from(departmentIndex.values()), [departmentIndex]);
 
-  const scopedDept = st.dept === 'All' ? null : st.dept;
-  const inScope = (deptId: string | null) => !scopedDept || deptId === scopedDept;
+  const scopedDept = st.dept === 'All' ? undefined : st.dept;
+  const windowStart = useMemo(() => lastNMonths(st.range)[0].start.toISOString(), [st.range]);
 
-  const scopedDocuments = useMemo(
-    () => documents.filter((d) => inScope(documentDepartmentId(d, cabinetIndex))),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [documents, cabinetIndex, scopedDept],
-  );
-  const scopedTasks = useMemo(
-    () => tasks.filter((t) => inScope(taskDepartmentId(t, cabinetIndex))),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tasks, cabinetIndex, scopedDept],
-  );
-  const scopedInstances = useMemo(
-    () =>
-      instances.filter((wi) => {
-        const cabinetId = wi.document?.cabinetId;
-        const deptId = cabinetId ? (cabinetIndex.get(cabinetId) ?? null) : null;
-        return inScope(deptId);
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [instances, cabinetIndex, scopedDept],
-  );
+  // Everything below is one GROUP BY each — no walking the full document/task/
+  // instance list client-side (see DRIFT-07).
+  const { data: docStats, isLoading: loadingDocMonth } = useDocumentStats({
+    groupBy: 'month',
+    departmentId: scopedDept,
+    from: windowStart,
+  });
+  const { data: wfStats, isLoading: loadingWf } = useWorkflowInstanceStats({
+    departmentId: scopedDept,
+  });
+  const { data: deptDocStats, isLoading: loadingDeptDocs } = useDocumentStats({
+    groupBy: 'department',
+  });
+  const { data: taskStats, isLoading: loadingTaskStats } = useTaskStats({ groupBy: 'department' });
+  const { data: openItems, isLoading: loadingOpenItems } = useOpenItemsByCabinet();
 
-  const inflow = bucketByMonth(scopedDocuments, (d) => d.createdAt, st.range);
-  const closedInstances = scopedInstances.filter((wi) => wi.closedAt);
-  const closed = bucketByMonth(closedInstances, (wi) => wi.closedAt, st.range);
+  const isLoading =
+    loadingDepts || loadingDocMonth || loadingWf || loadingDeptDocs || loadingTaskStats ||
+    loadingOpenItems;
+
+  const inflow = useMemo(
+    () => alignMonthlyBuckets(docStats?.buckets ?? [], st.range),
+    [docStats, st.range],
+  );
+  const closed = useMemo(
+    () => alignMonthlyBuckets(wfStats?.buckets ?? [], st.range),
+    [wfStats, st.range],
+  );
 
   const totFiles = inflow.values.reduce((a, b) => a + b, 0);
   const totClosed = closed.values.reduce((a, b) => a + b, 0);
-  const slaRate = taskSlaRate(scopedTasks);
 
-  const avgTurnaroundDays = useMemo(() => {
-    if (closedInstances.length === 0) return null;
-    const totalDays = closedInstances.reduce((sum, wi) => {
-      const start = new Date(wi.startedAt).getTime();
-      const end = new Date(wi.closedAt as string).getTime();
-      return sum + (end - start) / 86400000;
-    }, 0);
-    return totalDays / closedInstances.length;
-  }, [closedInstances]);
+  // Pending/in-progress counts per department, rolled up from the per-cabinet
+  // open-items read model (it already carries `departmentId`/`departmentName`).
+  const openByDept = useMemo(() => {
+    const map = new Map<string, { pending: number; progress: number }>();
+    for (const c of openItems?.cabinets ?? []) {
+      const key = c.departmentId ?? 'unassigned';
+      const cur = map.get(key) ?? { pending: 0, progress: 0 };
+      cur.pending += c.pending;
+      cur.progress += c.inProgress;
+      map.set(key, cur);
+    }
+    return map;
+  }, [openItems]);
+
+  const totalDocsByDept = useMemo(
+    () => new Map((deptDocStats?.buckets ?? []).map((b) => [b.departmentId ?? 'unassigned', b.count])),
+    [deptDocStats],
+  );
+
+  const slaByDept = useMemo(
+    () => new Map((taskStats?.buckets ?? []).map((b) => [b.departmentId ?? 'unassigned', b.slaRate])),
+    [taskStats],
+  );
+
+  const slaTotals = (taskStats?.buckets ?? []).reduce(
+    (acc, b) => ({ total: acc.total + b.total, onTime: acc.onTime + b.onTime }),
+    { total: 0, onTime: 0 },
+  );
+  const orgSlaRate = slaTotals.total === 0 ? 100 : Math.round((slaTotals.onTime / slaTotals.total) * 100);
+  const slaRate = scopedDept
+    ? Math.round(slaByDept.get(scopedDept) ?? 100)
+    : orgSlaRate;
+
+  const avgTurnaroundDays = wfStats?.avgTurnaroundDays ?? null;
 
   const kpis = [
     { v: totFiles.toLocaleString(), l: 'Total files (period)', to: '/management/trends' },
@@ -119,18 +126,24 @@ export default function ManagementDashboard() {
     { v: `${slaRate}%`, l: 'SLA compliance', to: '/management/departments' },
   ];
 
+  // Iterate the real department list (not the stats buckets) so a department
+  // with zero documents this period still gets a row.
   const rows: DeptRow[] = deptOptions
     .filter((d) => !scopedDept || d.id === scopedDept)
     .map((d) => {
-      const deptDocs = documents.filter((doc) => documentDepartmentId(doc, cabinetIndex) === d.id);
-      const deptTasks = tasks.filter((t) => taskDepartmentId(t, cabinetIndex) === d.id);
+      const totalDocs = totalDocsByDept.get(d.id) ?? 0;
+      const open = openByDept.get(d.id) ?? { pending: 0, progress: 0 };
       return {
         deptId: d.id,
         dept: d.name,
-        pending: deptDocs.filter((doc) => doc.status === 'pending').length,
-        progress: deptDocs.filter((doc) => doc.status === 'in_progress').length,
-        closed: deptDocs.filter((doc) => doc.status === 'closed').length,
-        sla: taskSlaRate(deptTasks),
+        pending: open.pending,
+        progress: open.progress,
+        // Approximate: total documents minus what's still open. Nothing in the
+        // backend's aggregate endpoints cross-tabs department x status, so this
+        // trades a small margin of error (e.g. archived docs) for not walking
+        // every document to get an exact count.
+        closed: Math.max(0, totalDocs - open.pending - open.progress),
+        sla: Math.round(slaByDept.get(d.id) ?? 100),
       };
     });
 
@@ -218,37 +231,6 @@ export default function ManagementDashboard() {
           </div>
         ))}
       </div>
-
-      {(wfStats || (docStats && docStats.total != null)) && (
-        <div className="card mb-4">
-          <div className="card-head">
-            <span className="h3">Server-computed aggregates</span>
-            <span className="caption">GET /documents/stats · GET /workflow-instances/stats</span>
-          </div>
-          <div className="card-body">
-            <div className="grid cols-4">
-              {docStats?.total != null && (
-                <div className="kpi">
-                  <div className="kv">{docStats.total.toLocaleString()}</div>
-                  <div className="kl">Documents (total)</div>
-                </div>
-              )}
-              {wfStats?.avgTurnaroundDays != null && (
-                <div className="kpi">
-                  <div className="kv">{wfStats.avgTurnaroundDays.toFixed(1)} d</div>
-                  <div className="kl">Avg turnaround (server)</div>
-                </div>
-              )}
-              {wfStats?.buckets?.map((b) => (
-                <div className="kpi" key={b.key}>
-                  <div className="kv">{b.count.toLocaleString()}</div>
-                  <div className="kl">{b.key}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="grid cols-2 mb-4">
         <div className="card">

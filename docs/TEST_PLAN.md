@@ -370,28 +370,43 @@ users' roles for the ones named.
       "Deny" instead of "Grant" at the admin inbox. Confirm the requester's document
       access is still blocked afterward, and the request shows under "Denied".
 
-## 14. Phase L — Document comments & signatures (`/doc/[id]`)
+## 14. Phase L — Workflow trail comments & signatures, review modal, version gating (`/doc/[id]`)
 
-These are dedicated `GET/POST /documents/:id/comments` and `/signatures` endpoints —
-distinct from the `comment` field and `approve`-action signature that are part of the
-workflow-task flow already covered in Phase A. Don't confuse the two.
+**Superseded 2026-09-18.** This phase used to test the dedicated `GET/POST
+/documents/:id/comments`/`/signatures` panels. Those were wired, then deliberately
+un-wired the same day — every comment and signature is workflow-trail-only now. See
+`BACKEND_REQUESTS.md` BE-16/BE-17 and doc 01's DRIFT-08 note.
 
-- [ ] **TP-L1.** Open any document you can view. Confirm a "Comments" panel renders with
-      a textarea and "Post comment" button (not just the workflow activity trail).
-- [ ] **TP-L2.** Post a comment. Confirm it appears immediately at the top of the list
-      with your name and a timestamp, without a page reload.
-- [ ] **TP-L3.** Refresh the page. Confirm the comment persisted (it's calling the real
-      endpoint, not just updating local state).
-- [ ] **TP-L4.** Confirm a "Signatures" panel renders separately from the document
-      viewer's in-image signature overlay. If the document has no standalone signatures
-      yet, it should say "Not signed yet," not be empty/missing.
-- [ ] **TP-L5.** Click "Sign document" (only shown if the document isn't closed). Draw a
-      signature (or upload an image) in the pad, submit.
-- [ ] **TP-L6.** Confirm the new signature appears in the panel with your name, a
-      timestamp, and a small thumbnail that opens the full image on click.
-- [ ] **TP-L7 (this is independent of any workflow task).** Confirm you can do TP-L5/L6
-      even when the document has **no pending task assigned to you** — this signature
-      isn't tied to an approval action.
+- [ ] **TP-L1 (mark reviewed, no signature).** As the assignee of a `review`-only stage,
+      click "Mark reviewed". Confirm a modal opens with an optional comment field (not an
+      immediate confirm) — leave the comment blank and submit. Confirm it succeeds and
+      the stage advances; the trail entry shows no comment line.
+- [ ] **TP-L2 (mark reviewed, with comment).** Repeat, this time typing a comment.
+      Confirm the trail entry on `WorkflowActivityPanel` shows your comment text.
+- [ ] **TP-L3 (review has no signature capture).** Confirm the "Mark reviewed" modal has
+      no signature pad — only `approve` does. This is a known backend limitation
+      (`review`'s action schema is `additionalProperties: false`, no `signature`
+      property), not a frontend gap; BE-16 tracks closing it.
+- [ ] **TP-L4 (approve signature shows on the trail).** Sign & approve a task (as before).
+      Confirm the resulting trail entry on `WorkflowActivityPanel` now shows a small
+      signature thumbnail next to the "Approved" entry (previously only the comment text
+      rendered, from `r.note`; the trail now also reads `r.comment` and
+      `r.task.signature`).
+- [ ] **TP-L5 (version upload closed by default).** Open a document with a pending task
+      that was **not** reached via "Request changes" (e.g. its first stage). Confirm the
+      Versions panel shows no "New version" button, and instead a caption: "New version
+      uploads open once the previous stage requests changes on this document."
+- [ ] **TP-L6 (version upload opens after request_changes).** Request changes on a task
+      (TP-E1), then as the assignee of the task it bounced back to, reopen the document.
+      Confirm "New version" now appears on the Versions panel, upload a file, and confirm
+      it succeeds and appears in the version list.
+- [ ] **TP-L7 (version upload closes again after moving on).** From the state in TP-L6,
+      mark the stage reviewed (or approve/reject it) so it advances past the bounced
+      stage. Confirm "New version" disappears again — the gate is per-bounce, not
+      permanent once unlocked.
+- [ ] **TP-L8 (Restore unaffected).** Confirm "Restore" on an old version is still offered
+      to anyone with `document:edit` regardless of the request-changes gate above — only
+      "New version" is gated, not "Restore".
 
 ## 15. Phase M — User invitations & password flows (`/admin/users`, `/set-password`)
 

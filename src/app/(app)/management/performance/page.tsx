@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useUIStore } from '@/store/useUIStore';
-import { useAllTasks, useTaskStats } from '@/apis/hooks/useTasks';
+import { useTaskStats } from '@/apis/hooks/useTasks';
 import { DonutChart } from '@/components/ui/Charts';
 import { Spinner } from '@/components/common/Spinner';
-import { taskSlaRate } from '@/apis/utils/managementAggregation';
 
 export default function PerformanceOverviewPage() {
   const { setPageTitle } = useUIStore();
@@ -14,15 +13,20 @@ export default function PerformanceOverviewPage() {
     setPageTitle('Performance Overview');
   }, [setPageTitle]);
 
-  const { data: tasksPage, isLoading } = useAllTasks();
-  // Server-computed SLA rollup by department (`GET /tasks/stats`). Falls back to
-  // the client-side donut below if the endpoint is unavailable.
-  const { data: stats } = useTaskStats();
-  const orgSla = taskSlaRate(tasksPage?.items ?? []);
+  // Server-computed SLA rollup by department (`GET /tasks/stats`) — the org
+  // figure is derived by summing its buckets rather than walking every task.
+  const { data: stats, isLoading } = useTaskStats();
+  const buckets = stats?.buckets ?? [];
+
+  const orgSla = useMemo(() => {
+    const totals = buckets.reduce(
+      (acc, b) => ({ total: acc.total + b.total, onTime: acc.onTime + b.onTime }),
+      { total: 0, onTime: 0 },
+    );
+    return totals.total === 0 ? 100 : Math.round((totals.onTime / totals.total) * 100);
+  }, [buckets]);
 
   if (isLoading) return <Spinner />;
-
-  const buckets = stats?.buckets ?? [];
 
   return (
     <div>

@@ -20,6 +20,7 @@ import { usePolicies } from '@/apis/hooks/usePolicies';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useTaskAction } from '@/apis/hooks/useTasks';
 import { useWorkflowInstances, useWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
+import { useWorkflowHistory } from '@/apis/hooks/useWorkflowHistory';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, UrgBadge, ConfBadge } from '@/components/ui/Badges';
@@ -27,8 +28,6 @@ import { fmtDateTime, fmtDate } from '@/utils/helpers';
 import { DocumentViewerPanel } from '@/components/documents/DocumentViewerPanel';
 import { DocumentDetailsPanel } from '@/components/documents/DocumentDetailsPanel';
 import { DocumentVersionsPanel } from '@/components/documents/DocumentVersionsPanel';
-import { DocumentCommentsPanel } from '@/components/documents/DocumentCommentsPanel';
-import { DocumentSignaturesPanel } from '@/components/documents/DocumentSignaturesPanel';
 import { WorkflowActivityPanel } from '@/components/workflowInstances/WorkflowActivityPanel';
 import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/components/documents/types';
 import type { WorkflowStageAction } from '@/types/models';
@@ -110,11 +109,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   // `comments`/`signatures`/`sealed`/`legalHold` are not `Document` fields on
   // the real API, and stay empty/false shims here. `comments`/`signatures`
   // specifically are the viewer's *positional* overlay shape (`x`/`y`/`w`/`h`
-  // placement) — there's no backend field for that. Dedicated, non-positional
-  // `GET/POST /documents/:id/comments` and `/signatures` endpoints do exist now
-  // (see `DocumentCommentsPanel`/`DocumentSignaturesPanel` below), and a
-  // workflow-task signature still lives on `POST /tasks/{taskId}/action`'s
-  // `approve` action. Three separate things; see types.ts for the shim's shape.
+  // placement) — there's no backend field for that, and nothing populates it.
+  // The real comment/signature data lives entirely on the workflow trail (the
+  // `comment`/`signature` on `POST /tasks/{taskId}/action`, read back via
+  // `GET /workflow-history` — see `WorkflowHistoryTimeline`), not here.
   const doc: DocumentWithUiExtras | null = rawDoc
     ? {
         ...rawDoc,
@@ -148,6 +146,16 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   // Only offer routing once we know there is nothing running — otherwise the
   // CTA flashes on every load before the instance list resolves.
   const hasNoWorkflow = !isLoadingInstances && !instanceSummary;
+
+  // Whether the currently-pending task exists because the *previous* stage
+  // just sent it back with "Request changes" — the only moment a new file
+  // version may be uploaded (see `changesRequestedForCurrentTask` below).
+  // Fetching just the single latest record is enough: if it isn't a
+  // `request_changes` that landed on this exact stage, uploading stays closed.
+  const { data: latestHistoryData } = useWorkflowHistory(
+    { workflowInstanceId: workflowInstance?.id, order: 'desc', limit: 1 },
+    { enabled: !!workflowInstance?.id },
+  );
 
   const { data: activeCabFoldersData } = useCabinetFolders(doc?.cabinetId);
   const activeCabFolders = activeCabFoldersData?.data || [];
@@ -237,6 +245,15 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const currentStageActorName =
     currentTask?.assignee?.name || currentTask?.assignedRole?.name || 'Unassigned';
 
+  // Gate "New version" on the Versions panel to only the moment changes were
+  // actually requested onto this exact stage — otherwise a file could be
+  // silently swapped mid-review with nobody the wiser.
+  const latestHistoryEntry = latestHistoryData?.data?.[0];
+  const changesRequestedForCurrentTask =
+    !!currentTask &&
+    latestHistoryEntry?.action === 'request_changes' &&
+    latestHistoryEntry.toStage === currentTask.stage;
+
   const rawFileKey = doc.currentVersion?.fileKey;
   // The API now returns a ready-to-use pre-signed URL on the current version —
   // pass it through untouched (it's already encoded; re-encoding risks breaking
@@ -324,18 +341,48 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
 
   const stageLabel = stage ? stage.name : 'Current stage';
 
+  // Neither field is compulsory — reviewing doesn't require a signature at
+  // all (the backend only accepts one on `approve`; a BACKEND_REQUESTS.md
+  // item tracks adding it here too) and a comment is optional context for
+  // the trail, not a justification the way "Request changes"/"Reject" need.
   const actReview = () => {
     if (!currentTask) return;
-    openConfirm({
-      title: 'Mark this stage reviewed?',
-      confirmLabel: 'Mark reviewed',
-      message: `“${stageLabel}” will be marked reviewed and the file advances to the next stage. This is recorded in the audit trail.`,
-      onConfirm: () =>
-        runAction(
-          { action: 'review', comment: 'Reviewed by ' + me.name },
-          { action: 'REVIEW', detail: `Reviewed stage “${stageLabel}”` },
-          { message: 'Reviewed — advanced to next stage', kind: 'success' },
-        ),
+    let commentText = '';
+    openModal({
+      title: `Mark reviewed — ${stageLabel}`,
+      body: (
+        <div>
+          <div className="banner info mb-4">
+            “{stageLabel}” will be marked reviewed and the file advances to the next stage. This
+            is recorded in the workflow trail.
+          </div>
+          <div className="field">
+            <label>Comment (optional)</label>
+            <textarea
+              className="input"
+              placeholder="Added to the workflow activity trail…"
+              maxLength={2000}
+              onChange={(e) => (commentText = e.target.value)}
+            />
+          </div>
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Mark reviewed',
+          kind: 'btn-primary',
+          onClick: () =>
+            runAction(
+              {
+                action: 'review',
+                ...(commentText.trim() ? { comment: commentText.trim() } : {}),
+              },
+              { action: 'REVIEW', detail: `Reviewed stage “${stageLabel}”` },
+              { message: 'Reviewed — advanced to next stage', kind: 'success' },
+            ),
+        },
+      ],
     });
   };
 
@@ -712,10 +759,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           </div>
           <div className="flex gap-2 mt-2 flex-wrap">
             <StatusBadge status={eff} />
-            <ConfBadge
-              level={doc.confidentiality.charAt(0).toUpperCase() + doc.confidentiality.slice(1)}
-            />
-            <UrgBadge level={doc.urgency.charAt(0).toUpperCase() + doc.urgency.slice(1)} />
+            <ConfBadge level={doc.confidentiality} />
+            <UrgBadge level={doc.urgency} />
             <span className="caption" style={{ alignSelf: 'center' }}>
               v{doc.currentVersion?.versionNumber ?? 1} · {fmtDate(doc.createdAt)}
             </span>
@@ -907,19 +952,13 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             currentVersionId={doc.currentVersionId}
             canView={can('document', 'view')}
             canEdit={can('document', 'edit') && !closed && !lockedByOther}
+            canUploadVersion={
+              can('document', 'edit') &&
+              !closed &&
+              !lockedByOther &&
+              changesRequestedForCurrentTask
+            }
             getUploaderName={(userId) => userById(users, userId)?.name || 'User'}
-          />
-
-          <DocumentSignaturesPanel
-            documentId={doc.id}
-            canView={can('document_signature', 'view')}
-            canSign={can('document_signature', 'create') && !closed}
-          />
-
-          <DocumentCommentsPanel
-            documentId={doc.id}
-            canView={can('document_comment', 'view')}
-            canPost={can('document_comment', 'create')}
           />
 
           <WorkflowActivityPanel

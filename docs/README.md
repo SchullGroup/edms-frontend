@@ -222,8 +222,9 @@ endpoints found unwired: document access-requests (`POST/GET
 (`GET/POST /documents/:id/comments` / `/signatures`, both new panels on `/doc/[id]`,
 separate from the pre-existing task-action `comment` field and `approve`-action
 signature). All verified live via real create/list/grant/deny/comment/sign round-trips
-against `edms-backend-zmfm.onrender.com` before being called done — see BE-1, BE-6, BE-7
-in `BACKEND_REQUESTS.md`.
+against `edms-backend-zmfm.onrender.com` before being called done — see BE-1 in
+`BACKEND_REQUESTS.md` (the comments/signatures entries there, BE-6/BE-7, were later
+deleted from that doc — withdrawn and superseded, not worth keeping once resolved).
 
 While wiring these, a much larger cluster of **unrelated stale claims** surfaced —
 things already wired that the docs still described as missing: cabinet access-grant UI,
@@ -240,6 +241,160 @@ whole document's portfolio counts are built on — one of the nine is
 re-classified in this pass. Every count in doc 05 derived from "42" is now a known
 undercount until a full re-audit happens; see doc 05's "Portfolio summary" for the same
 flag in place.
+
+**Correction (2026-09-18, later still the same day).** The document comments/signatures
+panels described two paragraphs above were reverted a few hours after being wired. On
+review, the product decision is that every comment and signature should live on the one
+workflow trail (`comment`/`signature` on `POST /tasks/:id/action`, read back via
+`GET /workflow-history`) rather than split across that trail *and* a second,
+task-independent thread. `DocumentCommentsPanel`/`DocumentSignaturesPanel` and their
+hooks/services/types were deleted; `document_comment:*`/`document_signature:*` no longer
+appear anywhere in the frontend. The endpoints themselves are still real and live on the
+backend — this is a frontend product choice not to consume them, not a drift finding.
+Two things came out of the same pass: `WorkflowHistoryTimeline` now renders each entry's
+`comment` and, when present, `task.signature`'s image (both confirmed live in the
+`GET /workflow-history` response shape, previously only `note` was read); and "Mark
+reviewed" gained an optional-comment modal, but **not** a signature — the backend's
+`review`/`reject`/`request_changes`/`close` action schema is `additionalProperties:
+false` with no `signature` property, confirmed against the live OpenAPI spec, so a
+review can't carry one today. See BE-16 (optional signature on `review`) and BE-17
+(support more than one document per workflow instance, for the "request changes because
+a document is missing, not wrong" case) in `BACKEND_REQUESTS.md`. Corrected in docs 01,
+02, 03, 05 and here.
+
+**Correction (2026-09-21).** Doc 01's `DRIFT-07` section described `GET /documents/stats`
+as an unverified shape (guessing at `total`, `byStatus`, `byConfidentiality`,
+`byDepartment`). None of those fields exist on the wire. Confirmed against
+`documents.service.ts#getDocumentStats` on `edms-backend` `dev`: the real shape is
+`{ buckets: [{key, count, departmentId, departmentName}] }`. The frontend's
+`docStats?.total != null` check could never be true, so a whole panel on the
+Organization Overview dashboard had been silently dead since it was added.
+`DocumentStatsResponse` in `src/types/models.ts` is corrected. Found while rewiring the
+four management dashboards off `fetchAllPages` onto the real aggregation endpoints
+(DRIFT-07, resolved this session).
+
+Also corrected: `DRIFT-14` was previously described as fixed by deleting a hardcoded
+constant (`WORKFLOW_DEFINITION_VIEW_ROLES`). The constant really is gone, replaced by
+real `requirePermission('workflow', 'view')` at the router — but the RBAC seed data
+shipped in the same backend commit (`4c07479`, 2026-09-16) never re-granted
+`workflow:view` to `staff`/`supervisor`/`management`/`internal_auditor`, so the
+user-visible symptom is unchanged: the routing picker still reports "no published
+workflows" to the roles that route documents. Re-diagnosed, not reopened as new — same
+finding, corrected mechanism.
+
+A related, genuinely new finding from the same pass: the frontend's own route guard
+(`routes.config.ts`, `src/lib/permissions.ts`) gated `/supervisor` on `workflow:route`
+and `/management` on `dashboard:view` — the first retired by that same backend commit,
+the second never a real backend resource at all (confirmed zero matches anywhere in
+`permissions.constants.ts` or `prisma/seed-system.ts`). Because `usePermissions.ts`
+discards its pre-hydration fallback the instant live permissions load, and both
+`/auth/login` and `/auth/me` have carried real permissions since DRIFT-03 shipped
+(2026-09-15), this meant **real supervisors and management users were being redirected
+to `/unauthorized` by the app's own guard**, independent of what the backend would
+actually allow. Fixed frontend-side (new finding, DRIFT-16) — see doc 01 §4.
+
+Also corrected: doc 01's drift register still listed "Cabinet access-grant CRUD has no
+UI" as open. It was already stale by 2026-09-18 per this log's own earlier entry (see
+above) but the register table itself was never updated to match — `admin/cabinets` has
+had a full "Access" card (grant modal, revoke button, wired to
+`useCabinetAccessGrants`/`useGrantCabinetAccess`/`useRevokeCabinetAccess`) since then.
+
+**Correction (2026-09-21, later the same day) — the big one: `DRIFT-06` retracted.**
+Every prior revision of `DRIFT-06` ("the file is never in the bucket Textract reads
+from") reasoned from the code — `s3.service.ts` posts to a URL outside `edms-backend`,
+therefore the file must land somewhere other than `env.S3_BUCKET`, therefore Textract
+must fail — and never checked a real document. It was wrong. Logged in as `client_admin`
+against the deployed backend (`edms-backend-zmfm.onrender.com`), pulled every document
+via `GET /documents`: 7 of 8 have `ocrStatus: 'completed'` with real, substantial
+extracted OCR text, and every `fileUrl` (a presigned GET the backend mints fresh) points
+at `env.S3_BUCKET`. Two of the completed ones have the exact `edmsdocuments/<filename>`
+key pattern the real browser-upload path produces, so this isn't seed data — the
+third-party gateway and `env.S3_BUCKET` are, in practice, the same storage in this
+deployment. This document has no visibility into *why* (that's the gateway's own,
+uninspected Lambda configuration), only that live behavior contradicts what every
+earlier revision of `DRIFT-06` asserted.
+
+What the same pull *did* show real: one document, uploaded 2026-09-18, has sat at
+`ocrStatus: 'pending'` for three days — never advanced to `processing`/`completed`/
+`failed` — and is confirmed invisible to `GET /documents/search` while sitting fine in
+the plain list. That's a real, narrower reliability gap (a job that never got durably
+picked up, not one Textract rejected), not the systemic architecture break this section
+previously described. The backend-side "upload through the backend instead of the
+gateway" plan that followed from the wrong diagnosis was dropped before any code was
+written. See doc 01 §5 for the corrected write-up and the reconciliation-sweep
+recommendation that replaces it.
+
+**Correction (2026-09-21, later still) — doc 01 §5 described dead upload code in every
+revision, including the first one.** `src/apis/services/uploader.ts` and
+`src/apis/hooks/useMultipartUploader.ts` — a chunked, presigned-PUT multipart uploader
+(5 MB parts, 5 concurrent, real `XMLHttpRequest` byte-progress) — replaced the
+single-shot base64-to-gateway upload (`s3.service.ts#uploadFile()`) on **2026-08-31**
+(`aa11682`), and `upload/page.tsx` was wired to it the same commit. This doc's original
+write-up is dated **2026-08-29** — two days *before* that switch — and none of the four
+re-scans since (2026-09-04 ×2, 2026-09-18, 2026-09-21) caught it; `uploadFile()` has had
+zero real callers the entire time. Found while confirming the upload progress bar
+reflects genuine byte-level progress (it does) rather than a simulated animation.
+Doc 01 §5's flow diagram and "Related storage problems" table are corrected to describe
+the live path; two of the old table's entries (2 MB limit, base64-in-memory) no longer
+apply at all, and a new one was found in the process: the dropzone's own UI text
+advertises file types (DOCX/XLSX/TIFF) and a 100 MB cap that the live validator has
+never actually allowed.
+
+**Correction (2026-09-21, later still).** Doc 05's Management Portal section stated
+"`/management`, `/departments`, `/trends` and `/performance` compute every aggregate
+client-side" and "the backend has no aggregation, statistics or reporting endpoints of
+any kind." Both were already wrong by the time this was read — eight aggregation
+endpoints exist (`GET /documents/stats`, `/tasks/stats`, `/workflow-instances/stats`
+and four more), and this session rewired all four pages onto them (DRIFT-07 in doc 01,
+resolved). Doc 05's page inventory, "APIs wired/missing," "Flows" and "What's left"
+subsections for that role are corrected to match, and backlog item 16 is marked done
+for management (backend half was already done; the frontend half — supervisor-side
+adoption of the same endpoints — is unverified, not claimed done).
+
+**Correction (2026-09-21, later still) — DRIFT-02 resolved.** Docs 01, 03 and 05 all
+described the frontend route guard as purely cosmetic — "no `middleware.ts` in the
+project," forgeable by editing `localStorage`. Built and live-tested a real fix:
+`src/proxy.ts` (not `middleware.ts` — Next.js 16 deprecated and renamed the file
+convention mid-session, caught from a dev-server log warning) resolves live
+roles/permissions from `GET /auth/me` server-side on every protected navigation, sharing
+its rule-matching with `AppShell` via a new `evaluateRouteAccess()` (`src/lib/
+routeAccess.ts`) so the two can't disagree. The one design decision that took real
+thought: it fails closed only on a *confirmed* 401/403 from a responding backend, and
+fails **open** on an unreachable one (network error, timeout, `5xx`) — the first version
+conflated the two and would have logged out every signed-in user on the next navigation
+during any backend blip, caught by live-testing against a deliberately unreachable
+backend before shipping, not by inspection. `AppShell`'s own separate session-verify
+effect had the identical bug and needed the same fix independently. Fail-open is backed
+by two new pieces so it doesn't mean "silently broken": `SessionExpiredModal` (no
+dismissal path except full logout) for a confirmed-dead session, and
+`ServiceUnavailableOverlay` (a `QueryCache`-level counter across all queries) for a
+backend that's actually down. Live-verified end-to-end, including the one scenario that
+mattered most — a real prior session against a genuinely unreachable backend — not just
+type-checked. Doc 01 §4 and its DRIFT-02 write-up, doc 03's onboarding flow, and doc 05's
+backlog item 11 are all corrected to match.
+
+**Correction (2026-09-22) — enum casing fixed, and two more stale claims corrected.**
+Fixed the confidentiality/urgency/status casing mismatch at its root: `StatusBadge`/
+`ConfBadge`/`UrgBadge` now run a shared `titleCase()` on their display text, correct
+regardless of which casing the underlying data source used, and correct on every one of
+their 34 call sites without needing to touch most of them. Found a real functional bug
+in the process, not just a display one: `search/page.tsx`'s confidentiality facet used a
+naive capitalize-first-letter transform that turned `'top_secret'` into `"Top_secret"`,
+matching nothing in the Title-Case facet list — a `top_secret` document could never be
+found via that filter, silently, with no error. Fixed alongside the display issue.
+
+Also corrected two more doc 01 claims the user caught/prompted a check on: **the
+"duplicate `NEXT_PUBLIC_API_URL`" finding isn't real** — the user checked the live
+`.env` directly; it has one `NEXT_PUBLIC_API_URL` key pointed at the deployed backend,
+plus `NEXT_PUBLIC_UPLOAD_BASE_URL` for the multipart uploader, no duplicates, no dead
+keys. And while confirming that, found the multipart-uploader host claim from the
+2026-09-21 upload-path correction was *also* wrong: it asserted the chunked uploader
+hits "the same third-party gateway host" as the old single-shot flow, written from
+`uploader.ts`'s hardcoded fallback default without checking whether `.env` overrides
+it — it does. The live host (`.env`'s `NEXT_PUBLIC_UPLOAD_BASE_URL`) is a different
+gateway in a different region than the code's fallback, consistent with the `us-west-1`
+bucket region confirmed during the DRIFT-06 live-verification. Doc 01 §5, §8.2, §9, and
+the register table are all corrected.
 
 ---
 

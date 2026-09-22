@@ -1,5 +1,6 @@
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import Cookies from 'js-cookie';
+import { useUIStore } from '@/store/useUIStore';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -141,12 +142,23 @@ apiClient.interceptors.response.use(
             }
           }
 
-          Cookies.remove('accessToken');
+          // A live backend explicitly rejected the refresh — the session is
+          // genuinely over, not just unreachable. Hand off to
+          // `SessionExpiredModal` (mounted in AppShell) instead of silently
+          // clearing the cookie and hard-redirecting: the user gets a clear
+          // "sign in again" prompt rather than being bounced without
+          // explanation mid-task. The modal owns the actual teardown
+          // (`performLogout`) once they act on it or dismiss it.
           if (typeof window !== 'undefined') {
-            // Wait, use Next.js router or just window.location
-            window.location.href = '/';
+            useUIStore.getState().setSessionExpired(true);
           }
         }
+        // Network error / timeout / 5xx reaching the refresh endpoint falls
+        // through here without touching the session — that's the backend
+        // being unreachable, not the user being logged out. The original
+        // request's own caller (a React Query hook, typically) sees this
+        // rejection and shows its normal error state; `ServiceUnavailableOverlay`
+        // picks up the broader pattern if it keeps happening across queries.
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

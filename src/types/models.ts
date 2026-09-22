@@ -136,7 +136,10 @@ export interface Document {
   checkoutLock?: CheckoutLock | null;
   archivedAt?: string | null;
   createdBy: string;
-  dueDate?: string | null;
+  // No due-date field exists here on the backend (`filing.prisma` has none on
+  // `Document`) — a due date lives on `Task.dueAt` / `WorkflowInstance.
+  // stageDueAt` instead. A `dueDate` field used to be declared here and was
+  // never real; removed 2026-09-21 (see DRIFT-13 in docs/01).
   createdAt: string;
   updatedAt?: string | null;
   currentVersionId?: string | null;
@@ -203,29 +206,13 @@ export interface AccessRequest {
   document?: { id: string; title: string; referenceNumber: string };
 }
 
-/** `GET/POST /documents/:id/comments` — a dedicated document-level comment
- *  thread, independent of any workflow task. Verified live 2026-09-18. */
-export interface DocumentComment {
-  id: string;
-  documentId: string;
-  authorId: string;
-  author: PersonSummary;
-  content: string;
-  createdAt: string;
-}
-
-/** `GET/POST /documents/:id/signatures` — a flat "who signed this document"
- *  record, independent of any workflow task and with no positional/field
- *  placement data (unlike the in-viewer signature fields on `approve` task
- *  actions). Verified live 2026-09-18. */
-export interface DocumentSignature {
-  id: string;
-  documentId: string;
-  signedBy: string;
-  signer: PersonSummary;
-  url: string;
-  createdAt: string;
-}
+// `GET/POST /documents/:id/comments` and `/signatures` are real, live
+// endpoints (verified 2026-09-18) but deliberately unused — comments and
+// signatures are product-scoped to the workflow trail instead (`comment`/
+// `signature` on `POST /tasks/{taskId}/action`, surfaced via
+// `WorkflowHistoryRecord`), so every user action on a document stays on one
+// trail rather than split across two disconnected panels. See BE-16/BE-17 in
+// BACKEND_REQUESTS.md for the gaps that decision now depends on closing.
 
 export interface DocumentMetadataField {
   fieldId: string;
@@ -287,16 +274,24 @@ export interface DocumentMetadataValueInput {
 }
 
 /**
- * `data` shape of `GET /documents/stats` — server-side count aggregates for the
- * management dashboards. The exact shape is unverified against the live API
- * (backend repo not in this workspace); consumers treat every field as optional
- * and fall back to client-side aggregation when it is missing.
+ * `data` shape of `GET /documents/stats` — verified against
+ * `documents.service.ts#getDocumentStats` on the backend (`edms-backend`
+ * `dev`). One shape, two `groupBy` modes:
+ *  - `groupBy=month` (default): `key` is `"YYYY-MM"`, optionally narrowed to
+ *    one department via `departmentId`.
+ *  - `groupBy=department`: `key` is the department id (or `"unassigned"`),
+ *    with `departmentId`/`departmentName` also present on each bucket.
+ * There is no `total` — sum `buckets[].count` for one.
  */
+export interface DocumentStatsBucket {
+  key: string;
+  count: number;
+  departmentId?: string | null;
+  departmentName?: string | null;
+}
+
 export interface DocumentStatsResponse {
-  total?: number;
-  byStatus?: Record<string, number>;
-  byConfidentiality?: Record<string, number>;
-  byDepartment?: { departmentId?: string | null; departmentName?: string | null; count: number }[];
+  buckets: DocumentStatsBucket[];
 }
 
 // --- Workflows ---
@@ -514,6 +509,10 @@ export interface WorkflowHistoryRecord {
   action: string;
   actorId?: string | null;
   note?: string | null;
+  /** The `comment` sent with the task action, e.g. `POST /tasks/{taskId}/action`'s
+   *  optional `comment` field on `review`/`approve`/etc. Distinct from `note`
+   *  (the older, still-accepted field). Confirmed live 2026-09-18. */
+  comment?: string | null;
   elapsedSeconds?: number | null;
   occurredAt: string;
   actor?: {
@@ -522,7 +521,10 @@ export interface WorkflowHistoryRecord {
     email: string;
     status: string;
   } | null;
-  task?: Record<string, any> | null;
+  /** Confirmed live 2026-09-18: carries `signature` (populated only for an
+   *  `approve` action — the only action the backend allows one on) alongside
+   *  the completed task's own `comment`/`note`. */
+  task?: (Record<string, any> & { signature?: TaskActionSignature | null }) | null;
   workflowInstance?: Record<string, any>;
 }
 

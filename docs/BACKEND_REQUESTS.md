@@ -1,8 +1,8 @@
 # Backend Requests — from the Frontend Team
 
-**Raised:** 2026-08-29 · **Updated:** 2026-09-04 (evening)
-**Frontend:** `edms-frontend` @ `dev` (`aec7863`)
-**Backend checked against:** `edms-backend` @ `dev` (`e60c418`) — **90 routes**
+**Raised:** 2026-08-29 · **Updated:** 2026-09-21
+**Frontend:** `edms-frontend` @ `dev`
+**Backend checked against:** `edms-backend` @ `dev` (`b1b0b68`) — **106 routes**
 
 > **Update after `feat(workflow): close workflow gaps 1-10`.** Thank you — **BE-3 is
 > done**, and it was the critical item on this list. Closing it introduced one new
@@ -32,15 +32,15 @@ it. Then BE-1 and BE-4, which are security items rather than features.
 | ~~BE-3~~  | ~~Authorization on the workflow routes~~          | ✅ **Done**  | —           | —                          |
 | **BE-4**  | Enforce confidentiality for download/print/export | Security fix | 🔴 High     | No                         |
 | **BE-5**  | `GET /documents/:id/download`                     | New endpoint | 🟠 Med      | Yes — no way to get a file |
-| ~~BE-6~~  | ~~`POST /documents/:id/comments`~~ — **withdrawn**: it's `comment` on `POST /tasks/:id/action` | — | — | No — frontend rewired |
-| ~~BE-7~~  | ~~`POST /documents/:id/signatures`~~ — **withdrawn**: it's `signature` on the `approve` task action | — | — | No — frontend rewired |
-| **BE-8**  | Presigned upload URL                              | New endpoint | 🟠 Med      | Yes — OCR/search broken    |
+| **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med | No — 1 of 8 documents affected so far |
 | **BE-9**  | `policies` module                                 | New module   | 🟠 Med      | No — frontend on fixtures  |
 | **BE-10** | JSON 404 handler                                  | Small fix    | 🟡 Low      | No                         |
 | ~~BE-11~~ | ~~`audit` module~~                                | ✅ **Done**  | —           | —                          |
 | ~~BE-13~~ | ~~`forgot-password` / `reset-password`~~          | ✅ **Done**  | —           | —                          |
 | **BE-14** | Confidentiality-tier clearance option on roles    | New field/endpoint | 🟠 Med | No — per-document grants work meanwhile |
 | **BE-15** | Revoke a granted `DocumentAccessGrant`            | New endpoint | 🟠 Med      | No — grants just accumulate |
+| **BE-16** | Optional `signature` on the `review` task action  | Schema change | 🟠 Med      | No — "Mark reviewed" ships comment-only meanwhile |
+| **BE-17** | Support >1 document per workflow instance         | Data model change | 🟡 Low | No — single-document version upload covers the common case |
 
 ---
 
@@ -62,7 +62,7 @@ These were broken and are now working. Frontend has been repointed accordingly.
   route-level grep for `requirePermission` still returns zero, so it reads as unfixed
   unless you know to grep `_FORBIDDEN`. Worth a comment in `workflows.router.ts`.
 - **Asynchronous OCR** — `StartDocumentTextDetectionCommand` replaces the synchronous
-  call, so multi-page PDFs work. This was the second half of our BE-8 ask.
+  call, so multi-page PDFs work.
 - **Presigned download URLs** (`getSignedDownloadUrl`) and **OCR text archiving**
   (`saveOcrText`) — both noted.
 - **Eight aggregation endpoints** — instance stats, status counts, bottlenecks-ageing,
@@ -353,100 +353,6 @@ action in the product.
 
 ---
 
-## ~~BE-6 · `POST /documents/:id/comments`~~ — WITHDRAWN (2026-09-10)
-
-Comments are not a document operation. The live spec has no `comments` path anywhere; a
-comment is the optional `comment` string on `POST /tasks/:id/action` (`minLength 1`,
-`maxLength 2000`), persisted to the workflow activity trail, and read back via
-`GET /workflow-instances/:id/history`. The frontend's free-text comment box on
-`/doc/[id]` (which posted to the non-existent route) has been removed; the stage-action
-modals now send their note as `comment`. No backend work required.
-
-> **Update 2026-09-18 — you built it anyway, as a separate thing.** A dedicated
-> `GET/POST /documents/:id/comments` now exists — confirmed live, real document-level
-> comment thread, independent of any task. This isn't a contradiction of the withdrawal
-> above: the task-action `comment` is still the only thing tied to the approval trail;
-> this is a second, general-purpose thread. Wired on `/doc/[id]` as `DocumentCommentsPanel`.
-
----
-
-## ~~BE-7 · `POST /documents/:id/signatures`~~ — WITHDRAWN (2026-09-10)
-
-Also already defined in the live spec, and also not a document operation. `POST
-/tasks/:id/action` with `action: "approve"` **requires**
-`signature: { fileUrl: <uri>, mimeType: "image/png" | "image/jpeg" | "image/webp" }`
-(422 without it; the backend validates the URL extension matches the MIME type).
-`comment` is optional alongside it. The frontend now captures a drawn/uploaded signature
-image (`SignaturePad`), uploads it via the multipart uploader, and sends it on the
-approve action (`useSignAndApprove`, used by `/doc/[id]` and the supervisor approvals
-queue). No backend work required.
-
-> **Update 2026-09-18 — same story as BE-6.** `GET/POST /documents/:id/signatures` now
-> exists — confirmed live. It's a flat `{signedBy, signer, url, createdAt}` record with
-> **no positional/field-placement data**, unlike the task-action signature which the
-> viewer places at a specific spot on the document image. Useful for a sign-off that
-> isn't tied to any pending workflow task. Wired as `DocumentSignaturesPanel` on
-> `/doc/[id]`, reusing the same `SignaturePad` capture UI.
-
----
-
-## 🟠 BE-8 · Presigned upload URL — **half done**
-
-> **Update 2026-09-04.** The OCR half of this ask has shipped: Textract now uses
-> `StartDocumentTextDetectionCommand` (asynchronous, multi-page), reads from the
-> configured `S3_BUCKET`, and archives extracted text via `saveOcrText()`. You also added
-> `getSignedDownloadUrl()` — a presigned **GET**.
->
-> **What is still missing is a presigned PUT**, so files can reach the bucket your worker
-> reads from. Until then the bucket mismatch below is unchanged, and OCR still fails on
-> every document. We accept that the remaining fix is mostly ours — we have to stop using
-> the third-party gateway — but we cannot do it without an upload path.
->
-> One request while you are here: **move `searchIndexQueue.add()` off the OCR success
-> path.** A document that fails text extraction should still be findable by title,
-> reference and metadata. Right now one failure costs the document all searchability.
-
-### What we found
-
-The browser uploads files to a **third-party AWS API Gateway hard-coded in our
-`s3.service.ts`** (`qerhd0lxje.execute-api.us-east-1.amazonaws.com`), then POSTs the
-resulting URL to `POST /documents` as `fileUrl`.
-
-The backend derives `fileKey` from that URL's path and asks Textract to read
-`s3://${S3_BUCKET}/${fileKey}` — **a different bucket**. Textract raises
-`InvalidS3ObjectException`, OCR retries three times and lands on `ocrStatus: 'failed'`.
-
-Because `searchIndexQueue.add()` sits on the OCR **success** path only, no index job is ever
-enqueued, `search_vector` stays `NULL`, and **`GET /documents/search` returns nothing,
-permanently** — while `GET /documents` lists the same documents fine. The two views
-disagree, which reads as flaky search rather than a bucket mismatch.
-
-We noticed `saveOcrText()` was added in `b72e0bf`. It's downstream of `extractText()`, so
-it never runs either.
-
-### What we need
-
-```
-POST /api/v1/documents/upload-url
-Body: { filename, mimeType, fileSize }
-  →   { uploadUrl, fileKey, expiresAt }
-```
-
-We PUT the raw bytes to `uploadUrl` (no base64 — our current gateway forces base64, which
-inflates payloads ~33% and contributes to a 2 MB ceiling), then send `fileKey` to
-`POST /documents` instead of `fileUrl`. Please also validate on your side that the
-submitted key belongs to `S3_BUCKET`; today `fileUrl` is unvalidated client input.
-
-**Two things worth fixing at the same time:**
-
-- `DetectDocumentTextCommand` is Textract's _synchronous_ API — single-page only.
-  Multi-page PDFs need `StartDocumentTextDetection`. Most real uploads here are multi-page.
-- Enqueue the search-index job on document **create/update/restore** regardless of OCR
-  outcome, so a failed OCR doesn't make a document unfindable by title. Title changes and
-  metadata edits currently don't reindex either, so the index drifts.
-
----
-
 ## 🟠 BE-9 · `policies` module
 
 `src/modules/policies/` is an empty directory. Our `policies.service.ts` returns fixtures.
@@ -580,17 +486,218 @@ into `/admin/access-requests` once it ships and the shape is known.
 
 ---
 
-## Appendix A — frontend calls that currently 404
+## 🟠 BE-16 · Optional `signature` on the `review` task action — **new, 2026-09-18**
 
-Verified against `b72e0bf`:
+### What we found
 
-| Frontend call                           | Status                              |
-| --------------------------------------- | ----------------------------------- |
-| `POST /documents/:id/comments`          | BE-6                                |
-| `POST /documents/:id/signatures`        | BE-7                                |
-| `POST /auth/logout` (via our BFF)       | BE-2                                |
-| ~~`POST /notifications`~~               | **Removed on our side** — see BE-1  |
-| ~~`POST /notifications/mark-all-read`~~ | **Fixed on our side** → `/read-all` |
+`POST /tasks/:id/action`'s request schema (confirmed against the live OpenAPI spec) is a
+three-way `oneOf`:
+
+```json
+{
+  "title": "Approve task",
+  "required": ["action", "signature"],
+  "additionalProperties": false,
+  "properties": { "action": { "enum": ["approve"] }, "signature": { "...required..." }, "comment": {}, "note": {} }
+},
+{
+  "title": "Review, reject, request changes, or close",
+  "required": ["action"],
+  "additionalProperties": false,
+  "properties": { "action": { "enum": ["reject", "review", "request_changes", "close"] }, "comment": {}, "note": {} }
+},
+```
+
+`additionalProperties: false` on the second variant means a `signature` field sent
+alongside `{action: "review", ...}` would fail validation outright, not just be ignored.
+Signing is `approve`-only.
+
+### Why we're asking
+
+We just built "Mark reviewed" as a modal with an optional comment field, matching how
+`approve` already works — the plan was to let a reviewer optionally sign off too, not
+just approve. We can't, today. A reviewer who wants their sign-off recorded has to use
+`approve` instead of `review`, which isn't right where a stage is genuinely review-only
+(no approval authority) — or has no way to sign at all.
+
+### What we need
+
+Extend the `oneOf`'s "review" branch (or split `review` into its own variant) to accept
+the same optional `signature` object `approve` does, still not required:
+
+```json
+{
+  "action": "review",
+  "signature": { "fileUrl": "...", "mimeType": "image/png" },  // optional
+  "comment": "..."                                              // optional, unchanged
+}
+```
+
+`TaskActionSignature`'s validation (URL format, MIME allowlist, extension-matches-MIME)
+can be reused as-is — we're not asking for new validation, just for the existing
+`signature` shape to be legal on one more action.
+
+### Until then
+
+"Mark reviewed" ships comment-only. Not blocking — it's a nice-to-have, not a broken
+flow — but flagging so it's tracked rather than re-discovered later.
+
+---
+
+## 🟡 BE-17 · Support more than one document per workflow instance — **new, 2026-09-18**
+
+### What we found
+
+`WorkflowInstance.documentId` is a single `uuid`, and `document` is a single nested
+object — confirmed against the live OpenAPI spec, no array, no join table, no
+`documentIds`. One instance is permanently tied to exactly one document.
+
+### Why we're asking
+
+Walking through the "Request changes" flow with the product owner: when a reviewer
+requests changes, there are two different things that can be wrong —
+
+1. **The existing document is wrong** (bad data, needs correcting) — already covered:
+   the recipient uploads a new version of the same document (see the version-upload
+   gating change landed alongside this request).
+2. **Something is missing** — the reviewer needs an additional document (a supporting
+   invoice, a signed cover sheet, whatever) that was never part of the original
+   submission. Today there is no way to add a second document to an in-flight workflow;
+   the only options are starting an entirely separate workflow (loses the connection to
+   the original) or squeezing an unrelated file into a version slot on the existing
+   document (loses the file's own identity, title, and type).
+
+The ask is for a way to attach one or more additional documents to an *existing*
+workflow instance — sharing that instance and landing in the same cabinet/folder as the
+original — rather than only ever replacing the original document's content.
+
+### What we need
+
+Not fully specified yet — we don't want to hand you a shape sight-unseen for something
+this structural. Roughly, we think it looks like either:
+
+- `WorkflowInstance` gaining a `documentIds: uuid[]` (or a join table,
+  `workflow_instance_documents`), with the existing `documentId`/`document` kept as the
+  "primary" document for backward compatibility, or
+- A new `POST /workflow-instances/:id/documents` endpoint that uploads/attaches an
+  additional document to a running instance, visible alongside the primary one on
+  `GET /workflow-instances/:id`.
+
+Happy to workshop the exact contract before either side builds — flagging this now
+mainly so it's tracked, not because we expect it imminently.
+
+### Until then
+
+Only single-document workflows are supported, same as today. The "Request changes"
+recipient can upload a new version of the existing document; they cannot attach a
+separate one to the same workflow.
+
+---
+
+## 🟠 BE-18 · Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` — **new, 2026-09-21**
+
+### What we found
+
+While live-verifying whether OCR needed a presigned-upload fix (it didn't — the gateway
+upload path already works end to end), we pulled every document via `GET /documents` as
+`client_admin` against `edms-backend-zmfm.onrender.com`. 7 of 8 have
+`ocrStatus: 'completed'` with real
+extracted text. One — `INV-2026-1839_invoice.pdf`, uploaded 2026-09-18 — has sat at
+`ocrStatus: 'pending'` for three days, never advancing to `processing`, `completed`, or
+`failed`. Confirmed invisible to `GET /documents/search?q=invoice` (finds the other two
+invoice-ish documents, not this one) while listed fine in the plain `GET /documents`.
+
+`pending` rather than `failed` is the tell. `processOcrJob` in `ocr.workers.ts` sets
+`ocrStatus: 'processing'` as its very first line, before Textract is ever called. A
+document stuck at `pending` means that function never ran for this job at all — the
+BullMQ job was never durably enqueued. The likeliest gap: the `DocumentVersion` row is
+written (defaulting to `ocrStatus: 'pending'`) and the follow-up
+`ocrQueue.add('ocr', {documentId, versionId}, ...)` is a separate call; if the process
+dies or restarts between those two steps, the row says `pending` forever and BullMQ's
+own `attempts: 3` retry config never applies — retries only fire for a job that made it
+into the queue and was picked up at least once.
+
+### Why it matters
+
+A silently-stuck document is invisible to search forever (`searchIndexQueue.add()` only
+runs on the OCR **success** path) with no signal to anyone that anything is wrong — we
+only found this one document by pulling the raw list and diffing timestamps by hand.
+At real scale this is a slow, undetectable leak of unsearchable documents.
+
+### What we need
+
+This exact failure mode is already solved elsewhere in this codebase, for a different
+queue. `notifications/workers/email.workers.ts` has
+`recoverPendingEmailNotifications()` / `startNotificationEmailRecovery()`: a
+60-second sweep finding notifications stuck `pending` past a staleness window and
+re-enqueuing them with a deterministic `jobId` (`recovery-${notificationId}`) so BullMQ
+dedupes against a job that's legitimately still in flight. Its own comment names this
+exact failure mode: *"a crash between the database write and the enqueue would
+otherwise leave them pending forever."*
+
+We'd like the same pattern applied to OCR:
+
+```ts
+// ocr.workers.ts — mirrors recoverPendingEmailNotifications / startNotificationEmailRecovery
+const OCR_RECOVERY_INTERVAL_MS = 60_000;
+const OCR_RECOVERY_STALE_MS = 2 * 60 * 1000; // your own MAX_POLL_ATTEMPTS ceiling is ~5 min
+
+async function recoverPendingOcrJobs(): Promise<void> {
+    const olderThan = new Date(Date.now() - OCR_RECOVERY_STALE_MS);
+    const stale = await documentsRepository.findPendingOcrVersionIds(db, olderThan); // new — mirrors findPendingEmailNotificationIds
+
+    for (const { id: versionId, documentId } of stale) {
+        await ocrQueue.add(
+            'ocr',
+            { documentId, versionId },
+            { jobId: `recovery-${versionId}`, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+        );
+    }
+}
+
+export function startOcrRecovery(): ReturnType<typeof setInterval> {
+    void recoverPendingOcrJobs().catch((error) => logger.error('Initial pending OCR recovery failed', { error }));
+    const timer = setInterval(
+        () => void recoverPendingOcrJobs().catch((error) => logger.error('Pending OCR recovery failed', { error })),
+        OCR_RECOVERY_INTERVAL_MS,
+    );
+    timer.unref();
+    return timer;
+}
+```
+
+— and wire `startOcrRecovery()` into `worker.ts`'s `main()` alongside `emailRecovery`,
+the same way that one already is.
+
+Three smaller, optional pieces while you're in this area:
+
+- Decouple search indexing from OCR success — `searchIndexQueue.add()` currently only
+  runs on the OCR **success** path, so a document whose OCR job is `failed` (or, per
+  this ask, recovering from `pending`) is unfindable by search on *anything*, not just
+  its extracted text — not even its own title. Enqueueing the index job on
+  create/update/restore regardless of OCR outcome would mean a document is always at
+  least title/metadata-searchable, with OCR text as a bonus once/if it lands.
+- An admin-facing "retry OCR" action for a single document/version would let someone
+  unstick one immediately rather than waiting for the next sweep — useful
+  independently of the sweep itself.
+- If it's the worker process staying up (rather than just the write/enqueue gap) that's
+  the actual cause, worth checking it's running continuously — we'd guess Render's
+  free-tier idling/restart behaviour, but have no visibility into your infra to confirm
+  it from here.
+
+### How to verify
+
+```bash
+curl -s -H "Authorization: Bearer $CLIENT_ADMIN_TOKEN" \
+  https://edms-backend-zmfm.onrender.com/api/v1/documents?limit=100 | \
+  jq '.data[] | select(.currentVersion.ocrStatus == "pending") | {title, createdAt: .currentVersion.createdAt}'
+# Today: INV-2026-1839_invoice.pdf, stuck since 2026-09-18.
+# After the sweep ships: that document (or any future one that hits the same gap)
+# should self-heal within OCR_RECOVERY_INTERVAL_MS plus one Textract turnaround, with
+# no manual intervention.
+```
+
+---
 
 ## Appendix B — backend routes we now consume
 
@@ -600,11 +707,12 @@ Previously built and unused; wired in `e07d8c3`:
 - `GET /notifications/preferences`, `PUT /notifications/preferences` → new panel
 - `POST /notifications/read-all` → "Mark all read"
 
-Still unused: **`GET /documents/stats`**. It returns `{buckets: [{key, departmentId,
-departmentName, count}]}` grouped by department or month. Our management dashboards need
-SLA rates and task rollups too, so we currently page through `/documents` and aggregate in
-the browser (up to 50 requests per dashboard). If you're extending stats, those two
-dimensions would let us delete that code.
+**Update 2026-09-21:** `GET /documents/stats` is adopted now, alongside
+`GET /tasks/stats`, `GET /workflow-instances/stats` and
+`GET /workflow-instances/open-items-by-cabinet` — all four management dashboards were
+rewired off the browser-side aggregation this note used to describe. Thank you for
+building the SLA-rate and task-rollup endpoints we asked for below; between them and
+`documents/stats`, the client-side aggregation is gone.
 
 ## Appendix C — how to reproduce the route inventory
 
@@ -633,5 +741,5 @@ grep -cE "^\s+\{ resource: '[a-z_]+', action: '[a-z_]+' \}," prisma/seed-system.
 
 ---
 
-_Questions on any of this — particularly BE-7's definition of a signature, and BE-9's
-response shape — are welcome. We'd rather agree the contract before either side builds._
+_Questions on any of this — particularly BE-9's response shape — are welcome. We'd
+rather agree the contract before either side builds._
