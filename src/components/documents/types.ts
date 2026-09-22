@@ -2,13 +2,14 @@ import { Document, Task, WorkflowInstance } from '@/types/models';
 
 /**
  * Fields the UI historically expected on a document that don't exist on the
- * real API response. There is **no** document-level comments or signatures
- * endpoint — comments are the `comment` field on `POST /tasks/{taskId}/action`
- * and a signature is the `signature` image on that endpoint's `approve` action;
- * the document-level narrative comes from `GET /workflow-history`. `legalHold`
- * and `sealed` have no backing field either. All are empty/false in practice;
- * kept typed explicitly rather than left as implicit `any` so the gap stays
- * visible.
+ * real `Document` response — comments and signatures live entirely on the
+ * workflow trail instead: the `comment` field on `POST /tasks/{taskId}/action`
+ * and a signature image on that endpoint's `approve` action, both read back
+ * via `GET /workflow-history`. (Dedicated `/documents/:id/comments` and
+ * `/signatures` endpoints do exist on the backend but are deliberately
+ * unused — see BE-16/BE-17 in BACKEND_REQUESTS.md.) `legalHold` and `sealed`
+ * have no backing field either. All are empty/false in practice; kept typed
+ * explicitly rather than left as implicit `any` so the gap stays visible.
  */
 export interface DocumentCommentUI {
   id?: string;

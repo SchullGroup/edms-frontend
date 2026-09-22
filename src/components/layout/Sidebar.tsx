@@ -9,7 +9,7 @@ import { useNavigation } from '@/hooks/useNavigation';
 import { Icon, IconEl } from '@/components/ui/Icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { useUIStore } from '@/store/useUIStore';
-import { authService } from '@/apis/services/auth.service';
+import { performLogout } from '@/lib/logout';
 
 export const Sidebar = () => {
   const router = useRouter();
@@ -20,13 +20,7 @@ export const Sidebar = () => {
 
   const handleSignOut = () => {
     setMenuOpen(false);
-    // Tear the session down immediately. `authService.logout()` clears the
-    // accessToken cookie synchronously and fires the backend revoke call in the
-    // background — we don't wait for it.
-    authService.logout();
-    queryClient.clear();
-    useStore.getState().setCurrentUser(null);
-    router.replace('/');
+    performLogout(queryClient, router);
   };
   const nav = useNavigation();
   const [menuOpen, setMenuOpen] = useState(false);

@@ -61,6 +61,17 @@ interface UIStore {
   closeDrawer: () => void;
   pageTitle: string;
   setPageTitle: (title: string) => void;
+  /** A live backend confirmed the token is dead (401 after a failed refresh)
+   *  — not merely unreachable. Drives `SessionExpiredModal`; see
+   *  `api-client.ts`'s response interceptor for the only place this is set. */
+  sessionExpired: boolean;
+  setSessionExpired: (sessionExpired: boolean) => void;
+  /** Repeated network-level/5xx query failures across the app (see
+   *  `react-query-provider.tsx`) — the backend appears to be down, as
+   *  opposed to a single page's own data being missing. Drives
+   *  `ServiceUnavailableOverlay`. */
+  serviceUnavailable: boolean;
+  setServiceUnavailable: (serviceUnavailable: boolean) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -97,4 +108,8 @@ export const useUIStore = create<UIStore>((set) => ({
   closeDrawer: () => set({ drawer: null }),
   pageTitle: 'Dashboard',
   setPageTitle: (pageTitle) => set({ pageTitle }),
+  sessionExpired: false,
+  setSessionExpired: (sessionExpired) => set({ sessionExpired }),
+  serviceUnavailable: false,
+  setServiceUnavailable: (serviceUnavailable) => set({ serviceUnavailable }),
 }));

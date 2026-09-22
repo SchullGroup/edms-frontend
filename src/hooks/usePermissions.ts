@@ -78,5 +78,18 @@ export const usePermissions = () => {
     [granted, currentUser],
   );
 
-  return { hasPermission, can: hasPermission, hasAny, hasAll, scopeFor, isReady, portal };
+  return {
+    hasPermission,
+    can: hasPermission,
+    hasAny,
+    hasAll,
+    scopeFor,
+    isReady,
+    portal,
+    /** The resolved grant set (live if available, else the pre-hydration
+     *  fallback) — what `AppShell`'s route guard passes into
+     *  `evaluateRouteAccess` (`@/lib/routeAccess`), the same function
+     *  `middleware.ts` uses server-side. */
+    granted,
+  };
 };

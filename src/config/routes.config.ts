@@ -25,10 +25,20 @@ export const routeConfig: RouteRule[] = [
   },
 
   // 2. WHITELIST: Match the base path, and ONLY explicitly included subroutes
+  //
+  // `dashboard:view` was never a real backend resource — no role could ever
+  // be granted it — so this gate could never be satisfied once real
+  // permissions (not the pre-hydration fallback) are in `currentUser.permissions`.
+  // Gated instead on the union of what these pages actually fetch:
+  // `document:view` (Org Overview, Departments, Trends), `workflow_instance:view`
+  // (all of them), `task:view` (Org Overview, Departments, Performance) and
+  // `department:view` (Departments). Any one is enough to open the section —
+  // individual widgets that need a permission the user lacks hide themselves
+  // via `hasPermission`/`Guard`, they don't block the whole page.
   {
     path: '/management',
     matchType: 'whitelist',
-    anyPermissions: ['dashboard:view'],
+    anyPermissions: ['document:view', 'workflow_instance:view', 'task:view', 'department:view'],
     include: [
       '/management/reports',
       '/management/compliance',
@@ -43,7 +53,7 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/staff',
     matchType: 'prefix',
-    anyPermissions: ['document:view', 'dashboard:view'],
+    anyPermissions: ['document:view'],
     exclude: ['/staff/restricted-example'], // Add explicit exceptions here if needed
   },
 
@@ -68,10 +78,16 @@ export const routeConfig: RouteRule[] = [
     anyPermissions: ['audit:view'],
   },
 
+  // `workflow:route` was retired by the backend's 2026-09-16 permission
+  // restructuring (split into `workflow_instance:route`, `task:*`,
+  // `delegation:*`) — no role can hold it anymore, so this gate was
+  // permanently unsatisfiable for real supervisors. Gated on what the
+  // supervisor console actually does: route documents into a workflow, and
+  // act on tasks.
   {
     path: '/supervisor',
     matchType: 'prefix',
-    anyPermissions: ['workflow:route'],
+    anyPermissions: ['workflow_instance:route', 'task:action'],
   },
 
   // 4. Global authenticated paths (no gate = any authenticated user)

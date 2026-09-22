@@ -1,14 +1,15 @@
 import { Task, User } from '@/types/models';
 
 /**
- * Helpers for the supervisor dashboards.
- *
- * These deliberately live apart from `utils/helpers.ts`. That module's
- * `effStatus` compares against title-case document statuses ('Closed',
- * 'Pending') from the old seed data, while the API returns snake_case
- * ('closed', 'in_progress'). Rather than change a helper the rest of the app
- * still depends on, the supervisor pages work off tasks — which is where
- * assignment, due dates and stage actually live in the backend model.
+ * Task-status helpers — originally written for the supervisor dashboards
+ * (hence the filename), now also used by the staff task views
+ * (`staff/tasks`, `TaskRow`). `utils/helpers.ts` used to have a same-named
+ * `effStatus` that compared against title-case statuses ('Closed', 'Pending')
+ * left over from the old seed data, while the real API returns snake_case
+ * ('closed', 'in_progress') and puts the due date on `Task.dueAt` /
+ * `WorkflowInstance.stageDueAt`, not on the document — `effStatus` was
+ * deleted 2026-09-21 (DRIFT-13) in favour of `taskStatusLabel`/`isOverdue`
+ * here, which already worked off tasks and got this right.
  */
 
 /** A task the assignee still has to act on. */

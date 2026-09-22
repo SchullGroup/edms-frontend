@@ -11,14 +11,20 @@ import {
   UploadDocumentRequest,
   DocumentStatsResponse,
   AccessRequest,
-  DocumentComment,
-  DocumentSignature,
 } from '@/types/models';
 
 export interface AccessRequestInboxFilters {
   status?: 'pending' | 'approved' | 'denied';
   page?: number;
   limit?: number;
+}
+
+export interface DocumentStatsParams {
+  groupBy?: 'month' | 'department';
+  /** Only applied when `groupBy=month`. */
+  departmentId?: string;
+  from?: string;
+  to?: string;
 }
 
 export interface DocumentFilters {
@@ -58,9 +64,9 @@ export const documentsService = {
     return response.data.data;
   },
 
-  // Server-side count aggregates for the management dashboards. Shape unverified —
-  // see `DocumentStatsResponse`. Callers must tolerate a 404 / partial payload.
-  getStats: async (params?: Record<string, any>): Promise<DocumentStatsResponse> => {
+  // Server-side count aggregates for the management dashboards — see
+  // `DocumentStatsResponse` for the (verified) shape.
+  getStats: async (params?: DocumentStatsParams): Promise<DocumentStatsResponse> => {
     const response = await apiClient.get<ApiResponse<DocumentStatsResponse>>('/documents/stats', {
       params,
     });
@@ -146,41 +152,6 @@ export const documentsService = {
   restoreVersion: async (id: string, versionId: string): Promise<DocumentVersion> => {
     const response = await apiClient.post<ApiResponse<DocumentVersion>>(
       `/documents/${id}/versions/${versionId}/restore`,
-    );
-    return response.data.data;
-  },
-
-  // Dedicated document-level comments/signatures — independent of any
-  // workflow task (contrast with the `comment` field and `signature` image
-  // on `POST /tasks/{taskId}/action`, still used by the approve flow — see
-  // tasks.service). Verified live 2026-09-18.
-  getComments: async (id: string): Promise<DocumentComment[]> => {
-    const response = await apiClient.get<ApiResponse<DocumentComment[]>>(
-      `/documents/${id}/comments`,
-    );
-    return response.data.data;
-  },
-
-  addComment: async (id: string, content: string): Promise<DocumentComment> => {
-    const response = await apiClient.post<ApiResponse<DocumentComment>>(
-      `/documents/${id}/comments`,
-      { content },
-    );
-    return response.data.data;
-  },
-
-  getSignatures: async (id: string): Promise<DocumentSignature[]> => {
-    const response = await apiClient.get<ApiResponse<DocumentSignature[]>>(
-      `/documents/${id}/signatures`,
-    );
-    return response.data.data;
-  },
-
-  /** `url` must already point at an uploaded image — this only records it. */
-  addSignature: async (id: string, url: string): Promise<DocumentSignature> => {
-    const response = await apiClient.post<ApiResponse<DocumentSignature>>(
-      `/documents/${id}/signatures`,
-      { url },
     );
     return response.data.data;
   },

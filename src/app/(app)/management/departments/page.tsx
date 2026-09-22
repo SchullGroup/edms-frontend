@@ -1,21 +1,18 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { useUIStore } from '@/store/useUIStore';
 import { useDepartments } from '@/apis/hooks/useDepartments';
-import { useCabinets } from '@/apis/hooks/useCabinets';
-import { useAllDocuments } from '@/apis/hooks/useDocuments';
-import { useAllTasks } from '@/apis/hooks/useTasks';
-import { useAllWorkflowInstances } from '@/apis/hooks/useWorkflowInstances';
+import { useDocumentStats } from '@/apis/hooks/useDocuments';
+import { useTaskStats } from '@/apis/hooks/useTasks';
+import { workflowInstancesService } from '@/apis/services/workflowInstances.service';
 import { HBarChart, LineChart } from '@/components/ui/Charts';
 import { Spinner } from '@/components/common/Spinner';
 import {
   buildDepartmentIndex,
-  buildCabinetDepartmentIndex,
-  documentDepartmentId,
-  taskDepartmentId,
-  bucketByMonth,
-  taskSlaRate,
+  alignMonthlyBuckets,
+  lastNMonths,
 } from '@/apis/utils/managementAggregation';
 
 const LINE_COLORS = [
@@ -36,64 +33,60 @@ export default function DeptComparisonPage() {
   }, [setPageTitle]);
 
   const { data: departmentsRes, isLoading: loadingDepts } = useDepartments();
-  const { data: cabinetsRes, isLoading: loadingCabinets } = useCabinets();
-  const { data: documents = [], isLoading: loadingDocs } = useAllDocuments();
-  const { data: tasksPage, isLoading: loadingTasks } = useAllTasks();
-  const { data: instances = [], isLoading: loadingInstances } = useAllWorkflowInstances();
-
   const departments = departmentsRes?.data ?? [];
-  const cabinets = cabinetsRes?.data ?? [];
-  const tasks = tasksPage?.items ?? [];
-
-  const isLoading =
-    loadingDepts || loadingCabinets || loadingDocs || loadingTasks || loadingInstances;
-
   const departmentIndex = useMemo(() => buildDepartmentIndex(departments), [departments]);
-  const cabinetIndex = useMemo(() => buildCabinetDepartmentIndex(cabinets), [cabinets]);
   const deptOptions = useMemo(() => Array.from(departmentIndex.values()), [departmentIndex]);
 
   const scope = dept === 'All' ? deptOptions : deptOptions.filter((d) => d.id === dept);
+  const windowStart = useMemo(() => lastNMonths(range)[0].start.toISOString(), [range]);
 
-  const perDept = useMemo(
-    () =>
-      scope.map((d) => {
-        const deptDocs = documents.filter(
-          (doc) => documentDepartmentId(doc, cabinetIndex) === d.id,
-        );
-        const deptTasks = tasks.filter((t) => taskDepartmentId(t, cabinetIndex) === d.id);
-        const deptInstances = instances.filter((wi) => {
-          const cabinetId = wi.document?.cabinetId;
-          return cabinetId ? cabinetIndex.get(cabinetId) === d.id : false;
-        });
-        const closedInstances = deptInstances.filter((wi) => wi.closedAt);
-        return {
-          dept: d,
-          volume: bucketByMonth(deptDocs, (doc) => doc.createdAt, range),
-          closed: bucketByMonth(closedInstances, (wi) => wi.closedAt, range),
-          sla: taskSlaRate(deptTasks),
-        };
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scope, documents, tasks, instances, cabinetIndex, range],
+  // Volume (period total) and SLA are both one GROUP BY across every
+  // department at once — no per-department call needed for either.
+  const { data: deptDocStats, isLoading: loadingVolume } = useDocumentStats({
+    groupBy: 'department',
+    from: windowStart,
+  });
+  const { data: taskStats, isLoading: loadingSla } = useTaskStats({ groupBy: 'department' });
+
+  const volumeByDept = useMemo(
+    () => new Map((deptDocStats?.buckets ?? []).map((b) => [b.departmentId ?? 'unassigned', b.count])),
+    [deptDocStats],
+  );
+  const slaByDept = useMemo(
+    () => new Map((taskStats?.buckets ?? []).map((b) => [b.departmentId ?? 'unassigned', b.slaRate])),
+    [taskStats],
   );
 
-  const volumeItems = perDept.map((p) => ({
-    label: p.dept.name,
-    value: p.volume.values.reduce((a, b) => a + b, 0),
+  // The monthly closure trend needs one time series *per department shown*,
+  // which `GET /workflow-instances/stats` only gives one department at a
+  // time — hence `useQueries` over the departments in scope, rather than a
+  // hook call per department (hooks can't be called in a loop).
+  const closedByDeptQueries = useQueries({
+    queries: scope.map((d) => ({
+      queryKey: ['workflowInstances', 'stats', { departmentId: d.id }],
+      queryFn: () => workflowInstancesService.getStats({ departmentId: d.id }),
+    })),
+  });
+
+  const isLoading =
+    loadingDepts || loadingVolume || loadingSla || closedByDeptQueries.some((q) => q.isLoading);
+
+  const volumeItems = scope.map((d) => ({
+    label: d.name,
+    value: volumeByDept.get(d.id) ?? 0,
     color: 'var(--brand-primary-light)',
   }));
 
-  const slaItems = perDept.map((p) => ({
-    label: p.dept.name,
-    value: p.sla,
-    color: p.sla >= 85 ? 'var(--status-closed)' : 'var(--status-overdue)',
-  }));
+  const slaItems = scope.map((d) => {
+    const sla = Math.round(slaByDept.get(d.id) ?? 100);
+    return { label: d.name, value: sla, color: sla >= 85 ? 'var(--status-closed)' : 'var(--status-overdue)' };
+  });
 
-  const lineLabels = perDept[0]?.closed.labels ?? bucketByMonth([], () => undefined, range).labels;
-  const lineSeries = perDept.map((p, i) => ({
-    name: p.dept.name,
+  const lineLabels = lastNMonths(range).map((m) => m.label);
+  const lineSeries = scope.map((d, i) => ({
+    name: d.name,
     color: LINE_COLORS[i % LINE_COLORS.length],
-    values: p.closed.values,
+    values: alignMonthlyBuckets(closedByDeptQueries[i]?.data?.buckets ?? [], range).values,
   }));
 
   if (isLoading) return <Spinner />;

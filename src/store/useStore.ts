@@ -255,12 +255,6 @@ export const useStore = create<AppStore>()(
   ),
 );
 
-export const effStatus = (doc: any) => {
-  if (doc.status === 'Closed' || doc.status === 'On Hold') return doc.status;
-  if (doc.due && doc.due < Date.now()) return 'Overdue';
-  return doc.status;
-};
-
 export const canView = (doc: any, user: any) => {
   if (!doc.restrictedTo) return true;
   return doc.restrictedTo.includes(user.id);

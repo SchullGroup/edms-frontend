@@ -18,7 +18,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
-import { effStatus, timeAgo, fmtDate } from '@/utils/helpers';
+import { timeAgo, fmtDate } from '@/utils/helpers';
 
 const URG_ORDER: Record<string, number> = { Critical: 0, High: 1, Normal: 2, Low: 3 };
 

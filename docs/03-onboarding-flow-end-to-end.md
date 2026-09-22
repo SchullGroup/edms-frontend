@@ -564,13 +564,15 @@ before any pilot, and it is a small change: add `requirePermission('workflow', �
 3. **Session verification** — calls `authService.me()` in the background; on failure
    clears `currentUser` and pushes to `/`.
 
-> ⛔ **The route guard is cosmetic.** There is no `middleware.ts` in the project. The guard
-> is a client-side `useEffect` reading a localStorage-persisted role array. Editing
-> `edms-state-v3` to claim `schulltech_admin` unlocks every portal.
->
-> For API-backed pages this is contained — the backend re-derives roles from the JWT and
-> returns 403. For `SEED`-backed pages (all of `/platform`, all of `/auditor`, much of
-> `/admin`) **everything renders**, because that data never leaves the browser.
+> ✅ **Resolved (2026-09-21).** This route guard used to be purely cosmetic — no
+> `middleware.ts` in the project, just a client-side `useEffect` reading a
+> localStorage-persisted role array, so editing `edms-state-v3` to claim
+> `schulltech_admin` unlocked every portal. `src/proxy.ts` (Next.js 16 renamed
+> `middleware.ts` to `proxy.ts`) now resolves real roles/permissions from
+> `GET /auth/me` server-side on every protected navigation, before the page is
+> served — editing `localStorage` no longer has any effect on what the server
+> sends back. The client-side guard above is now a same-tick UX nicety, not the
+> control. See DRIFT-02 (resolved) in doc 01 §4.
 
 ---
 
@@ -711,10 +713,10 @@ Once documents are flowing, this is what daily use looks like and what it costs.
 | Full-text search | ⛔ | index never built (Phase 8 step 2) |
 | Filter documents | ✅ | cabinet, folder, status, urgency, type, creator, archived |
 | Check out / check in | ✅ | ⚠️ no admin force-release; a stale lock blocks forever |
-| Upload a new version | ✅ | ⚠️ blocked if someone else holds the lock (correct) |
-| Restore a version | 🟨 | backend works, no UI |
-| Comment on a document | ⛔ | `POST /documents/:id/comments` 404s |
-| Sign a document | ⛔ | `POST /documents/:id/signatures` 404s |
+| Upload a new version | 🟨 | ✅ works, but **narrowed 2026-09-18** — only offered once the previous stage has sent the document back with "Request changes" onto the caller's current task; also blocked if someone else holds the lock (correct) |
+| Restore a version | ✅ | UI shipped since this table was written — `DocumentVersionsPanel`'s "Restore" |
+| Comment on a document | ✅ | optional `comment` on `POST /tasks/:id/action`, prompted by "Mark reviewed"/"Approve"/etc. and shown on the workflow trail. (A dedicated `/documents/:id/comments` endpoint exists too but is deliberately unused — see BE-16/BE-17 in `BACKEND_REQUESTS.md`.) |
+| Sign a document | 🟨 | `approve` only — `signature` is required there, not offered on `review`/`reject`/etc. (BE-16 asks for that gap to close). A dedicated `/documents/:id/signatures` endpoint exists too but is deliberately unused. |
 | Notifications | ⛔ | module missing; returns an HTML 404 that axios can't parse |
 | Delegate while away | 🟨 | backend complete, no UI at all |
 | Supervisor workload view | 🟨 | works, but walks every page of `/documents` client-side |

@@ -3,18 +3,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useUIStore } from '@/store/useUIStore';
 import { useDepartments } from '@/apis/hooks/useDepartments';
-import { useCabinets } from '@/apis/hooks/useCabinets';
-import { useAllDocuments } from '@/apis/hooks/useDocuments';
-import { useAllWorkflowInstances } from '@/apis/hooks/useWorkflowInstances';
+import { useDocumentStats } from '@/apis/hooks/useDocuments';
+import { useWorkflowInstanceStats } from '@/apis/hooks/useWorkflowInstances';
 import { LineChart } from '@/components/ui/Charts';
 import { Icon } from '@/components/ui/Icons';
 import { Spinner } from '@/components/common/Spinner';
-import {
-  buildDepartmentIndex,
-  buildCabinetDepartmentIndex,
-  documentDepartmentId,
-  bucketByMonth,
-} from '@/apis/utils/managementAggregation';
+import { buildDepartmentIndex, alignMonthlyBuckets, lastNMonths } from '@/apis/utils/managementAggregation';
 
 export default function TrendsForecastPage() {
   const { setPageTitle } = useUIStore();
@@ -26,43 +20,34 @@ export default function TrendsForecastPage() {
   }, [setPageTitle]);
 
   const { data: departmentsRes, isLoading: loadingDepts } = useDepartments();
-  const { data: cabinetsRes, isLoading: loadingCabinets } = useCabinets();
-  const { data: documents = [], isLoading: loadingDocs } = useAllDocuments();
-  const { data: instances = [], isLoading: loadingInstances } = useAllWorkflowInstances();
-
   const departments = departmentsRes?.data ?? [];
-  const cabinets = cabinetsRes?.data ?? [];
-
-  const isLoading = loadingDepts || loadingCabinets || loadingDocs || loadingInstances;
-
   const departmentIndex = useMemo(() => buildDepartmentIndex(departments), [departments]);
-  const cabinetIndex = useMemo(() => buildCabinetDepartmentIndex(cabinets), [cabinets]);
   const deptOptions = useMemo(() => Array.from(departmentIndex.values()), [departmentIndex]);
 
-  const scopedDept = dept === 'All' ? null : dept;
+  const scopedDept = dept === 'All' ? undefined : dept;
+  // `GET /documents/stats` takes an optional `from` bound; `GET
+  // /workflow-instances/stats` doesn't, so its buckets are aligned to the
+  // same window client-side by `alignMonthlyBuckets` instead.
+  const windowStart = useMemo(() => lastNMonths(range)[0].start.toISOString(), [range]);
 
-  const scopedDocuments = useMemo(
-    () =>
-      documents.filter((d) => !scopedDept || documentDepartmentId(d, cabinetIndex) === scopedDept),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [documents, cabinetIndex, scopedDept],
-  );
-  const scopedInstances = useMemo(
-    () =>
-      instances.filter((wi) => {
-        if (!scopedDept) return true;
-        const cabinetId = wi.document?.cabinetId;
-        return cabinetId ? cabinetIndex.get(cabinetId) === scopedDept : false;
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [instances, cabinetIndex, scopedDept],
-  );
+  const { data: docStats, isLoading: loadingDocs } = useDocumentStats({
+    groupBy: 'month',
+    departmentId: scopedDept,
+    from: windowStart,
+  });
+  const { data: wfStats, isLoading: loadingInstances } = useWorkflowInstanceStats({
+    departmentId: scopedDept,
+  });
 
-  const inflow = bucketByMonth(scopedDocuments, (d) => d.createdAt, range);
-  const closed = bucketByMonth(
-    scopedInstances.filter((wi) => wi.closedAt),
-    (wi) => wi.closedAt,
-    range,
+  const isLoading = loadingDepts || loadingDocs || loadingInstances;
+
+  const inflow = useMemo(
+    () => alignMonthlyBuckets(docStats?.buckets ?? [], range),
+    [docStats, range],
+  );
+  const closed = useMemo(
+    () => alignMonthlyBuckets(wfStats?.buckets ?? [], range),
+    [wfStats, range],
   );
 
   const backlog: number[] = [];

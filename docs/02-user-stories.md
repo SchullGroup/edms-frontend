@@ -466,12 +466,15 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
 - [x] Edit title, type, folder, confidentiality, urgency, status
 - [x] Workflow stage rail + activity trail from live `GET /workflow-history` (since the
       `feature/management` merge)
-- [x] ✅ **Comments — resolved 2026-09-18.** `GET/POST /documents/:id/comments` now
-      exists (didn't when DRIFT-08 was written) and is wired as `DocumentCommentsPanel` —
-      a general-purpose thread, separate from the task-action `comment` field.
-- [x] ✅ **Signatures — resolved 2026-09-18.** `GET/POST /documents/:id/signatures` now
-      exists and is wired as `DocumentSignaturesPanel` — a flat sign-off record with no
-      positional placement, separate from the task-action approve-flow signature.
+- [x] ✅ **Comments and signatures stay workflow-trail-only — reaffirmed 2026-09-18.**
+      `GET/POST /documents/:id/comments`/`/signatures` are real endpoints (confirmed
+      live) and were briefly wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel`
+      the same day, then deliberately removed: product wants every comment and
+      signature to live on the one workflow trail (`POST /tasks/:id/action`'s
+      `comment`/`approve`'s `signature`), not split across a second thread. "Mark
+      reviewed" now opens an optional-comment modal too — see DRIFT-08 in doc 01 and
+      BE-16/BE-17 in `BACKEND_REQUESTS.md` for what's still needed (an optional
+      signature on `review`, and multi-document workflow instances).
 - [ ] 🟨 **The backend audit trail is real now (DRIFT-11 revised, 2026-09-18)** — it
       auto-writes hash-chained entries server-side and `/admin/audit` reads it live. But
       this page still calls the old no-op `useCreateAuditLog` (there's no write endpoint

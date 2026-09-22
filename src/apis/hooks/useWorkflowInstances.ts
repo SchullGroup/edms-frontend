@@ -6,7 +6,6 @@ import {
   WorkflowInstanceStatsParams,
 } from '../services/workflowInstances.service';
 import { CreateWorkflowInstanceRequest } from '@/types/models';
-import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 
 /** Starting, holding, resuming or closing an instance moves the document's
  *  status and the task queues too, so every view that reads them is stale. */
@@ -25,19 +24,6 @@ export const useWorkflowInstances = (
     queryKey: ['workflowInstances', params],
     queryFn: () => workflowInstancesService.getAll(params),
     enabled: options?.enabled ?? true,
-  });
-};
-
-/**
- * INTERIM STOPGAP for pages that need the full workflow-instance set
- * (management dashboards). Loops every page — see fetchAllPages.ts for why
- * this exists and why it should be replaced once the backend has
- * aggregation endpoints.
- */
-export const useAllWorkflowInstances = (params: Record<string, any> = {}) => {
-  return useQuery({
-    queryKey: ['workflowInstances', 'all', params],
-    queryFn: () => fetchAllPages(workflowInstancesService.getAll, params),
   });
 };
 

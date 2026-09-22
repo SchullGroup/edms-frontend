@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   documentsService,
   DocumentFilters,
+  DocumentStatsParams,
   AccessRequestInboxFilters,
 } from '@/apis/services/documents.service';
 import { CreateVersionRequest, Document, DocumentMetadataValueInput } from '@/types/models';
@@ -17,8 +18,6 @@ export const documentKeys = {
   metadata: (id: string) => [...documentKeys.detail(id), 'metadata'] as const,
   versions: (id: string) => [...documentKeys.detail(id), 'versions'] as const,
   accessRequests: (id: string) => [...documentKeys.detail(id), 'access-requests'] as const,
-  comments: (id: string) => [...documentKeys.detail(id), 'comments'] as const,
-  signatures: (id: string) => [...documentKeys.detail(id), 'signatures'] as const,
 };
 
 export const accessRequestInboxKeys = {
@@ -35,9 +34,12 @@ export function useDocuments(filters: DocumentFilters = {}, options?: { enabled?
 }
 
 /**
- * INTERIM STOPGAP for pages that need the full document set (management
- * dashboards). Loops every page — see fetchAllPages.ts for why this exists
- * and why it should be replaced once the backend has aggregation endpoints.
+ * Walks every page of `GET /documents` for the given filter. The management
+ * dashboards used to lean on this for org-wide totals — they now read
+ * `GET /documents/stats` instead (see DRIFT-07). What's left needs the raw
+ * rows themselves, not just counts: listing every document in one cabinet
+ * for a folder-assignment UI (`admin/cabinets`, `staff/cabinets`), where
+ * there's no aggregation endpoint that would do instead.
  *
  * `enabled` defaults to true so existing unconditional callers are unaffected
  * — pass `false` explicitly for a caller that only wants this scoped to a
@@ -55,18 +57,16 @@ export function useAllDocuments(
   });
 }
 
-/**
- * Server-computed document aggregates (`GET /documents/stats`). Best-effort: the
- * endpoint may not be deployed and its shape is unverified, so failures are
- * swallowed (no retry, no error toast) and callers fall back to client-side
- * counts when `data` is undefined.
- */
-export function useDocumentStats(params?: Record<string, any>, options?: { enabled?: boolean }) {
+/** Server-computed document count aggregates (`GET /documents/stats`) —
+ *  one GROUP BY instead of walking every document client-side. */
+export function useDocumentStats(
+  params?: DocumentStatsParams,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: [...documentKeys.all, 'stats', params ?? {}],
     queryFn: () => documentsService.getStats(params),
     enabled: options?.enabled ?? true,
-    retry: false,
     staleTime: 60_000,
   });
 }
@@ -159,60 +159,6 @@ export function useCheckinDocument() {
     },
     onError: (err: any) => {
       addToast(err.response?.data?.message || 'Failed to checkin document', 'error');
-    },
-  });
-}
-
-// Dedicated document-level comments/signatures — independent of the
-// workflow-action path `src/app/(app)/doc/[id]/page.tsx` (`actApprove`) uses:
-// a `comment` field on `POST /tasks/{taskId}/action`, and a `signature` image
-// on its `approve` action. These are a separate thread/record, not a replacement.
-
-export function useDocumentComments(id?: string) {
-  return useQuery({
-    queryKey: documentKeys.comments(id || ''),
-    queryFn: () => documentsService.getComments(id as string),
-    enabled: !!id,
-  });
-}
-
-export function useAddDocumentComment() {
-  const queryClient = useQueryClient();
-  const { addToast } = useUIStore.getState();
-
-  return useMutation({
-    mutationFn: ({ id, content }: { id: string; content: string }) =>
-      documentsService.addComment(id, content),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: documentKeys.comments(id) });
-    },
-    onError: (err: any) => {
-      addToast(err.response?.data?.message || 'Failed to post comment', 'error');
-    },
-  });
-}
-
-export function useDocumentSignatures(id?: string) {
-  return useQuery({
-    queryKey: documentKeys.signatures(id || ''),
-    queryFn: () => documentsService.getSignatures(id as string),
-    enabled: !!id,
-  });
-}
-
-export function useAddDocumentSignature() {
-  const queryClient = useQueryClient();
-  const { addToast } = useUIStore.getState();
-
-  return useMutation({
-    mutationFn: ({ id, url }: { id: string; url: string }) =>
-      documentsService.addSignature(id, url),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: documentKeys.signatures(id) });
-      addToast('Signature added', 'success');
-    },
-    onError: (err: any) => {
-      addToast(err.response?.data?.message || 'Failed to add signature', 'error');
     },
   });
 }
