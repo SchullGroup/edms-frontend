@@ -24,11 +24,12 @@ import { Skeleton, SkeletonTable, SkeletonTreeRows } from '@/components/common/S
  *  as `UnfiledDocuments` in `admin/cabinets/page.tsx`. */
 const UNFILED = '__unfiled__';
 
-/** high/critical only, per spec — low/normal get no dot. */
-function UrgencyDot({ urgency }: { urgency: string }) {
+/** high/critical only, per spec — low/normal get no flash. */
+function urgencyRowClass(urgency: string): string {
   const tier = urgency?.toLowerCase();
-  if (tier !== 'high' && tier !== 'critical') return null;
-  return <span className={`urg-dot ${tier}`} title={`Urgency: ${urgency}`} />;
+  if (tier === 'critical') return 'urg-row-critical';
+  if (tier === 'high') return 'urg-row-high';
+  return '';
 }
 
 export default function CabinetBrowserPage() {
@@ -175,7 +176,6 @@ export default function CabinetBrowserPage() {
       sortable: true,
       render: (d) => (
         <span className="flex items-center gap-2">
-          <UrgencyDot urgency={d.urgency} />
           <span style={{ fontWeight: 600 }}>{d.title}</span>
         </span>
       ),
@@ -514,7 +514,11 @@ export default function CabinetBrowserPage() {
             <div className="card">
               <div className="doc-grid">
                 {docs.map((d) => (
-                  <div key={d.id} className="doc-card" onClick={() => router.push(`/doc/${d.id}`)}>
+                  <div
+                    key={d.id}
+                    className={`doc-card ${urgencyRowClass(d.urgency)}`}
+                    onClick={() => router.push(`/doc/${d.id}`)}
+                  >
                     <div className="doc-thumb">
                       <Icon name="doc" size={28} />
                     </div>
@@ -527,7 +531,6 @@ export default function CabinetBrowserPage() {
                         marginBottom: '7px',
                       }}
                     >
-                      <UrgencyDot urgency={d.urgency} />
                       <span>{d.title}</span>
                     </div>
                     <div className="flex gap-2 flex-wrap">
@@ -546,6 +549,7 @@ export default function CabinetBrowserPage() {
                 selectable
                 onSelect={(sel) => setSelected(sel)}
                 onRow={(d) => router.push(`/doc/${d.id}`)}
+                rowClassName={(d) => urgencyRowClass(d.urgency)}
               />
             </div>
           )}
