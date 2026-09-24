@@ -294,6 +294,24 @@ a:hover { text-decoration: underline; }
 .urg-legend .urg-dot { animation: none; margin-right: 5px; }
 .urg-legend span { display: inline-flex; align-items: center; }
 
+/* ---------- Urgency row/card flash (high/critical only) ---------- */
+/* Deliberately sharp/saturated — not the muted badge palette — so it reads as
+   an alert, not just a status tint. Same value in both themes; it's used at
+   low alpha via color-mix, not as text, so it doesn't need a dark variant. */
+.urg-row-critical, .urg-row-high { animation: urg-row-flash 1.3s ease-in-out infinite; }
+.urg-row-critical { --urg-flash: #FF3B30; }
+.urg-row-high { --urg-flash: #FFD400; }
+@keyframes urg-row-flash {
+  0%, 100% { background-color: color-mix(in srgb, var(--urg-flash) 30%, transparent); }
+  50% { background-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .urg-row-critical, .urg-row-high {
+    animation: none;
+    background-color: color-mix(in srgb, var(--urg-flash) 18%, transparent);
+  }
+}
+
 /* ---------- Task rows / lists ---------- */
 .rowlist { display: flex; flex-direction: column; }
 .task-row { display: flex; align-items: center; gap: 12px; padding: var(--row-pad) 20px; border-bottom: 1px solid var(--border); cursor: pointer; position: relative; transition: background .1s; }

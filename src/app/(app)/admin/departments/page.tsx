@@ -9,6 +9,7 @@ import {
   useUpdateDepartment,
   useDeleteDepartment,
 } from '@/apis/hooks/useDepartments';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
 import { Spinner } from '@/components/common/Spinner';
@@ -70,10 +71,16 @@ function RowMenu({
   onAddSub,
   onEdit,
   onDelete,
+  canCreate,
+  canEdit,
+  canDelete,
 }: {
   onAddSub: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -138,14 +145,32 @@ function RowMenu({
           role="menu"
           style={{ position: 'fixed', top: pos!.top, left: pos!.left, right: 'auto', minWidth: '208px' }}
         >
-          <button className="menu-item" role="menuitem" onClick={run(onAddSub)}>
+          <button
+            className="menu-item"
+            role="menuitem"
+            disabled={!canCreate}
+            title={!canCreate ? "You don't have permission to create departments" : undefined}
+            onClick={run(onAddSub)}
+          >
             <Icon name="plus" size={14} /> Add sub-department
           </button>
-          <button className="menu-item" role="menuitem" onClick={run(onEdit)}>
+          <button
+            className="menu-item"
+            role="menuitem"
+            disabled={!canEdit}
+            title={!canEdit ? "You don't have permission to edit departments" : undefined}
+            onClick={run(onEdit)}
+          >
             <Icon name="edit" size={14} /> Edit
           </button>
           <div className="menu-sep" />
-          <button className="menu-item danger" role="menuitem" onClick={run(onDelete)}>
+          <button
+            className="menu-item danger"
+            role="menuitem"
+            disabled={!canDelete}
+            title={!canDelete ? "You don't have permission to delete departments" : undefined}
+            onClick={run(onDelete)}
+          >
             <Icon name="x" size={14} /> Delete
           </button>
         </div>
@@ -157,6 +182,10 @@ function RowMenu({
 export default function DepartmentsAdminPage() {
   const { auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canCreateDepartment = can('department', 'create');
+  const canEditDepartment = can('department', 'edit');
+  const canDeleteDepartment = can('department', 'delete');
 
   const { data, isLoading, isError, refetch } = useDepartments();
   const createDepartment = useCreateDepartment();
@@ -357,6 +386,9 @@ export default function DepartmentsAdminPage() {
             onAddSub={() => openForm(null, findNode(r.id)!)}
             onEdit={() => openForm(findNode(r.id)!)}
             onDelete={() => handleDelete(r)}
+            canCreate={canCreateDepartment}
+            canEdit={canEditDepartment}
+            canDelete={canDeleteDepartment}
           />
         </div>
       ),
@@ -376,7 +408,14 @@ export default function DepartmentsAdminPage() {
           </div>
         </div>
         <div className="actions">
-          <button className="btn btn-primary flex items-center" onClick={() => openForm(null)}>
+          <button
+            className="btn btn-primary flex items-center"
+            onClick={() => openForm(null)}
+            disabled={!canCreateDepartment}
+            title={
+              !canCreateDepartment ? "You don't have permission to create departments" : undefined
+            }
+          >
             <span style={{ marginRight: '8px' }}>
               <Icon name="plus" size={15} />
             </span>

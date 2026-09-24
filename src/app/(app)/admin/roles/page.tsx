@@ -11,6 +11,7 @@ import {
   useSetRolePermissions,
 } from '@/apis/hooks/useRoles';
 import { isSystemRoleName } from '@/lib/permissions';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
 import { Spinner } from '@/components/common/Spinner';
 import { Role, RolePermission, RolePermissionScope } from '@/types/models';
@@ -63,6 +64,10 @@ const keyScopeMap = (perms: RolePermission[] | undefined): Map<string, RolePermi
 export default function RolesPermissionsPage() {
   const { auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canCreateRole = can('role', 'create');
+  const canEditRole = can('role', 'edit');
+  const canDeleteRole = can('role', 'delete');
 
   const { data: roles, isLoading } = useRoles();
   const createRole = useCreateRole();
@@ -425,7 +430,14 @@ export default function RolesPermissionsPage() {
         <div className="card">
           <div className="card-head">
             <span className="h3">Roles</span>
-            <button className="btn btn-primary btn-sm" onClick={handleNewRole}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleNewRole}
+              disabled={!canCreateRole}
+              title={
+                !canCreateRole ? "You don't have permission to create roles" : 'Create New Role'
+              }
+            >
               <Icon name="plus" size={14} /> New
             </button>
           </div>
@@ -514,6 +526,8 @@ export default function RolesPermissionsPage() {
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => handleEditRole(selectedRole)}
+                    disabled={!canEditRole}
+                    title={!canEditRole ? "You don't have permission to edit roles" : 'Edit Role'}
                   >
                     <Icon name="edit" size={13} /> Edit role
                   </button>
@@ -521,6 +535,10 @@ export default function RolesPermissionsPage() {
                     <button
                       className="btn btn-ghost btn-sm"
                       onClick={() => handleDeleteRole(selectedRole)}
+                      disabled={!canDeleteRole}
+                      title={
+                        !canDeleteRole ? "You don't have permission to delete roles" : 'Delete Role'
+                      }
                     >
                       <Icon name="x" size={13} /> Delete
                     </button>
@@ -588,7 +606,12 @@ export default function RolesPermissionsPage() {
                               type="button"
                               className="btn btn-ghost btn-sm"
                               onClick={() => toggleModule(mod)}
-                              disabled={busy}
+                              disabled={busy || !canEditRole}
+                              title={
+                                !canEditRole
+                                  ? "You don't have permission to edit roles"
+                                  : 'Toggle Module'
+                              }
                             >
                               {moduleFully(mod) ? 'Clear all' : 'Full access'}
                             </button>
@@ -598,7 +621,12 @@ export default function RolesPermissionsPage() {
                                   type="button"
                                   className="btn btn-secondary btn-sm"
                                   onClick={() => discardModule(mod)}
-                                  disabled={busy}
+                                  disabled={busy || !canEditRole}
+                                  title={
+                                    !canEditRole
+                                      ? "You don't have permission to edit roles"
+                                      : 'Discard Changes'
+                                  }
                                 >
                                   Discard
                                 </button>
@@ -606,7 +634,12 @@ export default function RolesPermissionsPage() {
                                   type="button"
                                   className="btn btn-primary btn-sm"
                                   onClick={() => saveModule(mod)}
-                                  disabled={busy}
+                                  disabled={busy || !canEditRole}
+                                  title={
+                                    !canEditRole
+                                      ? "You don't have permission to edit roles"
+                                      : 'Save Changes'
+                                  }
                                 >
                                   {busy && savingModule === mod.label ? 'Saving…' : 'Save'}
                                 </button>
@@ -662,10 +695,18 @@ export default function RolesPermissionsPage() {
                                             borderTop: '1px solid var(--border)',
                                           }}
                                         >
-                                          <label className="switch">
+                                          <label
+                                            className="switch"
+                                            title={
+                                              !canEditRole
+                                                ? "You don't have permission to edit roles"
+                                                : undefined
+                                            }
+                                          >
                                             <input
                                               type="checkbox"
                                               checked={granted}
+                                              disabled={!canEditRole}
                                               onChange={(e) => toggleKey(key, e.target.checked)}
                                             />
                                             <i />
@@ -675,9 +716,7 @@ export default function RolesPermissionsPage() {
                                               fontSize: 12.5,
                                               fontWeight: 600,
                                               flexGrow: 1,
-                                              color: granted
-                                                ? 'var(--ink)'
-                                                : 'var(--text-soft)',
+                                              color: granted ? 'var(--ink)' : 'var(--text-soft)',
                                             }}
                                           >
                                             {titleize(a)}
@@ -694,6 +733,12 @@ export default function RolesPermissionsPage() {
                                                   type="button"
                                                   className={draft.get(key) === s ? 'active' : ''}
                                                   onClick={() => setScope(key, s)}
+                                                  disabled={!canEditRole}
+                                                  title={
+                                                    !canEditRole
+                                                      ? "You don't have permission to edit roles"
+                                                      : undefined
+                                                  }
                                                 >
                                                   {titleize(s)}
                                                 </button>

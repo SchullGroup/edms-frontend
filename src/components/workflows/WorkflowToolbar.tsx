@@ -25,6 +25,9 @@ export interface WorkflowToolbarProps {
   creating: boolean;
   archiving: boolean;
   publishing: boolean;
+  canCreate: boolean;
+  canArchive: boolean;
+  canPublish: boolean;
 }
 
 /** A breadcrumb row (which workflow, tenant-wide) sits above a focused
@@ -54,6 +57,9 @@ export function WorkflowToolbar({
   creating,
   archiving,
   publishing,
+  canCreate,
+  canArchive,
+  canPublish,
 }: WorkflowToolbarProps) {
   const statusBadgeClass =
     workflow.status === 'published' ? 'b-status-closed' : workflow.status === 'archived' ? 'b-status-overdue' : 'b-status-pending';
@@ -171,7 +177,8 @@ export function WorkflowToolbar({
           <button
             className="btn btn-primary btn-sm"
             onClick={onPublish}
-            disabled={publishing || workflow.status === 'published'}
+            disabled={publishing || workflow.status === 'published' || !canPublish}
+            title={!canPublish ? "You don't have permission to publish workflows" : undefined}
           >
             {workflow.status === 'published' ? 'Published' : 'Publish'}
           </button>
@@ -206,7 +213,8 @@ export function WorkflowToolbar({
                   <button
                     className="menu-item"
                     role="menuitem"
-                    disabled={creating}
+                    disabled={creating || !canCreate}
+                    title={!canCreate ? "You don't have permission to create workflows" : undefined}
                     onClick={() => {
                       setMenuOpen(false);
                       onCreateNew();
@@ -217,7 +225,8 @@ export function WorkflowToolbar({
                   <button
                     className="menu-item"
                     role="menuitem"
-                    disabled={creating}
+                    disabled={creating || !canCreate}
+                    title={!canCreate ? "You don't have permission to create workflows" : undefined}
                     onClick={() => {
                       setMenuOpen(false);
                       onClone();
@@ -231,7 +240,10 @@ export function WorkflowToolbar({
                       <button
                         className="menu-item danger"
                         role="menuitem"
-                        disabled={archiving}
+                        disabled={archiving || !canArchive}
+                        title={
+                          !canArchive ? "You don't have permission to archive workflows" : undefined
+                        }
                         onClick={() => {
                           setMenuOpen(false);
                           onArchive();

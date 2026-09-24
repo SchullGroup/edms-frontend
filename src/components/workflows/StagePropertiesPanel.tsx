@@ -24,6 +24,7 @@ export interface StagePropertiesPanelProps {
   onSave: () => void;
   onDiscard: () => void;
   onDelete: () => void;
+  canEdit: boolean;
 }
 
 export function StagePropertiesPanel({
@@ -47,6 +48,7 @@ export function StagePropertiesPanel({
   onSave,
   onDiscard,
   onDelete,
+  canEdit,
 }: StagePropertiesPanelProps) {
   return (
     <div className="card wfd-props">
@@ -136,7 +138,12 @@ export function StagePropertiesPanel({
           </div>
 
           <div className="flex gap-2" style={{ marginTop: '4px' }}>
-            <button className="btn btn-primary btn-sm" onClick={onSave} disabled={!dirty || saving}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={onSave}
+              disabled={!dirty || saving || !canEdit}
+              title={!canEdit ? "You don't have permission to edit workflows" : undefined}
+            >
               {saving ? 'Saving…' : 'Save changes'}
             </button>
             {dirty && (
@@ -146,7 +153,12 @@ export function StagePropertiesPanel({
             )}
           </div>
 
-          <button className="btn btn-danger btn-sm mt-4" onClick={onDelete}>
+          <button
+            className="btn btn-danger btn-sm mt-4"
+            onClick={onDelete}
+            disabled={!canEdit}
+            title={!canEdit ? "You don't have permission to edit workflows" : undefined}
+          >
             Delete stage
           </button>
         </div>

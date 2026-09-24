@@ -18,6 +18,7 @@ interface TableProps<T> {
   emptyMsg?: string;
   defaultSortKey?: string;
   defaultSortDir?: 1 | -1;
+  rowClassName?: (row: T) => string;
 }
 
 export function Table<T extends Record<string, any>>({
@@ -29,6 +30,7 @@ export function Table<T extends Record<string, any>>({
   emptyMsg,
   defaultSortKey,
   defaultSortDir = 1,
+  rowClassName,
 }: TableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSortKey || null);
   const [sortDir, setSortDir] = useState<1 | -1>(defaultSortDir);
@@ -103,7 +105,7 @@ export function Table<T extends Record<string, any>>({
             {data.map((r, idx) => (
               <tr
                 key={idx}
-                className={`${onRow ? 'clickable' : ''} ${selected.has(r) ? 'selected' : ''}`}
+                className={`${onRow ? 'clickable' : ''} ${selected.has(r) ? 'selected' : ''} ${rowClassName ? rowClassName(r) : ''}`}
                 onClick={(e) => {
                   const target = e.target as HTMLElement;
                   if (target.tagName !== 'INPUT' && !target.closest('button') && onRow) {
