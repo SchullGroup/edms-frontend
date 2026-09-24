@@ -3,6 +3,15 @@ import { usersService, UserFilters } from '@/apis/services/users.service';
 import { User } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
 
+// Scope policy (not yet enforced — tracked as part of the internal write/scope
+// gating follow-up, see the sidebar permission work): `useUsers`/`useAllUsers`
+// are called from ~14 places, most of which are pickers/dropdowns rendering a
+// user list inside a page (reassign, delegate, uploader/assignee names, etc.)
+// — those only need department-scoped `user:view`. Only the tenant-wide
+// directory (`/admin/users`, gated on *global* scope — see useNavigation.ts)
+// legitimately needs every user in the tenant. When these hooks gain scope
+// awareness, that's the split to apply — not a blanket global requirement.
+
 export const userKeys = {
   all: ['users'] as const,
   lists: () => [...userKeys.all, 'list'] as const,

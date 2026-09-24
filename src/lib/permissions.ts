@@ -71,6 +71,18 @@ export function permissionMatches(granted: string, resource: string, action: str
   return resOk && actOk;
 }
 
+const SCOPE_ORDER: PermissionScope[] = ['own', 'department', 'global'];
+
+/** Does a held scope meet or exceed a minimum? `null` (no scope on the grant —
+ *  e.g. it only ever arrived via the scope-dropping role-derivation top-up, see
+ *  `derivePermissionsFromRoles`) never satisfies a minimum; a scope-less grant
+ *  can't be assumed to be global. Used for UX-layer decisions only (e.g. which
+ *  sidebar item to show) — the backend is still the real scope enforcement. */
+export function scopeAtLeast(held: PermissionScope | null, min: PermissionScope): boolean {
+  if (!held) return false;
+  return SCOPE_ORDER.indexOf(held) >= SCOPE_ORDER.indexOf(min);
+}
+
 /** Build the flat `"resource:action"` set a user holds, given their role names. */
 export function derivePermissionsFromRoles(
   roleNames: string[] | undefined,
@@ -129,10 +141,20 @@ export const PORTALS: Portal[] = [
     home: '/admin',
     surface: 'Client Administration',
     priority: 50,
-    // Write capabilities on tenant configuration — deliberately not `user:view`,
-    // which read-only roles (auditor, management) also hold.
+    // View-gated (not write-gated) so a read-only custom role — e.g. "user:view only"
+    // — still lands here and sees the admin nav items it can actually view; the write
+    // affordances inside each page hide themselves per-action instead (see
+    // routes.config.ts's matching note). Deliberately narrow: only keys that don't
+    // collide with another portal's entry list. `department:view`/`workflow_instance:view`
+    // are claimed by `management` (and `workflow_instance:view` also by `supervisor`);
+    // including them here would outrank a pure viewer into `admin` instead of the
+    // read-only oversight portal they more sensibly belong in. `cabinet:view` is held by
+    // almost every document-handling role (staff/supervisor/auditor), so admitting it
+    // would misroute ordinary custom roles into the config portal. `audit:view` is
+    // `auditor`'s entry key. None of this affects the specific `:view` gate each admin
+    // nav item/route still checks once a role is already inside via one of these three.
     entry: {
-      anyPermissions: ['user:create', 'user:edit', 'user:delete', 'cabinet:create', 'workflow:create'],
+      anyPermissions: ['user:view', 'role:view', 'workflow:view'],
     },
   },
   {
@@ -161,6 +183,16 @@ export const PORTALS: Portal[] = [
     priority: 20,
     // `workflow:route` was retired by the backend's 2026-09-16 permission
     // restructuring — see the matching note in `routes.config.ts`.
+    //
+    // Deliberately still action-based, not `task:view`/`workflow_instance:view` — that
+    // pair is a literal subset of `management`'s entry (`document:view,
+    // workflow_instance:view, task:view, department:view`), and `management` outranks
+    // `supervisor`, so a view-based entry here would make this portal permanently
+    // unreachable for any custom role (they'd always resolve to `management` first).
+    // The `/supervisor/*` routes and nav items are still `:view`-gated — only this
+    // portal-selection heuristic stays action-based, relying on the assumption that
+    // anyone holding `task:action`/`workflow_instance:route` also holds the matching
+    // `:view` key, so they still pass those `:view` gates once inside.
     entry: { anyPermissions: ['workflow_instance:route', 'task:action'] },
   },
   {
