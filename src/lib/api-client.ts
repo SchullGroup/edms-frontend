@@ -22,12 +22,52 @@ function anotherTabJustRefreshed(): boolean {
   }
 }
 
+// ── Session epoch ──────────────────────────────────────────────────────────
+// `_refreshPromise`/`isRefreshing`/`failedQueue` below are module-level state
+// that outlives logout→login — `performLogout` navigates client-side, no page
+// reload. Without this, a refresh request still in flight from a session that
+// just logged out can resolve *after* a fresh login and get treated as a
+// failure of the NEW session, signing the just-logged-in user back out. Every
+// login/logout bumps `authEpoch`; a refresh captures the epoch it started
+// under and, if that epoch has moved on by the time it resolves, its result
+// is discarded — it's answering a question nobody's asking anymore.
+let authEpoch = 0;
+
 // ── Shared refresh singleton ──────────────────────────────────────────────────
 let _refreshPromise: Promise<string> | null = null;
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (value?: unknown) => void;
+  reject: (reason?: any) => void;
+}> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+/** Called on every logout and every successful login (see `auth.service.ts`)
+ *  so a stale in-flight refresh from the session that just ended can't act on
+ *  the one that's now current. */
+export function invalidateInFlightAuth(): void {
+  authEpoch++;
+  _refreshPromise = null;
+  if (isRefreshing) {
+    isRefreshing = false;
+    processQueue(new Error('Session changed'), null);
+  }
+}
 
 export function refreshAccessToken(): Promise<string> {
   if (_refreshPromise) return _refreshPromise;
 
+  const epochAtStart = authEpoch;
   _refreshPromise = axios
     .post<{ success: boolean; data?: { accessToken?: string } }>('/api/auth/refresh')
     .then(({ data }) => {
@@ -35,6 +75,15 @@ export function refreshAccessToken(): Promise<string> {
       const token = tokenData.accessToken;
 
       if (!token) throw new Error('No token in refresh response');
+
+      // A logout or fresh login happened while this request was in flight —
+      // applying its token now would silently overwrite whatever session is
+      // actually current. Treat it the same as a failed refresh; the caller
+      // (the response interceptor below) also checks the epoch before doing
+      // anything session-affecting with the rejection.
+      if (authEpoch !== epochAtStart) {
+        throw new Error('Stale refresh — session changed while in flight');
+      }
 
       Cookies.set('accessToken', token, {
         expires: 1,
@@ -73,23 +122,6 @@ apiClient.interceptors.request.use(
   },
 );
 
-let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: (value?: unknown) => void;
-  reject: (reason?: any) => void;
-}> = [];
-
-const processQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
-
 // Response Interceptor: Handle 401s and Token Refresh
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
@@ -99,6 +131,10 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as any;
 
     if (error.response?.status === 401 && !originalRequest._retry) {
+      // Captured before joining/starting a refresh — if a login or logout
+      // happens while this 401 is being handled, the eventual outcome no
+      // longer says anything about whether the *current* session is valid.
+      const epochAtEntry = authEpoch;
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -125,6 +161,16 @@ apiClient.interceptors.response.use(
         return apiClient(originalRequest);
       } catch (refreshError: any) {
         processQueue(refreshError, null);
+
+        // A login or logout happened while this refresh was in flight — its
+        // outcome belongs to a session that's no longer current. Any followers
+        // were already rejected synchronously by `invalidateInFlightAuth` when
+        // the epoch moved on, so there's nothing left to do here but bail out
+        // quietly; in particular, never fire `setSessionExpired` for the
+        // session the user is *now* in over a request that predates it.
+        if (authEpoch !== epochAtEntry) {
+          return Promise.reject(refreshError);
+        }
 
         const httpStatus = refreshError?.response?.status;
         const isAuthFailure =
@@ -161,7 +207,14 @@ apiClient.interceptors.response.use(
         // picks up the broader pattern if it keeps happening across queries.
         return Promise.reject(refreshError);
       } finally {
-        isRefreshing = false;
+        // Only clear the flag if this cycle is still the current epoch's — a
+        // stale (late-resolving) cycle's `finally` shouldn't stomp on a
+        // legitimately in-progress refresh started under a newer epoch (that
+        // one already set `isRefreshing = true` for itself, after
+        // `invalidateInFlightAuth` reset it).
+        if (authEpoch === epochAtEntry) {
+          isRefreshing = false;
+        }
       }
     }
 

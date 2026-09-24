@@ -9,7 +9,6 @@ import { Topbar } from './Topbar';
 import { useUIStore } from '@/store/useUIStore';
 import { authService } from '@/apis/services/auth.service';
 import { usePermissions } from '@/hooks/usePermissions';
-import { useHydratePermissions } from '@/hooks/useHydratePermissions';
 import { SessionExpiredModal } from '@/components/common/SessionExpiredModal';
 import { ServiceUnavailableOverlay } from '@/components/common/ServiceUnavailableOverlay';
 
@@ -36,10 +35,6 @@ export const AppShell = ({ children }: AppShellProps) => {
   const [isMounted, setIsMounted] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const { granted, isReady: permsReady } = usePermissions();
-
-  // Top up currentUser.permissions with any role permission keys the live
-  // login/`/auth/me` payload didn't include; never overwrites live entries.
-  useHydratePermissions();
 
   useEffect(() => {
     const unsub = useStore.persist.onFinishHydration(() => setHydrated(true));
@@ -73,9 +68,13 @@ export const AppShell = ({ children }: AppShellProps) => {
 
   // Verify the session once per signed-in user, and adopt fresh `roles` /
   // `permissions` from `/auth/me` (both are now live — see docs/01 DRIFT-03).
-  // Gap-filling from `GET /roles` is handled separately, reactively, by
-  // `useHydratePermissions`. Keyed on `currentUser?.id` (a primitive) — NOT the
-  // object — so the `patchCurrentUser` below can't retrigger it.
+  // This is the only source of permission gap-filling — a role's permission
+  // changes reach a user the next time this call happens, on token refresh,
+  // or on their next login; there's no separate `GET /roles` top-up (removed:
+  // most roles can't call that endpoint at all, so it only ever produced a
+  // 403 in the network tab for most users, useless work masquerading as a
+  // safety net). Keyed on `currentUser?.id` (a primitive) — NOT the object —
+  // so the `patchCurrentUser` below can't retrigger it.
   useEffect(() => {
     if (!isMounted || !hydrated) return;
 
