@@ -74,6 +74,18 @@ export default function CabinetDesignerPage() {
   // Admins see every cabinet. Everyone else sees only cabinets scoped to their
   // own department, plus "general" cabinets that aren't scoped to any (departmentId null).
   const isAdmin = can('cabinet', 'create') || scopeFor('cabinet', 'view') === 'global';
+  const canCreateCabinet = can('cabinet', 'create');
+  const canEditCabinet = can('cabinet', 'edit');
+  const canDeleteCabinet = can('cabinet', 'delete');
+  const canCreateFolder = can('folder', 'create');
+  const canEditFolder = can('folder', 'edit');
+  const canDeleteFolder = can('folder', 'delete');
+  const canCreateField = can('cabinet_metadata_field', 'create');
+  const canEditField = can('cabinet_metadata_field', 'edit');
+  const canDeleteField = can('cabinet_metadata_field', 'delete');
+  const canCreateAccess = can('cabinet_access', 'create');
+  const canDeleteAccess = can('cabinet_access', 'delete');
+  const canEditDocument = can('document', 'edit');
   const { data: me } = useUser(currentUser?.id || '');
   const myDepartmentId = me?.departmentId ?? null;
 
@@ -797,11 +809,18 @@ export default function CabinetDesignerPage() {
       label: '',
       render: (r) => (
         <span className="flex gap-2">
-          <button className="btn btn-ghost btn-sm" onClick={() => handleEditField(r)}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => handleEditField(r)}
+            disabled={!canEditField}
+            title={!canEditField ? "You don't have permission to edit this schema" : undefined}
+          >
             Edit
           </button>
           <button
             className="btn btn-ghost btn-sm"
+            disabled={!canDeleteField}
+            title={!canDeleteField ? "You don't have permission to edit this schema" : undefined}
             onClick={() => {
               deleteMetadataField.mutate(
                 { cabinetId: activeCab.id, fieldId: r.id },
@@ -831,7 +850,12 @@ export default function CabinetDesignerPage() {
       key: 'act',
       label: '',
       render: (g) => (
-        <button className="btn btn-ghost btn-sm" onClick={() => handleRevokeAccess(g)}>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => handleRevokeAccess(g)}
+          disabled={!canDeleteAccess}
+          title={!canDeleteAccess ? "You don't have permission to revoke cabinet access" : undefined}
+        >
           Revoke
         </button>
       ),
@@ -887,6 +911,8 @@ export default function CabinetDesignerPage() {
             className="btn btn-secondary btn-sm"
             style={{ margin: '10px' }}
             onClick={handleNewCabinet}
+            disabled={!canCreateCabinet}
+            title={!canCreateCabinet ? "You don't have permission to create cabinets" : undefined}
           >
             + New cabinet
           </button>
@@ -904,10 +930,22 @@ export default function CabinetDesignerPage() {
                 )}
               </span>
               <span className="flex items-center gap-2">
-                <button className="btn btn-secondary btn-sm" onClick={handleEditCabinet}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleEditCabinet}
+                  disabled={!canEditCabinet}
+                  title={!canEditCabinet ? "You don't have permission to edit cabinets" : undefined}
+                >
                   Edit
                 </button>
-                <button className="btn btn-ghost btn-sm" onClick={handleDeleteCabinet}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={handleDeleteCabinet}
+                  disabled={!canDeleteCabinet}
+                  title={
+                    !canDeleteCabinet ? "You don't have permission to delete cabinets" : undefined
+                  }
+                >
                   Delete cabinet
                 </button>
               </span>
@@ -928,7 +966,12 @@ export default function CabinetDesignerPage() {
           <div className="card mb-4">
             <div className="card-head">
               <span className="h3">{activeCab.name} — structure</span>
-              <button className="btn btn-secondary btn-sm" onClick={handleNewFolder}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleNewFolder}
+                disabled={!canCreateFolder}
+                title={!canCreateFolder ? "You don't have permission to create folders" : undefined}
+              >
                 + Folder
               </button>
             </div>
@@ -976,6 +1019,12 @@ export default function CabinetDesignerPage() {
                             <span className="caption">{f._count?.documents ?? 0} docs</span>
                             <button
                               className="btn btn-ghost btn-sm"
+                              disabled={!canEditFolder}
+                              title={
+                                !canEditFolder
+                                  ? "You don't have permission to edit folders"
+                                  : undefined
+                              }
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleRenameFolder(f);
@@ -985,6 +1034,12 @@ export default function CabinetDesignerPage() {
                             </button>
                             <button
                               className="btn btn-ghost btn-sm"
+                              disabled={!canDeleteFolder}
+                              title={
+                                !canDeleteFolder
+                                  ? "You don't have permission to delete folders"
+                                  : undefined
+                              }
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDeleteFolder(f);
@@ -1021,7 +1076,12 @@ export default function CabinetDesignerPage() {
           <div className="card mb-4">
             <div className="card-head">
               <span className="h3">Metadata schema</span>
-              <button className="btn btn-secondary btn-sm" onClick={handleNewField}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleNewField}
+                disabled={!canCreateField}
+                title={!canCreateField ? "You don't have permission to edit this schema" : undefined}
+              >
                 + Field
               </button>
             </div>
@@ -1039,7 +1099,14 @@ export default function CabinetDesignerPage() {
           <div className="card">
             <div className="card-head">
               <span className="h3">Access</span>
-              <button className="btn btn-secondary btn-sm" onClick={handleGrantAccess}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleGrantAccess}
+                disabled={!canCreateAccess}
+                title={
+                  !canCreateAccess ? "You don't have permission to grant cabinet access" : undefined
+                }
+              >
                 + Grant access
               </button>
             </div>
@@ -1078,6 +1145,8 @@ function DocumentRowList({
   onOpenDocument: (doc: any) => void;
   onMoveDocuments: (docs: any[], onMoved?: () => void) => void;
 }) {
+  const { can } = usePermissions();
+  const canMove = can('document', 'edit');
   // Selection is by id, not by row object, so it survives the refetch that
   // follows any mutation (react-query hands back new objects each time).
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1111,7 +1180,8 @@ function DocumentRowList({
         </label>
         <button
           className="btn btn-secondary btn-sm"
-          disabled={selectedDocs.length === 0}
+          disabled={selectedDocs.length === 0 || !canMove}
+          title={!canMove ? "You don't have permission to move documents" : undefined}
           onClick={() => onMoveDocuments(selectedDocs, () => setSelectedIds(new Set()))}
         >
           Move selected{selectedDocs.length > 0 ? ` (${selectedDocs.length})` : ''}

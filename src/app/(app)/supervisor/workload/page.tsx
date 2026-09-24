@@ -5,6 +5,7 @@ import { useUIStore } from '@/store/useUIStore';
 import { useTaskWorkload, useTasks, useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { TaskRow } from '@/components/ui/TaskRow';
@@ -140,6 +141,8 @@ function WorkloadMemberCard({
   member: TaskWorkloadMember;
   onReassign: (task: Task) => void;
 }) {
+  const { can } = usePermissions();
+  const canReassign = can('task', 'reassign');
   const [expanded, setExpanded] = useState(false);
   const { data, isLoading } = useTasks(
     { assigneeId: member.memberId, status: 'pending', scope: 'all', limit: 100 },
@@ -217,6 +220,10 @@ function WorkloadMemberCard({
                 extraActions={
                   <button
                     className="btn btn-secondary btn-sm"
+                    disabled={!canReassign}
+                    title={
+                      !canReassign ? "You don't have permission to reassign tasks" : undefined
+                    }
                     onClick={(e) => {
                       e.stopPropagation();
                       onReassign(t);

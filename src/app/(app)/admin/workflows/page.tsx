@@ -14,6 +14,7 @@ import {
 import { useRoles } from '@/apis/hooks/useRoles';
 import { useAllUsers } from '@/apis/hooks/useUsers';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
 import { WorkflowToolbar } from '@/components/workflows/WorkflowToolbar';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
@@ -25,6 +26,11 @@ const SAVE_DEBOUNCE_MS = 500;
 export default function WorkflowDesignerPage() {
   const { auditAction } = useStore();
   const { setPageTitle, openConfirm, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canCreateWorkflow = can('workflow', 'create');
+  const canEditWorkflow = can('workflow', 'edit');
+  const canPublishWorkflow = can('workflow', 'publish');
+  const canArchiveWorkflow = can('workflow', 'archive');
 
   const { data: workflowsData, isLoading, error } = useWorkflows();
   const workflows = workflowsData?.data || [];
@@ -178,7 +184,12 @@ export default function WorkflowDesignerPage() {
         <div className="card card-pad text-center">
           <div className="h3 mb-2">No workflows yet</div>
           <div className="caption mb-4">Create your first workflow to get started.</div>
-          <button className="btn btn-primary" onClick={handleCreateWorkflow}>
+          <button
+            className="btn btn-primary"
+            onClick={handleCreateWorkflow}
+            disabled={!canCreateWorkflow}
+            title={!canCreateWorkflow ? "You don't have permission to create workflows" : undefined}
+          >
             Create workflow
           </button>
         </div>
@@ -368,13 +379,21 @@ export default function WorkflowDesignerPage() {
         creating={createWfMutation.isPending}
         archiving={archiveWfMutation.isPending}
         publishing={publishWfMutation.isPending}
+        canCreate={canCreateWorkflow}
+        canArchive={canArchiveWorkflow}
+        canPublish={canPublishWorkflow}
       />
 
       <div className="wfd-layout">
         <div className="card">
           <div className="card-head">
             <span className="h3">Stages</span>
-            <button className="btn btn-secondary btn-sm" onClick={handleAddStage} disabled={updateWfMutation.isPending}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleAddStage}
+              disabled={updateWfMutation.isPending || !canEditWorkflow}
+              title={!canEditWorkflow ? "You don't have permission to edit workflows" : undefined}
+            >
               <Icon name="plus" size={14} /> Add stage
             </button>
           </div>
@@ -411,6 +430,7 @@ export default function WorkflowDesignerPage() {
           onSave={handleSaveStage}
           onDiscard={handleDiscardStage}
           onDelete={() => handleDeleteStage(selectedStage)}
+          canEdit={canEditWorkflow}
         />
       </div>
     </div>

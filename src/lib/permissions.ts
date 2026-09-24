@@ -285,7 +285,19 @@ const everything = ALL_RESOURCES.flatMap((r) => ALL_ACTIONS.map((a) => `${r}:${a
 const viewAll = ALL_RESOURCES.map((r) => `${r}:view`);
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
-  client_admin: everything,
+  // `everything` only spans the canonical resource x action vocabulary above.
+  // `workflow:publish`/`workflow:archive`/`task:reassign`/`document_access_request:grant`
+  // are real, separately seeded backend permissions outside that vocabulary (see
+  // `workflows.router.ts` and `documents.router.ts`'s `requirePermission` calls) —
+  // appended explicitly so internal button-gating on them doesn't flicker disabled
+  // for client_admin before live permissions arrive.
+  client_admin: [
+    ...everything,
+    'workflow:publish',
+    'workflow:archive',
+    'task:reassign',
+    'document_access_request:grant',
+  ],
   schulltech_admin: ['workflow:view', 'workflow_instance:route', 'audit:view'],
   internal_auditor: [
     ...viewAll,
@@ -309,6 +321,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     'workflow_instance:route',
     'task:view',
     'task:action',
+    'task:reassign',
     'cabinet:view',
     'folder:view',
     'folder:edit',

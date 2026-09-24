@@ -6,6 +6,7 @@ import { useApprovalTasks, useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useSignAndApprove } from '@/hooks/useSignAndApprove';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { TaskRow } from '@/components/ui/TaskRow';
@@ -38,6 +39,9 @@ export default function ApprovalsQueuePage() {
   const { promptSignAndApprove } = useSignAndApprove();
 
   const { setPageTitle, openModal, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canAct = can('task', 'action');
+  const canReassign = can('task', 'reassign');
 
   useEffect(() => {
     setPageTitle('Approvals Queue');
@@ -170,6 +174,8 @@ export default function ApprovalsQueuePage() {
                     <>
                       <button
                         className="btn btn-success btn-sm"
+                        disabled={!canAct}
+                        title={!canAct ? "You don't have permission to act on tasks" : undefined}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleApprove(t);
@@ -179,6 +185,10 @@ export default function ApprovalsQueuePage() {
                       </button>
                       <button
                         className="btn btn-secondary btn-sm"
+                        disabled={!canReassign}
+                        title={
+                          !canReassign ? "You don't have permission to reassign tasks" : undefined
+                        }
                         onClick={(e) => {
                           e.stopPropagation();
                           handleReassign(t);
