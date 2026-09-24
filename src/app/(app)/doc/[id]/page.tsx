@@ -287,6 +287,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const eff =
     doc.status === 'closed' ? 'Closed' : doc.status === 'in_progress' ? 'In Progress' : 'Pending';
   const closed = doc.status === 'closed';
+  const canActPermission = can('task', 'action');
   const disabledReason = closed
     ? 'Document is closed'
     : lockedByOther
@@ -295,8 +296,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         ? 'No action is pending on this document'
         : !isMine
           ? `Assigned to ${currentStageActorName}`
-          : null;
-  const canAct = !closed && !lockedByOther && !!currentTask && isMine;
+          : !canActPermission
+            ? "You don't have permission to act on tasks"
+            : null;
+  const canAct = !closed && !lockedByOther && !!currentTask && isMine && canActPermission;
 
   // What the assignee may do here is whatever the stage definition allows. The
   // approve/return pair is only a fallback for when the definition didn't come
@@ -691,6 +694,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     if (!currentTask) return addToast('No task is currently pending on this document', 'info');
     if (!isMine)
       return addToast(`This task is assigned to ${currentStageActorName}, not you`, 'info');
+    if (!canActPermission)
+      return addToast("You don't have permission to act on tasks", 'info');
     if (!allowedActions.includes('approve'))
       return addToast(`"${stageLabel}" doesn't require a signature — it's review-only`, 'info');
     actApprove();
@@ -779,20 +784,29 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               <Icon name="download" size={14} /> Download
             </button>
             {lockedByMe ? (
-              <button className="btn btn-secondary" onClick={actCheckin} disabled={checkoutBusy}>
+              <button
+                className="btn btn-secondary"
+                onClick={actCheckin}
+                disabled={checkoutBusy || !can('document', 'edit')}
+                title={
+                  !can('document', 'edit') ? "You don't have permission to edit documents" : undefined
+                }
+              >
                 <Icon name="lock" size={14} /> Check in
               </button>
             ) : (
               <button
                 className="btn btn-secondary"
                 onClick={actCheckout}
-                disabled={checkoutBusy || closed || lockedByOther}
+                disabled={checkoutBusy || closed || lockedByOther || !can('document', 'edit')}
                 title={
                   closed
                     ? 'Document is closed'
                     : lockedByOther
                       ? 'Checked out by another user'
-                      : 'Check out for editing'
+                      : !can('document', 'edit')
+                        ? "You don't have permission to edit documents"
+                        : 'Check out for editing'
                 }
               >
                 <Icon name="key" size={14} /> Check out
