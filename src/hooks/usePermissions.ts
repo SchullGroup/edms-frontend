@@ -14,10 +14,11 @@ import {
  * Permission-aware access checks for the UI.
  *
  * Source of truth is `currentUser.permissions` — populated at login (if the
- * backend embeds it), refreshed from `GET /auth/me`, or derived from
- * `GET /roles` by `useHydratePermissions`. If none of those have resolved yet
- * we fall back to an approximate grant set for the six seeded system roles so
- * the app is usable during the first render.
+ * backend embeds it) and refreshed from `GET /auth/me` (see `AppShell`'s
+ * session-verify effect) or on token refresh. A role's permission changes
+ * reach a user the next time one of those happens, not live — if none of
+ * them have resolved yet we fall back to an approximate grant set for the six
+ * seeded system roles so the app is usable during the first render.
  */
 export const usePermissions = () => {
   const currentUser = useStore((s) => s.currentUser);
@@ -30,8 +31,8 @@ export const usePermissions = () => {
     }
     // No live permissions yet — approximate from the seeded system roles. That
     // approximation is only trustworthy for the six built-in roles; a custom
-    // role has no fallback, so it stays "not ready" until useHydratePermissions
-    // fills `currentUser.permissions` from GET /roles.
+    // role has no fallback, so it stays "not ready" until `currentUser.permissions`
+    // arrives from a live `/auth/me` call, login, or token refresh.
     const fallback = fallbackPermissionsForRoles(roleNames);
     return { granted: fallback, isReady: fallback.length > 0 };
   }, [currentUser]);

@@ -15,10 +15,9 @@ export function useRoles(options?: { enabled?: boolean }) {
     queryKey: roleKeys.lists(),
     queryFn: () => rolesService.getAll(),
     enabled: options?.enabled ?? true,
-    // `useHydratePermissions` (mounted app-wide, for the whole session) and
-    // four admin pages all subscribe to this same query. Role definitions
-    // rarely change mid-session, so the default 60s staleTime meant almost
-    // any navigation between admin pages re-triggered a background refetch —
+    // Four admin pages subscribe to this same query. Role definitions rarely
+    // change mid-session, so the default 60s staleTime meant almost any
+    // navigation between admin pages re-triggered a background refetch —
     // invisible (cached data renders instantly) but visible in the network
     // log. Mutations in useCreateRole/useUpdateRole/useSetRolePermissions/
     // useDeleteRole already invalidate this key on success, so a longer
