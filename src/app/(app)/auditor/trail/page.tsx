@@ -6,6 +6,7 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useAuditEntries, useExportAuditCsv } from '@/apis/hooks/useAudit';
 import { useUsers } from '@/apis/hooks/useUsers';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { Spinner } from '@/components/common/Spinner';
@@ -55,6 +56,8 @@ export default function AuditorTrailPage() {
   const rows = auditData?.data || [];
 
   const exportCsv = useExportAuditCsv();
+  const { can } = usePermissions();
+  const canExport = can('audit', 'export');
 
   useEffect(() => {
     setPageTitle('Audit Trail');
@@ -255,7 +258,8 @@ export default function AuditorTrailPage() {
             <button
               className="btn btn-secondary btn-sm"
               onClick={handleExport}
-              disabled={exportCsv.isPending}
+              disabled={exportCsv.isPending || !canExport}
+              title={!canExport ? "You don't have permission to export the audit trail" : undefined}
             >
               {exportCsv.isPending ? 'Exporting…' : 'Export extract'}
             </button>

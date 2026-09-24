@@ -10,6 +10,7 @@ import {
 } from '@/apis/hooks/useWorkflowInstances';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Spinner } from '@/components/common/Spinner';
 import { Icon } from '@/components/ui/Icons';
 import { Table, Column } from '@/components/ui/Table';
@@ -267,6 +268,8 @@ function MemberDrawerBody({
   onReassign: (task: Task) => void;
   onOpenDocument: (documentId: string) => void;
 }) {
+  const { can } = usePermissions();
+  const canReassign = can('task', 'reassign');
   const { data, isLoading } = useTasks({
     assigneeId: member.memberId,
     status: 'pending',
@@ -324,6 +327,8 @@ function MemberDrawerBody({
                 <button
                   className="btn btn-secondary btn-sm"
                   style={{ marginLeft: '12px', flexShrink: 0 }}
+                  disabled={!canReassign}
+                  title={!canReassign ? "You don't have permission to reassign tasks" : undefined}
                   onClick={(e) => {
                     e.stopPropagation();
                     onReassign(t);

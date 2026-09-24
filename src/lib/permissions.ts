@@ -286,29 +286,47 @@ const viewAll = ALL_RESOURCES.map((r) => `${r}:view`);
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   // `everything` only spans the canonical resource x action vocabulary above.
-  // `workflow:publish`/`workflow:archive`/`task:reassign`/`document_access_request:grant`
-  // are real, separately seeded backend permissions outside that vocabulary (see
-  // `workflows.router.ts` and `documents.router.ts`'s `requirePermission` calls) —
-  // appended explicitly so internal button-gating on them doesn't flicker disabled
-  // for client_admin before live permissions arrive.
+  // `workflow:publish`/`workflow:archive`/`task:reassign`/`document_access_request:grant`/
+  // `task:action`/`delegation:create`/`delegation:end` are real, separately seeded
+  // backend permissions outside that vocabulary (`task` and `delegation` aren't in
+  // `PERMISSION_RESOURCES` at all — see `workflows.router.ts`'s `requirePermission`
+  // calls) — appended explicitly so internal button-gating on them (doc/[id]'s
+  // approve/review actions, delegations' create/end) doesn't flicker disabled
+  // before live permissions arrive. Every seeded role holds all three.
   client_admin: [
     ...everything,
     'workflow:publish',
     'workflow:archive',
     'task:reassign',
+    'task:action',
     'document_access_request:grant',
+    'delegation:create',
+    'delegation:end',
   ],
-  schulltech_admin: ['workflow:view', 'workflow_instance:route', 'audit:view'],
+  schulltech_admin: [
+    'workflow:view',
+    'workflow_instance:route',
+    'audit:view',
+    'task:action',
+    'delegation:create',
+    'delegation:end',
+  ],
   internal_auditor: [
     ...viewAll,
     'document:download',
     'document:export',
     'audit:export',
+    'task:action',
+    'delegation:create',
+    'delegation:end',
   ],
   management: [
     ...viewAll,
     'document:export',
     'workflow_instance:route',
+    'task:action',
+    'delegation:create',
+    'delegation:end',
   ],
   supervisor: [
     'document:view',
@@ -327,6 +345,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     'folder:edit',
     'user:view',
     'audit:view',
+    'delegation:create',
+    'delegation:end',
   ],
   staff: [
     'document:view',
@@ -343,6 +363,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     'workflow_instance:route',
     'task:view',
     'task:action',
+    'delegation:create',
+    'delegation:end',
   ],
 };
 

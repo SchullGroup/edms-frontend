@@ -7,6 +7,7 @@ import { useBottlenecksAgeing } from '@/apis/hooks/useWorkflowInstances';
 import { useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { HBarChart } from '@/components/ui/Charts';
@@ -36,6 +37,8 @@ export default function BottlenecksPage() {
   const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
   const { setPageTitle, openModal, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canReassign = can('task', 'reassign');
 
   useEffect(() => {
     setPageTitle('Bottlenecks & Ageing');
@@ -171,6 +174,8 @@ export default function BottlenecksPage() {
         r.canReassign ? (
           <button
             className="btn btn-secondary btn-sm"
+            disabled={!canReassign}
+            title={!canReassign ? "You don't have permission to reassign tasks" : undefined}
             onClick={(e) => {
               e.stopPropagation();
               handleReassign(r);
