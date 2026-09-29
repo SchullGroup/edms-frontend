@@ -13,15 +13,13 @@ import {
 } from '@/apis/hooks/useWorkflows';
 import { useRoles } from '@/apis/hooks/useRoles';
 import { useAllUsers } from '@/apis/hooks/useUsers';
-import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
 import { WorkflowToolbar } from '@/components/workflows/WorkflowToolbar';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
-import { StagePropertiesPanel } from '@/components/workflows/StagePropertiesPanel';
-import { DEFAULT_WORKFLOW_DEFINITION, rebuildTransitions } from '@/components/workflows/constants';
-
-const SAVE_DEBOUNCE_MS = 500;
+import { StagePanel } from '@/components/workflows/StagePanel';
+import { WorkflowDesignerGuide } from '@/components/workflows/WorkflowDesignerGuide';
+import { DEFAULT_WORKFLOW_DEFINITION, reconcileTransitions } from '@/components/workflows/constants';
 
 export default function WorkflowDesignerPage() {
   const { auditAction } = useStore();
@@ -45,6 +43,7 @@ export default function WorkflowDesignerPage() {
 
   const [wfId, setWfId] = useState(null);
   const [selectedStageId, setSelectedStageId] = useState(null);
+  const [stagePanelTab, setStagePanelTab] = useState('properties');
   // There's no real delete-workflow endpoint on the backend — only archive.
   // Archived workflows drop out of the switcher by default so archiving
   // reads as "gone" day-to-day, without pretending it's actually deleted.
@@ -62,16 +61,6 @@ export default function WorkflowDesignerPage() {
   const [slaDraft, setSlaDraft] = useState(48);
   const [actionsDraft, setActionsDraft] = useState([]);
 
-  // The reorder save is debounced (below) and, even once it fires, has to round-trip
-  // the network before the invalidated query refetches — so `wf.definition.stages`
-  // doesn't reflect a drop for a few hundred ms at least. Rendering straight off
-  // server data made a just-dropped card snap back to its old slot immediately,
-  // then jump to its real one once the save landed. This holds the dropped order
-  // locally so the canvas reflects it the instant you let go, and is cleared once
-  // the server's stage order actually catches up to it (or the drag is abandoned
-  // by switching workflows, or the save fails).
-  const [stageOrderOverride, setStageOrderOverride] = useState(null);
-
   useEffect(() => {
     if (workflows.length > 0 && !wfId) {
       setWfId(workflows[0].id);
@@ -79,31 +68,13 @@ export default function WorkflowDesignerPage() {
   }, [workflows, wfId]);
 
   const wf = workflows?.find((w) => w.id === wfId) || workflows?.[0];
-  const serverStages = wf?.definition?.stages || [];
-  const stages = stageOrderOverride || serverStages;
+  const stages = wf?.definition?.stages || [];
   const switcherWorkflows = showArchived ? workflows : workflows.filter((w) => w.status !== 'archived' || w.id === wf?.id);
   const archivedCount = workflows.filter((w) => w.status === 'archived').length;
 
   useEffect(() => {
     setNameDraft(wf?.name || '');
   }, [wf?.id, wf?.name]);
-
-  useEffect(() => {
-    setStageOrderOverride(null);
-  }, [wf?.id]);
-
-  // Drop the override once the server order actually matches it — never on a
-  // timer or eagerly in the mutation's onSuccess, either of which could flash
-  // back to the stale pre-drag order while the invalidated query is still
-  // refetching.
-  useEffect(() => {
-    if (!stageOrderOverride) return;
-    const same =
-      stageOrderOverride.length === serverStages.length &&
-      stageOrderOverride.every((s, i) => s.id === serverStages[i]?.id);
-    if (same) setStageOrderOverride(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverStages]);
 
   const selectedStage = stages.find((s) => s.id === selectedStageId);
 
@@ -123,21 +94,6 @@ export default function WorkflowDesignerPage() {
   const updateWorkflow = (id, updates) => {
     updateWfMutation.mutate({ id, updates });
   };
-
-  // Editing a name or a stage's properties never saves on its own — only an
-  // explicit Save commits it. The one thing that still saves automatically
-  // is dragging a stage to reorder it, and even that is debounced so a
-  // flurry of quick drags collapses into one write instead of one per drop.
-  const debouncedReorder = useDebouncedCallback((id, updates) => {
-    updateWfMutation.mutate(
-      { id, updates },
-      {
-        // Revert to server truth if the save fails — otherwise the optimistic
-        // order would be stuck showing a reorder that never actually happened.
-        onError: () => setStageOrderOverride(null),
-      },
-    );
-  }, SAVE_DEBOUNCE_MS);
 
   const nameDirty = nameDraft !== (wf?.name || '');
   const stageDirty =
@@ -247,15 +203,11 @@ export default function WorkflowDesignerPage() {
       actions: ['review'],
     };
     const updatedStages = [...stages, newStage];
-    updateWorkflow(wf.id, { definition: { stages: updatedStages, transitions: rebuildTransitions(updatedStages) } });
+    updateWorkflow(wf.id, {
+      definition: { stages: updatedStages, transitions: reconcileTransitions(updatedStages, wf.definition.transitions || []) },
+    });
     setSelectedStageId(newStage.id);
     addToast('Stage added — configure it on the right', 'success');
-  };
-
-  const handleReorderStages = (updatedStages) => {
-    // Paint the drop immediately; the actual save is debounced below.
-    setStageOrderOverride(updatedStages);
-    debouncedReorder(wf.id, { definition: { stages: updatedStages, transitions: rebuildTransitions(updatedStages) } });
   };
 
   const handleDeleteStage = (stage) => {
@@ -272,7 +224,12 @@ export default function WorkflowDesignerPage() {
         return updateWfMutation
           .mutateAsync({
             id: wf.id,
-            updates: { definition: { stages: updatedStages, transitions: rebuildTransitions(updatedStages) } },
+            updates: {
+              definition: {
+                stages: updatedStages,
+                transitions: reconcileTransitions(updatedStages, wf.definition.transitions || []),
+              },
+            },
           })
           .then(() => {
             if (selectedStageId === stage.id) setSelectedStageId(null);
@@ -297,6 +254,15 @@ export default function WorkflowDesignerPage() {
       return;
     }
     setSelectedStageId(id);
+  };
+
+  // A branch line's own label was clicked on the canvas, not just its stage
+  // card — unambiguous intent to look at that stage's routing, so jump
+  // straight to the Transitions tab instead of leaving it on whichever tab
+  // happened to be open.
+  const handleEditBranch = (id) => {
+    selectStage(id);
+    setStagePanelTab('transitions');
   };
 
   const toggleAction = (action) => {
@@ -331,6 +297,13 @@ export default function WorkflowDesignerPage() {
 
   const handleDiscardStage = () => {
     resetStageDrafts(selectedStage);
+  };
+
+  // Replaces just this stage's own outgoing transitions, leaving every other
+  // stage's transitions (including any of its own branches) untouched.
+  const handleSaveTransitions = (stageId, outgoing) => {
+    const otherTransitions = (wf.definition.transitions || []).filter((t) => t.from !== stageId);
+    updateWorkflow(wf.id, { definition: { ...wf.definition, transitions: [...otherTransitions, ...outgoing] } });
   };
 
   const assigneeSummary = (s) => {
@@ -384,6 +357,8 @@ export default function WorkflowDesignerPage() {
         canPublish={canPublishWorkflow}
       />
 
+      <WorkflowDesignerGuide />
+
       <div className="wfd-layout">
         <div className="card">
           <div className="card-head">
@@ -400,37 +375,49 @@ export default function WorkflowDesignerPage() {
           <div className="card-body" style={{ padding: 0 }}>
             <WorkflowCanvas
               stages={stages}
+              transitions={wf.definition.transitions || []}
               selectedStageId={selectedStageId}
               onSelect={selectStage}
-              onReorder={handleReorderStages}
+              onEditBranch={handleEditBranch}
               assigneeSummary={assigneeSummary}
-              disabled={updateWfMutation.isPending}
             />
           </div>
         </div>
 
-        <StagePropertiesPanel
+        <StagePanel
           selectedStage={selectedStage}
+          stages={stages}
+          transitions={wf.definition.transitions || []}
+          onSaveTransitions={handleSaveTransitions}
           saving={updateWfMutation.isPending}
-          dirty={stageDirty}
-          nameDraft={stageNameDraft}
-          onNameChange={setStageNameDraft}
-          actionsDraft={actionsDraft}
-          onToggleAction={toggleAction}
-          assigneeMode={assigneeMode}
-          onAssigneeModeChange={handleAssigneeModeChange}
-          roles={roles || []}
-          roleDraft={roleDraft}
-          onRoleChange={setRoleDraft}
-          users={users}
-          userDraft={userDraft}
-          onUserChange={setUserDraft}
-          slaDraft={slaDraft}
-          onSlaChange={setSlaDraft}
-          onSave={handleSaveStage}
-          onDiscard={handleDiscardStage}
-          onDelete={() => handleDeleteStage(selectedStage)}
           canEdit={canEditWorkflow}
+          tab={stagePanelTab}
+          onTabChange={setStagePanelTab}
+          hasConditionalBranch={(wf.definition.transitions || []).some(
+            (t) => t.from === selectedStage?.id && !!t.condition,
+          )}
+          propertiesProps={{
+            saving: updateWfMutation.isPending,
+            dirty: stageDirty,
+            nameDraft: stageNameDraft,
+            onNameChange: setStageNameDraft,
+            actionsDraft,
+            onToggleAction: toggleAction,
+            assigneeMode,
+            onAssigneeModeChange: handleAssigneeModeChange,
+            roles: roles || [],
+            roleDraft,
+            onRoleChange: setRoleDraft,
+            users,
+            userDraft,
+            onUserChange: setUserDraft,
+            slaDraft,
+            onSlaChange: setSlaDraft,
+            onSave: handleSaveStage,
+            onDiscard: handleDiscardStage,
+            onDelete: () => handleDeleteStage(selectedStage),
+            canEdit: canEditWorkflow,
+          }}
         />
       </div>
     </div>

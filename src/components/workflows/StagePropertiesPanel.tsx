@@ -25,6 +25,9 @@ export interface StagePropertiesPanelProps {
   onDiscard: () => void;
   onDelete: () => void;
   canEdit: boolean;
+  /** Renders just the body, no card/header — used when a parent (StagePanel)
+   *  already supplies the shared card shell and tab switcher. */
+  bare?: boolean;
 }
 
 export function StagePropertiesPanel({
@@ -49,25 +52,21 @@ export function StagePropertiesPanel({
   onDiscard,
   onDelete,
   canEdit,
+  bare,
 }: StagePropertiesPanelProps) {
-  return (
-    <div className="card wfd-props">
-      <div className="card-head">
-        <span className="h3">Stage properties</span>
-        {saving && <span className="btn-spinner" aria-hidden="true" />}
+  const body = !selectedStage ? (
+    <div className="card-body">
+      <p className="muted" style={{ lineHeight: 1.6, fontSize: '12.5px' }}>
+        Select a stage on the left to configure it, or add a new one.
+      </p>
+      <div className="divider"></div>
+      <div className="banner success" style={{ marginBottom: 0 }}>
+        Only one stage is active on a document at a time — but a stage can route to different
+        next stages depending on conditions you set on the Transitions tab.
       </div>
-      {!selectedStage ? (
-        <div className="card-body">
-          <p className="muted" style={{ lineHeight: 1.6, fontSize: '12.5px' }}>
-            Select a stage on the left to configure it, or add a new one.
-          </p>
-          <div className="divider"></div>
-          <div className="banner success" style={{ marginBottom: 0 }}>
-            This workflow is strictly sequential — one stage runs at a time, in this order.
-          </div>
-        </div>
-      ) : (
-        <div className="card-body">
+    </div>
+  ) : (
+    <div className="card-body">
           <div className="field">
             <label>Stage name</label>
             <input className="input" value={nameDraft} onChange={(e) => onNameChange(e.target.value)} />
@@ -162,7 +161,17 @@ export function StagePropertiesPanel({
             Delete stage
           </button>
         </div>
-      )}
+      );
+
+  if (bare) return body;
+
+  return (
+    <div className="card wfd-props">
+      <div className="card-head">
+        <span className="h3">Stage properties</span>
+        {saving && <span className="btn-spinner" aria-hidden="true" />}
+      </div>
+      {body}
     </div>
   );
 }
