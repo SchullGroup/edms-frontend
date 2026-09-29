@@ -18,6 +18,7 @@ import { Icon } from '@/components/ui/Icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { fmtDateTime } from '@/utils/helpers';
 import { Cabinet, Delegation, User } from '@/types/models';
+import { DateTimeField, todayStr } from '@/components/ui/DatePicker';
 
 /** A delegation is active only while `isActive` AND the current time falls
  *  inside its window — the backend flips `isActive` off once it ends, but a
@@ -301,20 +302,20 @@ function DelegationForm({
           <label>
             Starts <span className="req">*</span>
           </label>
-          <input
-            className="input"
-            type="datetime-local"
-            onChange={(e) => commit({ startsAt: e.target.value })}
+          <DateTimeField
+            aria-label="Starts"
+            min={todayStr()}
+            onChange={(v) => commit({ startsAt: v })}
           />
         </div>
         <div className="field" style={{ flex: 1 }}>
           <label>
             Ends <span className="req">*</span>
           </label>
-          <input
-            className="input"
-            type="datetime-local"
-            onChange={(e) => commit({ endsAt: e.target.value })}
+          <DateTimeField
+            aria-label="Ends"
+            min={todayStr()}
+            onChange={(v) => commit({ endsAt: v })}
           />
         </div>
       </div>

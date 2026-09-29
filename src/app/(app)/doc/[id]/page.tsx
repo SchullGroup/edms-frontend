@@ -32,6 +32,7 @@ import { WorkflowActivityPanel } from '@/components/workflowInstances/WorkflowAc
 import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/components/documents/types';
 import type { WorkflowStageAction } from '@/types/models';
 import { Skeleton, SkeletonText } from '@/components/common/Skeleton';
+import { DateTimeField, todayStr } from '@/components/ui/DatePicker';
 
 export default function DocumentDetail({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -179,8 +180,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <Icon name="lock" size={32} />
           <div className="h3 mt-4 mb-2">You don't have clearance to view this document</div>
           <p className="caption mb-4" style={{ maxWidth: '400px', margin: '0 auto 16px' }}>
-            Its confidentiality level is above what your role is cleared for. Request access
-            below, or ask the document owner directly.
+            Its confidentiality level is above what your role is cleared for. Request access below,
+            or ask the document owner directly.
           </p>
           <button
             className="btn btn-primary"
@@ -271,7 +272,11 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   // back to "download and print allowed, no watermark", including restricted ones.
   // Fixture levels are display-cased with spaces ("Top Secret"); the backend
   // sends snake_case tiers ("top_secret"). Normalise both sides before matching.
-  const normaliseTier = (v: string) => v.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const normaliseTier = (v: string) =>
+    v
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
   const confTiers: any[] = (policiesData as any)?.confidentiality ?? [];
   const confPolicyItem = confTiers.find(
     (p) => normaliseTier(String(p.level)) === normaliseTier(doc.confidentiality),
@@ -356,8 +361,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       body: (
         <div>
           <div className="banner info mb-4">
-            “{stageLabel}” will be marked reviewed and the file advances to the next stage. This
-            is recorded in the workflow trail.
+            “{stageLabel}” will be marked reviewed and the file advances to the next stage. This is
+            recorded in the workflow trail.
           </div>
           <div className="field">
             <label>Comment (optional)</label>
@@ -616,10 +621,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           </div>
           <div className="field">
             <label>Expected return (optional)</label>
-            <input
-              type="datetime-local"
-              className="input"
-              onChange={(e) => (returnAt = e.target.value)}
+            <DateTimeField
+              aria-label="Expected return"
+              min={todayStr()}
+              onChange={(v) => (returnAt = v)}
             />
           </div>
         </div>
@@ -671,15 +676,15 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     });
   };
 
-  const actShare = () => {
-    const url = window.location.origin + window.location.pathname + '#/doc/' + doc.id;
-    if (navigator.clipboard) {
-      navigator.clipboard
-        .writeText(url)
-        .then(() => addToast('Permission-checked link copied to clipboard', 'success'));
-    }
-    createAuditLog.mutate({ action: 'SHARE', target: doc.id, detail: 'Generated share link' });
-  };
+  // const actShare = () => {
+  //   const url = window.location.origin + window.location.pathname + '#/doc/' + doc.id;
+  //   if (navigator.clipboard) {
+  //     navigator.clipboard
+  //       .writeText(url)
+  //       .then(() => addToast('Permission-checked link copied to clipboard', 'success'));
+  //   }
+  //   createAuditLog.mutate({ action: 'SHARE', target: doc.id, detail: 'Generated share link' });
+  // };
 
   // Signing is not a document-level operation on the real API — it is the
   // `approve` task action carrying a signature image. `actApprove` above owns
@@ -694,8 +699,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     if (!currentTask) return addToast('No task is currently pending on this document', 'info');
     if (!isMine)
       return addToast(`This task is assigned to ${currentStageActorName}, not you`, 'info');
-    if (!canActPermission)
-      return addToast("You don't have permission to act on tasks", 'info');
+    if (!canActPermission) return addToast("You don't have permission to act on tasks", 'info');
     if (!allowedActions.includes('approve'))
       return addToast(`"${stageLabel}" doesn't require a signature — it's review-only`, 'info');
     actApprove();
@@ -771,63 +775,65 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             </span>
           </div>
         </div>
+      </div>
 
-        <div className="actions">
-            <button className="btn btn-secondary" onClick={actShare}>
-              <Icon name="share" size={14} /> Share
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        {/* <button className="btn btn-secondary" onClick={actShare}>
+          <Icon name="share" size={14} /> Share
+        </button> */}
+        <button
+          className="btn btn-secondary"
+          onClick={actDownload}
+          title={confPolicy.download ? 'Download a copy' : 'Disabled'}
+        >
+          <Icon name="download" size={14} /> Download
+        </button>
+        {lockedByMe ? (
+          <button
+            className="btn btn-secondary"
+            onClick={actCheckin}
+            disabled={checkoutBusy || !can('document', 'edit')}
+            title={
+              !can('document', 'edit') ? "You don't have permission to edit documents" : undefined
+            }
+          >
+            <Icon name="lock" size={14} /> Check in
+          </button>
+        ) : (
+          <button
+            className="btn btn-secondary"
+            onClick={actCheckout}
+            disabled={checkoutBusy || closed || lockedByOther || !can('document', 'edit')}
+            title={
+              closed
+                ? 'Document is closed'
+                : lockedByOther
+                  ? 'Checked out by another user'
+                  : !can('document', 'edit')
+                    ? "You don't have permission to edit documents"
+                    : 'Check out for editing'
+            }
+          >
+            <Icon name="key" size={14} /> Check out
+          </button>
+        )}
+        {/* <div style={{ position: 'relative' }}>
+            <button className="btn btn-secondary" onClick={() => setShowMenu(!showMenu)}>
+              More ▾
             </button>
-            <button
-              className="btn btn-secondary"
-              onClick={actDownload}
-              title={confPolicy.download ? 'Download a copy' : 'Disabled'}
-            >
-              <Icon name="download" size={14} /> Download
-            </button>
-            {lockedByMe ? (
-              <button
-                className="btn btn-secondary"
-                onClick={actCheckin}
-                disabled={checkoutBusy || !can('document', 'edit')}
-                title={
-                  !can('document', 'edit') ? "You don't have permission to edit documents" : undefined
-                }
+            {showMenu && (
+              <div
+                className="menu"
+                style={{
+                  minWidth: '240px',
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  zIndex: 10,
+                }}
               >
-                <Icon name="lock" size={14} /> Check in
-              </button>
-            ) : (
-              <button
-                className="btn btn-secondary"
-                onClick={actCheckout}
-                disabled={checkoutBusy || closed || lockedByOther || !can('document', 'edit')}
-                title={
-                  closed
-                    ? 'Document is closed'
-                    : lockedByOther
-                      ? 'Checked out by another user'
-                      : !can('document', 'edit')
-                        ? "You don't have permission to edit documents"
-                        : 'Check out for editing'
-                }
-              >
-                <Icon name="key" size={14} /> Check out
-              </button>
-            )}
-            <div style={{ position: 'relative' }}>
-              <button className="btn btn-secondary" onClick={() => setShowMenu(!showMenu)}>
-                More ▾
-              </button>
-              {showMenu && (
-                <div
-                  className="menu"
-                  style={{
-                    minWidth: '240px',
-                    position: 'absolute',
-                    top: '100%',
-                    right: 0,
-                    zIndex: 10,
-                  }}
-                >
-                  <button
+                <button
                     className="menu-item"
                     onClick={() => {
                       setShowMenu(false);
@@ -838,59 +844,94 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                       <Icon name="sign" size={15} />
                     </span>{' '}
                     Sign &amp; approve
-                  </button>
-                  {can('document', 'delete') && (
-                    <>
-                      <div className="menu-sep"></div>
-                      <button
-                        className="menu-item danger"
-                        disabled={doc.legalHold || archiveDocument.isPending}
-                        onClick={() => {
-                          setShowMenu(false);
-                          openConfirm({
-                            title: `Archive "${doc.title}"?`,
-                            message:
-                              'The document is hidden from normal listings and search. It can be restored by an administrator.',
-                            confirmLabel: 'Archive',
-                            danger: true,
-                            onConfirm: () =>
-                              archiveDocument
-                                .mutateAsync(doc.id)
-                                .then(() => {
-                                  createAuditLog.mutate({
-                                    action: 'ARCHIVE',
-                                    target: doc.id,
-                                    detail: doc.title,
-                                  });
-                                  router.push('/staff/cabinets');
-                                })
-                                .catch(() => false),
-                          });
-                        }}
-                      >
-                        <span>
-                          <Icon name="redact" size={15} />
-                        </span>{' '}
-                        Archive document
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-            {hasNoWorkflow && !closed && (
-              <button className="btn btn-primary" onClick={routeThisDocument}>
-                <Icon name="flow" size={14} /> Route to workflow
-              </button>
+                  </button> 
+                {can('document', 'delete') && (
+                  <>
+                    <div className="menu-sep"></div>
+                    <button
+                      className="menu-item danger"
+                      disabled={doc.legalHold || archiveDocument.isPending}
+                      onClick={() => {
+                        setShowMenu(false);
+                        openConfirm({
+                          title: `Archive "${doc.title}"?`,
+                          message:
+                            'The document is hidden from normal listings and search. It can be restored by an administrator.',
+                          confirmLabel: 'Archive',
+                          danger: true,
+                          onConfirm: () =>
+                            archiveDocument
+                              .mutateAsync(doc.id)
+                              .then(() => {
+                                createAuditLog.mutate({
+                                  action: 'ARCHIVE',
+                                  target: doc.id,
+                                  detail: doc.title,
+                                });
+                                router.push('/staff/cabinets');
+                              })
+                              .catch(() => false),
+                        });
+                      }}
+                    >
+                      <span>
+                        <Icon name="redact" size={15} />
+                      </span>{' '}
+                      Archive document
+                    </button>
+                  </>
+                )}
+              </div>
             )}
-            {stageActionButtons
-              .filter((b) => allowedActions.includes(b.action))
-              .map((b) => (
-                <React.Fragment key={b.action}>
-                  {actionBtn(b.label, b.kind, b.run, b.icon ? { icon: b.icon } : {})}
-                </React.Fragment>
-              ))}
-        </div>
+          </div> */}
+        {hasNoWorkflow && !closed && (
+          <button className="btn btn-primary" onClick={routeThisDocument}>
+            <Icon name="flow" size={14} /> Route to workflow
+          </button>
+        )}
+        {can('document', 'delete') && (
+          // <>
+          //   <div className="menu-sep"></div>
+          <button
+            className="menu-item danger"
+            disabled={doc.legalHold || archiveDocument.isPending}
+            onClick={() => {
+              setShowMenu(false);
+              openConfirm({
+                title: `Archive "${doc.title}"?`,
+                message:
+                  'The document is hidden from normal listings and search. It can be restored by an administrator.',
+                confirmLabel: 'Archive',
+                danger: true,
+                onConfirm: () =>
+                  archiveDocument
+                    .mutateAsync(doc.id)
+                    .then(() => {
+                      createAuditLog.mutate({
+                        action: 'ARCHIVE',
+                        target: doc.id,
+                        detail: doc.title,
+                      });
+                      router.push('/staff/cabinets');
+                    })
+                    .catch(() => false),
+              });
+            }}
+          >
+            <span>
+              <Icon name="redact" size={15} />
+            </span>{' '}
+            Archive document
+          </button>
+          // </>
+        )}
+        {stageActionButtons
+          .filter((b) => allowedActions.includes(b.action))
+          .map((b) => (
+            <React.Fragment key={b.action}>
+              {actionBtn(b.label, b.kind, b.run, b.icon ? { icon: b.icon } : {})}
+            </React.Fragment>
+          ))}
       </div>
 
       {doc.legalHold && (
@@ -906,7 +947,11 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <span>
             <Icon name="lock" size={15} />
           </span>{' '}
-          Read-only: checked out by {userById(users, doc.checkoutLock?.lockedBy)?.name} since{' '}
+          Read-only: checked out by{' '}
+          {doc.checkoutLock?.locker?.name ||
+            userById(users, doc.checkoutLock?.lockedBy)?.name ||
+            'another user'}{' '}
+          since{' '}
           {fmtDate(doc.checkoutLock?.lockedAt)}.
         </div>
       )}
@@ -967,10 +1012,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             canView={can('document', 'view')}
             canEdit={can('document', 'edit') && !closed && !lockedByOther}
             canUploadVersion={
-              can('document', 'edit') &&
-              !closed &&
-              !lockedByOther &&
-              changesRequestedForCurrentTask
+              can('document', 'edit') && !closed && !lockedByOther && changesRequestedForCurrentTask
             }
             getUploaderName={(userId) => userById(users, userId)?.name || 'User'}
           />
