@@ -8,7 +8,7 @@ import {
   useTeamStatusMatrix,
   useOpenItemsByCabinet,
 } from '@/apis/hooks/useWorkflowInstances';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Spinner } from '@/components/common/Spinner';
@@ -31,6 +31,8 @@ export default function SupervisorDashboard() {
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
 
   const users = usersData?.data || [];
+  // Reassign targets: active users in the reassigner's own department only.
+  const { users: colleagues } = useDepartmentColleagues();
   const byCabinet = byCabinetData?.cabinets || [];
 
   const reassignTask = useReassignTask();
@@ -93,11 +95,11 @@ export default function SupervisorDashboard() {
             </label>
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select team member...</option>
-              {users
-                .filter((u) => u.status === 'active' && u.id !== t.assigneeId)
+              {colleagues
+                .filter((u) => u.id !== t.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} ({(u as any).departmentId || 'System'})
+                    {u.name}
                   </option>
                 ))}
             </select>
