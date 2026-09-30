@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useUIStore } from '@/store/useUIStore';
 import { useTaskWorkload, useTasks, useReassignTask } from '@/apis/hooks/useTasks';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Spinner } from '@/components/common/Spinner';
@@ -25,6 +25,8 @@ export default function WorkloadPage() {
   } = useTaskWorkload();
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
   const users = usersData?.data || [];
+  // Reassign targets: active users in the reassigner's own department only.
+  const { users: colleagues } = useDepartmentColleagues();
 
   const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
@@ -55,8 +57,8 @@ export default function WorkloadPage() {
             <label>New assignee</label>
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select user...</option>
-              {users
-                .filter((u) => u.status === 'active' && u.id !== t.assigneeId)
+              {colleagues
+                .filter((u) => u.id !== t.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}

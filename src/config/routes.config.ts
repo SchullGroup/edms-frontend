@@ -62,7 +62,8 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/staff/cabinets',
     matchType: 'prefix',
-    anyPermissions: ['document:view'],
+    // Sidebar requires department-or-global scope; route rules aren't scope-aware.
+    anyPermissions: ['cabinet:view'],
   },
   {
     path: '/staff/performance',
@@ -82,7 +83,7 @@ export const routeConfig: RouteRule[] = [
   // require only their resource's `:view` key at the route level — viewing a page
   // shouldn't need write rights, and write affordances hide themselves inside the
   // page instead (not yet built — tracked as a follow-up, see docs). Their sidebar
-  // items are actually stricter (Cabinet Designer also needs create-or-global-scope,
+  // items are actually stricter (Cabinet Designer needs global view + create,
   // Workflow Monitor needs department-or-global scope — see useNavigation.ts); this
   // route rule stays at the permissive resource:action level since it isn't
   // scope-aware, same reasoning as Users below. Roles, Access Requests, Departments
@@ -119,16 +120,13 @@ export const routeConfig: RouteRule[] = [
     matchType: 'prefix',
     anyPermissions: ['department:create'],
   },
-  // The sidebar's Cabinet Designer item additionally requires the record to be
-  // `cabinet:create` OR global-scoped `cabinet:view` (mirroring the page's own
-  // `isAdmin` check — see its comment there). This route rule stays at plain
-  // `cabinet:view` since `RouteRule`/`evaluateRouteAccess` isn't scope-aware —
-  // kept permissive rather than narrowed to `cabinet:create` alone, so a
-  // global-scoped viewer the sidebar links to never hits a dead link here.
+  // The sidebar's Cabinet Designer item requires global-scoped `cabinet:view`
+  // AND `cabinet:create`. This rule requires both keys but can't enforce the
+  // global scope, since `RouteRule`/`evaluateRouteAccess` isn't scope-aware.
   {
     path: '/admin/cabinets',
     matchType: 'prefix',
-    anyPermissions: ['cabinet:view', 'cabinet:create'],
+    permissions: ['cabinet:view', 'cabinet:create'],
   },
   {
     path: '/admin/workflows/instances',

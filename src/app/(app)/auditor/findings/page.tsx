@@ -5,6 +5,7 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
+import { DateField, todayStr } from '@/components/ui/DatePicker';
 
 export default function AuditorFindingsPage() {
   const { findings, users, currentUser, addFinding, updateFinding, auditAction } = useStore();
@@ -97,11 +98,10 @@ export default function AuditorFindingsPage() {
             </div>
             <div className="field">
               <label>Response due</label>
-              <input
-                type="date"
-                className="input"
+              <DateField
                 defaultValue={due}
-                onChange={(e) => (due = e.target.value)}
+                min={todayStr()}
+                onChange={(v) => (due = v)}
               />
             </div>
           </div>

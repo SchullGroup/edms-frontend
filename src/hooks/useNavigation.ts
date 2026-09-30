@@ -79,7 +79,9 @@ export const useNavigation = () => {
               route: '/staff/cabinets',
               label: 'Cabinets',
               icon: 'cabinet',
-              anyPermissions: ['document:view'],
+              anyPermissions: [
+                { resource: 'cabinet', action: 'view', minScope: 'department' },
+              ],
             },
             {
               route: '/upload',
@@ -209,7 +211,9 @@ export const useNavigation = () => {
               route: '/staff/cabinets',
               label: 'Cabinets',
               icon: 'cabinet',
-              anyPermissions: ['document:view'],
+              anyPermissions: [
+                { resource: 'cabinet', action: 'view', minScope: 'department' },
+              ],
             },
             { route: '/search', label: 'Search', icon: 'search' },
             { route: '/circulars', label: 'Circulars', icon: 'speaker' },
@@ -286,6 +290,14 @@ export const useNavigation = () => {
               // asymmetry is low-stakes.
               anyPermissions: ['document:export', 'audit:export'],
             },
+            {
+              route: '/staff/cabinets',
+              label: 'Cabinets',
+              icon: 'cabinet',
+              anyPermissions: [
+                { resource: 'cabinet', action: 'view', minScope: 'department' },
+              ],
+            },
             { route: '/search', label: 'Search', icon: 'search' },
           ],
         },
@@ -333,21 +345,24 @@ export const useNavigation = () => {
           label: 'Configuration',
           items: [
             {
+              route: '/staff/cabinets',
+              label: 'Cabinets',
+              icon: 'cabinet',
+              anyPermissions: [
+                { resource: 'cabinet', action: 'view', minScope: 'department' },
+              ],
+            },
+            {
               route: '/admin/cabinets',
               label: 'Cabinet Designer',
               icon: 'cabinet',
-              // Corrected from `cabinet:view` — the page's own `isAdmin` check
-              // (`can('cabinet','create') || scopeFor('cabinet','view') ===
-              // 'global'`) is the only permission logic on this 1471-line page,
-              // and it only decides which cabinets to *list*; the New/Edit/Delete
-              // buttons are completely unguarded. Mirroring that same isAdmin
-              // signal here instead of plain view — same reasoning as Departments/
-              // Workflow Designer/Roles: no internal write gating yet, so the
-              // sidebar link itself is the only thing standing between a viewer
-              // and those buttons.
-              anyPermissions: [
-                'cabinet:create',
+              // Requires BOTH global-scoped `cabinet:view` and `cabinet:create` — a
+              // department-scoped or read-only viewer gets the plain Cabinets browser
+              // instead. The page's New/Edit/Delete buttons are still unguarded
+              // internally, so this link is the only gate in front of them.
+              permissions: [
                 { resource: 'cabinet', action: 'view', minScope: 'global' },
+                'cabinet:create',
               ],
             },
             {
@@ -475,14 +490,16 @@ export const useNavigation = () => {
               icon: 'list',
               anyPermissions: ['audit:view'],
             },
-            // Real route is `/staff/cabinets`, governed by the `/staff` route rules —
-            // gate on `document:view` (that rule's permission), not `audit:view`, or
-            // this becomes a dead link for an auditor without document:view.
+            // Real route is `/staff/cabinets` — gate it exactly like the Cabinets
+            // item (department-or-global `cabinet:view`), not `audit:view`, or this
+            // becomes a dead link for an auditor without cabinet access.
             {
               route: '/staff/cabinets',
               label: 'Document Sampling',
               icon: 'cabinet',
-              anyPermissions: ['document:view'],
+              anyPermissions: [
+                { resource: 'cabinet', action: 'view', minScope: 'department' },
+              ],
             },
             { route: '/search', label: 'Search', icon: 'search' },
           ],

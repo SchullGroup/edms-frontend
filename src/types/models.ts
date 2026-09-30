@@ -173,6 +173,9 @@ export interface CheckoutLock {
   lockedBy: string;
   lockedAt: string;
   expectedReturnAt?: string | null;
+  /** Who holds the lock — requested from the backend (`GET /documents/:id`
+   *  doesn't include `checkoutLock` yet); falls back to a `users` lookup. */
+  locker?: PersonSummary;
 }
 
 /** A `{id, name, email}` person embed — used for a request's requester/reviewer,
@@ -299,23 +302,59 @@ export interface DocumentStatsResponse {
 export type WorkflowStageAction =
   'approve' | 'reject' | 'review' | 'request_changes' | 'close' | 'delegate';
 
-export type WorkflowStageType =
-  'start' | 'review' | 'approval' | 'sign' | 'condition' | 'parallel' | 'notify' | 'close';
-
 export interface WorkflowStage {
   id: string;
   name: string;
   role?: string;
   user_id?: string;
   sla_hours: number;
-  /** Designer-authored stage kind. Persisted by the backend alongside `actions`. */
-  type?: WorkflowStageType;
   actions?: WorkflowStageAction[];
+}
+
+// Matches the backend's `WORKFLOW_CONDITION_FIELDS`/`_OPERATORS`/`_MODES`
+// (`edms-backend/src/shared/constants/workflow.constants.ts`) exactly — these
+// are validated server-side with a strict Zod schema, so the frontend enum
+// values must stay byte-for-byte in sync with it, not just conceptually similar.
+export type WorkflowConditionField = 'urgency' | 'confidentiality' | 'metadata';
+
+export type WorkflowConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'in'
+  | 'not_in'
+  | 'greater_than'
+  | 'greater_than_or_equal'
+  | 'less_than'
+  | 'less_than_or_equal';
+
+export type WorkflowConditionMode = 'all' | 'any';
+
+export type WorkflowConditionValue = string | number | boolean;
+
+export interface WorkflowConditionRule {
+  field: WorkflowConditionField;
+  /** Required iff `field === 'metadata'`; rejected for any other field. */
+  metadata_field_id?: string;
+  operator: WorkflowConditionOperator;
+  value: WorkflowConditionValue | WorkflowConditionValue[];
+}
+
+export interface WorkflowCondition {
+  mode: WorkflowConditionMode;
+  rules: WorkflowConditionRule[];
 }
 
 export interface WorkflowTransition {
   from: string;
   to: string;
+  /**
+   * Required once a stage has more than one conditional outgoing transition;
+   * must be unique among that stage's conditional branches. Fallback
+   * transitions (no `condition`) cannot carry one — the backend rejects it.
+   */
+  priority?: number;
+  /** Absent = the required, unconditional fallback for its `from` stage. */
+  condition?: WorkflowCondition;
 }
 
 export interface WorkflowDefinitionJson {

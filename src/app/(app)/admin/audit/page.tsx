@@ -9,6 +9,8 @@ import { useUsers } from '@/apis/hooks/useUsers';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { AuditEntry } from '@/types/models';
+import { usePermissions } from '@/hooks/usePermissions';
+import { DateField } from '@/components/ui/DatePicker';
 
 const PAGE_SIZE = 20;
 
@@ -43,6 +45,8 @@ export default function TenantAuditPage() {
 
   const exportCsv = useExportAuditCsv();
   const verifyChain = useVerifyAuditChain();
+  const { can } = usePermissions();
+  const canExport = can('audit', 'export');
 
   useEffect(() => {
     setPageTitle('Tenant Audit');
@@ -151,25 +155,26 @@ export default function TenantAuditPage() {
               </option>
             ))}
           </select>
-          <input
-            className="input"
-            type="date"
+          <DateField
+            compact
             aria-label="From date"
-            style={{ width: 'auto', height: '32px' }}
+            placeholder="From"
+            style={{ width: '160px' }}
             value={from}
-            onChange={(e) => {
-              setFrom(e.target.value);
+            onChange={(v) => {
+              setFrom(v);
               setPage(1);
             }}
           />
-          <input
-            className="input"
-            type="date"
+          <DateField
+            compact
             aria-label="To date"
-            style={{ width: 'auto', height: '32px' }}
+            placeholder="To"
+            style={{ width: '160px' }}
             value={to}
-            onChange={(e) => {
-              setTo(e.target.value);
+            min={from || undefined}
+            onChange={(v) => {
+              setTo(v);
               setPage(1);
             }}
           />
@@ -190,7 +195,8 @@ export default function TenantAuditPage() {
             <button
               className="btn btn-secondary btn-sm"
               onClick={handleExport}
-              disabled={exportCsv.isPending}
+              disabled={exportCsv.isPending || !canExport}
+              title={!canExport ? "You don't have permission to export the audit trail" : undefined}
             >
               {exportCsv.isPending ? 'Exporting…' : 'Export'}
             </button>

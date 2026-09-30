@@ -74,6 +74,7 @@ function RowMenu({
   canCreate,
   canEdit,
   canDelete,
+  subBlockedReason,
 }: {
   onAddSub: () => void;
   onEdit: () => void;
@@ -81,6 +82,8 @@ function RowMenu({
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  /** Set when this row can't take a sub-department (it's already one). */
+  subBlockedReason?: string;
 }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -143,13 +146,21 @@ function RowMenu({
           ref={menuRef}
           className="menu"
           role="menu"
-          style={{ position: 'fixed', top: pos!.top, left: pos!.left, right: 'auto', minWidth: '208px' }}
+          style={{
+            position: 'fixed',
+            top: pos!.top,
+            left: pos!.left,
+            right: 'auto',
+            minWidth: '208px',
+          }}
         >
           <button
             className="menu-item"
             role="menuitem"
-            disabled={!canCreate}
-            title={!canCreate ? "You don't have permission to create departments" : undefined}
+            disabled={!canCreate || !!subBlockedReason}
+            title={
+              !canCreate ? "You don't have permission to create departments" : subBlockedReason
+            }
             onClick={run(onAddSub)}
           >
             <Icon name="plus" size={14} /> Add sub-department
@@ -225,9 +236,12 @@ export default function DepartmentsAdminPage() {
 
   const openForm = (dept: Department | null, presetParent?: Department) => {
     const isNew = !dept;
+    // Departments are at most two levels deep: only a top-level department can
+    // be a parent, and a department with sub-departments must stay top level.
     // Editing: a department (and its whole subtree) can't become its own parent.
     // Adding a sub-department: the parent is fixed to `presetParent`.
     const excluded = dept ? new Set(subtreeIds(dept)) : new Set<string>();
+    const mustStayTopLevel = !!dept?.children?.length;
     const form = {
       name: dept?.name ?? '',
       parentId: presetParent?.id ?? dept?.parentId ?? '',
@@ -260,20 +274,26 @@ export default function DepartmentsAdminPage() {
               // department as the parent of its own sub-department.
               <input className="input" value={presetParent.name} disabled readOnly />
             ) : (
-            <select
-              className="input"
-              defaultValue={form.parentId ?? ''}
-              onChange={(e) => (form.parentId = e.target.value)}
-            >
-              <option value="">— None (top level) —</option>
-              {flatOptions
-                .filter((o) => !excluded.has(o.id))
-                .map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {'  '.repeat(o.depth) + o.name}
-                  </option>
-                ))}
-            </select>
+              <select
+                className="input"
+                defaultValue={form.parentId ?? ''}
+                onChange={(e) => (form.parentId = e.target.value)}
+              >
+                <option value="">— None (top level) —</option>
+                {!mustStayTopLevel &&
+                  flatOptions
+                    .filter((o) => o.depth === 0 && !excluded.has(o.id))
+                    .map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {'  '.repeat(o.depth) + o.name}
+                      </option>
+                    ))}
+              </select>
+            )}
+            {mustStayTopLevel && (
+              <div className="help">
+                This department has sub-departments, so it must stay top level.
+              </div>
             )}
           </div>
         </div>
@@ -389,6 +409,9 @@ export default function DepartmentsAdminPage() {
             canCreate={canCreateDepartment}
             canEdit={canEditDepartment}
             canDelete={canDeleteDepartment}
+            subBlockedReason={
+              r.depth > 0 ? "A sub-department can't have its own sub-departments" : undefined
+            }
           />
         </div>
       ),
@@ -430,11 +453,7 @@ export default function DepartmentsAdminPage() {
             {tree.length} top-level{allRows.length !== tree.length && `, ${allRows.length} total`}
           </span>
         </div>
-        <Table
-          cols={cols}
-          rows={rows}
-          emptyMsg="No departments yet — create the first one."
-        />
+        <Table cols={cols} rows={rows} emptyMsg="No departments yet — create the first one." />
       </div>
     </div>
   );
