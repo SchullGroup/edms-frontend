@@ -121,6 +121,27 @@ export const useStartWorkflowInstance = () => {
   });
 };
 
+export const useAttachWorkflowDocument = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      documentId,
+      comment,
+    }: {
+      instanceId: string;
+      documentId: string;
+      comment?: string;
+    }) => workflowInstancesService.attachDocument(instanceId, documentId, comment),
+    onSuccess: () => {
+      invalidateInstanceViews(queryClient);
+      // The active task's `documents` gains the new one.
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+};
+
 export const useHoldWorkflowInstance = () => {
   const queryClient = useQueryClient();
 

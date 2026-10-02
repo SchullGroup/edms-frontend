@@ -48,12 +48,20 @@ export function WorkflowActivityPanel({
 
             <div className="divider"></div>
             <div className="h3 mb-2">Activity trail</div>
-            <WorkflowHistoryTimeline
-              workflowInstanceId={workflowInstance.id}
-              stages={stages}
-              limit={20}
-              emptyMessage="Nothing has been actioned on this workflow yet."
-            />
+            {/* Fixed height, scrolls on its own — a long trail would otherwise
+                stretch the page far below the document viewer beside it. */}
+            <div
+              tabIndex={0}
+              aria-label="Activity trail"
+              style={{ maxHeight: 340, overflowY: 'auto', paddingRight: 4 }}
+            >
+              <WorkflowHistoryTimeline
+                workflowInstanceId={workflowInstance.id}
+                stages={stages}
+                limit={20}
+                emptyMessage="Nothing has been actioned on this workflow yet."
+              />
+            </div>
           </>
         )}
 

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
+import { UPLOAD_ACCEPT, resolveUploadMimeType } from '@/constants/uploadTypes';
 import {
   useDocumentVersions,
   useAddDocumentVersion,
@@ -59,7 +60,12 @@ export function DocumentVersionsPanel({
       });
       await addVersion.mutateAsync({
         id: documentId,
-        data: { fileUrl, mimeType: file.type, checksum, fileSize: file.size },
+        data: {
+          fileUrl,
+          mimeType: resolveUploadMimeType(file) ?? file.type,
+          checksum,
+          fileSize: file.size,
+        },
       });
     } catch (err: any) {
       addToast(err?.message || 'Failed to upload new version', 'error');
@@ -91,7 +97,7 @@ export function DocumentVersionsPanel({
             <input
               ref={fileRef}
               type="file"
-              accept="application/pdf,image/*"
+              accept={UPLOAD_ACCEPT}
               style={{ display: 'none' }}
               onChange={onPickFile}
             />
@@ -109,7 +115,8 @@ export function DocumentVersionsPanel({
       <div className="card-body" style={{ paddingTop: '6px' }}>
         {canEdit && !canUploadVersion && (
           <div className="caption mb-2">
-            New version uploads open once the previous stage requests changes on this document.
+            New versions are uploaded on the workflow page, once a stage requests changes on this
+            document.
           </div>
         )}
         {isLoading && <div className="caption">Loading versions…</div>}

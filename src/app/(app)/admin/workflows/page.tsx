@@ -287,10 +287,15 @@ export default function WorkflowDesignerPage() {
 
   const handleSaveStage = () => {
     if (!selectedStage || !stageDirty) return;
+    // The first stage can't send work back — drop a stale "Request changes".
+    const actions =
+      stages[0]?.id === selectedStage.id
+        ? actionsDraft.filter((a) => a !== 'request_changes')
+        : actionsDraft;
     const patch =
       assigneeMode === 'role'
-        ? { name: stageNameDraft, actions: actionsDraft, sla_hours: slaDraft, role: roleDraft, user_id: undefined }
-        : { name: stageNameDraft, actions: actionsDraft, sla_hours: slaDraft, user_id: userDraft, role: undefined };
+        ? { name: stageNameDraft, actions, sla_hours: slaDraft, role: roleDraft, user_id: undefined }
+        : { name: stageNameDraft, actions, sla_hours: slaDraft, user_id: userDraft, role: undefined };
     const updatedStages = stages.map((s) => (s.id === selectedStage.id ? { ...s, ...patch } : s));
     updateWorkflow(wf.id, { definition: { ...wf.definition, stages: updatedStages } });
   };
@@ -417,6 +422,7 @@ export default function WorkflowDesignerPage() {
             onDiscard: handleDiscardStage,
             onDelete: () => handleDeleteStage(selectedStage),
             canEdit: canEditWorkflow,
+            isFirstStage: !!selectedStage && stages[0]?.id === selectedStage.id,
           }}
         />
       </div>

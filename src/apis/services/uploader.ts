@@ -81,6 +81,10 @@ export interface UploadProgress {
   percentage: number;
 }
 
+/** Where each step of an upload lands on the 0–100 bar. The byte transfer
+ *  fills `urlsReady`→`bytesDone`; `/finalize` takes it to 100. */
+const PHASE = { initialized: 5, urlsReady: 10, bytesDone: 92 } as const;
+
 type ProgressCallback = (progress: UploadProgress) => void;
 type ErrorCallback = (error: Error) => void;
 type CompleteCallback = (result: AxiosResponse<FinalizeResponse>) => void;
@@ -165,6 +169,7 @@ export class Uploader {
 
       this.fileId = fileId;
       this.fileKey = fileKey;
+      this.emitProgress(PHASE.initialized);
 
       const numberOfParts = Math.ceil(this.file.size / this.chunkSize);
 
@@ -180,6 +185,7 @@ export class Uploader {
       });
 
       this.parts.push(...urlsResponse.data.parts);
+      this.emitProgress(PHASE.urlsReady);
 
       this.sendNext();
     } catch (error) {
@@ -249,6 +255,7 @@ export class Uploader {
     try {
       const response = await this.sendCompleteRequest();
       this.completed = true;
+      this.emitProgress(100);
       this.onCompleteFn(response);
     } catch (err) {
       this.completed = true;
@@ -304,18 +311,26 @@ export class Uploader {
       this.progressCache[part] = event.loaded;
     }
 
-    if (event.type === 'uploaded') {
-      this.uploadedSize += this.progressCache[part] || 0;
+    // A finished part moves from the in-flight cache into the settled total.
+    // (`loadend` also fires for failed parts — those are retried and re-counted.)
+    if (event.type === 'load') {
+      this.uploadedSize += this.progressCache[part] || event.loaded || 0;
       delete this.progressCache[part];
     }
 
     const inProgress = Object.values(this.progressCache).reduce((memo, loaded) => memo + loaded, 0);
 
     const sent = Math.min(this.uploadedSize + inProgress, this.file.size);
-    const total = this.file.size;
-    const percentage = Math.round((sent / total) * 100);
+    const total = this.file.size || 1;
+    // Bytes on the wire fill the band between "URLs ready" and "finalizing";
+    // the round trips either side get their own slice so the bar reflects the
+    // whole upload, not just the PUTs.
+    const byteShare = PHASE.bytesDone - PHASE.urlsReady;
+    this.emitProgress(PHASE.urlsReady + Math.round((sent / total) * byteShare), sent);
+  }
 
-    this.onProgressFn({ sent, total, percentage });
+  private emitProgress(percentage: number, sent = 0): void {
+    this.onProgressFn({ sent, total: this.file.size, percentage: Math.min(100, percentage) });
   }
 
   private upload(chunk: Blob, part: PresignedPart, sendChunkStarted: () => void): Promise<number> {
@@ -346,7 +361,7 @@ export class Uploader {
       xhr.upload.addEventListener('progress', progressListener);
       xhr.addEventListener('error', progressListener);
       xhr.addEventListener('abort', progressListener);
-      xhr.addEventListener('loadend', progressListener);
+      xhr.upload.addEventListener('load', progressListener);
 
       xhr.open('PUT', part.signedUrl);
 

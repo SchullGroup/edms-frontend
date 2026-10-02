@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { UPLOAD_ACCEPT, UPLOAD_TYPES_LABEL, resolveUploadMimeType } from '@/constants/uploadTypes';
 import { useRouter } from 'next/navigation';
 import { useStore, cabById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
+import { DOCUMENT_TYPES } from '@/constants/documentTypes';
 
 const IDU_GUESSES = [
   {
@@ -121,12 +123,13 @@ export default function UploadCapturePage() {
         </div>
         <div style={{ fontWeight: 700, fontSize: '14px' }}>Drag & drop documents here</div>
         <div className="muted" style={{ marginTop: '5px', fontSize: '12.5px' }}>
-          or click to browse · PDF, DOCX, XLSX, TIFF, JPG up to 100 MB
+          or click to browse · {UPLOAD_TYPES_LABEL}
         </div>
       </div>
       <input
         type="file"
         multiple
+        accept={UPLOAD_ACCEPT}
         style={{ display: 'none' }}
         ref={fileInputRef}
         onChange={(e) => {
@@ -207,7 +210,7 @@ import { calculateChecksum } from '@/apis/services/s3.service';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 
 function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
-  const { docTypes, session, users } = useStore();
+  const { session, users } = useStore();
   const { data: cabinetsData } = useCabinets();
   const cabinets = cabinetsData?.data || [];
   const { addToast } = useUIStore();
@@ -309,7 +312,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         confidentiality: conf,
         urgency: urg,
         fileUrl,
-        mimeType: file.file.type || 'application/pdf',
+        mimeType: resolveUploadMimeType(file.file) ?? file.file.type,
         fileSize: file.file.size,
         checksum: checksum,
       });
@@ -377,7 +380,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         <div className="field">
           <label>Document type</label>
           <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
-            {docTypes.map((t) => (
+            {DOCUMENT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>

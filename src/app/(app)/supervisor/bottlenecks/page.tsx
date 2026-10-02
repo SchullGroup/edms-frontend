@@ -244,7 +244,7 @@ export default function BottlenecksPage() {
             <Table
               cols={cols}
               rows={items}
-              onRow={(r) => router.push(`/doc/${r.documentId}`)}
+              onRow={(r) => router.push(`/workflow-instances/${r.workflowInstanceId}`)}
             />
             {pagination && (
               <Pagination

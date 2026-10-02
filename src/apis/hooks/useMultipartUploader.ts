@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Uploader } from '@/apis/services/uploader';
+import { resolveUploadMimeType, validateUploadFile } from '@/constants/uploadTypes';
 
 // Same host edms already uploads to (see s3.service.ts's legacy base64 path) —
 // only the /initialize, /presigned-url and /finalize routes under it are new.
@@ -15,51 +16,43 @@ export interface StartUploadParams {
   folderName: string;
 }
 
-// Same file types/size limits s3.service.ts's uploadFile() dispatcher actually
-// enforced (images route through uploadImageToS3 at a 3MB cap, application/pdf
-// through uploadToS3 at a 2MB cap, everything else was rejected) — kept in
-// sync deliberately rather than reusing validateFile(), whose broader
-// allowedTypes list (Word/Excel/text) was never actually reachable through
-// uploadFile() in practice.
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
-const ALLOWED_PDF_TYPES = ['application/pdf'];
-const MAX_IMAGE_SIZE = 10_000_000;
-const MAX_PDF_SIZE = 50_000_000;
-
-function validateUpload(file: File): string | null {
-  if (ALLOWED_IMAGE_TYPES.includes(file.type)) {
-    if (file.size > MAX_IMAGE_SIZE) {
-      return `File size must be less than ${Math.round(MAX_IMAGE_SIZE / 1024 / 1024)}MB`;
-    }
-    return null;
-  }
-
-  if (ALLOWED_PDF_TYPES.includes(file.type)) {
-    if (file.size > MAX_PDF_SIZE) {
-      return `File size must be less than ${Math.round(MAX_PDF_SIZE / 1024 / 1024)}MB`;
-    }
-    return null;
-  }
-
-  return 'Unsupported file type';
-}
-
 export function useMultipartUploader() {
+  // `targetProgress` is what the uploader last reported; `uploadProgress` is
+  // what's shown, counted up toward it a step at a time. Small files only get
+  // one or two real progress events, so without this the label jumps 0 → 100.
+  // It never runs ahead of a real milestone.
+  const [targetProgress, setTargetProgress] = useState(0);
   const [uploadProgress, setUploadProgress] = useState(0);
   const uploaderRef = useRef<Uploader | null>(null);
 
+  useEffect(() => {
+    if (targetProgress < uploadProgress) {
+      setUploadProgress(targetProgress); // reset for a new upload
+      return;
+    }
+    if (targetProgress === uploadProgress) return;
+    const timer = window.setTimeout(() => {
+      setUploadProgress((shown) =>
+        Math.min(targetProgress, shown + Math.max(1, Math.ceil((targetProgress - shown) / 6))),
+      );
+    }, 40);
+    return () => window.clearTimeout(timer);
+  }, [targetProgress, uploadProgress]);
+
   const startUpload = useCallback(({ file, fileName, folderName }: StartUploadParams): Promise<string> => {
-    const validationError = validateUpload(file);
+    // Allowed types and the size cap live in `@/constants/uploadTypes`.
+    const validationError = validateUploadFile(file);
     if (validationError) {
       return Promise.reject(new Error(validationError));
     }
 
+    setTargetProgress(0);
     setUploadProgress(0);
 
     const uploader = new Uploader({
       file,
       fileName,
-      contentType: file.type,
+      contentType: resolveUploadMimeType(file) ?? file.type,
       folderName,
       baseURL,
     });
@@ -69,7 +62,7 @@ export function useMultipartUploader() {
     return new Promise<string>((resolve, reject) => {
       uploader
         .onProgress(({ percentage }) => {
-          setUploadProgress(percentage);
+          setTargetProgress(percentage);
         })
         .onError((error) => {
           console.error(error);

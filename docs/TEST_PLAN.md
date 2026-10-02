@@ -735,11 +735,41 @@ steps need a stage to have more than one other stage available to route to.
   - Done: `react-day-picker@9` + `src/components/ui/DatePicker.tsx` (`DateField`,
     `DateTimeField`). Replaced all six native inputs: Tenant Audit from/to, Findings due
     date, Delegation starts/ends, Checkout expected return.
-- [ ] the current document structure doesn't show who checked out a document. Check current backend code for the response of the api route for /document/:id
-  - Confirmed on `dev`: `GET /documents/:id` returns only `isCheckedOut`, never the lock.
+- [x] the current document structure doesn't show who checked out a document. Check current backend code for the response of the api route for /document/:id
+  - **Fixed on backend `dev` (`b4a3f81`, 2026-09-29):** `findById` now includes
+    `checkoutLock` with `locker {id,name,email}` — exactly the one-liner below. No frontend
+    change was needed beyond refreshing a stale comment in `models.ts`. Re-test TP-G1…G4.
+  - *Previously:* confirmed on `dev`: `GET /documents/:id` returned only `isCheckedOut`, never the lock.
     **This is a bug, not just missing info:** the doc page compares
     `checkoutLock.lockedBy` to the current user, so with no lock in the response even the
     person who checked it out is treated as "someone else" and can't check it back in.
   - Backend fix (one line) in `documents.repository.ts` `findById` include:
     `checkoutLock: { include: { locker: { select: { id: true, name: true, email: true } } } }`
   - Frontend is ready for it (`CheckoutLock.locker`; the banner shows the holder's name).
+
+## - Frontend-only work queue
+
+Items whose backend already exists (or needs none). Worked through one at a time.
+
+- [x] Search: filters sent to `GET /documents` (one value each, paginated) instead of
+      filtering one page client-side; types from the shared `constants/documentTypes.ts`;
+      saved searches per user, without the two seeded fakes (15.3, 15.4). While text is
+      entered only the Cabinet filter applies — `GET /documents/search` accepts only `q` and
+      `cabinetId` (backend request: add the other filters there).
+- [ ] Edit a document's confidentiality and urgency after upload — `PATCH /documents/:id`,
+      gated on `document:edit` (13.1/13.2; no UI exists today)
+- [ ] SLA settings screen: business hours, working days, holidays, warning window, urgency
+      multipliers, breach action — `GET/PATCH /sla/configuration`, `/sla/holidays` (6.7, 6.8,
+      18.2, 18.5)
+- [ ] Sub-folders: create and browse nested folders — folder `parentId` (5.1)
+- [ ] Typed signature: render the typed name to an image for approve (9.1)
+- [ ] My Performance from `GET /tasks/stats?assigneeId=` (16.4)
+- [ ] Staff dashboard: status tiles click through; finish SLA/ageing highlighting (19.1, 19.4)
+- [ ] My Tasks: keep the backend's urgency → due-date order instead of re-sorting (19.2)
+- [ ] Quick-actions strip; recent and pinned documents/searches (19.3, 19.5)
+- [ ] Admin home setup checklist (18.1)
+- [ ] Chart drill-downs to filtered record lists (21.6, 22.3)
+- [ ] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6)
+- [ ] Configuration history: audit log filtered to config actions (18.7)
+- [ ] PDF/image preview and in-PDF search (4.3, 5.9 — partial; Office/email/OCR need backend)
+- [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3)

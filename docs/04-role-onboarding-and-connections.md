@@ -366,7 +366,7 @@ morning   → /staff        check dashboard   ⚠️ must remember to; nothing p
 during    → /upload       file arrivals     ✅  (⚠️ >2 MB rejected, PDF/images only)
           → /doc/[id]     add context       ⛔ comments 404
           → route         send for approval ⛔ 404
-          → /search       find something    ⛔ empty
+          → /search       find something    🟨 pending check
 end       → /staff/tasks  clear the queue   ✅
 ```
 
@@ -377,7 +377,7 @@ end       → /staff/tasks  clear the queue   ✅
 | Upload and file | ✅ | The best-built flow in the product |
 | See department documents | ✅ | ⚠️ but cabinet grants aren't enforced on reads, so scope is wider than intended |
 | Edit documents they created | ✅ | `document:edit` is `own`-scoped |
-| Check out / check in | ✅ | ⚠️ only they can release their own lock — no admin override |
+| Check out / check in | ✅ | Their lock can be force-released by an admin/supervisor (`document_lock:delete`, global or same-department scope) once past `expectedReturnAt`; they get a `checkout.reminder` 24 h before and `checkout.overdue` after (2026-10-02, not yet verified e2e) |
 | Upload new versions | ✅ | |
 | Restore an old version | ⛔ | Backend works, no UI |
 | Search by content | ⛔ | Index never built |
@@ -434,7 +434,9 @@ Those three constants — not the permission table — are what actually make su
 | Task | Status | Note |
 |---|---|---|
 | Clear the approvals queue daily | ✅ | Prioritised by urgency then due date — genuinely good |
-| Approve / reject / request changes | ✅ | Notes recorded, history written |
+| Approve / reject / request changes | 🟨 | On the workflow page (`/workflow-instances/[id]`, 2026-10-02). Request changes now asks which of the task's documents need changes — DRIFT-18 fixed, not yet verified e2e |
+| Release a team member's overdue checkout | 🟨 | Notified via `checkout.overdue` when a same-department holder misses `expectedReturnAt`; "Force check in" on `/doc/[id]` if they hold `document_lock:delete` at department scope for that cabinet's department (2026-10-02, not yet verified e2e) |
+| Follow a notification to its item | 🟨 | Task and workflow links (`/tasks/:id`, `/workflow-instances/:id`) open the workflow page; `/documents/:id` opens the document page (DRIFT-17); previously 404'd |
 | Spot ageing work | 🟨 | Ageing in days is real (computed from `createdAt` on live documents), but the **breach count is permanently zero**: `effStatus()` looks for a `due` field that `Document` does not have, and compares capitalized statuses against lowercase values (DRIFT-13). Separately, **`SlaBreach` rows exist in the DB and no screen reads them.** |
 | Rebalance workload | ✅ | |
 | Delegate while on leave | ⛔ | **Backend is complete. No UI, no service file, no hook.** |
@@ -603,7 +605,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | 1 | Log in, land on Audit Dashboard | `/auditor` | 🟥 `SEED.findings`, `SEED.audit` |
 | 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
-| 4 | Search for evidence | `/search` | ⛔ index never built |
+| 4 | Search for evidence | `/search` | 🟨 index built on backend; page rebuilt 2026-09-30, pending end-to-end check |
 | 5 | Raise a finding | `/auditor/findings` | 🟥 367 lines on `SEED.findings` |
 | 6 | Review compliance posture | `/auditor/compliance` | 🟥 re-export of `/management/compliance` |
 

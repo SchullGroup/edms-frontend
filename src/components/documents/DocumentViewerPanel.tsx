@@ -64,7 +64,10 @@ export function DocumentViewerPanel({
   getSignerName,
 }: DocumentViewerPanelProps) {
   const isPdf = fileMimeType === 'application/pdf';
-  const isImage = fileMimeType.startsWith('image/');
+  // TIFF is an `image/*` type but only Safari can draw it in an <img> — in
+  // Chrome/Firefox it would be a broken image, so it takes the "no preview"
+  // path along with DOCX/XLSX until a renderer exists for those.
+  const isImage = fileMimeType.startsWith('image/') && fileMimeType !== 'image/tiff';
 
   const [pageInput, setPageInput] = useState('');
   const [pdfPage, setPdfPage] = useState('');

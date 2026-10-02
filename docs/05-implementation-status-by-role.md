@@ -71,8 +71,11 @@ For each of the six role dashboards this document lists:
 
 ## Portfolio summary
 
-**51 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
-2026-09-18 — was 42 at last full classification).
+**53 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
+2026-10-02 — was 51 on 2026-09-18, 42 at last full classification). The +2 are the
+notification-link landing pages `/tasks/[id]` (redirect-only) and `/workflow-instances/[id]`
+(DRIFT-17) — the latter became the full workflow page later the same day. Both are listed
+under Shared pages below.
 
 > ⚠️ **Count updated, classification not yet caught up.** Of the +9 pages, this document
 > classifies one (`/admin/access-requests`, below). The other eight —
@@ -214,7 +217,7 @@ GET  /documents/:id/versions                 version history
 POST /documents/:id/versions                 new version
 GET  /documents/:id/metadata                 metadata read
 PUT  /documents/:id/metadata                 metadata write
-GET  /documents/search                       ⚠️ works but always returns [] (index never built)
+GET  /documents/search                       ⚠️ index now built on backend dev (search_vector + worker); not yet verified live
 ```
 
 ### APIs missing ⛔
@@ -278,7 +281,7 @@ GET  /documents/search                       ⚠️ works but always returns [] 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
 | `/supervisor` | 320 | `currentUser` | `useDocuments`, `useUsers`, `useCabinets` ✅ · `useCreateAuditLog` 🟥 | 🟨 Hybrid — audit hook is a no-op |
-| `/supervisor/approvals` | 185 | `currentUser` | `useTasks`, `useDocuments` ✅ | ✅ Live |
+| `/supervisor/approvals` | 205 | `currentUser` | `useTasks`, `useDocuments` ✅ | ✅ Live — **2026-10-02:** the per-row "Approve" button was removed (approving from a list meant signing without reading the documents); rows keep Reassign and Open, and Open goes to the workflow page |
 | `/supervisor/bottlenecks` | 164 | `currentUser` | `useDocuments`, `useUsers` ✅ | ✅ Live — ⚠️ **but "Overdue" is always 0** |
 | `/supervisor/workload` | 191 | `currentUser` | `useDocuments`, `useUsers` ✅ | ✅ Live |
 | `/supervisor/exceptions` | 73 | — | **inline `useState` array** | 🟥 Mock |
@@ -369,7 +372,12 @@ already holds warning and escalation rows written by the SLA worker.
 5. **Replace `/supervisor/exceptions`** with real SoD/control-failure detection, or remove it.
 6. **Give `/supervisor/performance` a data source.**
 7. **Add a team-aggregation endpoint** to replace the client-side page walking.
-8. **Allow an admin/supervisor to force-release a stale checkout lock** (there is an explicit `TODO` in `documents.service.ts`).
+8. ~~**Allow an admin/supervisor to force-release a stale checkout lock**~~ — **built 2026-10-02.**
+   Backend `canReleaseLock` (`document_lock:delete` at `global`, or `department` for the
+   cabinet's department); `/doc/[id]` shows "Force check in" to those holders **only once the
+   lock is past `expectedReturnAt`**. Supervisors are also notified (`checkout.overdue`) when a
+   team member's checkout goes overdue. Not yet verified end to end — a lock with no
+   `expectedReturnAt` can never become forceable from the UI (by design, per product call).
 
 ---
 
@@ -619,7 +627,7 @@ GET    /documents/access-requests                    admin inbox, all documents
 | `/auditor/findings` | 367 | `findings`, `users`, `addFinding`, `updateFinding` | **none** | 🟥 Mock — no backend model regardless |
 | `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟨 Hybrid — inherits the now-real sensitive-activity panel |
 
-*The auditor also uses the shared `/staff/cabinets` (✅ live) and `/search` (⛔ empty).*
+*The auditor also uses the shared `/staff/cabinets` (✅ live) and `/search` (🟨 rebuilt 2026-09-30, pending end-to-end check).*
 
 ### APIs wired
 
@@ -777,34 +785,55 @@ This is a **phase**, not a backlog item:
 | Page | LOC | Roles | Store reads | API | Status |
 |---|---:|---|---|---|---|
 | `/` (login) | 316 | all | `currentUser`, `setCurrentUser` | `authService` ✅ | ✅ Live ⚠️ **all 12 test accounts are wrong** |
-| `/doc/[id]` | 956 | all | `currentUser` | mostly real ✅ · `usePolicies` 🟥 mock | 🟨 Hybrid — grew substantially 2026-09-18 (access requests, comments, signatures); `@ts-nocheck` is gone, was stale here |
-| `/search` | 258 | all | `docTypes`, `savedSearches` | `useDocumentSearch`, `useDocuments`, `useCabinets` ✅ · `@ts-nocheck` | 🟨 Hybrid — **and always empty** |
-| `/upload` | 475 | staff, supervisor, management, client_admin | `docTypes`, `session`, `users` | `useCabinets`, `useCabinetFolders`, `documentsService`, `s3` ✅ | ✅ Live |
+| `/doc/[id]` | 570 | all | `currentUser` | `useDocument`, versions, checkout, `useWorkflowInstances` ✅ · `usePolicies` 🟥 mock | 🟨 Hybrid (policies) — **made view-only 2026-10-02**: workflow actions, signing and the activity trail moved to `/workflow-instances/[id]` |
+| `/search` | 457 | all | `currentUser`, `savedSearches` (per-user, user-created — not `SEED`) | `useDocuments` (server-side filters + pagination), `useDocumentSearch` (text + cabinet), `useCabinets` ✅ | 🟨 Pending check — rebuilt 2026-09-30: no `SEED` reads, no `@ts-nocheck`; types from `constants/documentTypes.ts`. Not yet verified end to end, so not marked ✅ |
+| `/upload` | 475 | staff, supervisor, management, client_admin | `docTypes`, `session`, `users` | `useCabinets`, `useCabinetFolders`, `documentsService`, `s3` ✅ | ✅ Live  **2026-10-02:** accepted types unified in `src/constants/uploadTypes.ts` — PDF, DOCX, XLSX, TIFF, JPG, PNG up to 100 MB (was PDF ≤50 MB + images ≤10 MB, despite the page text claiming DOCX/XLSX/TIFF). DOCX/XLSX/TIFF upload but **don't preview** in the viewer and **aren't OCR'd** (Textract can't read DOCX/XLSX), so they're not text-searchable |
 | `/notifications` | 106 | all | `notifications`, `session` | **none** | 🟥 Mock |
 | `/circulars` | 107 | all | `circulars`, `session`, `users` | **none** | 🟥 Mock |
 | `/unauthorized` | 58 | all | — | — | static |
+| `/tasks/[id]` | 33 | all | — | `useTask` → `GET /tasks/:id` | ↪️ redirect to `/workflow-instances/{instanceId}?task={id}` — landing page for backend `/tasks/:id` notification links (DRIFT-17). Not yet verified live |
+| `/workflow-instances/[id]` | 351 | all | `currentUser` | `useWorkflowInstance`, `useTask`, `useDocument`, `useTaskAction`, versions ✅ | 🟨 **new 2026-10-02** — the workflow page (see below). Was a 33-line redirect earlier the same day. Not yet verified e2e |
 
-### `/doc/[id]` — the most complex page in the app
+### `/doc/[id]` — view-only document page *(split 2026-10-02)*
+
+Everything that moves a workflow moved to `/workflow-instances/[id]` (below). This page is
+the document on its own: file, details, versions, custody, archive.
 
 | Feature | Status |
 |---|---|
 | Load document | ✅ `GET /documents/:id` |
+| No access (confidentiality 403) | ✅ full-page "You don't have access" + **Request access** (`useRequestAccessPrompt`, shared with the workflow page) |
 | Metadata panel | ✅ `GET` + inline editor `PUT /documents/:id/metadata` (when `document:edit`) |
-| Version history | ✅ `GET /documents/:id/versions` · open · `POST /versions/:vid/restore` · upload new version |
-| Version upload gating | 🟨 **narrowed 2026-09-18** — "New version" only renders once the most recent `GET /workflow-history` entry is a `request_changes` that landed on the caller's current task's stage; previously any editor could swap the file mid-review |
-| Archive | ✅ `DELETE /documents/:id` (More menu, when `document:delete`) |
-| Edit document | ✅ `PATCH /documents/:id` |
-| Checkout / check-in | ✅ |
-| Task action from this screen | ✅ `POST /tasks/:id/action` |
+| Version history | ✅ `GET /documents/:id/versions` · open · `POST /versions/:vid/restore` |
+| Version upload / restore gating | 🟨 **changed 2026-10-02** — "New version" is never offered here; revisions are uploaded on the workflow page in answer to a `request_changes`. Restore is blocked while a workflow is running, so the file can't be swapped mid-review. Not yet verified e2e |
+| Archive | ✅ `DELETE /documents/:id` (toolbar, when `document:delete`) |
+| Checkout / check-in | ✅ — banner names the holder (`checkoutLock.locker`, embedded since backend `b4a3f81`) and flags an overdue lock |
+| Force check-in (someone else's overdue lock) | 🟨 **built 2026-10-02, not yet verified e2e** — shown only to `document_lock:delete` at `global` scope, or `department` scope matching the cabinet's department, and only once `expectedReturnAt` has passed. Same `POST /documents/:id/checkin`; the backend authorises it via `canReleaseLock` |
+| Workflows card | 🟨 **new 2026-10-02** — `GET /workflow-instances?documentId=` → every workflow the document is in, each linking to its workflow page; "Open workflow" in the toolbar for the live one, "Route to workflow" when none. **Unverified:** whether that filter matches a document that was *attached* rather than primary |
 | Cabinet + folder context | ✅ |
-| **Comments** | ✅ the optional `comment` field on `POST /tasks/:id/action`, part of the workflow trail — the only comment mechanism now. **2026-09-18:** a dedicated `GET/POST /documents/:id/comments` thread was briefly wired (`DocumentCommentsPanel`) the same day, then removed by product decision — one trail, not two |
-| **Signatures** | ✅ `signature: {fileUrl,mimeType}` image, **`approve` only** — `SignaturePad` draws/uploads it (`useSignAndApprove`). "Mark reviewed" (`review` action) now opens an optional-comment modal too, but **cannot** capture a signature: the backend's `review`/`reject`/`request_changes`/`close` schema is `additionalProperties: false` with no `signature` property. See BE-16. **2026-09-18:** same reversal as comments — `GET/POST /documents/:id/signatures` (`DocumentSignaturesPanel`) was wired then removed |
-| **Attach an additional document to a workflow** | ⛔ **not buildable** — `WorkflowInstance.documentId` is a single uuid; the backend has no concept of more than one document per instance. See BE-17 |
-| **Access requests** | ✅ **added 2026-09-18** — "Request access" now really calls `POST /documents/:id/access-requests`; previously recorded an audit action only |
-| **Activity timeline** | ✅ `GET /workflow-instances/:id/history` (`WorkflowHistoryTimeline`) — now also renders each entry's `comment` and, when present, `task.signature`'s image |
 | **Policies (confidentiality options)** | 🟥 `SEED.policies` — offers `Top Secret`, which the upload form correctly omits |
-| **File preview / download** | ⛔ no endpoint exists |
-| Type safety | ✅ `@ts-nocheck` is gone — was stale here, not dated when actually removed |
+| **File preview / download** | 🟨 the code renders and downloads the pre-signed `currentVersion.fileUrl` that `GET /documents/:id` returns, so the old "no endpoint" claim looks stale — **not re-verified live** |
+
+### `/workflow-instances/[id]` — the workflow page *(new 2026-10-02)*
+
+Reached from `TaskRow` (staff task queue, dashboard, approvals, workload), the supervisor
+team drawer, bottlenecks, the workflow monitors ("Open workflow"), and notification links
+(`/tasks/:id` forwards here with `?task=`). Keyed on the instance id because a task id changes
+every time the stage moves. **All 🟨 — built and type/build-checked, not yet verified end to
+end against a live backend.**
+
+| Feature | Status |
+|---|---|
+| Which task the page is about | 🟨 the `?task=` one if still active → else the caller's own active task → else whoever holds the current stage → else the latest task (finished workflows) |
+| Documents | 🟨 from `GET /tasks/:id` `documents` (each pinned to the version under review); tabs when there's more than one. Falls back to the primary document alone if the caller can see the workflow but not its task (403) |
+| Per-document access overlay | 🟨 a document above the viewer's clearance (`GET /documents/:id` 403) renders a blurred viewer with "You don't have access to this document" + **Request access** — the other documents and the stage actions stay usable |
+| Stage actions | 🟨 review / approve (signature) / request changes / delegate / close / reject, filtered by the stage definition's `actions`; enabled only for the active task's assignee or a holder of its role, with `task:action` |
+| **Request changes ("Send back")** | 🟨 **DRIFT-18 fixed 2026-10-02** — picker of the task's documents (min 1, the viewed one pre-ticked) + required reason → `documents: [{documentId}]`. **Hidden on the first stage** (nothing to send back to — backend 409 `WORKFLOW_PREVIOUS_STAGE_NOT_FOUND`); the designer also greys it out for stage 1 and strips it on save |
+| **Mark reviewed — document required** | 🟨 **new 2026-10-02** — product rule: a review must attach ≥1 document. `review` itself takes no documents, so a two-step modal — 1) `WorkflowDocumentPicker`, with two tabs: **From a cabinet** (debounced title search via `GET /documents/search?q=&cabinetId=` — full-text over title + OCR + metadata, so a brand-new document isn't findable until OCR has run and the index job follows) and **Upload from computer** (multipart upload → `POST /documents` into a chosen cabinet/folder, defaulting to the primary document's cabinet, confidentiality and urgency — the document is filed immediately, even if the review is then cancelled); 2) optional comment + confirm, with Back keeping the selection — attaches each via `POST /workflow-instances/:id/documents`, then sends `review`. Needs `workflow_instance:create` — **the seeded `supervisor` role doesn't hold it**, so a supervisor-held review stage is blocked with an explanation until the seed grants it |
+| Revision uploads | 🟨 `pendingDocumentRevisions` from `GET /tasks/:id`: banner + per-document "Changes requested" card + `DocumentVersionsPanel` upload, only for the active task's holder **with `document_version:create`** — what the backend route checks. Was gated on `document:edit`, which the seeded `staff` role doesn't hold, so staff never saw the button (found in testing 2026-10-02; the old `/doc/[id]` had the same bug). Restore is likewise gated on `document_version:restore` now. Uploading resolves the revision (backend) and refetches the task |
+| Activity trail / stage progress | ✅ `WorkflowActivityPanel` (moved from `/doc/[id]`). Trail is a fixed 340px scroll area and the viewer column is sticky on wide screens, so a long trail no longer pushes the page far below the document |
+| **Attach an additional document** | 🟨 only as part of "Mark reviewed" (above). No standalone attach button yet — multi-document *start* is being added on the backend |
+| **Comments / signatures** | ✅ unchanged — `comment` on any action, signature image on `approve` only (BE-16) |
 
 ### `/notifications` — note the detail
 
@@ -908,7 +937,7 @@ ageing indicator.*
 | 18 | Cabinet metadata-field designer + dynamic upload form | Frontend |
 | 19 | ✅ ~~Comments and signatures endpoints~~ — task-action fields suffice (`comment` string on any action, `approve`'s required `signature` image). Dedicated `GET/POST /documents/:id/comments`/`/signatures` exist and were briefly wired 2026-09-18, then deliberately un-wired the same day: product wants one workflow trail, not a second task-independent thread. | — |
 | 19a | Optional `signature` on the `review` task action (BE-16) — "Mark reviewed" already has an optional-comment modal; needs the backend to accept a signature there too, the same way `approve` does | Backend |
-| 19b | Support more than one document per workflow instance (BE-17) — lets a "Request changes" recipient attach a missing document to the same workflow/folder instead of only replacing the existing file's version | Backend |
+| 19b | ~~Support more than one document per workflow instance (BE-17)~~ — **backend done 2026-09-24** (`5144fc7`). Frontend half open: attach UI, per-document `request_changes`, and a workflow view page that lists the instance's documents — planning started 2026-10-02 | Frontend |
 | 20 | Document download/export/print, gated by the existing tier allowlists | Backend |
 | 21 | Circulars: model, endpoints, audience targeting, ack tracking | Both |
 | 22 | Retention policy endpoints + enforcement job | Backend |
