@@ -189,8 +189,8 @@ export interface CheckoutLock {
   lockedBy: string;
   lockedAt: string;
   expectedReturnAt?: string | null;
-  /** Who holds the lock — requested from the backend (`GET /documents/:id`
-   *  doesn't include `checkoutLock` yet); falls back to a `users` lookup. */
+  /** Who holds the lock — embedded by `GET /documents/:id` (`checkoutLock.locker`);
+   *  the doc page still falls back to a `users` lookup if it's absent. */
   locker?: PersonSummary;
 }
 
@@ -635,6 +635,59 @@ export interface Task {
   assignedRole?: { id: string; name: string } | null;
   completer?: TaskUserSummary | null;
   workflowInstance: TaskWorkflowInstance;
+  /** `GET /tasks/:id` only — the documents this task covers, each pinned to
+   *  the version the task was raised against. */
+  documents?: TaskDocumentSnapshot[];
+  /** `GET /tasks/:id` only — revisions an earlier stage asked for on this
+   *  task's documents that are still waiting on a new version. */
+  pendingDocumentRevisions?: PendingDocumentRevision[];
+}
+
+/** One `TaskDocument` row: a workflow document as this task saw it. */
+export interface TaskDocumentSnapshot {
+  id: string;
+  workflowInstanceDocumentId: string;
+  documentVersionId: string;
+  createdAt: string;
+  workflowInstanceDocument: {
+    id: string;
+    documentId: string;
+    addedAtStage?: string | null;
+    comment?: string | null;
+    addedAt: string;
+    document: {
+      id: string;
+      title: string;
+      documentType?: string | null;
+      status: string;
+      confidentiality: string;
+      urgency: string;
+      currentVersionId?: string | null;
+    };
+  };
+  documentVersion: {
+    id: string;
+    versionNumber: number;
+    mimeType: string;
+    ocrStatus?: string;
+    uploadedBy: string;
+    createdAt: string;
+  };
+}
+
+/** A `request_changes` revision still waiting on a new version. */
+export interface PendingDocumentRevision {
+  id: string;
+  workflowInstanceDocumentId: string;
+  requestedFromTaskId: string;
+  sourceVersionId: string;
+  comment?: string | null;
+  status: string;
+  createdAt: string;
+  workflowInstanceDocument: {
+    documentId: string;
+    document: { id: string; title: string; documentType?: string | null; currentVersionId?: string | null };
+  };
 }
 
 /** Signature image metadata carried by an `approve` task action. The backend
@@ -653,7 +706,18 @@ export type TaskActionRequest =
       comment?: string;
       note?: string;
     }
-  | { action: 'review' | 'reject' | 'request_changes' | 'close'; comment?: string; note?: string }
+  | { action: 'review' | 'reject' | 'close'; comment?: string; note?: string }
+  | {
+      /** Sends the work back one stage. Since `edms-backend` `5144fc7` the
+       *  backend requires at least one entry in `documents` — each must be one
+       *  of this task's documents (`Task.documents`), and each becomes a pending
+       *  `WorkflowDocumentRevision` the previous stage resolves by uploading a
+       *  new version. */
+      action: 'request_changes';
+      documents: { documentId: string; comment?: string }[];
+      comment?: string;
+      note?: string;
+    }
   | {
       action: 'delegate';
       /** Who the replacement task goes to. The workflow stays at the current

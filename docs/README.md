@@ -68,7 +68,8 @@ setting up an environment.
 
 ## The short version
 
-**51 frontend pages · 106 backend routes · 6 roles · 0 tests.**
+**53 frontend pages · 106 backend routes · 6 roles · 0 tests.**
+*(Pages re-derived 2026-10-02: +2 redirect-only notification landing pages, DRIFT-17. Backend route count not re-derived since 2026-09-18 — `5144fc7` added at least `POST /workflow-instances/:id/documents`.)*
 *(Re-derived 2026-09-18 — was 42 pages / 90 routes at last full count. Route count is
 solid, from the live Swagger spec. Page count is solid; the 9 newly-counted pages beyond
 `/admin/access-requests` haven't been individually classified — see doc 05's Portfolio
@@ -83,7 +84,7 @@ The DOCUMENT half is real
 The GOVERNANCE half is a UI over fixtures
   notifications · circulars · policies
   findings · retention · platform operations
-                                                    🟥 at least 19 of 51 pages
+                                                    🟥 at least 19 of 53 pages
 ```
 
 ### The four defects that matter most
@@ -395,6 +396,25 @@ it — it does. The live host (`.env`'s `NEXT_PUBLIC_UPLOAD_BASE_URL`) is a diff
 gateway in a different region than the code's fallback, consistent with the `us-west-1`
 bucket region confirmed during the DRIFT-06 live-verification. Doc 01 §5, §8.2, §9, and
 the register table are all corrected.
+
+**Correction (2026-10-02).** Backend `dev` (`b4a3f81`, `5144fc7`) made three doc claims
+stale, rather than wrong when written: (1) "no admin force-release; a stale lock blocks
+forever" (docs 02, 03, 05) — the backend now lets `document_lock:delete` at
+global/department scope release another user's lock, and the frontend offers it once the
+lock is overdue; (2) `GET /documents/:id` "never returns the lock" (TEST_PLAN) — it embeds
+`checkoutLock.locker` now; (3) "multi-document workflows not buildable" (doc 05, BE-17) —
+the backend supports them. The same backend change silently broke `request_changes`
+(DRIFT-18). Separately, **every notification deep-link had always 404'd** (DRIFT-17) —
+no doc had caught it; found while wiring the checkout-overdue notifications. Page count
+51 → 53 for the two landing pages that fix it. Doc 01 §8's old 8.4 (date/number types) is
+now 8.5.
+
+Later the same day `/doc/[id]` was split: it is now **view-only**, and reviewing, approving,
+sending back and uploading revisions moved to a real workflow page at
+`/workflow-instances/[id]` (until then a redirect). That fixed DRIFT-18. Page count
+unchanged (53). Doc 05's `/doc/[id]` table also claimed "file preview/download — no endpoint
+exists"; the code clearly uses the pre-signed `currentVersion.fileUrl`, so that row is
+re-marked 🟨 pending a live check rather than ✅.
 
 ---
 

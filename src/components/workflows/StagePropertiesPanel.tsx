@@ -25,6 +25,9 @@ export interface StagePropertiesPanelProps {
   onDiscard: () => void;
   onDelete: () => void;
   canEdit: boolean;
+  /** The workflow's first stage — it has no earlier stage to send work back
+   *  to, so "Request changes" can't apply (the backend rejects it with 409). */
+  isFirstStage?: boolean;
   /** Renders just the body, no card/header — used when a parent (StagePanel)
    *  already supplies the shared card shell and tab switcher. */
   bare?: boolean;
@@ -52,6 +55,7 @@ export function StagePropertiesPanel({
   onDiscard,
   onDelete,
   canEdit,
+  isFirstStage = false,
   bare,
 }: StagePropertiesPanelProps) {
   const body = !selectedStage ? (
@@ -76,14 +80,22 @@ export function StagePropertiesPanel({
             <label>Allowed actions</label>
             <div className="flex gap-2 flex-wrap">
               {STAGE_ACTIONS.map((a) => {
-                const active = actionsDraft.includes(a.value);
+                const unavailable = isFirstStage && a.value === 'request_changes';
+                const active = actionsDraft.includes(a.value) && !unavailable;
                 return (
                   <button
                     key={a.value}
                     type="button"
-                    title={a.hint}
+                    title={unavailable ? 'Not available on the first stage — there is no earlier stage to send it back to' : a.hint}
                     className="tag"
-                    style={active ? { background: 'var(--focus)', color: '#fff', borderColor: 'var(--focus)' } : { cursor: 'pointer' }}
+                    disabled={unavailable}
+                    style={
+                      active
+                        ? { background: 'var(--focus)', color: '#fff', borderColor: 'var(--focus)' }
+                        : unavailable
+                          ? { opacity: 0.45, cursor: 'not-allowed', textDecoration: 'line-through' }
+                          : { cursor: 'pointer' }
+                    }
                     onClick={() => onToggleAction(a.value)}
                   >
                     {a.label}
@@ -91,7 +103,11 @@ export function StagePropertiesPanel({
                 );
               })}
             </div>
-            <div className="help">What whoever's assigned this stage can do with it.</div>
+            <div className="help">
+              What whoever's assigned this stage can do with it.
+              {isFirstStage &&
+                ' "Request changes" isn’t available on the first stage — use "Reject" to stop a submission instead.'}
+            </div>
           </div>
 
           <div className="field">

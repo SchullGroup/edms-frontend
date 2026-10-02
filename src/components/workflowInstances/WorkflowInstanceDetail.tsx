@@ -20,6 +20,8 @@ const STATUS_LABEL: Record<WorkflowInstanceStatus, string> = {
 export interface WorkflowInstanceDetailProps {
   instanceId: string;
   onOpenDocument?: (documentId: string) => void;
+  /** Shows an "Open workflow" button that leads to the full workflow page. */
+  onOpenWorkflow?: (instanceId: string) => void;
 }
 
 /**
@@ -27,7 +29,11 @@ export interface WorkflowInstanceDetailProps {
  * response that embeds both `tasks[]` and the definition's stage list, so this
  * refetches by id rather than taking a row from the list response.
  */
-export function WorkflowInstanceDetail({ instanceId, onOpenDocument }: WorkflowInstanceDetailProps) {
+export function WorkflowInstanceDetail({
+  instanceId,
+  onOpenDocument,
+  onOpenWorkflow,
+}: WorkflowInstanceDetailProps) {
   const { data: instance, isLoading } = useWorkflowInstance(instanceId);
   const { confirmHold, confirmResume, confirmClose, isPending } = useWorkflowInstanceLifecycle();
 
@@ -48,6 +54,15 @@ export function WorkflowInstanceDetail({ instanceId, onOpenDocument }: WorkflowI
           {instance.workflowDefinition?.name || 'Workflow'}
           {instance.workflowDefinition?.version ? ` v${instance.workflowDefinition.version}` : ''}
         </span>
+        {onOpenWorkflow && (
+          <button
+            className="btn btn-primary btn-sm"
+            style={{ marginLeft: 'auto' }}
+            onClick={() => onOpenWorkflow(instance.id)}
+          >
+            Open workflow
+          </button>
+        )}
       </div>
 
       <div className="field">

@@ -152,9 +152,9 @@ export default function SupervisorDashboard() {
         <MemberDrawerBody
           member={m}
           onReassign={(t) => handleReassignModal(t, () => handleRowClick(m))}
-          onOpenDocument={(docId) => {
+          onOpenDocument={(instanceId, taskId) => {
             closeDrawer();
-            router.push(`/doc/${docId}`);
+            router.push(`/workflow-instances/${instanceId}?task=${taskId}`);
           }}
         />
       ),
@@ -268,7 +268,8 @@ function MemberDrawerBody({
 }: {
   member: WorkflowTeamStatusMember;
   onReassign: (task: Task) => void;
-  onOpenDocument: (documentId: string) => void;
+  /** Opens the task on its workflow page. */
+  onOpenDocument: (workflowInstanceId: string, taskId: string) => void;
 }) {
   const { can } = usePermissions();
   const canReassign = can('task', 'reassign');
@@ -313,7 +314,7 @@ function MemberDrawerBody({
                   justifyContent: 'space-between',
                   cursor: 'pointer',
                 }}
-                onClick={() => doc?.id && onOpenDocument(doc.id)}
+                onClick={() => onOpenDocument(t.workflowInstanceId, t.id)}
               >
                 <div className="task-main">
                   <div

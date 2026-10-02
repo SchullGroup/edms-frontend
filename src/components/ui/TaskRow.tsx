@@ -27,6 +27,10 @@ export const TaskRow = ({
   const owner = doc?.createdBy;
   const stage = isTask ? item.stage : null;
   const docId = doc?.id || item.documentId;
+  // A task is worked on its workflow page; a bare document opens its own page.
+  const href = isTask
+    ? `/workflow-instances/${item.workflowInstanceId}?task=${item.id}`
+    : `/doc/${docId}`;
 
   const agePct = 30; // Placeholder
 
@@ -35,9 +39,9 @@ export const TaskRow = ({
       className={`task-row ${doc?.urgency === 'critical' ? 'overdue' : ''}`}
       tabIndex={0}
       role="button"
-      onClick={() => router.push(`/doc/${docId}`)}
+      onClick={() => router.push(href)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') router.push(`/doc/${docId}`);
+        if (e.key === 'Enter') router.push(href);
       }}
     >
       <div className="task-main">
@@ -69,7 +73,7 @@ export const TaskRow = ({
           className="btn btn-primary btn-sm"
           onClick={(e) => {
             e.stopPropagation();
-            router.push(`/doc/${docId}`);
+            router.push(href);
           }}
         >
           Open

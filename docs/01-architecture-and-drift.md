@@ -961,11 +961,11 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 |---|---|---|
 | `GET /documents` | ✅ | ✅ |
 | `GET /documents/search` | ✅ | ✅ (misses a document if its OCR job gets stuck at `pending` — see DRIFT-06) |
-| `GET /documents/:id` | ✅ | ✅ |
+| `GET /documents/:id` | ✅ | ✅ — embeds `checkoutLock` + `locker {id,name,email}` since `edms-backend` `b4a3f81` (2026-09-29); before that only `isCheckedOut` came back, so even the lock holder couldn't check the document back in (TEST_PLAN "Things to check") |
 | `POST /documents` | ✅ | ✅ |
 | `PATCH /documents/:id` | ✅ | ✅ |
 | `POST /documents/:id/checkout` | ✅ | ✅ |
-| `POST /documents/:id/checkin` | ✅ | ✅ |
+| `POST /documents/:id/checkin` | ✅ | ✅ — holder, **or** a `document_lock:delete` holder at `global` scope / `department` scope for the cabinet's department (`canReleaseLock`). Frontend offers that "Force check in" only once the lock is past `expectedReturnAt` (2026-10-02) |
 | `GET /documents/:id/metadata` | ✅ | ✅ |
 | `PUT /documents/:id/metadata` | ✅ | ✅ (cannot clear values — see backend analysis) |
 | `GET /documents/:id/versions` | ✅ | ✅ |
@@ -986,7 +986,8 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | ~~`POST /workflow-instances/start`~~ | now the two-call `POST /workflow-instances` **then** `POST /:instanceId/start` | ✅ **DRIFT-09 resolved** |
 | `POST /workflow-instances/:id/hold` `/resume` `/close` | ✅ | ✅ |
 | `GET /tasks`, `GET /tasks/:id` | ✅ | ✅ |
-| `POST /tasks/:id/action` | ✅ | ✅ |
+| `POST /tasks/:id/action` | ✅ | ✅ — `request_changes` sends `documents: [{documentId}]` from the workflow page's document picker since 2026-10-02 (**DRIFT-18** fixed; the field became required in `edms-backend` `5144fc7`). Not yet verified e2e |
+| — | `POST /workflow-instances/:id/documents` `{documentId, comment?}` (`5144fc7`) | ⚠️ backend only — attaches an extra document to an instance; **no UI yet** |
 | `PATCH /tasks/:id/reassign` | ✅ | ✅ |
 | `GET/POST /delegations`, `POST /delegations/:id/end` | ✅ | ✅ wired — `/delegations` (344 lines) exists; this row was stale, caught 2026-09-18 while investigating DRIFT-11 |
 | — | `GET /workflow-history`, `GET /workflow-history/:id` | ⚠️ backend only — **no UI at all** |
@@ -1257,7 +1258,31 @@ it — but `PATCH /documents/:id` accepts it, and the doc-detail edit form is dr
 **Fix:** backend should reject `top_secret` on write until a role is cleared for it, and
 should verify the writer's clearance for whatever tier they assign.
 
-### 8.4 Date/number types
+### ✅ 8.4 DRIFT-17 — Notification `actionUrl`s used the backend's path vocabulary — **Resolved (frontend, 2026-10-02)**
+
+Every backend `actionUrl` (in-app notification payloads **and** the branded emails, both
+resolved against `APP_URL`) named a path this app does not have:
+
+| Backend writes | Written by | Now lands on |
+|---|---|---|
+| `/tasks/:id` | task assign/delegate/next-stage, SLA warning/breach/escalation, instance reassign | `src/app/(app)/tasks/[id]` → `GET /tasks/:id` → `/workflow-instances/{workflowInstanceId}?task={id}` |
+| `/workflow-instances/:id` | workflow completed / rejected | `src/app/(app)/workflow-instances/[id]` — the workflow page itself (same path, no redirect) |
+| `/documents/:id` | access grant/deny, checkout reminder/overdue | `next.config.ts` redirect → `/doc/:id` |
+| `/documents/:id/access-requests` | access requested | redirect → `/admin/access-requests` |
+| `/reset-password?token=` | password-reset email | redirect → `/set-password?token=` (same `POST /auth/reset-password` flow) |
+| `/login` | password set / reset emails | redirect → `/` |
+
+The four path-only mappings are `redirects()` in `next.config.ts`, which run **before**
+`proxy.ts`, so they work for email links too — verified 2026-10-02 against `next start`
+(307s to the right targets, query string kept). `/tasks/[id]` is a thin lookup page.
+Previously every one of these 404'd.
+
+**Still open:** `/admin/access-requests` is gated on `user:edit`, but the access-requested
+notification goes to the document's **creator**, who usually lacks it and lands on
+`/unauthorized`. There is no per-document review UI. A backend change to target
+`/doc/:id`, or a per-document requests panel, would close it.
+
+### 8.5 Date/number types
 
 `DocumentVersion.fileSize` is a Prisma `BigInt`. `app.ts` installs a JSON replacer
 converting `bigint` → `Number`, so the wire format is a JS number — fine below 2^53, and
@@ -1311,6 +1336,16 @@ NEXT_PUBLIC_API_URL=                                # duplicate key — this one
 `NEXT_PUBLIC_API_URL`, same as the client. That still works, but it means the backend
 URL used for server-to-server calls is baked into the client bundle rather than kept in
 a separate non-public variable. Not urgent enough to be its own finding on its own.
+
+### Backend worker settings (`edms-backend/src/config/env.ts`)
+
+| Variable | Default | Used by |
+|---|---|---|
+| `SLA_WARNING_HOURS` | `4` | `sla-breach.worker` — warn this long before a task's `dueAt` |
+| `SLA_RECONCILE_INTERVAL_MS` | `300000` | `sla-breach.worker` schedule |
+| `CHECKOUT_REMINDER_HOURS` | `24` | `checkout-overdue.worker` — `checkout.reminder` to the holder this long before `expectedReturnAt` (added `b4a3f81`, 2026-09-29) |
+| `CHECKOUT_OVERDUE_RECONCILE_INTERVAL_MS` | `300000` | `checkout-overdue.worker` schedule; once past due it sends `checkout.overdue` to the holder and to `supervisor`s in the holder's department |
+| `APP_URL` | `http://localhost:3000` | Base for every notification/email `actionUrl` — must be this app's origin, or `notificationHref` drops the link as cross-origin (see §8.4) |
 
 ### Port alignment
 
@@ -1372,6 +1407,8 @@ suspiciously few documents.
 | ID | Severity | Title | Owner | Blast radius |
 |---|---|---|---|---|
 | **DRIFT-14** | 🔴 **Critical** | Workflow definitions are readable only by `client_admin`/`schulltech_admin`, so `staff` and `supervisor` cannot list the workflows they hold `workflow_instance:route` for | Backend | **Document routing is unreachable again.** The picker reports "no published workflows", which is neither true nor the reason. Re-diagnosed 2026-09-21: the hardcoded role list is gone (replaced by real `requirePermission`), but the RBAC seed data that replaced it never re-granted `workflow:view` to non-admin roles |
+| ~~DRIFT-18~~ | ✅ **Resolved (frontend, 2026-10-02)** | `request_changes` required a `documents` array the frontend didn't send (`5144fc7`, multi-document workflows) | Frontend | Was: "Send back" failed validation for every user. Fixed as part of the doc/workflow page split — the new `/workflow-instances/[id]` asks which of the task's documents need changes. Not yet verified e2e |
+| ~~DRIFT-17~~ | ✅ **Resolved (frontend, 2026-10-02)** | Notification/email `actionUrl`s (`/tasks/:id`, `/workflow-instances/:id`, `/documents/:id…`, `/reset-password`, `/login`) named routes this app doesn't have | Frontend | Was: every notification deep-link and the password-reset email 404'd. One gap left: access-request links go to a `user:edit`-gated page — see [§8.4](#8-contract-shape-drift-same-url-different-meaning) |
 | ~~DRIFT-16~~ | ✅ **Resolved (frontend, 2026-09-21)** | Frontend route guard (`routes.config.ts`, `PORTALS`) gated `/supervisor` and `/management` on `workflow:route`/`dashboard:view` — retired/fictional keys no role could ever hold | Frontend | Was: real supervisors and management users redirected to `/unauthorized` by the app's own guard, independent of what the backend allowed |
 | ~~DRIFT-11~~ | ✅ **Resolved** | Backend audit module real & auto-writing; `/admin/audit`, `auditor/trail` and `management/compliance` all migrated 2026-09-18 | — | `platform/audit` stays on `SEED` — no cross-tenant `GET /audit` exists, and no platform-level API exists at all to migrate it *to* |
 | ~~DRIFT-15~~ | ✅ **Resolved** | ~~`POST /auth/reset-password` sent `newPassword`/`confirmPassword`~~ — backend wants `password` | Frontend | Was: blocked **every** password reset and invitation acceptance, on every role |

@@ -685,12 +685,20 @@ lifecycle.
 - [x] A second checkout attempt returns 409
 - [x] Optional `expectedReturnAt` so others know when it frees up
 - [x] `POST /documents/:id/checkin` releases both, atomically
-- [x] Only the lock holder can check in
+- [x] Only the lock holder can check in — **or**, since `edms-backend` `b4a3f81`
+      (2026-09-29), a `document_lock:delete` holder at `global` scope, or at `department`
+      scope for the cabinet's department (`canReleaseLock`)
 - [x] Uploading a version while someone else holds the lock is rejected (409)
-- [ ] ⚠️ Supervisors and records officers cannot force-release a stale lock — there is an
-      explicit `TODO` in `documents.service.ts` for this. A user who locks a document and
-      goes on leave blocks it indefinitely.
-- [ ] No lock-expiry job, despite `expectedReturnAt` being captured
+- [x] 🟨 Force-release of a stale lock — "Force check in" on `/doc/[id]` (2026-10-02),
+      shown to the holders above **only once the lock is past `expectedReturnAt`**. Built,
+      not yet verified end to end. A lock taken without `expectedReturnAt` never becomes
+      forceable from the UI.
+- [x] 🟨 Overdue reminders instead of auto-expiry — `checkout-overdue.worker` (every 5
+      min) sends `checkout.reminder` to the holder `CHECKOUT_REMINDER_HOURS` (24) before
+      `expectedReturnAt`, then `checkout.overdue` to the holder and their department's
+      supervisors once it passes. Locks are never released automatically. Backend-verified
+      by code reading only
+- [x] `GET /documents/:id` names the holder (`checkoutLock.locker`) — the banner shows it
 
 ---
 

@@ -119,6 +119,21 @@ export const workflowInstancesService = {
     return response.data.data;
   },
 
+  /** `POST /workflow-instances/{id}/documents` — adds a document to a running
+   *  workflow (edms-backend `5144fc7`). It joins the active task's document set.
+   *  Allowed for the active task's holder (or department/global scope) with
+   *  `workflow_instance:create`. */
+  attachDocument: async (
+    instanceId: string,
+    documentId: string,
+    comment?: string,
+  ): Promise<void> => {
+    await apiClient.post(`/workflow-instances/${instanceId}/documents`, {
+      documentId,
+      ...(comment ? { comment } : {}),
+    });
+  },
+
   start: async (instanceId: string): Promise<WorkflowInstance> => {
     const response = await apiClient.post<ApiResponse<WorkflowInstance>>(
       `/workflow-instances/${instanceId}/start`,

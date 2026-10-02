@@ -712,7 +712,7 @@ Once documents are flowing, this is what daily use looks like and what it costs.
 | Open a document | ✅ | ⚠️ no download/preview endpoint exists |
 | Full-text search | ⛔ | index never built (Phase 8 step 2) |
 | Filter documents | ✅ | cabinet, folder, status, urgency, type, creator, archived |
-| Check out / check in | ✅ | ⚠️ no admin force-release; a stale lock blocks forever |
+| Check out / check in | ✅ | Overdue locks can be force-released by `document_lock:delete` holders (global, or department for the cabinet's department) — 🟨 built 2026-10-02, not yet verified e2e. Holder + supervisors notified as the due date nears/passes |
 | Upload a new version | 🟨 | ✅ works, but **narrowed 2026-09-18** — only offered once the previous stage has sent the document back with "Request changes" onto the caller's current task; also blocked if someone else holds the lock (correct) |
 | Restore a version | ✅ | UI shipped since this table was written — `DocumentVersionsPanel`'s "Restore" |
 | Comment on a document | ✅ | optional `comment` on `POST /tasks/:id/action`, prompted by "Mark reviewed"/"Approve"/etc. and shown on the workflow trail. (A dedicated `/documents/:id/comments` endpoint exists too but is deliberately unused — see BE-16/BE-17 in `BACKEND_REQUESTS.md`.) |
@@ -850,4 +850,4 @@ npm run dev                # Web   :3000
 - ⛔ **No notifications.** Users must check `/staff/tasks` manually.
 - ⛔ **No audit trail.** Do not represent the system as compliance-ready.
 - ⚠️ Files over 2 MB will be rejected; only PDF and images upload.
-- ⚠️ A checked-out document cannot be force-released by an admin.
+- ⚠️ A checked-out document can only be force-released once it is **overdue** — set an expected return date when checking out, or nobody but the holder can release it.

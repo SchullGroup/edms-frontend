@@ -9,7 +9,8 @@ export interface DocumentDetailsPanelProps {
   documentType?: string | null;
   cabinetId: string;
   ownerName: string;
-  assigneeName: string;
+  /** Omitted on the view-only document page, which has no task context. */
+  assigneeName?: string;
   createdAtLabel: string;
   metadata: { fieldId: string; name: string; value?: string | null }[];
   /** When true, custom metadata fields become editable with a Save action. */
@@ -48,10 +49,12 @@ export function DocumentDetailsPanel({
           <span className="k">Owner</span>
           <span className="v">{ownerName}</span>
         </div>
-        <div className="meta-row">
-          <span className="k">Assignee</span>
-          <span className="v">{assigneeName}</span>
-        </div>
+        {assigneeName !== undefined && (
+          <div className="meta-row">
+            <span className="k">Assignee</span>
+            <span className="v">{assigneeName}</span>
+          </div>
+        )}
         <div className="meta-row">
           <span className="k">Created</span>
           <span className="v">{createdAtLabel}</span>

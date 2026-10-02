@@ -277,6 +277,9 @@ export function useAddDocumentVersion() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: documentKeys.versions(id) });
       queryClient.invalidateQueries({ queryKey: documentKeys.detail(id) });
+      // A new version resolves any pending `request_changes` revision on this
+      // document, which shows on the task (`pendingDocumentRevisions`).
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
       addToast('New version uploaded', 'success');
     },
     onError: (err: any) => {
