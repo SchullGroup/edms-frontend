@@ -167,6 +167,22 @@ export interface DocumentVersion {
   createdAt: string;
 }
 
+/** A search the user saved on `/search`: the query text plus at most one
+ *  value per filter, in the backend's own enum values. Kept in the persisted
+ *  store per user — see `savedSearches` in `initialData.ts`. */
+export interface SavedSearch {
+  id: string;
+  name: string;
+  q: string;
+  filters: {
+    cabinetId?: string;
+    documentType?: string;
+    status?: 'pending' | 'in_progress' | 'on_hold' | 'closed';
+    confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
+    urgency?: 'low' | 'normal' | 'high' | 'critical';
+  };
+}
+
 export interface CheckoutLock {
   id: string;
   documentId: string;

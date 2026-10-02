@@ -6,6 +6,7 @@ import { useStore, cabById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
+import { DOCUMENT_TYPES } from '@/constants/documentTypes';
 
 const IDU_GUESSES = [
   {
@@ -207,7 +208,7 @@ import { calculateChecksum } from '@/apis/services/s3.service';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 
 function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
-  const { docTypes, session, users } = useStore();
+  const { session, users } = useStore();
   const { data: cabinetsData } = useCabinets();
   const cabinets = cabinetsData?.data || [];
   const { addToast } = useUIStore();
@@ -377,7 +378,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         <div className="field">
           <label>Document type</label>
           <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
-            {docTypes.map((t) => (
+            {DOCUMENT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
