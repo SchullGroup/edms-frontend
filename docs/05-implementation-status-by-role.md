@@ -71,8 +71,11 @@ For each of the six role dashboards this document lists:
 
 ## Portfolio summary
 
-**51 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
-2026-09-18 — was 42 at last full classification).
+**53 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
+2026-10-02 — was 51 on 2026-09-18, 42 at last full classification). The +2 are the
+notification-link landing pages `/tasks/[id]` (redirect-only) and `/workflow-instances/[id]`
+(DRIFT-17) — the latter became the full workflow page later the same day. Both are listed
+under Shared pages below.
 
 > ⚠️ **Count updated, classification not yet caught up.** Of the +9 pages, this document
 > classifies one (`/admin/access-requests`, below). The other eight —
@@ -214,7 +217,7 @@ GET  /documents/:id/versions                 version history
 POST /documents/:id/versions                 new version
 GET  /documents/:id/metadata                 metadata read
 PUT  /documents/:id/metadata                 metadata write
-GET  /documents/search                       ⚠️ works but always returns [] (index never built)
+GET  /documents/search                       ⚠️ index now built on backend dev (search_vector + worker); not yet verified live
 ```
 
 ### APIs missing ⛔
@@ -278,7 +281,7 @@ GET  /documents/search                       ⚠️ works but always returns [] 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
 | `/supervisor` | 320 | `currentUser` | `useDocuments`, `useUsers`, `useCabinets` ✅ · `useCreateAuditLog` 🟥 | 🟨 Hybrid — audit hook is a no-op |
-| `/supervisor/approvals` | 185 | `currentUser` | `useTasks`, `useDocuments` ✅ | ✅ Live |
+| `/supervisor/approvals` | 205 | `currentUser` | `useTasks`, `useDocuments` ✅ | ✅ Live — **2026-10-02:** the per-row "Approve" button was removed (approving from a list meant signing without reading the documents); rows keep Reassign and Open, and Open goes to the workflow page |
 | `/supervisor/bottlenecks` | 164 | `currentUser` | `useDocuments`, `useUsers` ✅ | ✅ Live — ⚠️ **but "Overdue" is always 0** |
 | `/supervisor/workload` | 191 | `currentUser` | `useDocuments`, `useUsers` ✅ | ✅ Live |
 | `/supervisor/exceptions` | 73 | — | **inline `useState` array** | 🟥 Mock |
@@ -369,73 +372,85 @@ already holds warning and escalation rows written by the SLA worker.
 5. **Replace `/supervisor/exceptions`** with real SoD/control-failure detection, or remove it.
 6. **Give `/supervisor/performance` a data source.**
 7. **Add a team-aggregation endpoint** to replace the client-side page walking.
-8. **Allow an admin/supervisor to force-release a stale checkout lock** (there is an explicit `TODO` in `documents.service.ts`).
+8. ~~**Allow an admin/supervisor to force-release a stale checkout lock**~~ — **built 2026-10-02.**
+   Backend `canReleaseLock` (`document_lock:delete` at `global`, or `department` for the
+   cabinet's department); `/doc/[id]` shows "Force check in" to those holders **only once the
+   lock is past `expectedReturnAt`**. Supervisors are also notified (`checkout.overdue`) when a
+   team member's checkout goes overdue. Not yet verified end to end — a lock with no
+   `expectedReturnAt` can never become forceable from the UI (by design, per product call).
 
 ---
 
 ## 3. Management Portal (`management`)
 
 **Landing:** `/management` · **Sidebar:** Dashboards / Governance / Reporting
-**Overall: 🟨 The numbers are real. The method will not scale.**
+**Overall: 🟨 The numbers are real, and — as of 2026-09-21 — so is the method.**
+
+> ⚠️ **Correction (2026-09-21).** This whole section previously described
+> `/management`, `/management/departments`, `/management/trends` and
+> `/management/performance` as computing every aggregate client-side via
+> `useAllDocuments`/`useAllTasks`/`useAllWorkflowInstances` walking every page of raw
+> data (`fetchAllPages`) — and stated flatly that "the backend has no aggregation,
+> statistics or reporting endpoints of any kind." Neither is true any more. Eight
+> aggregation endpoints (`GET /documents/stats`, `/tasks/stats`,
+> `/workflow-instances/stats`, `/status-counts`, `/team-status-matrix`,
+> `/open-items-by-cabinet`, `/bottlenecks-ageing`, `/sla/breaches`) exist on the
+> backend, and all four of these pages were rewired onto the relevant ones this
+> session (DRIFT-07 in doc 01, resolved). See doc 01 §6/§10 for the full writeup; this
+> section is updated to match.
 
 ### Page inventory
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
-| `/management` | 276 | **none** | `useDepartments`, `useCabinets`, `useAllDocuments`, `useAllTasks`, `useAllWorkflowInstances` ✅ | ✅ Live ⚠️ client-side aggregation |
-| `/management/departments` | 176 | **none** | 5 hooks ✅ | ✅ Live ⚠️ same |
-| `/management/trends` | 186 | **none** | 4 hooks ✅ | ✅ Live ⚠️ same |
-| `/management/performance` | 43 | **none** | `useAllTasks` + `taskSlaRate` ✅ | ✅ Live ⚠️ same |
+| `/management` | 297 | **none** | `useDepartments`, `useDocumentStats`, `useTaskStats`, `useOpenItemsByCabinet`, `useWorkflowInstanceStats` ✅ | ✅ Live — server-aggregated |
+| `/management/departments` | 169 | **none** | `useDepartments`, `useDocumentStats`, `useTaskStats`, `useQueries`-over-`workflowInstancesService.getStats` (one per department shown) ✅ | ✅ Live — server-aggregated |
+| `/management/trends` | 171 | **none** | `useDepartments`, `useDocumentStats`, `useWorkflowInstanceStats` ✅ | ✅ Live — server-aggregated (the forecast/backlog math is still client-side, but it's arithmetic on two already-aggregated series, not a full-list walk) |
+| `/management/performance` | 85 | **none** | `useTaskStats` ✅ | ✅ Live — server-aggregated |
 | `/management/compliance` | 169 | **`findings`** | `useUsers` ✅ · `useAuditEntries` ✅ (migrated 2026-09-18) | 🟨 Hybrid — `findings`/hbar chart still `SEED` |
 | `/management/reports` | 161 | — | **inline `DEPTS`** · `useCreateAuditLog` 🟥 | 🟥 Mock |
 | `/management/findings` | 7 | — | ↪️ re-exports `/auditor/findings` | 🟥 Mock |
 
-> **Management is the only dashboard with fully API-driven pages** — four of its seven read
-> no fixtures at all. It is also the dashboard whose method scales worst, because those
-> four compute every aggregate in the browser.
+> **Management is the only dashboard with fully API-driven pages** — four of its seven
+> read no fixtures at all, and (as of 2026-09-21) all four also let the database do the
+> aggregating instead of the browser. The three still-mocked pages (`compliance`'s
+> findings panel, `reports`, `findings`) share one root cause: no `Finding` model exists
+> anywhere in the backend, not a wiring gap.
 
 ### APIs wired ✅
 
 ```
-GET /departments                  tree, flattened client-side
-GET /cabinets                     cabinet → department mapping
-GET /documents        (paginated) ⚠️ via fetchAllPages — up to 50 requests
-GET /tasks            (paginated) ⚠️ via fetchAllPages
-GET /workflow-instances (paginated) ⚠️ via fetchAllPages
-GET /users                        headcount per department
+GET /departments                        tree, flattened client-side
+GET /documents/stats   groupBy=month|department   inflow, volume, per-department totals
+GET /tasks/stats       groupBy=department          SLA rate, on-time/overdue per department
+GET /workflow-instances/stats           closed-per-month buckets + avg turnaround
+GET /workflow-instances/open-items-by-cabinet      pending/in-progress rolled up by department
+GET /users                              headcount per department
 ```
 
-### APIs missing ⛔ — the defining gap for this role
+`useDocuments`/`useAllDocuments`/`useAllTasks`/`useAllWorkflowInstances`-style full-list
+walks are gone from every page in this table. `useAllTasks`, `useAllWorkflowInstances`
+and `tasksService.getAllPages` had no other callers once these four pages were rewired,
+so they were deleted rather than left dead.
 
-**The backend has no aggregation, statistics or reporting endpoints of any kind.**
+### APIs missing ⛔
 
 | Needed | Currently |
 |---|---|
-| `GET /stats/documents?groupBy=department&from=&to=` | 50 requests + JS reduce |
-| `GET /stats/sla-compliance?groupBy=department` | Recomputed in JS; **ignores `SlaBreach`** |
-| `GET /stats/turnaround?groupBy=month` | JS month-bucketing |
-| `GET /stats/workload?groupBy=user` | JS |
-| `GET /findings` | 🟥 No `Finding` model exists |
-| `GET /audit` | 🟥 No endpoint; `internal_auditor` already holds `audit:view` |
+| `GET /findings` | 🟥 No `Finding` model exists — affects this section, `/auditor/findings`, and `/management/findings` alike |
+| `GET /audit` (for the findings/compliance panel specifically — the sensitive-activity half already reads it) | Partially addressed — see `/management/compliance` above |
 | Scheduled/emailed reports | No scheduler, no mail transport |
+| A department × document-status cross-tab | Doesn't exist — `/management`'s per-department Pending/In-Progress/Closed table derives `Closed` as `total − (pending + inProgress)` rather than an exact count, because no single endpoint returns document status broken out by department |
 
-### The cost, quantified
+### One trade-off from the rewiring, not hidden
 
-```
-One /management page load:
-  useAllDocuments()          → up to 50 × 100 records
-  useAllTasks()              → up to 50 × 100 records
-  useAllWorkflowInstances()  → up to 50 × 100 records
-  ─────────────────────────────────────────────────
-  up to 150 sequential HTTP requests
-  up to 15,000 records parsed and aggregated in the browser
-```
-
-`fetchAllPages.ts` says so itself: *"INTERIM STOPGAP… reconstructing in the browser what a
-single SQL aggregate query would do on the server. Replace call sites with real aggregation
-endpoints once the backend adds them, and delete this file."*
-
-Invisible at demo scale. A 30-second page load at 10,000 documents.
+`/management`'s per-department drill-down table used to compute an exact
+Pending/In-Progress/Closed split by walking every document. `pending`/`inProgress` are
+now exact (rolled up from `open-items-by-cabinet`, which does carry that breakdown per
+cabinet); `Closed` is derived as `totalDocsInDept − pending − inProgress` since no
+backend endpoint cross-tabs department against document status. Off by whatever
+archived-but-not-excluded edge cases don't fit that arithmetic — a documented
+approximation, not a silent one.
 
 ### Dummy data 🟥
 
@@ -444,29 +459,30 @@ Invisible at demo scale. A 30-second page load at 10,000 documents.
 | `/management/compliance` | `findings`/hbar chart still `SEED.findings` — the sensitive-activity panel is real now (migrated 2026-09-18) |
 | `/management/reports` | inline `DEPTS`; the report builder produces nothing real |
 | `/management/findings` | ↪️ auditor's page → `SEED.findings` |
-| SLA compliance figures | derived from documents/tasks, **not** from `SlaBreach` |
 
 ### Flows
 
 | Flow | Status |
 |---|---|
-| Organisation overview | 🟨 real data, client-side aggregation |
-| Compare departments | 🟨 same |
-| Trends over time | 🟨 same; no forecasting despite the page title |
-| Performance overview | 🟨 thin — 43 lines |
-| Compliance posture | 🟥 mock audit data |
+| Organisation overview | ✅ real data, server-aggregated |
+| Compare departments | ✅ same |
+| Trends over time | ✅ same; forecast/backlog projection still client-side arithmetic on the two aggregated series (unchanged behavior, just no longer walking raw records to build them) |
+| Performance overview | ✅ same; org SLA is now summed from `useTaskStats`'s own buckets rather than a second full task walk |
+| Compliance posture | 🟨 sensitive-activity panel real, findings chart still mock |
 | Findings review | 🟥 re-export of a mock page |
 | Export CSV | ✅ |
 | Scheduled report by email | ⛔ |
 
 ### What's left, in order
 
-1. **Build aggregation endpoints**, then delete `fetchAllPages.ts` as its header asks. *Largest single backend gap for this role.*
-2. **Build `Finding`** — model, endpoints, and a management-oriented view (owner, ageing, department rollup) rather than a re-export.
-3. **Build the audit module** so compliance posture stops being fabricated.
-4. **Compute SLA compliance from `SlaBreach`**, not from re-derived document dates.
-5. **Make `/management/reports` generate real reports.**
-6. **Correct the frontend permission heuristic** — `usePermissions` grants management
+1. ~~Build aggregation endpoints, then delete `fetchAllPages.ts` as its header asks~~ —
+   **done for this role's four dashboards** (2026-09-21). `fetchAllPages.ts` itself
+   stays — `useAllDocuments` still has a legitimate remaining use elsewhere
+   (`admin/cabinets`, `staff/cabinets`: listing every document in one cabinet for a
+   folder-assignment UI, which no aggregate endpoint answers).
+2. **Build `Finding`** — model, endpoints, and a management-oriented view (owner, ageing, department rollup) rather than a re-export. *Now the largest single gap for this role.*
+3. **Make `/management/reports` generate real reports.**
+4. **Correct the frontend permission heuristic** — `usePermissions` grants management
    approve/reject rights the backend never issued. Fix this *with* DRIFT-05, or management's
    buttons will start 403-ing and look like a regression.
 
@@ -611,7 +627,7 @@ GET    /documents/access-requests                    admin inbox, all documents
 | `/auditor/findings` | 367 | `findings`, `users`, `addFinding`, `updateFinding` | **none** | 🟥 Mock — no backend model regardless |
 | `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟨 Hybrid — inherits the now-real sensitive-activity panel |
 
-*The auditor also uses the shared `/staff/cabinets` (✅ live) and `/search` (⛔ empty).*
+*The auditor also uses the shared `/staff/cabinets` (✅ live) and `/search` (🟨 rebuilt 2026-09-30, pending end-to-end check).*
 
 ### APIs wired
 
@@ -769,34 +785,55 @@ This is a **phase**, not a backlog item:
 | Page | LOC | Roles | Store reads | API | Status |
 |---|---:|---|---|---|---|
 | `/` (login) | 316 | all | `currentUser`, `setCurrentUser` | `authService` ✅ | ✅ Live ⚠️ **all 12 test accounts are wrong** |
-| `/doc/[id]` | 956 | all | `currentUser` | mostly real ✅ · `usePolicies` 🟥 mock | 🟨 Hybrid — grew substantially 2026-09-18 (access requests, comments, signatures); `@ts-nocheck` is gone, was stale here |
-| `/search` | 258 | all | `docTypes`, `savedSearches` | `useDocumentSearch`, `useDocuments`, `useCabinets` ✅ · `@ts-nocheck` | 🟨 Hybrid — **and always empty** |
-| `/upload` | 475 | staff, supervisor, management, client_admin | `docTypes`, `session`, `users` | `useCabinets`, `useCabinetFolders`, `documentsService`, `s3` ✅ | ✅ Live |
+| `/doc/[id]` | 570 | all | `currentUser` | `useDocument`, versions, checkout, `useWorkflowInstances` ✅ · `usePolicies` 🟥 mock | 🟨 Hybrid (policies) — **made view-only 2026-10-02**: workflow actions, signing and the activity trail moved to `/workflow-instances/[id]` |
+| `/search` | 457 | all | `currentUser`, `savedSearches` (per-user, user-created — not `SEED`) | `useDocuments` (server-side filters + pagination), `useDocumentSearch` (text + cabinet), `useCabinets` ✅ | 🟨 Pending check — rebuilt 2026-09-30: no `SEED` reads, no `@ts-nocheck`; types from `constants/documentTypes.ts`. Not yet verified end to end, so not marked ✅ |
+| `/upload` | 475 | staff, supervisor, management, client_admin | `docTypes`, `session`, `users` | `useCabinets`, `useCabinetFolders`, `documentsService`, `s3` ✅ | ✅ Live  **2026-10-02:** accepted types unified in `src/constants/uploadTypes.ts` — PDF, DOCX, XLSX, TIFF, JPG, PNG up to 100 MB (was PDF ≤50 MB + images ≤10 MB, despite the page text claiming DOCX/XLSX/TIFF). DOCX/XLSX/TIFF upload but **don't preview** in the viewer and **aren't OCR'd** (Textract can't read DOCX/XLSX), so they're not text-searchable |
 | `/notifications` | 106 | all | `notifications`, `session` | **none** | 🟥 Mock |
 | `/circulars` | 107 | all | `circulars`, `session`, `users` | **none** | 🟥 Mock |
 | `/unauthorized` | 58 | all | — | — | static |
+| `/tasks/[id]` | 33 | all | — | `useTask` → `GET /tasks/:id` | ↪️ redirect to `/workflow-instances/{instanceId}?task={id}` — landing page for backend `/tasks/:id` notification links (DRIFT-17). Not yet verified live |
+| `/workflow-instances/[id]` | 351 | all | `currentUser` | `useWorkflowInstance`, `useTask`, `useDocument`, `useTaskAction`, versions ✅ | 🟨 **new 2026-10-02** — the workflow page (see below). Was a 33-line redirect earlier the same day. Not yet verified e2e |
 
-### `/doc/[id]` — the most complex page in the app
+### `/doc/[id]` — view-only document page *(split 2026-10-02)*
+
+Everything that moves a workflow moved to `/workflow-instances/[id]` (below). This page is
+the document on its own: file, details, versions, custody, archive.
 
 | Feature | Status |
 |---|---|
 | Load document | ✅ `GET /documents/:id` |
+| No access (confidentiality 403) | ✅ full-page "You don't have access" + **Request access** (`useRequestAccessPrompt`, shared with the workflow page) |
 | Metadata panel | ✅ `GET` + inline editor `PUT /documents/:id/metadata` (when `document:edit`) |
-| Version history | ✅ `GET /documents/:id/versions` · open · `POST /versions/:vid/restore` · upload new version |
-| Archive | ✅ `DELETE /documents/:id` (More menu, when `document:delete`) |
-| Edit document | ✅ `PATCH /documents/:id` |
-| Checkout / check-in | ✅ |
-| Task action from this screen | ✅ `POST /tasks/:id/action` |
+| Version history | ✅ `GET /documents/:id/versions` · open · `POST /versions/:vid/restore` |
+| Version upload / restore gating | 🟨 **changed 2026-10-02** — "New version" is never offered here; revisions are uploaded on the workflow page in answer to a `request_changes`. Restore is blocked while a workflow is running, so the file can't be swapped mid-review. Not yet verified e2e |
+| Archive | ✅ `DELETE /documents/:id` (toolbar, when `document:delete`) |
+| Checkout / check-in | ✅ — banner names the holder (`checkoutLock.locker`, embedded since backend `b4a3f81`) and flags an overdue lock |
+| Force check-in (someone else's overdue lock) | 🟨 **built 2026-10-02, not yet verified e2e** — shown only to `document_lock:delete` at `global` scope, or `department` scope matching the cabinet's department, and only once `expectedReturnAt` has passed. Same `POST /documents/:id/checkin`; the backend authorises it via `canReleaseLock` |
+| Workflows card | 🟨 **new 2026-10-02** — `GET /workflow-instances?documentId=` → every workflow the document is in, each linking to its workflow page; "Open workflow" in the toolbar for the live one, "Route to workflow" when none. **Unverified:** whether that filter matches a document that was *attached* rather than primary |
 | Cabinet + folder context | ✅ |
-| **Comments (task-tied)** | ✅ the `comment` field on `POST /tasks/:id/action`, part of the approval trail |
-| **Comments (general)** | ✅ **added 2026-09-18** — dedicated `GET/POST /documents/:id/comments`, `DocumentCommentsPanel` |
-| **Signatures (task-tied)** | ✅ `signature: {fileUrl,mimeType}` image on the `approve` task action — `SignaturePad` draws/uploads it (`useSignAndApprove`) |
-| **Signatures (general)** | ✅ **added 2026-09-18** — dedicated `GET/POST /documents/:id/signatures` (flat record, no positional data), `DocumentSignaturesPanel`, reuses `SignaturePad` |
-| **Access requests** | ✅ **added 2026-09-18** — "Request access" now really calls `POST /documents/:id/access-requests`; previously recorded an audit action only |
-| **Activity timeline** | ✅ `GET /workflow-instances/:id/history` (`WorkflowHistoryTimeline`) |
 | **Policies (confidentiality options)** | 🟥 `SEED.policies` — offers `Top Secret`, which the upload form correctly omits |
-| **File preview / download** | ⛔ no endpoint exists |
-| Type safety | ✅ `@ts-nocheck` is gone — was stale here, not dated when actually removed |
+| **File preview / download** | 🟨 the code renders and downloads the pre-signed `currentVersion.fileUrl` that `GET /documents/:id` returns, so the old "no endpoint" claim looks stale — **not re-verified live** |
+
+### `/workflow-instances/[id]` — the workflow page *(new 2026-10-02)*
+
+Reached from `TaskRow` (staff task queue, dashboard, approvals, workload), the supervisor
+team drawer, bottlenecks, the workflow monitors ("Open workflow"), and notification links
+(`/tasks/:id` forwards here with `?task=`). Keyed on the instance id because a task id changes
+every time the stage moves. **All 🟨 — built and type/build-checked, not yet verified end to
+end against a live backend.**
+
+| Feature | Status |
+|---|---|
+| Which task the page is about | 🟨 the `?task=` one if still active → else the caller's own active task → else whoever holds the current stage → else the latest task (finished workflows) |
+| Documents | 🟨 from `GET /tasks/:id` `documents` (each pinned to the version under review); tabs when there's more than one. Falls back to the primary document alone if the caller can see the workflow but not its task (403) |
+| Per-document access overlay | 🟨 a document above the viewer's clearance (`GET /documents/:id` 403) renders a blurred viewer with "You don't have access to this document" + **Request access** — the other documents and the stage actions stay usable |
+| Stage actions | 🟨 review / approve (signature) / request changes / delegate / close / reject, filtered by the stage definition's `actions`; enabled only for the active task's assignee or a holder of its role, with `task:action` |
+| **Request changes ("Send back")** | 🟨 **DRIFT-18 fixed 2026-10-02** — picker of the task's documents (min 1, the viewed one pre-ticked) + required reason → `documents: [{documentId}]`. **Hidden on the first stage** (nothing to send back to — backend 409 `WORKFLOW_PREVIOUS_STAGE_NOT_FOUND`); the designer also greys it out for stage 1 and strips it on save |
+| **Mark reviewed — document required** | 🟨 **new 2026-10-02** — product rule: a review must attach ≥1 document. `review` itself takes no documents, so a two-step modal — 1) `WorkflowDocumentPicker`, with two tabs: **From a cabinet** (debounced title search via `GET /documents/search?q=&cabinetId=` — full-text over title + OCR + metadata, so a brand-new document isn't findable until OCR has run and the index job follows) and **Upload from computer** (multipart upload → `POST /documents` into a chosen cabinet/folder, defaulting to the primary document's cabinet, confidentiality and urgency — the document is filed immediately, even if the review is then cancelled); 2) optional comment + confirm, with Back keeping the selection — attaches each via `POST /workflow-instances/:id/documents`, then sends `review`. Needs `workflow_instance:create` — **the seeded `supervisor` role doesn't hold it**, so a supervisor-held review stage is blocked with an explanation until the seed grants it |
+| Revision uploads | 🟨 `pendingDocumentRevisions` from `GET /tasks/:id`: banner + per-document "Changes requested" card + `DocumentVersionsPanel` upload, only for the active task's holder **with `document_version:create`** — what the backend route checks. Was gated on `document:edit`, which the seeded `staff` role doesn't hold, so staff never saw the button (found in testing 2026-10-02; the old `/doc/[id]` had the same bug). Restore is likewise gated on `document_version:restore` now. Uploading resolves the revision (backend) and refetches the task |
+| Activity trail / stage progress | ✅ `WorkflowActivityPanel` (moved from `/doc/[id]`). Trail is a fixed 340px scroll area and the viewer column is sticky on wide screens, so a long trail no longer pushes the page far below the document |
+| **Attach an additional document** | 🟨 only as part of "Mark reviewed" (above). No standalone attach button yet — multi-document *start* is being added on the backend |
+| **Comments / signatures** | ✅ unchanged — `comment` on any action, signature image on `approve` only (BE-16) |
 
 ### `/notifications` — note the detail
 
@@ -885,7 +922,7 @@ ageing indicator.*
 | 8 | Presigned upload endpoint + async Textract + **unconditional** search indexing | Both | OCR **and** search together |
 | 9 | Notifications module + wire the SLA worker to it | Backend | Task assignment, SLA warnings, circular acks |
 | 10 | ✅ ~~Audit module: `AuditService.log()` everywhere + hash chain + `GET /audit`~~ — **done, both halves** (DRIFT-11 resolved, 2026-09-18). `admin/audit`, `auditor/trail` and `management/compliance` all read the real trail; `platform/audit` stays mocked by design (no cross-tenant backend exists) | — | **The auditor dashboard and the compliance claim are both real now** for every tenant-scoped role |
-| 11 | Next.js `middleware.ts` for server-side route protection | Frontend | Closes the forgeable-role hole |
+| 11 | ✅ ~~Next.js `middleware.ts` for server-side route protection~~ — **done** 2026-09-21, as `proxy.ts` (Next.js 16's rename). Fails closed only on a confirmed 401/403, fails open on an unreachable backend, covered by a session-expired modal and a service-unavailable overlay. See DRIFT-02 (resolved) in doc 01 §4. | — | Closed the forgeable-role hole |
 | 12 | Cabinet access-grant UI **+ backend read-path enforcement, shipped together** | Both | Need-to-know actually works |
 | 13 | ✅ ~~Delegation UI~~ — `/delegations` exists, wired to `useDelegations`/`useCreateDelegation`/`useEndDelegation`. Was stale here; caught 2026-09-18. Not re-verified end-to-end. | Frontend | Supervisors can take leave |
 | 14 | ✅ ~~Repoint the role matrix editor~~ — already on `PUT /roles/:id/permissions` via `useSetRolePermissions`. **2026-09-10** also added role **rename**/**delete** (`useUpdateRole`/`useDeleteRole`), user **role assign/remove** on save (`POST`/`DELETE /users/:id/roles`), and moved the resource/action vocabulary into `src/lib/permissions.ts` | Frontend | Was: silent data loss |
@@ -895,10 +932,12 @@ ageing indicator.*
 
 | # | Item | Owner |
 |---|---|---|
-| 16 | Aggregation/reporting endpoints; then delete `fetchAllPages.ts` | Backend |
+| 16 | ✅ ~~Aggregation/reporting endpoints; then delete `fetchAllPages.ts`~~ — **backend half done** (8 endpoints exist); **frontend half done for management** (2026-09-21) — all four management dashboards rewired onto them, `useAllTasks`/`useAllWorkflowInstances` deleted. `fetchAllPages.ts` itself stays: `useAllDocuments` still legitimately lists every document in one cabinet for `admin/cabinets`/`staff/cabinets`, which no aggregate endpoint answers. Supervisor-side adoption (§2) not yet checked. | — |
 | 17 | `Finding` model + endpoints + a management-oriented view | Both |
 | 18 | Cabinet metadata-field designer + dynamic upload form | Frontend |
-| 19 | ✅ ~~Comments and signatures endpoints~~ — task-action fields sufficed as of 2026-09-10 (`comment` string, `approve`'s required `signature` image). **Update 2026-09-18:** dedicated `GET/POST /documents/:id/comments` and `/signatures` exist now too — separate, general-purpose records, wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel`. | — |
+| 19 | ✅ ~~Comments and signatures endpoints~~ — task-action fields suffice (`comment` string on any action, `approve`'s required `signature` image). Dedicated `GET/POST /documents/:id/comments`/`/signatures` exist and were briefly wired 2026-09-18, then deliberately un-wired the same day: product wants one workflow trail, not a second task-independent thread. | — |
+| 19a | Optional `signature` on the `review` task action (BE-16) — "Mark reviewed" already has an optional-comment modal; needs the backend to accept a signature there too, the same way `approve` does | Backend |
+| 19b | ~~Support more than one document per workflow instance (BE-17)~~ — **backend done 2026-09-24** (`5144fc7`). Frontend half open: attach UI, per-document `request_changes`, and a workflow view page that lists the instance's documents — planning started 2026-10-02 | Frontend |
 | 20 | Document download/export/print, gated by the existing tier allowlists | Backend |
 | 21 | Circulars: model, endpoints, audience targeting, ack tracking | Both |
 | 22 | Retention policy endpoints + enforcement job | Backend |

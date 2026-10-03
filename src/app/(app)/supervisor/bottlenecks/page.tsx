@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useBottlenecksAgeing } from '@/apis/hooks/useWorkflowInstances';
 import { useReassignTask } from '@/apis/hooks/useTasks';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { HBarChart } from '@/components/ui/Charts';
@@ -32,10 +33,14 @@ export default function BottlenecksPage() {
   const { data, isLoading, isError, refetch } = useBottlenecksAgeing({ page, limit: PAGE_SIZE });
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
   const users = usersData?.data || [];
+  // Reassign targets: active users in the reassigner's own department only.
+  const { users: colleagues } = useDepartmentColleagues();
 
   const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
   const { setPageTitle, openModal, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canReassign = can('task', 'reassign');
 
   useEffect(() => {
     setPageTitle('Bottlenecks & Ageing');
@@ -83,8 +88,8 @@ export default function BottlenecksPage() {
             <label>New assignee</label>
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select user...</option>
-              {users
-                .filter((u) => u.status === 'active' && u.id !== item.assigneeId)
+              {colleagues
+                .filter((u) => u.id !== item.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
@@ -171,6 +176,8 @@ export default function BottlenecksPage() {
         r.canReassign ? (
           <button
             className="btn btn-secondary btn-sm"
+            disabled={!canReassign}
+            title={!canReassign ? "You don't have permission to reassign tasks" : undefined}
             onClick={(e) => {
               e.stopPropagation();
               handleReassign(r);
@@ -237,7 +244,7 @@ export default function BottlenecksPage() {
             <Table
               cols={cols}
               rows={items}
-              onRow={(r) => router.push(`/doc/${r.documentId}`)}
+              onRow={(r) => router.push(`/workflow-instances/${r.workflowInstanceId}`)}
             />
             {pagination && (
               <Pagination

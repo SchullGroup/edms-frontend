@@ -136,7 +136,10 @@ export interface Document {
   checkoutLock?: CheckoutLock | null;
   archivedAt?: string | null;
   createdBy: string;
-  dueDate?: string | null;
+  // No due-date field exists here on the backend (`filing.prisma` has none on
+  // `Document`) — a due date lives on `Task.dueAt` / `WorkflowInstance.
+  // stageDueAt` instead. A `dueDate` field used to be declared here and was
+  // never real; removed 2026-09-21 (see DRIFT-13 in docs/01).
   createdAt: string;
   updatedAt?: string | null;
   currentVersionId?: string | null;
@@ -164,12 +167,31 @@ export interface DocumentVersion {
   createdAt: string;
 }
 
+/** A search the user saved on `/search`: the query text plus at most one
+ *  value per filter, in the backend's own enum values. Kept in the persisted
+ *  store per user — see `savedSearches` in `initialData.ts`. */
+export interface SavedSearch {
+  id: string;
+  name: string;
+  q: string;
+  filters: {
+    cabinetId?: string;
+    documentType?: string;
+    status?: 'pending' | 'in_progress' | 'on_hold' | 'closed';
+    confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
+    urgency?: 'low' | 'normal' | 'high' | 'critical';
+  };
+}
+
 export interface CheckoutLock {
   id: string;
   documentId: string;
   lockedBy: string;
   lockedAt: string;
   expectedReturnAt?: string | null;
+  /** Who holds the lock — embedded by `GET /documents/:id` (`checkoutLock.locker`);
+   *  the doc page still falls back to a `users` lookup if it's absent. */
+  locker?: PersonSummary;
 }
 
 /** A `{id, name, email}` person embed — used for a request's requester/reviewer,
@@ -203,29 +225,13 @@ export interface AccessRequest {
   document?: { id: string; title: string; referenceNumber: string };
 }
 
-/** `GET/POST /documents/:id/comments` — a dedicated document-level comment
- *  thread, independent of any workflow task. Verified live 2026-09-18. */
-export interface DocumentComment {
-  id: string;
-  documentId: string;
-  authorId: string;
-  author: PersonSummary;
-  content: string;
-  createdAt: string;
-}
-
-/** `GET/POST /documents/:id/signatures` — a flat "who signed this document"
- *  record, independent of any workflow task and with no positional/field
- *  placement data (unlike the in-viewer signature fields on `approve` task
- *  actions). Verified live 2026-09-18. */
-export interface DocumentSignature {
-  id: string;
-  documentId: string;
-  signedBy: string;
-  signer: PersonSummary;
-  url: string;
-  createdAt: string;
-}
+// `GET/POST /documents/:id/comments` and `/signatures` are real, live
+// endpoints (verified 2026-09-18) but deliberately unused — comments and
+// signatures are product-scoped to the workflow trail instead (`comment`/
+// `signature` on `POST /tasks/{taskId}/action`, surfaced via
+// `WorkflowHistoryRecord`), so every user action on a document stays on one
+// trail rather than split across two disconnected panels. See BE-16/BE-17 in
+// BACKEND_REQUESTS.md for the gaps that decision now depends on closing.
 
 export interface DocumentMetadataField {
   fieldId: string;
@@ -287,16 +293,24 @@ export interface DocumentMetadataValueInput {
 }
 
 /**
- * `data` shape of `GET /documents/stats` — server-side count aggregates for the
- * management dashboards. The exact shape is unverified against the live API
- * (backend repo not in this workspace); consumers treat every field as optional
- * and fall back to client-side aggregation when it is missing.
+ * `data` shape of `GET /documents/stats` — verified against
+ * `documents.service.ts#getDocumentStats` on the backend (`edms-backend`
+ * `dev`). One shape, two `groupBy` modes:
+ *  - `groupBy=month` (default): `key` is `"YYYY-MM"`, optionally narrowed to
+ *    one department via `departmentId`.
+ *  - `groupBy=department`: `key` is the department id (or `"unassigned"`),
+ *    with `departmentId`/`departmentName` also present on each bucket.
+ * There is no `total` — sum `buckets[].count` for one.
  */
+export interface DocumentStatsBucket {
+  key: string;
+  count: number;
+  departmentId?: string | null;
+  departmentName?: string | null;
+}
+
 export interface DocumentStatsResponse {
-  total?: number;
-  byStatus?: Record<string, number>;
-  byConfidentiality?: Record<string, number>;
-  byDepartment?: { departmentId?: string | null; departmentName?: string | null; count: number }[];
+  buckets: DocumentStatsBucket[];
 }
 
 // --- Workflows ---
@@ -304,23 +318,59 @@ export interface DocumentStatsResponse {
 export type WorkflowStageAction =
   'approve' | 'reject' | 'review' | 'request_changes' | 'close' | 'delegate';
 
-export type WorkflowStageType =
-  'start' | 'review' | 'approval' | 'sign' | 'condition' | 'parallel' | 'notify' | 'close';
-
 export interface WorkflowStage {
   id: string;
   name: string;
   role?: string;
   user_id?: string;
   sla_hours: number;
-  /** Designer-authored stage kind. Persisted by the backend alongside `actions`. */
-  type?: WorkflowStageType;
   actions?: WorkflowStageAction[];
+}
+
+// Matches the backend's `WORKFLOW_CONDITION_FIELDS`/`_OPERATORS`/`_MODES`
+// (`edms-backend/src/shared/constants/workflow.constants.ts`) exactly — these
+// are validated server-side with a strict Zod schema, so the frontend enum
+// values must stay byte-for-byte in sync with it, not just conceptually similar.
+export type WorkflowConditionField = 'urgency' | 'confidentiality' | 'metadata';
+
+export type WorkflowConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'in'
+  | 'not_in'
+  | 'greater_than'
+  | 'greater_than_or_equal'
+  | 'less_than'
+  | 'less_than_or_equal';
+
+export type WorkflowConditionMode = 'all' | 'any';
+
+export type WorkflowConditionValue = string | number | boolean;
+
+export interface WorkflowConditionRule {
+  field: WorkflowConditionField;
+  /** Required iff `field === 'metadata'`; rejected for any other field. */
+  metadata_field_id?: string;
+  operator: WorkflowConditionOperator;
+  value: WorkflowConditionValue | WorkflowConditionValue[];
+}
+
+export interface WorkflowCondition {
+  mode: WorkflowConditionMode;
+  rules: WorkflowConditionRule[];
 }
 
 export interface WorkflowTransition {
   from: string;
   to: string;
+  /**
+   * Required once a stage has more than one conditional outgoing transition;
+   * must be unique among that stage's conditional branches. Fallback
+   * transitions (no `condition`) cannot carry one — the backend rejects it.
+   */
+  priority?: number;
+  /** Absent = the required, unconditional fallback for its `from` stage. */
+  condition?: WorkflowCondition;
 }
 
 export interface WorkflowDefinitionJson {
@@ -514,6 +564,10 @@ export interface WorkflowHistoryRecord {
   action: string;
   actorId?: string | null;
   note?: string | null;
+  /** The `comment` sent with the task action, e.g. `POST /tasks/{taskId}/action`'s
+   *  optional `comment` field on `review`/`approve`/etc. Distinct from `note`
+   *  (the older, still-accepted field). Confirmed live 2026-09-18. */
+  comment?: string | null;
   elapsedSeconds?: number | null;
   occurredAt: string;
   actor?: {
@@ -522,7 +576,10 @@ export interface WorkflowHistoryRecord {
     email: string;
     status: string;
   } | null;
-  task?: Record<string, any> | null;
+  /** Confirmed live 2026-09-18: carries `signature` (populated only for an
+   *  `approve` action — the only action the backend allows one on) alongside
+   *  the completed task's own `comment`/`note`. */
+  task?: (Record<string, any> & { signature?: TaskActionSignature | null }) | null;
   workflowInstance?: Record<string, any>;
 }
 
@@ -578,6 +635,59 @@ export interface Task {
   assignedRole?: { id: string; name: string } | null;
   completer?: TaskUserSummary | null;
   workflowInstance: TaskWorkflowInstance;
+  /** `GET /tasks/:id` only — the documents this task covers, each pinned to
+   *  the version the task was raised against. */
+  documents?: TaskDocumentSnapshot[];
+  /** `GET /tasks/:id` only — revisions an earlier stage asked for on this
+   *  task's documents that are still waiting on a new version. */
+  pendingDocumentRevisions?: PendingDocumentRevision[];
+}
+
+/** One `TaskDocument` row: a workflow document as this task saw it. */
+export interface TaskDocumentSnapshot {
+  id: string;
+  workflowInstanceDocumentId: string;
+  documentVersionId: string;
+  createdAt: string;
+  workflowInstanceDocument: {
+    id: string;
+    documentId: string;
+    addedAtStage?: string | null;
+    comment?: string | null;
+    addedAt: string;
+    document: {
+      id: string;
+      title: string;
+      documentType?: string | null;
+      status: string;
+      confidentiality: string;
+      urgency: string;
+      currentVersionId?: string | null;
+    };
+  };
+  documentVersion: {
+    id: string;
+    versionNumber: number;
+    mimeType: string;
+    ocrStatus?: string;
+    uploadedBy: string;
+    createdAt: string;
+  };
+}
+
+/** A `request_changes` revision still waiting on a new version. */
+export interface PendingDocumentRevision {
+  id: string;
+  workflowInstanceDocumentId: string;
+  requestedFromTaskId: string;
+  sourceVersionId: string;
+  comment?: string | null;
+  status: string;
+  createdAt: string;
+  workflowInstanceDocument: {
+    documentId: string;
+    document: { id: string; title: string; documentType?: string | null; currentVersionId?: string | null };
+  };
 }
 
 /** Signature image metadata carried by an `approve` task action. The backend
@@ -596,7 +706,18 @@ export type TaskActionRequest =
       comment?: string;
       note?: string;
     }
-  | { action: 'review' | 'reject' | 'request_changes' | 'close'; comment?: string; note?: string }
+  | { action: 'review' | 'reject' | 'close'; comment?: string; note?: string }
+  | {
+      /** Sends the work back one stage. Since `edms-backend` `5144fc7` the
+       *  backend requires at least one entry in `documents` — each must be one
+       *  of this task's documents (`Task.documents`), and each becomes a pending
+       *  `WorkflowDocumentRevision` the previous stage resolves by uploading a
+       *  new version. */
+      action: 'request_changes';
+      documents: { documentId: string; comment?: string }[];
+      comment?: string;
+      note?: string;
+    }
   | {
       action: 'delegate';
       /** Who the replacement task goes to. The workflow stays at the current

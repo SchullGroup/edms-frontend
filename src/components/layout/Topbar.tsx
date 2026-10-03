@@ -40,8 +40,10 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
 
   const { data: unreadCount = 0 } = useUnreadNotificationCount({ enabled: !!me });
   // Only fetched while the menu is open — the badge alone runs off the count endpoint.
+  // Capped to the 7 most recent unread; "View all notifications" is the escape
+  // hatch to the full (read + unread, paginated) list rather than growing this menu.
   const { data: notifData } = useNotifications(
-    { limit: 6, channel: 'in_app' },
+    { limit: 7, channel: 'in_app', unreadOnly: true },
     { enabled: notifOpen },
   );
   const markRead = useMarkNotificationRead();
@@ -150,7 +152,7 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
               ))
             ) : (
               <div className="empty" style={{ padding: '22px' }}>
-                No notifications
+                No unread notifications
               </div>
             )}
             <div className="menu-sep"></div>

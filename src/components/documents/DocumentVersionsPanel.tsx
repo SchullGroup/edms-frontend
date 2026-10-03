@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
+import { UPLOAD_ACCEPT, resolveUploadMimeType } from '@/constants/uploadTypes';
 import {
   useDocumentVersions,
   useAddDocumentVersion,
@@ -17,8 +18,13 @@ interface Props {
   currentVersionId?: string | null;
   /** Reader — controls whether the panel renders at all. */
   canView: boolean;
-  /** Writer — controls the "Upload new version" and "Restore" affordances. */
+  /** Writer — controls the "Restore" affordance. */
   canEdit: boolean;
+  /** Controls the "New version" upload affordance specifically — true only
+   *  once the previous stage has sent the document back with "Request
+   *  changes" onto the caller's current task, so the file can't be silently
+   *  swapped mid-review. */
+  canUploadVersion: boolean;
   getUploaderName?: (userId: string) => string;
 }
 
@@ -27,6 +33,7 @@ export function DocumentVersionsPanel({
   currentVersionId,
   canView,
   canEdit,
+  canUploadVersion,
   getUploaderName,
 }: Props) {
   const { data: versions, isLoading } = useDocumentVersions(canView ? documentId : '');
@@ -49,11 +56,16 @@ export function DocumentVersionsPanel({
       const fileUrl = await startUpload({
         file,
         fileName: file.name,
-        folderName: 'edms-documents',
+        folderName: 'edmsDocuments',
       });
       await addVersion.mutateAsync({
         id: documentId,
-        data: { fileUrl, mimeType: file.type, checksum, fileSize: file.size },
+        data: {
+          fileUrl,
+          mimeType: resolveUploadMimeType(file) ?? file.type,
+          checksum,
+          fileSize: file.size,
+        },
       });
     } catch (err: any) {
       addToast(err?.message || 'Failed to upload new version', 'error');
@@ -80,12 +92,12 @@ export function DocumentVersionsPanel({
     <div className="card">
       <div className="card-head flex justify-between items-center">
         <span className="h3">Versions</span>
-        {canEdit && (
+        {canUploadVersion && (
           <>
             <input
               ref={fileRef}
               type="file"
-              accept="application/pdf,image/*"
+              accept={UPLOAD_ACCEPT}
               style={{ display: 'none' }}
               onChange={onPickFile}
             />
@@ -101,21 +113,30 @@ export function DocumentVersionsPanel({
         )}
       </div>
       <div className="card-body" style={{ paddingTop: '6px' }}>
-        {isLoading && <div className="caption">Loading versions…</div>}
-        {!isLoading && sorted.length === 0 && (
-          <div className="caption">No version history.</div>
+        {canEdit && !canUploadVersion && (
+          <div className="caption mb-2">
+            New versions are uploaded on the workflow page, once a stage requests changes on this
+            document.
+          </div>
         )}
+        {isLoading && <div className="caption">Loading versions…</div>}
+        {!isLoading && sorted.length === 0 && <div className="caption">No version history.</div>}
         {sorted.map((v) => {
           const isCurrent = v.id === currentVersionId;
           return (
             <div key={v.id} className="meta-row" style={{ alignItems: 'center' }}>
               <span className="k">
                 v{v.versionNumber}
-                {isCurrent && <span className="badge b-status-closed" style={{ marginLeft: 6 }}>current</span>}
+                {isCurrent && (
+                  <span className="badge b-status-closed" style={{ marginLeft: 6 }}>
+                    current
+                  </span>
+                )}
               </span>
               <span className="v flex items-center gap-2" style={{ justifyContent: 'flex-end' }}>
                 <span className="caption">
-                  {getUploaderName ? getUploaderName(v.uploadedBy) : v.uploadedBy} · {fmtDate(v.createdAt)}
+                  {getUploaderName ? getUploaderName(v.uploadedBy) : v.uploadedBy} ·{' '}
+                  {fmtDate(v.createdAt)}
                   {v.ocrStatus && v.ocrStatus !== 'completed' ? ` · OCR ${v.ocrStatus}` : ''}
                 </span>
                 {v.fileUrl && (

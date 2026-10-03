@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AuthUser } from '@/types/models';
+import { AuthUser, SavedSearch } from '@/types/models';
 import { SEED, FINDINGS } from './initialData';
 
 export { FINDINGS };
@@ -47,6 +47,8 @@ export interface AppStore extends AppState {
   updateFeatureFlag: (id: string, updates: any) => void;
   updateFinding: (id: string, updates: any) => void;
   addFinding: (f: any) => void;
+  addSavedSearch: (userId: string, search: SavedSearch) => void;
+  removeSavedSearch: (userId: string, id: string) => void;
 
   // --- Async API Actions (New Pattern) ---
   fetchDocuments: () => Promise<void>;
@@ -226,6 +228,24 @@ export const useStore = create<AppStore>()(
         const { findings } = get();
         set({ findings: [f, ...(findings || [])] });
       },
+      addSavedSearch: (userId, search) => {
+        const { savedSearches } = get();
+        set({
+          savedSearches: {
+            ...savedSearches,
+            [userId]: [...(savedSearches[userId] ?? []), search],
+          },
+        });
+      },
+      removeSavedSearch: (userId, id) => {
+        const { savedSearches } = get();
+        set({
+          savedSearches: {
+            ...savedSearches,
+            [userId]: (savedSearches[userId] ?? []).filter((s) => s.id !== id),
+          },
+        });
+      },
 
       // --- Async API Actions Implementation ---
       fetchDocuments: async () => {
@@ -241,25 +261,25 @@ export const useStore = create<AppStore>()(
     }),
     {
       name: 'edms-state-v3',
-      version: 4,
+      version: 5,
       // v4: drop any stale `currentUser.permissions` persisted by an older build
       // so it gets re-derived cleanly from `GET /roles` / `GET /auth/me`.
+      // v5: `savedSearches` went from one shared array (seeded with two fake
+      // entries) to a per-user map with a new shape — start it empty.
       migrate: (persisted: any, version) => {
-        if (version < 4 && persisted?.currentUser) {
-          const { permissions, ...rest } = persisted.currentUser;
-          return { ...persisted, currentUser: rest };
+        let next = persisted;
+        if (version < 4 && next?.currentUser) {
+          const { permissions, ...rest } = next.currentUser;
+          next = { ...next, currentUser: rest };
         }
-        return persisted;
+        if (version < 5 && next) {
+          next = { ...next, savedSearches: {} };
+        }
+        return next;
       },
     },
   ),
 );
-
-export const effStatus = (doc: any) => {
-  if (doc.status === 'Closed' || doc.status === 'On Hold') return doc.status;
-  if (doc.due && doc.due < Date.now()) return 'Overdue';
-  return doc.status;
-};
 
 export const canView = (doc: any, user: any) => {
   if (!doc.restrictedTo) return true;

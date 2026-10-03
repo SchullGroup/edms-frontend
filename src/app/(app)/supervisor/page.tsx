@@ -8,8 +8,9 @@ import {
   useTeamStatusMatrix,
   useOpenItemsByCabinet,
 } from '@/apis/hooks/useWorkflowInstances';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Spinner } from '@/components/common/Spinner';
 import { Icon } from '@/components/ui/Icons';
 import { Table, Column } from '@/components/ui/Table';
@@ -30,6 +31,8 @@ export default function SupervisorDashboard() {
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
 
   const users = usersData?.data || [];
+  // Reassign targets: active users in the reassigner's own department only.
+  const { users: colleagues } = useDepartmentColleagues();
   const byCabinet = byCabinetData?.cabinets || [];
 
   const reassignTask = useReassignTask();
@@ -92,11 +95,11 @@ export default function SupervisorDashboard() {
             </label>
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select team member...</option>
-              {users
-                .filter((u) => u.status === 'active' && u.id !== t.assigneeId)
+              {colleagues
+                .filter((u) => u.id !== t.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} ({(u as any).departmentId || 'System'})
+                    {u.name}
                   </option>
                 ))}
             </select>
@@ -149,9 +152,9 @@ export default function SupervisorDashboard() {
         <MemberDrawerBody
           member={m}
           onReassign={(t) => handleReassignModal(t, () => handleRowClick(m))}
-          onOpenDocument={(docId) => {
+          onOpenDocument={(instanceId, taskId) => {
             closeDrawer();
-            router.push(`/doc/${docId}`);
+            router.push(`/workflow-instances/${instanceId}?task=${taskId}`);
           }}
         />
       ),
@@ -265,8 +268,11 @@ function MemberDrawerBody({
 }: {
   member: WorkflowTeamStatusMember;
   onReassign: (task: Task) => void;
-  onOpenDocument: (documentId: string) => void;
+  /** Opens the task on its workflow page. */
+  onOpenDocument: (workflowInstanceId: string, taskId: string) => void;
 }) {
+  const { can } = usePermissions();
+  const canReassign = can('task', 'reassign');
   const { data, isLoading } = useTasks({
     assigneeId: member.memberId,
     status: 'pending',
@@ -308,7 +314,7 @@ function MemberDrawerBody({
                   justifyContent: 'space-between',
                   cursor: 'pointer',
                 }}
-                onClick={() => doc?.id && onOpenDocument(doc.id)}
+                onClick={() => onOpenDocument(t.workflowInstanceId, t.id)}
               >
                 <div className="task-main">
                   <div
@@ -324,6 +330,8 @@ function MemberDrawerBody({
                 <button
                   className="btn btn-secondary btn-sm"
                   style={{ marginLeft: '12px', flexShrink: 0 }}
+                  disabled={!canReassign}
+                  title={!canReassign ? "You don't have permission to reassign tasks" : undefined}
                   onClick={(e) => {
                     e.stopPropagation();
                     onReassign(t);

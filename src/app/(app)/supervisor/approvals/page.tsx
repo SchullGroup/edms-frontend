@@ -3,9 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import { useUIStore } from '@/store/useUIStore';
 import { useApprovalTasks, useReassignTask } from '@/apis/hooks/useTasks';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
-import { useSignAndApprove } from '@/hooks/useSignAndApprove';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { TaskRow } from '@/components/ui/TaskRow';
@@ -32,12 +32,15 @@ export default function ApprovalsQueuePage() {
   const tasks = tasksData?.data || [];
   const pagination = tasksData?.pagination;
   const users = usersData?.data || [];
+  // Reassign targets: active users in the reassigner's own department only.
+  const { users: colleagues } = useDepartmentColleagues();
 
   const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
-  const { promptSignAndApprove } = useSignAndApprove();
 
   const { setPageTitle, openModal, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canReassign = can('task', 'reassign');
 
   useEffect(() => {
     setPageTitle('Approvals Queue');
@@ -46,21 +49,6 @@ export default function ApprovalsQueuePage() {
   const setTabAndReset = (next: 'pending' | 'escalated') => {
     setTab(next);
     setPage(1);
-  };
-
-  const handleApprove = (t: Task) => {
-    const title = t.workflowInstance?.document?.title || 'this document';
-    // `approve` requires a signature image — open the pad, upload, then act.
-    promptSignAndApprove({
-      taskId: t.id,
-      title: title.slice(0, 44),
-      onSuccess: () =>
-        createAuditLog.mutate({
-          action: 'APPROVE',
-          target: t.workflowInstance?.documentId || t.id,
-          detail: 'Signed & approved via approvals queue',
-        }),
-    });
   };
 
   const handleReassign = (t: Task) => {
@@ -79,8 +67,8 @@ export default function ApprovalsQueuePage() {
             <label>New assignee</label>
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select user...</option>
-              {users
-                .filter((u) => u.status === 'active' && u.id !== t.assigneeId)
+              {colleagues
+                .filter((u) => u.id !== t.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
@@ -166,19 +154,16 @@ export default function ApprovalsQueuePage() {
                 <TaskRow
                   key={t.id}
                   item={t}
+                  // Approving happens on the workflow page ("Open"), where the
+                  // documents can actually be read first — not from the list.
                   extraActions={
                     <>
                       <button
-                        className="btn btn-success btn-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleApprove(t);
-                        }}
-                      >
-                        Approve
-                      </button>
-                      <button
                         className="btn btn-secondary btn-sm"
+                        disabled={!canReassign}
+                        title={
+                          !canReassign ? "You don't have permission to reassign tasks" : undefined
+                        }
                         onClick={(e) => {
                           e.stopPropagation();
                           handleReassign(t);

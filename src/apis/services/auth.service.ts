@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, invalidateInFlightAuth } from '@/lib/api-client';
 import { AuthUser, ApiResponse } from '@/types/models';
 import Cookies from 'js-cookie';
 
@@ -28,6 +28,10 @@ export const authService = {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
       });
+      // A refresh from a previous, since-ended session (e.g. the tab sat open
+      // overnight and something 401'd before this fresh login) could still be
+      // in flight — invalidate it so its late result can't act on this session.
+      invalidateInFlightAuth();
     }
 
     return response.data.data;
@@ -58,6 +62,10 @@ export const authService = {
    * token) runs in the background and its outcome is not awaited.
    */
   logout: (): void => {
+    // Bump the auth epoch first — any refresh still in flight for this
+    // (outgoing) session must not be allowed to act on whatever session comes
+    // next, including a fresh login moments later. See `api-client.ts`.
+    invalidateInFlightAuth();
     const token = Cookies.get('accessToken');
     Cookies.remove('accessToken');
     axios

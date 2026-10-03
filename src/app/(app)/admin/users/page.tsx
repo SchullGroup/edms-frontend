@@ -12,6 +12,7 @@ import {
   useResendInvitation,
 } from '@/apis/hooks/useUsers';
 import { useRoles } from '@/apis/hooks/useRoles';
+import { usePermissions } from '@/hooks/usePermissions';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { buildDepartmentIndex, departmentName } from '@/apis/utils/managementAggregation';
 import { Table, Column } from '@/components/ui/Table';
@@ -23,6 +24,9 @@ const USERS_PAGE_SIZE = 10;
 export default function UsersPage() {
   const { auditAction } = useStore();
   const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canCreateUser = can('user', 'create');
+  const canEditUser = can('user', 'edit');
 
   const [page, setPage] = useState(1);
   const [departmentFilter, setDepartmentFilter] = useState('');
@@ -264,6 +268,8 @@ export default function UsersPage() {
         <div className="flex gap-2">
           <button
             className="btn btn-secondary btn-sm"
+            disabled={!canEditUser}
+            title={!canEditUser ? "You don't have permission to edit users" : undefined}
             onClick={(e) => {
               e.stopPropagation();
               handleUserModal(u);
@@ -273,6 +279,8 @@ export default function UsersPage() {
           </button>
           <button
             className="btn btn-secondary btn-sm"
+            disabled={!canEditUser}
+            title={!canEditUser ? "You don't have permission to edit users" : undefined}
             onClick={(e) => {
               e.stopPropagation();
               handleToggleStatus(u);
@@ -283,7 +291,10 @@ export default function UsersPage() {
           {u.status === 'Active' && !u.lastLoginAt && (
             <button
               className="btn btn-secondary btn-sm"
-              disabled={resendInvitation.isPending}
+              disabled={resendInvitation.isPending || !canCreateUser}
+              title={
+                !canCreateUser ? "You don't have permission to invite users" : undefined
+              }
               onClick={(e) => {
                 e.stopPropagation();
                 handleResendInvitation(u);
@@ -307,7 +318,12 @@ export default function UsersPage() {
           </div>
         </div>
         <div className="actions">
-          <button className="btn btn-primary flex items-center" onClick={() => handleUserModal(null)}>
+          <button
+            className="btn btn-primary flex items-center"
+            onClick={() => handleUserModal(null)}
+            disabled={!canCreateUser}
+            title={!canCreateUser ? "You don't have permission to invite users" : undefined}
+          >
             <span style={{ marginRight: '8px' }}>
               <Icon name="plus" size={15} />
             </span>{' '}

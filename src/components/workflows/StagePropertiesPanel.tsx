@@ -24,6 +24,13 @@ export interface StagePropertiesPanelProps {
   onSave: () => void;
   onDiscard: () => void;
   onDelete: () => void;
+  canEdit: boolean;
+  /** The workflow's first stage — it has no earlier stage to send work back
+   *  to, so "Request changes" can't apply (the backend rejects it with 409). */
+  isFirstStage?: boolean;
+  /** Renders just the body, no card/header — used when a parent (StagePanel)
+   *  already supplies the shared card shell and tab switcher. */
+  bare?: boolean;
 }
 
 export function StagePropertiesPanel({
@@ -47,25 +54,23 @@ export function StagePropertiesPanel({
   onSave,
   onDiscard,
   onDelete,
+  canEdit,
+  isFirstStage = false,
+  bare,
 }: StagePropertiesPanelProps) {
-  return (
-    <div className="card wfd-props">
-      <div className="card-head">
-        <span className="h3">Stage properties</span>
-        {saving && <span className="btn-spinner" aria-hidden="true" />}
+  const body = !selectedStage ? (
+    <div className="card-body">
+      <p className="muted" style={{ lineHeight: 1.6, fontSize: '12.5px' }}>
+        Select a stage on the left to configure it, or add a new one.
+      </p>
+      <div className="divider"></div>
+      <div className="banner success" style={{ marginBottom: 0 }}>
+        Only one stage is active on a document at a time — but a stage can route to different
+        next stages depending on conditions you set on the Transitions tab.
       </div>
-      {!selectedStage ? (
-        <div className="card-body">
-          <p className="muted" style={{ lineHeight: 1.6, fontSize: '12.5px' }}>
-            Select a stage on the left to configure it, or add a new one.
-          </p>
-          <div className="divider"></div>
-          <div className="banner success" style={{ marginBottom: 0 }}>
-            This workflow is strictly sequential — one stage runs at a time, in this order.
-          </div>
-        </div>
-      ) : (
-        <div className="card-body">
+    </div>
+  ) : (
+    <div className="card-body">
           <div className="field">
             <label>Stage name</label>
             <input className="input" value={nameDraft} onChange={(e) => onNameChange(e.target.value)} />
@@ -75,14 +80,22 @@ export function StagePropertiesPanel({
             <label>Allowed actions</label>
             <div className="flex gap-2 flex-wrap">
               {STAGE_ACTIONS.map((a) => {
-                const active = actionsDraft.includes(a.value);
+                const unavailable = isFirstStage && a.value === 'request_changes';
+                const active = actionsDraft.includes(a.value) && !unavailable;
                 return (
                   <button
                     key={a.value}
                     type="button"
-                    title={a.hint}
+                    title={unavailable ? 'Not available on the first stage — there is no earlier stage to send it back to' : a.hint}
                     className="tag"
-                    style={active ? { background: 'var(--focus)', color: '#fff', borderColor: 'var(--focus)' } : { cursor: 'pointer' }}
+                    disabled={unavailable}
+                    style={
+                      active
+                        ? { background: 'var(--focus)', color: '#fff', borderColor: 'var(--focus)' }
+                        : unavailable
+                          ? { opacity: 0.45, cursor: 'not-allowed', textDecoration: 'line-through' }
+                          : { cursor: 'pointer' }
+                    }
                     onClick={() => onToggleAction(a.value)}
                   >
                     {a.label}
@@ -90,7 +103,11 @@ export function StagePropertiesPanel({
                 );
               })}
             </div>
-            <div className="help">What whoever's assigned this stage can do with it.</div>
+            <div className="help">
+              What whoever's assigned this stage can do with it.
+              {isFirstStage &&
+                ' "Request changes" isn’t available on the first stage — use "Reject" to stop a submission instead.'}
+            </div>
           </div>
 
           <div className="field">
@@ -136,7 +153,12 @@ export function StagePropertiesPanel({
           </div>
 
           <div className="flex gap-2" style={{ marginTop: '4px' }}>
-            <button className="btn btn-primary btn-sm" onClick={onSave} disabled={!dirty || saving}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={onSave}
+              disabled={!dirty || saving || !canEdit}
+              title={!canEdit ? "You don't have permission to edit workflows" : undefined}
+            >
               {saving ? 'Saving…' : 'Save changes'}
             </button>
             {dirty && (
@@ -146,11 +168,26 @@ export function StagePropertiesPanel({
             )}
           </div>
 
-          <button className="btn btn-danger btn-sm mt-4" onClick={onDelete}>
+          <button
+            className="btn btn-danger btn-sm mt-4"
+            onClick={onDelete}
+            disabled={!canEdit}
+            title={!canEdit ? "You don't have permission to edit workflows" : undefined}
+          >
             Delete stage
           </button>
         </div>
-      )}
+      );
+
+  if (bare) return body;
+
+  return (
+    <div className="card wfd-props">
+      <div className="card-head">
+        <span className="h3">Stage properties</span>
+        {saving && <span className="btn-spinner" aria-hidden="true" />}
+      </div>
+      {body}
     </div>
   );
 }

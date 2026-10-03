@@ -10,6 +10,7 @@ import {
 } from '@/apis/hooks/useDelegations';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCabinets } from '@/apis/hooks/useCabinets';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Spinner } from '@/components/common/Spinner';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -17,6 +18,7 @@ import { Icon } from '@/components/ui/Icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { fmtDateTime } from '@/utils/helpers';
 import { Cabinet, Delegation, User } from '@/types/models';
+import { DateTimeField, todayStr } from '@/components/ui/DatePicker';
 
 /** A delegation is active only while `isActive` AND the current time falls
  *  inside its window — the backend flips `isActive` off once it ends, but a
@@ -60,6 +62,9 @@ function scopeLabel(d: Delegation, cabinetNameById: Record<string, string>): str
 export default function DelegationsPage() {
   const { currentUser } = useStore();
   const { setPageTitle, openModal, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canCreateDelegation = can('delegation', 'create');
+  const canEndDelegation = can('delegation', 'end');
 
   const { data, isLoading, isError, refetch } = useDelegations({ scope: 'mine', limit: 100 });
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
@@ -166,7 +171,8 @@ export default function DelegationsPage() {
             className="btn btn-secondary btn-sm"
             style={{ marginLeft: '12px' }}
             onClick={() => handleEnd(d)}
-            disabled={endDelegation.isPending}
+            disabled={endDelegation.isPending || !canEndDelegation}
+            title={!canEndDelegation ? "You don't have permission to end delegations" : undefined}
           >
             End now
           </button>
@@ -186,7 +192,14 @@ export default function DelegationsPage() {
           </div>
         </div>
         <div className="actions">
-          <button className="btn btn-accent" onClick={openCreateModal}>
+          <button
+            className="btn btn-accent"
+            onClick={openCreateModal}
+            disabled={!canCreateDelegation}
+            title={
+              !canCreateDelegation ? "You don't have permission to create delegations" : undefined
+            }
+          >
             <Icon name="plus" size={15} /> New delegation
           </button>
         </div>
@@ -289,20 +302,20 @@ function DelegationForm({
           <label>
             Starts <span className="req">*</span>
           </label>
-          <input
-            className="input"
-            type="datetime-local"
-            onChange={(e) => commit({ startsAt: e.target.value })}
+          <DateTimeField
+            aria-label="Starts"
+            min={todayStr()}
+            onChange={(v) => commit({ startsAt: v })}
           />
         </div>
         <div className="field" style={{ flex: 1 }}>
           <label>
             Ends <span className="req">*</span>
           </label>
-          <input
-            className="input"
-            type="datetime-local"
-            onChange={(e) => commit({ endsAt: e.target.value })}
+          <DateTimeField
+            aria-label="Ends"
+            min={todayStr()}
+            onChange={(v) => commit({ endsAt: v })}
           />
         </div>
       </div>

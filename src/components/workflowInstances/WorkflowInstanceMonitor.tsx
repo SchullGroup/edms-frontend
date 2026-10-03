@@ -115,6 +115,10 @@ export function WorkflowInstanceMonitor() {
             closeDrawer();
             router.push(`/doc/${docId}`);
           }}
+          onOpenWorkflow={(instanceId) => {
+            closeDrawer();
+            router.push(`/workflow-instances/${instanceId}`);
+          }}
         />
       ),
     });

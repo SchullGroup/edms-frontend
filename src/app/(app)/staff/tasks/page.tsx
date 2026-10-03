@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, effStatus } from '@/store/useStore';
+import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
+import { taskStatusLabel } from '@/utils/supervisor';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { Spinner } from '@/components/common/Spinner';
@@ -51,12 +52,11 @@ export default function MyTasksPage() {
   if (!currentUser) return null;
 
   let list = tasks;
-  // Fallback frontend filtering for status just to be safe with Overdue since backend 'pending' includes overdue
+  // Backend 'pending' covers both — refine the Pending/Overdue split client-side
+  // using the real `dueAt` field (see `taskStatusLabel`, `@/utils/supervisor`).
   if (statusF !== 'All') {
     list = list.filter((t: any) => {
-      const isCompleted = t.status === 'completed';
-      const eff = isCompleted ? 'Closed' : effStatus(t);
-      // Backend handles exact status mapping, but for 'Pending'/'Overdue' split we need to refine:
+      const eff = taskStatusLabel(t);
       if (statusF === 'Overdue') return eff === 'Overdue';
       if (statusF === 'Pending') return eff === 'Pending';
       return true; // Already filtered by backend for other exact matches

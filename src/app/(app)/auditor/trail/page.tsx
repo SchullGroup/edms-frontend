@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useAuditEntries, useExportAuditCsv } from '@/apis/hooks/useAudit';
 import { useUsers } from '@/apis/hooks/useUsers';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { Spinner } from '@/components/common/Spinner';
@@ -29,7 +30,15 @@ export default function AuditorTrailPage() {
   const [action, setAction] = useState('');
   const [days, setDays] = useState(30);
 
-  const from = new Date(Date.now() - days * 86400000).toISOString();
+  // Memoized on `days` alone — recomputing this from `Date.now()` on every
+  // render changed `filters.from` by a few milliseconds each time, which
+  // changed `useAuditEntries`' query key every render and made the trail
+  // refetch forever (the endpoint was always returning data fine; the query
+  // just never reused its own result).
+  const from = useMemo(
+    () => new Date(Date.now() - days * 86400000).toISOString(),
+    [days],
+  );
   const filters = {
     page,
     limit: PAGE_SIZE,
@@ -47,6 +56,8 @@ export default function AuditorTrailPage() {
   const rows = auditData?.data || [];
 
   const exportCsv = useExportAuditCsv();
+  const { can } = usePermissions();
+  const canExport = can('audit', 'export');
 
   useEffect(() => {
     setPageTitle('Audit Trail');
@@ -247,7 +258,8 @@ export default function AuditorTrailPage() {
             <button
               className="btn btn-secondary btn-sm"
               onClick={handleExport}
-              disabled={exportCsv.isPending}
+              disabled={exportCsv.isPending || !canExport}
+              title={!canExport ? "You don't have permission to export the audit trail" : undefined}
             >
               {exportCsv.isPending ? 'Exporting…' : 'Export extract'}
             </button>

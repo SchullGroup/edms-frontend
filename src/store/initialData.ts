@@ -1,16 +1,10 @@
+import { DOCUMENT_TYPES } from '@/constants/documentTypes';
+import type { SavedSearch } from '@/types/models';
+
 export const CONF_LEVELS = ['Public', 'Internal', 'Confidential', 'Restricted', 'Top Secret'];
 export const URGENCY_LEVELS = ['Low', 'Normal', 'High', 'Critical'];
 export const STATUSES = ['Pending', 'In Progress', 'On Hold', 'Closed', 'Overdue'];
-export const DOC_TYPES = [
-  'Invoice',
-  'Contract',
-  'Memo',
-  'Policy',
-  'Report',
-  'Purchase Order',
-  'Letter',
-  'Incident Report',
-];
+export const DOC_TYPES: string[] = [...DOCUMENT_TYPES];
 
 const DAY = 86400000;
 const now = Date.now();
@@ -1497,15 +1491,8 @@ export const SEED = {
   policies: POLICIES,
   featureFlags: FEATURE_FLAGS,
   plans: PLANS,
-  savedSearches: [
-    { id: 'ss-1', name: 'My overdue items', q: '', facets: { status: ['Overdue'] } },
-    {
-      id: 'ss-2',
-      name: 'Restricted finance docs',
-      q: '',
-      facets: { cabinet: ['cab-fin'], confidentiality: ['Restricted'] },
-    },
-  ],
+  // Keyed by user id, so people sharing a browser don't see each other's.
+  savedSearches: {} as Record<string, SavedSearch[]>,
   branding: {
     appName: 'SchullTech EDMS',
     tenantName: 'First Atlantic Bank',

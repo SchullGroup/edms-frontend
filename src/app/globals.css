@@ -294,6 +294,24 @@ a:hover { text-decoration: underline; }
 .urg-legend .urg-dot { animation: none; margin-right: 5px; }
 .urg-legend span { display: inline-flex; align-items: center; }
 
+/* ---------- Urgency row/card flash (high/critical only) ---------- */
+/* Deliberately sharp/saturated — not the muted badge palette — so it reads as
+   an alert, not just a status tint. Same value in both themes; it's used at
+   low alpha via color-mix, not as text, so it doesn't need a dark variant. */
+.urg-row-critical, .urg-row-high { animation: urg-row-flash 1.3s ease-in-out infinite; }
+.urg-row-critical { --urg-flash: #FF3B30; }
+.urg-row-high { --urg-flash: #FFD400; }
+@keyframes urg-row-flash {
+  0%, 100% { background-color: color-mix(in srgb, var(--urg-flash) 30%, transparent); }
+  50% { background-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .urg-row-critical, .urg-row-high {
+    animation: none;
+    background-color: color-mix(in srgb, var(--urg-flash) 18%, transparent);
+  }
+}
+
 /* ---------- Task rows / lists ---------- */
 .rowlist { display: flex; flex-direction: column; }
 .task-row { display: flex; align-items: center; gap: 12px; padding: var(--row-pad) 20px; border-bottom: 1px solid var(--border); cursor: pointer; position: relative; transition: background .1s; }
@@ -370,6 +388,23 @@ textarea.input { height: auto; padding: 10px 12px; min-height: 76px; resize: ver
 .combobox-opt-label { display: flex; flex-direction: column; line-height: 1.3; }
 .combobox-opt-hint { font-size: 11px; color: var(--muted); }
 .combobox-empty { padding: 10px; font-size: 12px; color: var(--muted); text-align: center; }
+
+/* ---------- Date pickers (react-day-picker) ---------- */
+.datefield { position: relative; }
+.datefield-control { display: flex; align-items: center; gap: 8px; text-align: left; cursor: pointer; color: var(--ink); padding-right: 30px; white-space: nowrap; }
+.datefield-control > svg { color: var(--muted); flex-shrink: 0; }
+.datefield-placeholder { color: var(--muted); }
+.datefield-clear { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); display: inline-flex; border: 0; background: none; color: var(--muted); padding: 4px; border-radius: 6px; cursor: pointer; }
+.datefield-clear:hover { background: var(--surface); color: var(--ink); }
+.datefield-pop { z-index: 1000; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-overlay); padding: 10px 12px; color: var(--ink); font-size: 13px;
+  --rdp-accent-color: var(--brand-primary-light); --rdp-accent-background-color: color-mix(in srgb, var(--focus) 12%, transparent);
+  --rdp-day-height: 36px; --rdp-day-width: 36px; --rdp-day_button-height: 34px; --rdp-day_button-width: 34px; --rdp-today-color: var(--focus); }
+.datefield-pop .rdp-selected .rdp-day_button { background: var(--brand-primary-light); color: #fff; border-color: transparent; }
+.datefield-pop .rdp-day_button:hover:not([disabled]) { background: var(--surface); }
+.datefield-pop .rdp-selected .rdp-day_button:hover { background: var(--brand-primary-light); }
+.datefield-time { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 4px; color: var(--muted); }
+.datefield-time select.input { width: auto; height: 32px; padding: 0 8px; }
+.datefield-time .btn { margin-left: auto; }
 
 .check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .check input { width: 15px; height: 15px; accent-color: var(--focus); }
@@ -573,21 +608,43 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
 .wfd-saved-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--status-closed); opacity: 0; transform: translateY(2px); transition: opacity .2s cubic-bezier(.2,0,0,1), transform .2s cubic-bezier(.2,0,0,1); pointer-events: none; }
 .wfd-saved-pill.show { opacity: 1; transform: translateY(0); }
 
-.wfd-canvas { position: relative; background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px); background-size: 22px 22px; border-radius: var(--radius); padding: 20px; }
-/* Stages wrap onto as many rows as needed instead of scrolling off to the right. */
-.wf-node-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px; }
-.wf-node { flex: 0 0 176px; background: var(--panel); border: 1.5px solid var(--border-strong); border-radius: 13px; padding: 11px 14px; box-shadow: var(--shadow); cursor: grab; user-select: none; touch-action: none; transition: border-color .12s ease, box-shadow .12s ease; }
+.wfd-canvas { position: relative; background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px); background-size: 22px 22px; border-radius: var(--radius); padding: 20px; overflow: auto; }
+/* Stages sit at an absolute (column, row) position computed from the routing
+   graph (see `computeStageLayout`), not from array order in a flex row — see
+   WorkflowCanvas's own comment for why. */
+.wfd-canvas-graph { position: relative; }
+.wf-node { position: absolute; background: var(--panel); border: 1.5px solid var(--border-strong); border-radius: 13px; padding: 11px 14px; box-shadow: var(--shadow); cursor: pointer; user-select: none; transition: border-color .12s ease, box-shadow .12s ease; }
 .wf-node:hover { border-color: var(--muted); }
-.wf-node:active { cursor: grabbing; }
 .wf-node.selected { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 16%, transparent); }
-.wf-node.dragging { opacity: .5; }
-.wf-node-order { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
-.wf-node-order::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--border-strong); flex-shrink: 0; }
-.wf-node.selected .wf-node-order::before { background: var(--focus); }
 .wf-node-name { font-size: 13px; font-weight: 700; line-height: 1.3; }
 .wf-node-meta { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
 .wf-node-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
 .wf-node-tag { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font-size: 9.5px; font-weight: 600; color: var(--muted); }
+
+/* Branch connector lines drawn over the stage row (see WorkflowCanvas's SVG
+   overlay) — conditional reuses the pending/amber status color, the required
+   fallback reuses the closed/green one, both already themed for dark mode. */
+.wfd-connectors { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.wfd-connector-plain { stroke: var(--border-strong); }
+.wfd-connector-conditional { stroke: var(--status-pending); }
+.wfd-connector-fallback { stroke: var(--status-closed); }
+.wfd-branch-label { position: absolute; transform: translate(-50%, -50%); font-size: 9.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; pointer-events: auto; border: 0; cursor: pointer; }
+.wfd-branch-label.conditional { color: var(--status-pending); background: color-mix(in srgb, var(--status-pending) 16%, var(--panel)); }
+.wfd-branch-label.fallback { color: var(--status-closed); background: color-mix(in srgb, var(--status-closed) 16%, var(--panel)); cursor: default; }
+
+/* Transitions panel (side panel, next to Stage properties) */
+.wfd-transition-card { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.wfd-tag-conditional { color: var(--status-pending); border-color: color-mix(in srgb, var(--status-pending) 40%, var(--border)); background: color-mix(in srgb, var(--status-pending) 12%, var(--surface)); }
+.wfd-tag-fallback { color: var(--status-closed); border-color: color-mix(in srgb, var(--status-closed) 40%, var(--border)); background: color-mix(in srgb, var(--status-closed) 12%, var(--surface)); }
+.wfd-rule-row { display: flex; align-items: center; gap: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px; flex-wrap: wrap; }
+
+/* Stage panel's Properties/Transitions tab bar */
+.wfd-tabbar { margin: 14px 20px 0; }
+.wfd-tab-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--status-pending); margin-left: 6px; vertical-align: middle; }
+
+/* Collapsible "How routing works" guide */
+.wfd-guide-trigger { margin-bottom: 14px; }
+.wfd-guide-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.6; color: var(--ink); }
 
 /* progress bar generic */
 .pbar { height: 7px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }

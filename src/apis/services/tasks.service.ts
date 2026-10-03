@@ -44,46 +44,10 @@ export interface DepartmentScopedTaskParams {
   departmentId?: string;
 }
 
-/** The backend caps `limit` at 100. */
-const MAX_LIMIT = 100;
-
-/** Safety valve so a large tenant can never spin the browser forever. */
-const MAX_PAGES = 20;
-
 export const tasksService = {
   getAll: async (params?: TaskFilters): Promise<PaginatedResponse<Task>> => {
     const response = await apiClient.get<PaginatedResponse<Task>>('/tasks', { params });
     return response.data;
-  },
-
-  /**
-   * Walks every page of `GET /tasks` and returns the flattened list.
-   *
-   * The supervisor dashboards aggregate over the whole task set (counts, ageing
-   * buckets, per-member rollups), so a single 20-row page would silently produce
-   * wrong numbers. `truncated` is true when we hit MAX_PAGES and stopped early,
-   * so callers can warn instead of quietly under-reporting.
-   */
-  getAllPages: async (
-    params?: Omit<TaskFilters, 'page' | 'limit'>,
-  ): Promise<{ items: Task[]; total: number; truncated: boolean }> => {
-    const items: Task[] = [];
-    let page = 1;
-    let total = 0;
-    let totalPages = 1;
-
-    while (page <= totalPages && page <= MAX_PAGES) {
-      const response = await apiClient.get<PaginatedResponse<Task>>('/tasks', {
-        params: { ...params, page, limit: MAX_LIMIT },
-      });
-
-      items.push(...response.data.data);
-      total = response.data.pagination.total;
-      totalPages = response.data.pagination.totalPages;
-      page += 1;
-    }
-
-    return { items, total, truncated: totalPages > MAX_PAGES };
   },
 
   getById: async (id: string): Promise<Task> => {

@@ -1,89 +1,196 @@
-// @ts-nocheck
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useStore, effStatus, canView, cabById, userById } from '@/store/useStore';
+import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { documentStatusLabel } from '@/utils/helpers';
 import { useDocuments, useDocumentSearch } from '@/apis/hooks/useDocuments';
 import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { DOCUMENT_TYPES } from '@/constants/documentTypes';
 import { Icon } from '@/components/ui/Icons';
-import { TaskRow } from '@/components/ui/TaskRow';
+import { Pagination } from '@/components/ui/Pagination';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { exportCsv } from '@/utils/exportCsv';
 import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
+import type { Document, SavedSearch } from '@/types/models';
+
+type Filters = SavedSearch['filters'];
+type Option = readonly [value: string, label: string];
+
+const PAGE_SIZE = 20;
+
+// Backend enum values → labels. One value per filter: `GET /documents` takes a
+// single value for each, so these are pick-one groups, not checkboxes.
+const STATUS_OPTIONS: Option[] = [
+  ['pending', 'Pending'],
+  ['in_progress', 'In Progress'],
+  ['on_hold', 'On Hold'],
+  ['closed', 'Closed'],
+];
+const CONFIDENTIALITY_OPTIONS: Option[] = [
+  ['public', 'Public'],
+  ['internal', 'Internal'],
+  ['confidential', 'Confidential'],
+  ['restricted', 'Restricted'],
+  ['top_secret', 'Top Secret'],
+];
+const URGENCY_OPTIONS: Option[] = [
+  ['critical', 'Critical'],
+  ['high', 'High'],
+  ['normal', 'Normal'],
+  ['low', 'Low'],
+];
+const TYPE_OPTIONS: Option[] = DOCUMENT_TYPES.map((t) => [t, t] as const);
+
+/** Reads a filter from the URL, accepting the enum (`in_progress`) or its label
+ *  (`In Progress`). Unknown values — e.g. the old `status=Overdue`, which isn't a
+ *  document status — are ignored rather than filtering everything out. */
+function fromParam(raw: string | null, options: Option[]): string | undefined {
+  if (!raw) return undefined;
+  const norm = raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return options.find(([v, l]) => v === norm || l.toLowerCase() === raw.trim().toLowerCase())?.[0];
+}
+
+function FilterGroup({
+  title,
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  title: string;
+  options: Option[];
+  value: string | undefined;
+  onChange: (value: string | undefined) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="facet-group" role="radiogroup" aria-label={title}>
+      <div className="flex justify-between items-center">
+        <span className="fg-title">{title}</span>
+        {value && !disabled && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ marginTop: '-9px' }}
+            onClick={() => onChange(undefined)}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      {options.map(([v, label]) => (
+        <label
+          className="facet-opt"
+          key={v}
+          style={disabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+        >
+          <input
+            type="radio"
+            name={`filter-${title}`}
+            checked={value === v}
+            disabled={disabled}
+            readOnly
+            // onClick, not onChange: a checked radio never fires onChange, and
+            // clicking the selected option should clear it.
+            onClick={() => onChange(value === v ? undefined : v)}
+          />
+          {label}
+        </label>
+      ))}
+    </div>
+  );
+}
 
 export default function SearchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { docTypes, savedSearches } = useStore();
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
-
-  const initialQ = searchParams?.get('q') || '';
-  const [q, setQ] = useState(initialQ);
+  const me = useStore((s) => s.currentUser);
+  const savedByUser = useStore((s) => s.savedSearches);
+  const addSavedSearch = useStore((s) => s.addSavedSearch);
+  const removeSavedSearch = useStore((s) => s.removeSavedSearch);
+  const { setPageTitle, openModal, addToast } = useUIStore();
+  const saved = me ? (savedByUser[me.id] ?? []) : [];
 
   const { data: cabinetsData } = useCabinets();
-  const cabinets = cabinetsData?.data || [];
+  const cabinets = useMemo(() => cabinetsData?.data ?? [], [cabinetsData]);
+  const cabinetName = useMemo(
+    () => new Map(cabinets.map((c: any) => [c.id, c.name as string])),
+    [cabinets],
+  );
 
-  const { data: searchData, isLoading: isSearchLoading } = useDocumentSearch(q);
-  const { data: allData, isLoading: isAllLoading } = useDocuments();
-
-  const baseDocuments = q ? (searchData?.data || []) : (allData?.data || []);
-  const isLoading = q ? isSearchLoading : isAllLoading;
-  const [facets, setFacets] = useState<Record<string, Set<string>>>({
-    cabinet: new Set(),
-    type: new Set(),
-    status: new Set(),
-    confidentiality: new Set(),
-    urgency: new Set()
-  });
+  // `input` is what's typed; `q` is the debounced value actually searched.
+  const urlQ = searchParams?.get('q') ?? '';
+  const [input, setInput] = useState(urlQ);
+  const [q, setQ] = useState(urlQ.trim());
+  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState<Filters>(() => ({
+    cabinetId: searchParams?.get('cabinet') || undefined,
+    documentType: fromParam(searchParams?.get('type') ?? null, TYPE_OPTIONS),
+    status: fromParam(searchParams?.get('status') ?? null, STATUS_OPTIONS) as Filters['status'],
+    confidentiality: fromParam(
+      searchParams?.get('confidentiality') ?? searchParams?.get('conf') ?? null,
+      CONFIDENTIALITY_OPTIONS,
+    ) as Filters['confidentiality'],
+    urgency: fromParam(searchParams?.get('urgency') ?? null, URGENCY_OPTIONS) as Filters['urgency'],
+  }));
 
   useEffect(() => {
     setPageTitle('Search');
-    // Pre-fill facets from query params if present
-    const newFacets = { ...facets };
-    let changed = false;
-    ['cabinet', 'type', 'status', 'confidentiality', 'urgency'].forEach(key => {
-      const val = searchParams?.get(key);
-      if (val) {
-        newFacets[key].add(val);
-        changed = true;
-      }
-    });
-    if (changed) setFacets(newFacets);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setPageTitle]); // only run once and on title change
+  }, [setPageTitle]);
 
-  const matches = (d: any) => {
-    const status = d.status === 'closed' ? 'Closed' : (d.status === 'in_progress' ? 'In Progress' : 'Pending');
-    const type = d.documentType;
-    const urgency = d.urgency?.charAt(0).toUpperCase() + d.urgency?.slice(1);
-    const confidentiality = d.confidentiality?.charAt(0).toUpperCase() + d.confidentiality?.slice(1);
+  // The sidebar search box navigates to /search?q=… — follow it even when
+  // we're already on this page.
+  useEffect(() => {
+    setInput(urlQ);
+    setQ(urlQ.trim());
+    setPage(1);
+  }, [urlQ]);
 
-    if (facets.cabinet.size && !facets.cabinet.has(d.cabinetId)) return false;
-    if (facets.type.size && !facets.type.has(type)) return false;
-    if (facets.status.size && !facets.status.has(status)) return false;
-    if (facets.confidentiality.size && !facets.confidentiality.has(confidentiality)) return false;
-    if (facets.urgency.size && !facets.urgency.has(urgency)) return false;
-    return true;
+  const searchText = useDebouncedCallback((value: string) => {
+    setQ(value.trim());
+    setPage(1);
+  }, 350);
+
+  // Text search (`GET /documents/search`) only accepts a cabinet filter; the
+  // others need the list endpoint. So while there's text, only Cabinet applies.
+  const textMode = q.length > 0;
+  const listQuery = useDocuments(
+    { ...filters, page, limit: PAGE_SIZE },
+    { enabled: !textMode },
+  );
+  const searchQuery = useDocumentSearch(q, {
+    cabinetId: filters.cabinetId,
+    page,
+    limit: PAGE_SIZE,
+  });
+  const active = textMode ? searchQuery : listQuery;
+  const results: Document[] = active.data?.data ?? [];
+  const pagination = active.data?.pagination;
+  const total = pagination?.total ?? results.length;
+
+  const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => {
+    setFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
   };
-
-  const results = baseDocuments.filter(matches);
-
-  const toggleFacet = (key: string, val: string) => {
-    const newFacets = { ...facets };
-    if (newFacets[key].has(val)) newFacets[key].delete(val);
-    else newFacets[key].add(val);
-    setFacets(newFacets);
-  };
+  const hasFilters = Object.values(filters).some(Boolean);
 
   const saveSearch = () => {
-    let nameVal = '';
+    if (!me) return;
+    let name = q ? `“${q}”` : 'My filter';
     openModal({
       title: 'Save this search',
       body: (
         <div className="field">
           <label>Name</label>
-          <input className="input" placeholder="e.g. Overdue finance invoices" defaultValue={q ? `“${q}”` : 'My filter'} onChange={e => nameVal = e.target.value} />
+          <input
+            className="input"
+            defaultValue={name}
+            placeholder="e.g. Critical finance invoices"
+            onChange={(e) => (name = e.target.value)}
+          />
         </div>
       ),
       actions: [
@@ -92,163 +199,255 @@ export default function SearchPage() {
           label: 'Save',
           kind: 'btn-primary',
           onClick: () => {
-            const finalName = nameVal || (q ? `“${q}”` : 'My filter');
-            const newSaved = {
-              id: 'ss-' + Date.now(),
-              name: finalName,
+            const kept = Object.fromEntries(
+              Object.entries(filters).filter(([, v]) => v),
+            ) as Filters;
+            addSavedSearch(me.id, {
+              id: `ss-${Date.now()}`,
+              name: name.trim() || 'My filter',
               q,
-              facets: Object.fromEntries(Object.entries(facets).map(([k, v]) => [k, Array.from(v)])) as any
-            } as any;
-            useStore.setState({ savedSearches: [...savedSearches, newSaved] });
+              filters: kept,
+            });
             addToast('Search saved', 'success');
-          }
-        }
-      ]
+          },
+        },
+      ],
     });
   };
 
-  const applySaved = (ss: any) => {
-    setQ(ss.q || '');
-    const nf = {
-      cabinet: new Set<string>((ss.facets && ss.facets.cabinet) || []),
-      type: new Set<string>((ss.facets && ss.facets.type) || []),
-      status: new Set<string>((ss.facets && ss.facets.status) || []),
-      confidentiality: new Set<string>((ss.facets && ss.facets.confidentiality) || []),
-      urgency: new Set<string>((ss.facets && ss.facets.urgency) || [])
-    };
-    setFacets(nf);
+  const applySaved = (ss: SavedSearch) => {
+    let next = { ...ss.filters };
+    // A saved cabinet may have been deleted since, or be one this user can't see.
+    if (next.cabinetId && cabinets.length && !cabinetName.has(next.cabinetId)) {
+      next = { ...next, cabinetId: undefined };
+      addToast('The cabinet in this saved search is no longer available', 'info');
+    }
+    setInput(ss.q);
+    setQ(ss.q);
+    setFilters(next);
+    setPage(1);
   };
-
-  const group = (title: string, key: string, opts: [string, string][]) => {
-    return (
-      <div className="facet-group" key={key}>
-        <div className="fg-title">{title}</div>
-        {opts.map(([val, label]) => {
-          const cnt = baseDocuments.filter(d => {
-            const saved = new Set(facets[key]);
-            facets[key] = new Set();
-            
-            const status = d.status === 'closed' ? 'Closed' : (d.status === 'in_progress' ? 'In Progress' : 'Pending');
-            const type = d.documentType;
-            const urgency = d.urgency?.charAt(0).toUpperCase() + d.urgency?.slice(1);
-            const confidentiality = d.confidentiality?.charAt(0).toUpperCase() + d.confidentiality?.slice(1);
-
-            let dVal = '';
-            if (key === 'status') dVal = status;
-            else if (key === 'type') dVal = type;
-            else if (key === 'urgency') dVal = urgency;
-            else if (key === 'confidentiality') dVal = confidentiality;
-            else if (key === 'cabinet') dVal = d.cabinetId;
-
-            const ok = matches(d) && dVal === val;
-            facets[key] = saved;
-            return ok;
-          }).length;
-          return (
-            <label className="facet-opt" key={val}>
-              <input type="checkbox" checked={facets[key].has(val)} onChange={() => toggleFacet(key, val)} />
-              {label} <span className="cnt">{cnt}</span>
-            </label>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const CONF_LEVELS = ['Public', 'Internal', 'Confidential', 'Restricted', 'Top Secret'];
-  const URG_LEVELS = ['Critical', 'High', 'Normal', 'Low'];
-  const STATUSES = ['Pending', 'In Progress', 'On Hold', 'Overdue', 'Closed'];
 
   return (
     <div>
       <div className="page-head">
         <div>
           <div className="page-title">Search</div>
-          <div className="page-sub">Global and semantic search with facets and saved searches.</div>
+          <div className="page-sub">
+            Search document titles and scanned text, or browse everything with filters.
+          </div>
         </div>
       </div>
 
       <div className="mb-4">
-        <input 
-          className="input" 
-          type="search" 
-          value={q} 
-          placeholder="Search naturally — e.g. “overdue invoices from Meridian above 10 million”"
+        <input
+          className="input"
+          type="search"
+          value={input}
+          aria-label="Search documents"
+          placeholder="Search titles and document text…"
           style={{ height: '44px', fontSize: '14px' }}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            searchText(e.target.value);
+          }}
         />
       </div>
 
       <div className="search-layout">
-        {/* Facets */}
         <div className="card">
           <div className="facet-group">
             <div className="flex justify-between items-center">
-              <span className="fg-title" style={{ marginBottom: 0 }}>Saved searches</span>
-              <button className="btn btn-ghost btn-sm" title="Save current search" onClick={saveSearch}>+ Save</button>
+              <span className="fg-title" style={{ marginBottom: 0 }}>
+                Saved searches
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                title="Save current search"
+                disabled={!me || (!q && !hasFilters)}
+                onClick={saveSearch}
+              >
+                + Save
+              </button>
             </div>
-            {savedSearches.map(ss => (
-              <div className="facet-opt" style={{ justifyContent: 'space-between' }} key={ss.id}>
-                <a href="#" style={{ fontWeight: 600 }} onClick={(e) => { e.preventDefault(); applySaved(ss); }}>{ss.name}</a>
-                <button className="tag" style={{ border: 0, cursor: 'pointer' }} aria-label="Delete saved search" onClick={() => {
-                  useStore.setState({ savedSearches: savedSearches.filter(x => x.id !== ss.id) });
-                  addToast('Saved search removed', 'info');
-                }}>×</button>
+            {saved.length === 0 && (
+              <div className="caption" style={{ marginTop: '6px' }}>
+                Searches you save appear here.
+              </div>
+            )}
+            {saved.map((ss) => (
+              <div
+                className="facet-opt"
+                style={{ justifyContent: 'space-between' }}
+                key={ss.id}
+              >
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontWeight: 600, padding: 0 }}
+                  onClick={() => applySaved(ss)}
+                >
+                  {ss.name}
+                </button>
+                <button
+                  className="tag"
+                  style={{ border: 0, cursor: 'pointer' }}
+                  aria-label={`Delete saved search ${ss.name}`}
+                  onClick={() => {
+                    if (me) removeSavedSearch(me.id, ss.id);
+                    addToast('Saved search removed', 'info');
+                  }}
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>
-          {group('Cabinet', 'cabinet', cabinets.map((c: any) => [c.id, c.name]))}
-          {group('Type', 'type', docTypes.map(t => [t, t]))}
-          {group('Status', 'status', STATUSES.map(s => [s, s]))}
-          {group('Confidentiality', 'confidentiality', CONF_LEVELS.map(l => [l, l]))}
-          {group('Urgency', 'urgency', URG_LEVELS.map(l => [l, l]))}
+
+          {textMode && (
+            <div className="facet-group caption">
+              While searching text, only the Cabinet filter applies. Clear the search box to
+              use the others.
+            </div>
+          )}
+
+          <FilterGroup
+            title="Cabinet"
+            options={cabinets.map((c: any) => [c.id, c.name] as const)}
+            value={filters.cabinetId}
+            onChange={(v) => setFilter('cabinetId', v)}
+          />
+          <FilterGroup
+            title="Type"
+            options={TYPE_OPTIONS}
+            value={filters.documentType}
+            onChange={(v) => setFilter('documentType', v)}
+            disabled={textMode}
+          />
+          <FilterGroup
+            title="Status"
+            options={STATUS_OPTIONS}
+            value={filters.status}
+            onChange={(v) => setFilter('status', v as Filters['status'])}
+            disabled={textMode}
+          />
+          <FilterGroup
+            title="Confidentiality"
+            options={CONFIDENTIALITY_OPTIONS}
+            value={filters.confidentiality}
+            onChange={(v) => setFilter('confidentiality', v as Filters['confidentiality'])}
+            disabled={textMode}
+          />
+          <FilterGroup
+            title="Urgency"
+            options={URGENCY_OPTIONS}
+            value={filters.urgency}
+            onChange={(v) => setFilter('urgency', v as Filters['urgency'])}
+            disabled={textMode}
+          />
+          {hasFilters && (
+            <div className="facet-group">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setFilters({});
+                  setPage(1);
+                }}
+              >
+                Clear all filters
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Results */}
         <div className="min-w-0">
           <div className="flex justify-between items-center mb-2">
             <span className="muted" style={{ fontSize: '12.5px' }}>
-              {results.length} result{results.length === 1 ? '' : 's'}{q ? ` for “${q}”` : ''} · semantic + keyword search across OCR text
+              {active.isLoading
+                ? 'Searching…'
+                : `${total} result${total === 1 ? '' : 's'}${q ? ` for “${q}”` : ''}`}
             </span>
-            <button className="btn btn-secondary btn-sm" onClick={() => exportCsv('Search_Results', results)}>Export results</button>
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={!results.length}
+              onClick={() =>
+                exportCsv(
+                  'Search_Results',
+                  results.map((d) => ({
+                    title: d.title,
+                    type: d.documentType ?? '',
+                    cabinet: cabinetName.get(d.cabinetId) ?? '',
+                    status: documentStatusLabel(d),
+                    confidentiality: d.confidentiality,
+                    urgency: d.urgency,
+                    created: d.createdAt,
+                  })),
+                )
+              }
+            >
+              Export this page
+            </button>
           </div>
 
-          {!results.length ? (
+          {active.isError ? (
+            <ErrorMessage message="Search failed." retry={active.refetch} />
+          ) : !results.length ? (
             <div className="card">
               <div className="empty">
                 <Icon name="search" size={32} />
-                <div className="h3 mt-4 mb-2">{isLoading ? 'Loading...' : 'No results'}</div>
-                <p className="caption mb-4">{isLoading ? 'Fetching documents...' : (q ? `Nothing matched “${q}”. Try fewer words, or clear some facets.` : 'Type a query or pick facets on the left.')}</p>
+                <div className="h3 mt-4 mb-2">{active.isLoading ? 'Loading…' : 'No results'}</div>
+                <p className="caption mb-4">
+                  {active.isLoading
+                    ? 'Fetching documents…'
+                    : q
+                      ? `Nothing matched “${q}”. Try fewer words, or a different cabinet.`
+                      : hasFilters
+                        ? 'No documents match these filters.'
+                        : 'No documents yet.'}
+                </p>
               </div>
             </div>
           ) : (
             <div className="card">
               <div className="rowlist">
-                {results.map((d: any) => {
-                  const restricted = false; // Mock for now
-                  const status = d.status === 'closed' ? 'Closed' : (d.status === 'in_progress' ? 'In Progress' : 'Pending');
-                  const confidentiality = d.confidentiality?.charAt(0).toUpperCase() + d.confidentiality?.slice(1);
-                  return (
-                    <div className="task-row" key={d.id} onClick={() => router.push(`/doc/${d.id}`)} role="button" tabIndex={0}>
-                      <div className="task-main">
-                        <div className="task-title">
-                          {restricted && <span style={{ marginRight: '6px' }}><Icon name="lock" size={12} /></span>}
-                          {d.title}
-                        </div>
-                        <div className="caption" style={{ margin: '4px 0' }}>
-                          …{d.documentType} filed in Cabinet · {Object.entries((d as any).metadata || {}).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(' · ')}…
-                        </div>
-                        <div className="task-meta">
-                          <StatusBadge status={status} />
-                          <ConfBadge level={confidentiality} />
-                          <span>· {new Date(d.createdAt).toLocaleDateString('en-GB')}</span>
-                        </div>
+                {results.map((d) => (
+                  <div
+                    className="task-row"
+                    key={d.id}
+                    onClick={() => router.push(`/doc/${d.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') router.push(`/doc/${d.id}`);
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="task-main">
+                      <div className="task-title">{d.title}</div>
+                      <div className="caption" style={{ margin: '4px 0' }}>
+                        {[d.documentType, cabinetName.get(d.cabinetId)].filter(Boolean).join(' · ')}
                       </div>
-                      <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); router.push(`/doc/${d.id}`); }}>Open</button>
+                      <div className="task-meta">
+                        <StatusBadge status={documentStatusLabel(d)} />
+                        <ConfBadge level={d.confidentiality} />
+                        <UrgBadge level={d.urgency} />
+                        <span>· {new Date(d.createdAt).toLocaleDateString('en-GB')}</span>
+                      </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
+              {pagination && (
+                <Pagination
+                  page={pagination.page}
+                  limit={pagination.limit}
+                  total={pagination.total}
+                  totalPages={
+                    pagination.totalPages ?? Math.ceil(pagination.total / pagination.limit)
+                  }
+                  onPageChange={setPage}
+                />
+              )}
             </div>
           )}
         </div>

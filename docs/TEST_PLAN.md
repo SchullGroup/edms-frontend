@@ -370,28 +370,43 @@ users' roles for the ones named.
       "Deny" instead of "Grant" at the admin inbox. Confirm the requester's document
       access is still blocked afterward, and the request shows under "Denied".
 
-## 14. Phase L — Document comments & signatures (`/doc/[id]`)
+## 14. Phase L — Workflow trail comments & signatures, review modal, version gating (`/doc/[id]`)
 
-These are dedicated `GET/POST /documents/:id/comments` and `/signatures` endpoints —
-distinct from the `comment` field and `approve`-action signature that are part of the
-workflow-task flow already covered in Phase A. Don't confuse the two.
+**Superseded 2026-09-18.** This phase used to test the dedicated `GET/POST
+/documents/:id/comments`/`/signatures` panels. Those were wired, then deliberately
+un-wired the same day — every comment and signature is workflow-trail-only now. See
+`BACKEND_REQUESTS.md` BE-16/BE-17 and doc 01's DRIFT-08 note.
 
-- [ ] **TP-L1.** Open any document you can view. Confirm a "Comments" panel renders with
-      a textarea and "Post comment" button (not just the workflow activity trail).
-- [ ] **TP-L2.** Post a comment. Confirm it appears immediately at the top of the list
-      with your name and a timestamp, without a page reload.
-- [ ] **TP-L3.** Refresh the page. Confirm the comment persisted (it's calling the real
-      endpoint, not just updating local state).
-- [ ] **TP-L4.** Confirm a "Signatures" panel renders separately from the document
-      viewer's in-image signature overlay. If the document has no standalone signatures
-      yet, it should say "Not signed yet," not be empty/missing.
-- [ ] **TP-L5.** Click "Sign document" (only shown if the document isn't closed). Draw a
-      signature (or upload an image) in the pad, submit.
-- [ ] **TP-L6.** Confirm the new signature appears in the panel with your name, a
-      timestamp, and a small thumbnail that opens the full image on click.
-- [ ] **TP-L7 (this is independent of any workflow task).** Confirm you can do TP-L5/L6
-      even when the document has **no pending task assigned to you** — this signature
-      isn't tied to an approval action.
+- [ ] **TP-L1 (mark reviewed, no signature).** As the assignee of a `review`-only stage,
+      click "Mark reviewed". Confirm a modal opens with an optional comment field (not an
+      immediate confirm) — leave the comment blank and submit. Confirm it succeeds and
+      the stage advances; the trail entry shows no comment line.
+- [ ] **TP-L2 (mark reviewed, with comment).** Repeat, this time typing a comment.
+      Confirm the trail entry on `WorkflowActivityPanel` shows your comment text.
+- [ ] **TP-L3 (review has no signature capture).** Confirm the "Mark reviewed" modal has
+      no signature pad — only `approve` does. This is a known backend limitation
+      (`review`'s action schema is `additionalProperties: false`, no `signature`
+      property), not a frontend gap; BE-16 tracks closing it.
+- [ ] **TP-L4 (approve signature shows on the trail).** Sign & approve a task (as before).
+      Confirm the resulting trail entry on `WorkflowActivityPanel` now shows a small
+      signature thumbnail next to the "Approved" entry (previously only the comment text
+      rendered, from `r.note`; the trail now also reads `r.comment` and
+      `r.task.signature`).
+- [ ] **TP-L5 (version upload closed by default).** Open a document with a pending task
+      that was **not** reached via "Request changes" (e.g. its first stage). Confirm the
+      Versions panel shows no "New version" button, and instead a caption: "New version
+      uploads open once the previous stage requests changes on this document."
+- [ ] **TP-L6 (version upload opens after request_changes).** Request changes on a task
+      (TP-E1), then as the assignee of the task it bounced back to, reopen the document.
+      Confirm "New version" now appears on the Versions panel, upload a file, and confirm
+      it succeeds and appears in the version list.
+- [ ] **TP-L7 (version upload closes again after moving on).** From the state in TP-L6,
+      mark the stage reviewed (or approve/reject it) so it advances past the bounced
+      stage. Confirm "New version" disappears again — the gate is per-bounce, not
+      permanent once unlocked.
+- [ ] **TP-L8 (Restore unaffected).** Confirm "Restore" on an old version is still offered
+      to anyone with `document:edit` regardless of the request-changes gate above — only
+      "New version" is gated, not "Restore".
 
 ## 15. Phase M — User invitations & password flows (`/admin/users`, `/set-password`)
 
@@ -491,7 +506,192 @@ corrupting data on every save** before today.
 
 ---
 
-## 18. Wrap-up
+## 18. Phase P — Permission-aware navigation & action gating (`routes.config.ts`,
+`useNavigation.ts`, per-page action guards)
+
+**Context.** The sidebar and route guard used to be role-hardcoded (and briefly, after
+DRIFT-16, gated on permission keys no real role could hold — see doc 01). Both are now
+driven by the same `resource:action` permission vocabulary as the backend: a nav item and
+its route rule are meant to require the same key, so a link is never shown that the route
+would then reject. Separately, and on a different timeline, individual **write actions**
+inside pages (buttons, not links) are being gated one page at a time — some are done, some
+are deliberately not yet. This phase tests both layers and tells you which failures are
+real findings vs. already-known, still-open work.
+
+### P1 — Sidebar composition per role
+
+- [ ] **TP-P1.** Log in as each fixture account in turn (`client_admin`, `staff_finance`,
+      `supervisor_finance`, `management_ops`, `internal_auditor`, `schulltech_admin`).
+      Confirm the sidebar shows **only** the sections/items that role's permissions cover —
+      compare against the nav table below. In particular:
+      - `staff` should **not** see Admin, Supervisor, Management, Auditor, or Platform
+        sections at all — just Dashboard, My Tasks, Notifications, Delegations, Cabinets,
+        Upload & Capture, Search, Circulars, My Performance.
+      - `supervisor` additionally sees Approvals Queue, Workflow Monitor, Bottlenecks &
+        Ageing, Workload & Reassign, Team Performance, Exceptions.
+      - `client_admin` sees the full Administration/Configuration/Communication/Governance
+        set, **including Branding** (role-gated on `client_admin` specifically, not a
+        permission — a custom role, even an all-powerful one, would not see it).
+      - `internal_auditor` sees Audit Dashboard, Audit Trail, Document Sampling (which is
+        actually `/staff/cabinets` under a different label), Findings Tracker, Compliance
+        Posture — and nothing from Admin/Supervisor/Management.
+      - `schulltech_admin` sees only the Platform portal (Tenant Directory, Platform
+        Health, Plans & Entitlements, Billing & Usage, Feature Flags, Platform Audit) —
+        this portal is role-gated, not permission-gated, by design (no `platform` resource
+        exists in the vocabulary).
+      - Every role sees "Product Guide" at the bottom (`/user-stories`) — it's ungated on
+        purpose.
+
+### P2 — Route guard on direct URL access
+
+- [ ] **TP-P2.** While logged in as `staff_finance`, type an admin URL directly into the
+      address bar (e.g. `/admin/users`, `/admin/roles`, `/admin/branding`). Confirm you land
+      on **"Access Denied"** (`/unauthorized` — red icon, "You do not have the required
+      roles or permissions to view this page", with "Go Back" and "Return to Dashboard"
+      buttons) rather than the page itself, a blank screen, or a crash.
+- [ ] **TP-P3.** Repeat TP-P2 as `supervisor_finance` against `/admin/*` and `/platform/*`,
+      and as `management_ops` against `/admin/*`, `/supervisor/*`, and `/platform/*`.
+      Same expected result each time.
+- [ ] **TP-P4 (management is a whitelist, not a prefix).** As `management_ops`, confirm
+      `/management/reports`, `/management/compliance`, `/management/departments`,
+      `/management/trends`, `/management/performance`, and `/management/findings` all load
+      normally, but a made-up path like `/management/anything-else` still denies access —
+      this section only opens the specific sub-pages it lists, not everything under
+      `/management`.
+- [ ] **TP-P5 ("Return to Dashboard" is role-correct).** From an Access Denied page hit
+      under any role, click "Return to Dashboard". Confirm it returns you to **that role's
+      own home** (`/staff`, `/supervisor`, `/management`, `/admin`, `/auditor`, or
+      `/platform`), not a hardcoded page.
+
+### P3 — Action-level gating that's already fixed (spot-check, expect success)
+
+These pages had their write buttons wired to real `can()` checks in the last two sessions.
+Confirm the buttons **work normally** for the role that holds the permission — this phase
+is about catching a regression, not finding something new:
+
+- [ ] **TP-P6.** `client_admin` on `/admin/access-requests`, `/admin/cabinets`,
+      `/admin/departments`, `/admin/roles`, `/admin/users`, `/admin/workflows`: create/
+      edit/delete affordances are present and functional.
+- [ ] **TP-P7.** `supervisor_finance` on `/supervisor/approvals` and `/supervisor/workload`:
+      Approve/Reject and Reassign are present and functional.
+- [ ] **TP-P8.** `internal_auditor` on `/auditor/trail`: Export extract works (this role
+      holds `audit:export`); confirm `client_admin` on `/admin/audit` instead gets an error
+      toast on Export (it does **not** hold `audit:export` — see TP-J5, still correct
+      behavior, not a bug).
+- [ ] **TP-P9.** Any role, on `/doc/[id]`: Delegate/Reassign-style workflow actions
+      (Mark reviewed, Approve/Reject, delegate) respect the signed-in user's actual task
+      assignment and permissions.
+
+### P4 — Known open gaps (do not file a duplicate finding for these)
+
+The following write actions have **no permission check at all yet** — any signed-in user
+who can reach the page can click them regardless of role. This is tracked, already
+prioritized work, not something this test pass needs to (re)discover. If you hit one,
+confirm the *action itself* still behaves correctly (no crash, real data written) — that's
+still worth knowing — but don't file "missing permission gate" as a new bug for these:
+
+| Page | Ungated action(s) |
+|---|---|
+| `/admin/audit` | Verify integrity, Export |
+| `/admin/branding` | Publish branding |
+| `/admin/circulars` | Compose / Publish / Save |
+| `/admin/policies` | Confidentiality / urgency / control toggles |
+| `/supervisor/exceptions` | Acknowledge (writes a real audit log entry; the exception row list itself is still mock data) |
+| `/staff/cabinets` | Move / Route bulk actions |
+
+- [ ] **TP-P10 (the one genuine bug in this group — do report it, it's logic-wrong not
+      just unfinished).** On `/auditor/findings` (also reachable at
+      `/management/findings` — it's the same component) as any role: "Raise finding" is
+      gated on `audit:view`, but **"Add response" and "Close finding" have zero guard at
+      all**, not even the same (wrong) `audit:view` check the create action uses. Confirm
+      this is still the case. It's a real inconsistency worth fixing, but low urgency —
+      `Finding` has no real backend model yet, so there's no live data exposure behind it.
+
+---
+
+## 19. Phase Q — Conditional workflow routing (`/admin/workflows`)
+
+**Context.** The backend has supported conditional/prioritized transitions for a while
+(`WORKFLOW_CONDITION_FIELDS`/`_OPERATORS`/`_MODES` in `edms-backend`'s workflow constants) but
+the frontend Workflow Designer never exposed it — it only ever built a straight `stage 1 → stage
+2 → … ` chain. This phase covers the new authoring UI: a stage can now route conditionally on
+the document's urgency, confidentiality, or a metadata field, with a required fallback for
+anything that doesn't match. **True parallel routing (more than one *unconditional* branch from
+a stage) is still not supported, on either side of the stack — don't go looking for it.**
+
+Log in as `client_admin` (`workflow:edit` is required to reach this page at all). Open
+`/admin/workflows` and select or create a workflow with **at least 3 stages** — a couple of these
+steps need a stage to have more than one other stage available to route to.
+
+- [x] **TP-Q1 (the tabs, and that switching them is non-destructive).** Select any non-terminal
+      stage. Confirm the right-hand panel is a single card titled with the stage's name, with
+      **Properties** and **Transitions** tabs. On Properties, change the stage name (don't save),
+      switch to Transitions, then switch back to Properties. Confirm your unsaved name edit is
+      still sitting there — tab-switching must not silently discard it.
+- [ ] **TP-Q2 (the default shape).** On the Transitions tab of a stage with no authored branches,
+      confirm you see exactly one card, badge **"Fallback"**, pointing at the next stage in
+      sequence, plus a **"+ Add conditional branch"** button. This is the same default chain the
+      designer has always built, just now visible/editable as a real transition instead of an
+      implicit assumption.
+- [ ] **TP-Q3 (adding a branch).** Click **"+ Add conditional branch"**. Confirm a new card
+      appears above the fallback: badges **"Priority 1"** and **"Conditional"**, a target-stage
+      dropdown, and a rule row defaulting to **Urgency → equals → Critical**.
+- [ ] **TP-Q4 (metadata fields are tenant-wide).** On that rule, change the field dropdown to
+      **"Metadata field"**. Confirm the fixed value dropdown is replaced by a metadata-field
+      dropdown **plus** a free-text value box. The field dropdown should list metadata fields
+      from cabinets across the whole tenant, not just one cabinet — this workflow definition
+      isn't tied to a specific cabinet, so that's intentional, not a bug.
+- [ ] **TP-Q5 (multiple rules, match mode).** Click **"+ Add rule"** on the same branch. Confirm
+      a second rule row appears, and a **"Match: All rules / Any rule"** toggle appears alongside
+      it — this toggle should be entirely absent when a branch only has one rule.
+- [ ] **TP-Q6 (client-side validation — duplicate target, expect a blocked save, not a 422).**
+      Change the new branch's target-stage dropdown to the **same** stage the fallback card
+      already points to. Confirm a warning banner appears ("Two branches from this stage point to
+      the same next stage…") and **"Save transitions" becomes disabled**. This mirrors a real
+      backend rule (`Duplicate transition 'from->to'`) enforced client-side so you never actually
+      round-trip into that 422.
+- [ ] **TP-Q7 (client-side validation — priorities).** Pick a different, unused target stage for
+      the branch from TP-Q6 so the duplicate-target warning clears. Add a **second** conditional
+      branch (a distinct target is required — see TP-Q9 below if none is available). Set both
+      branches' priority fields to the same number. Confirm "Conditional branches need unique
+      priorities" appears and Save stays disabled; give them different priorities and confirm the
+      warning clears.
+- [ ] **TP-Q8 (removing a branch).** Click the **✕** on a conditional branch card. Confirm it's
+      removed from the list and, once you're back down to zero conditional branches, the one
+      remaining fallback card is the only thing shown (matching TP-Q2's default state).
+- [ ] **TP-Q9 (the 2-target edge case — the real bug this shipped with, now fixed).** Find or
+      make a stage where every *other* stage is already used as a transition target (the simplest
+      way: a workflow with exactly 2 stages — the first stage's only fallback already points at
+      the only other stage there is). Confirm **"+ Add conditional branch" is disabled**, with a
+      tooltip/help line explaining there's no distinct stage left to route to. If this button is
+      ever clickable in this state, that's a regression — it used to silently create a branch that
+      failed to save with "Validation failed" (a real duplicate-transition 422) instead of
+      preventing the impossible action up front.
+- [ ] **TP-Q10 (save succeeds).** On the 3+-stage workflow from TP-Q3–Q7, once the warnings are
+      clear (distinct targets, unique priorities, exactly one fallback), click **"Save
+      transitions"**. Confirm a success toast and no validation error.
+- [ ] **TP-Q11 (the canvas reflects the save — real lines, not just badges).** After TP-Q10,
+      look at the canvas on the left. Confirm it now draws a **curved amber line** from the stage
+      to its conditional branch's target, labeled with a short summary of the rule (e.g. "urgency
+      = critical"), and a **curved green line** to the fallback labeled "else". Pick a different,
+      untouched stage that still has only its original single transition — confirm it still shows
+      a **plain gray line with no label**, unchanged from before this feature existed.
+- [ ] **TP-Q12 (clicking a routing line jumps straight to it).** With a different stage selected
+      (Properties tab showing), click the amber or green label on another stage's branch line.
+      Confirm it both selects that stage **and** switches the panel straight to its Transitions
+      tab — you shouldn't have to click the tab yourself after clicking a line on the canvas.
+- [ ] **TP-Q13 (persistence).** Reload the page (or switch to a different workflow and back).
+      Confirm the branch, its rule, its priority, and the canvas lines are all still exactly as
+      you saved them.
+- [ ] **TP-Q14 (the guide).** Click the **"How routing works"** button above the canvas. Confirm
+      a modal opens explaining the feature (fallback requirement, priority ordering, match mode,
+      what each line color means), and that Escape, clicking the backdrop, and the **×** all
+      close it — same behavior as every other modal in the app, since this one reuses the shared
+      modal system rather than a one-off implementation.
+
+---
+
+## 20. Wrap-up
 
 - [ ] Re-run **TP-A1–A7** once more at the very end using kemi.reviewer (the custom-role
       user) instead of a system-role user, to prove the custom role built in step TP-0
@@ -501,7 +701,75 @@ corrupting data on every save** before today.
 - [ ] **TP-N is the highest-priority phase to actually run**, not skip — it's the only one
       testing a fix for a bug that was silently corrupting saved data before today. A
       failure there means the scope bug isn't actually fixed, not just a UI nicety missing.
+- [ ] **TP-P4's table is a living list, not a permanent one** — as each Tier 2 page gets
+      its actions gated, move its row out of the "known open gaps" table and add fresh
+      TP-P steps confirming the new guard actually blocks a role that lacks the permission
+      (mirroring TP-P6–P9), not just that it shows for a role that has it.
 - [ ] Anything that contradicts this plan should update `docs/BACKEND_REQUESTS.md` or
       `docs/01-architecture-and-drift.md` (new `DRIFT-nn` if it's a genuine bug) rather
       than just living in a test report — per this repo's convention, the docs are the
       persistent record.
+
+
+## - Things to check
+- [x] Prevent admin from creating a sub department within a sub-department
+  - Frontend done: "Add sub-department" is disabled on sub-department rows; the parent picker
+    only offers top-level departments; a department with sub-departments must stay top level.
+  - ⚠️ Backend does **not** enforce depth — `POST/PATCH /departments` accepts any `parentId`.
+    Ask backend to reject a parent that itself has a parent.
+- [x] Allow admin to delete a department with no users (check current backend code)
+  - Already works: `DELETE /departments/:id` (`department:delete`) is live on `dev` and wired
+    to the row menu's Delete. Backend returns 409 if the department has **any** users (all
+    statuses, despite the "active users" message) or cabinets. The frontend also blocks it
+    while the department has sub-departments (the backend would otherwise orphan them to
+    top level — the self-relation has no `onDelete` rule).
+- [x] In the reassign, user shouldn't be able to reassign outside their department. So filter by current user's department id.
+  - Frontend done: all four reassign dialogs (Team Overview, Approvals, Workload,
+    Bottlenecks) list only active users in the reassigner's department
+    (`useDepartmentColleagues`). No department → empty list.
+  - Backend already enforces this for department-scoped reassigners
+    (`TASK_REASSIGN_DEPARTMENT_FORBIDDEN`); global-scoped reassigners are not restricted.
+  - `/auth/me` doesn't return `departmentId`, so the page fetches `GET /users/:id` for it —
+    ask backend to add `departmentId` to `/auth/me` and login.
+- [x] use react-day-picker or similar library for date-time pickers
+  - Done: `react-day-picker@9` + `src/components/ui/DatePicker.tsx` (`DateField`,
+    `DateTimeField`). Replaced all six native inputs: Tenant Audit from/to, Findings due
+    date, Delegation starts/ends, Checkout expected return.
+- [x] the current document structure doesn't show who checked out a document. Check current backend code for the response of the api route for /document/:id
+  - **Fixed on backend `dev` (`b4a3f81`, 2026-09-29):** `findById` now includes
+    `checkoutLock` with `locker {id,name,email}` — exactly the one-liner below. No frontend
+    change was needed beyond refreshing a stale comment in `models.ts`. Re-test TP-G1…G4.
+  - *Previously:* confirmed on `dev`: `GET /documents/:id` returned only `isCheckedOut`, never the lock.
+    **This is a bug, not just missing info:** the doc page compares
+    `checkoutLock.lockedBy` to the current user, so with no lock in the response even the
+    person who checked it out is treated as "someone else" and can't check it back in.
+  - Backend fix (one line) in `documents.repository.ts` `findById` include:
+    `checkoutLock: { include: { locker: { select: { id: true, name: true, email: true } } } }`
+  - Frontend is ready for it (`CheckoutLock.locker`; the banner shows the holder's name).
+
+## - Frontend-only work queue
+
+Items whose backend already exists (or needs none). Worked through one at a time.
+
+- [x] Search: filters sent to `GET /documents` (one value each, paginated) instead of
+      filtering one page client-side; types from the shared `constants/documentTypes.ts`;
+      saved searches per user, without the two seeded fakes (15.3, 15.4). While text is
+      entered only the Cabinet filter applies — `GET /documents/search` accepts only `q` and
+      `cabinetId` (backend request: add the other filters there).
+- [ ] Edit a document's confidentiality and urgency after upload — `PATCH /documents/:id`,
+      gated on `document:edit` (13.1/13.2; no UI exists today)
+- [ ] SLA settings screen: business hours, working days, holidays, warning window, urgency
+      multipliers, breach action — `GET/PATCH /sla/configuration`, `/sla/holidays` (6.7, 6.8,
+      18.2, 18.5)
+- [ ] Sub-folders: create and browse nested folders — folder `parentId` (5.1)
+- [ ] Typed signature: render the typed name to an image for approve (9.1)
+- [ ] My Performance from `GET /tasks/stats?assigneeId=` (16.4)
+- [ ] Staff dashboard: status tiles click through; finish SLA/ageing highlighting (19.1, 19.4)
+- [ ] My Tasks: keep the backend's urgency → due-date order instead of re-sorting (19.2)
+- [ ] Quick-actions strip; recent and pinned documents/searches (19.3, 19.5)
+- [ ] Admin home setup checklist (18.1)
+- [ ] Chart drill-downs to filtered record lists (21.6, 22.3)
+- [ ] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6)
+- [ ] Configuration history: audit log filtered to config actions (18.7)
+- [ ] PDF/image preview and in-PDF search (4.3, 5.9 — partial; Office/email/OCR need backend)
+- [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3)

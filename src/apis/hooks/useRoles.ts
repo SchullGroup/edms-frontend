@@ -15,6 +15,14 @@ export function useRoles(options?: { enabled?: boolean }) {
     queryKey: roleKeys.lists(),
     queryFn: () => rolesService.getAll(),
     enabled: options?.enabled ?? true,
+    // Four admin pages subscribe to this same query. Role definitions rarely
+    // change mid-session, so the default 60s staleTime meant almost any
+    // navigation between admin pages re-triggered a background refetch —
+    // invisible (cached data renders instantly) but visible in the network
+    // log. Mutations in useCreateRole/useUpdateRole/useSetRolePermissions/
+    // useDeleteRole already invalidate this key on success, so a longer
+    // window here doesn't risk showing stale permissions after an edit.
+    staleTime: 5 * 60 * 1000,
   });
 }
 

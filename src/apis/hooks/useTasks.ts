@@ -7,14 +7,11 @@ import {
   TaskStatsParams,
 } from '../services/tasks.service';
 import { TaskActionRequest } from '@/types/models';
-import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 
 export const taskKeys = {
   all: ['tasks'] as const,
   lists: () => [...taskKeys.all, 'list'] as const,
   list: (filters?: TaskFilters) => [...taskKeys.lists(), filters ?? {}] as const,
-  allPages: (filters?: Omit<TaskFilters, 'page' | 'limit'>) =>
-    [...taskKeys.all, 'allPages', filters ?? {}] as const,
   detail: (id: string) => [...taskKeys.all, 'detail', id] as const,
 };
 
@@ -22,24 +19,6 @@ export const useTasks = (params?: TaskFilters, options?: { enabled?: boolean }) 
   return useQuery({
     queryKey: taskKeys.list(params),
     queryFn: () => tasksService.getAll(params),
-    enabled: options?.enabled ?? true,
-  });
-};
-
-/**
- * Fetches every page of `/tasks` for the given filter.
- *
- * The supervisor dashboards roll tasks up into counts and per-member matrices,
- * so a single page would under-report. Prefer this over `useTasks` anywhere a
- * total is displayed.
- */
-export const useAllTasks = (
-  params?: Omit<TaskFilters, 'page' | 'limit'>,
-  options?: { enabled?: boolean },
-) => {
-  return useQuery({
-    queryKey: taskKeys.allPages(params),
-    queryFn: () => tasksService.getAllPages(params),
     enabled: options?.enabled ?? true,
   });
 };

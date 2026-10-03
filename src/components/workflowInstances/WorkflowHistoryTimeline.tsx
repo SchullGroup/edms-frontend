@@ -127,7 +127,24 @@ export function WorkflowHistoryTimeline({
                 {r.actor?.name || 'System'} · {fmtDateTime(r.occurredAt)}
                 {elapsed ? ` · ${elapsed}` : ''}
               </div>
-              {r.note && <div className="wf-detail">{r.note}</div>}
+              {(r.comment || r.note) && (
+                <div className="wf-detail">{r.comment || r.note}</div>
+              )}
+              {r.task?.signature?.fileUrl && (
+                <a
+                  href={r.task.signature.fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 mt-1"
+                  title="Signature"
+                >
+                  <img
+                    src={r.task.signature.fileUrl}
+                    alt={`${r.actor?.name || 'Signer'}'s signature`}
+                    style={{ height: '22px', maxWidth: '76px', objectFit: 'contain' }}
+                  />
+                </a>
+              )}
             </div>
           </div>
         );

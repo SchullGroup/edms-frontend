@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import {
@@ -20,6 +21,8 @@ const PAGE_SIZE = 20;
 export default function AccessRequestsInboxPage() {
   const router = useRouter();
   const { setPageTitle, openConfirm } = useUIStore();
+  const { can } = usePermissions();
+  const canGrant = can('document_access_request', 'grant');
 
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<'' | 'pending' | 'approved' | 'denied'>('pending');
@@ -119,7 +122,10 @@ export default function AccessRequestsInboxPage() {
           <div className="flex gap-2">
             <button
               className="btn btn-secondary btn-sm"
-              disabled={grantRequest.isPending || denyRequest.isPending}
+              disabled={grantRequest.isPending || denyRequest.isPending || !canGrant}
+              title={
+                !canGrant ? "You don't have permission to grant document access" : undefined
+              }
               onClick={(e) => {
                 e.stopPropagation();
                 handleGrant(r);
@@ -129,7 +135,10 @@ export default function AccessRequestsInboxPage() {
             </button>
             <button
               className="btn btn-secondary btn-sm"
-              disabled={grantRequest.isPending || denyRequest.isPending}
+              disabled={grantRequest.isPending || denyRequest.isPending || !canGrant}
+              title={
+                !canGrant ? "You don't have permission to deny document access requests" : undefined
+              }
               onClick={(e) => {
                 e.stopPropagation();
                 handleDeny(r);
