@@ -721,7 +721,7 @@ Once documents are flowing, this is what daily use looks like and what it costs.
 | Delegate while away | 🟨 | backend complete, no UI at all |
 | Supervisor workload view | 🟨 | works, but walks every page of `/documents` client-side |
 | Management reports | 🟨 | works, but computes all aggregates in the browser |
-| Circulars | 🟥 | mock on both sides |
+| Circulars | 🟨 | backend module built; frontend wired 2026-10-05 (`/circulars`, `/circulars/manage`) — not yet verified live |
 
 ### The performance cliff worth planning for
 

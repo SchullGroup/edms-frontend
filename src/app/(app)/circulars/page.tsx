@@ -1,36 +1,67 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useStore, userById } from '@/store/useStore';
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useCircularInbox, useCircularInboxSummary } from '@/apis/hooks/useCirculars';
 import { Icon } from '@/components/ui/Icons';
+import { UrgBadge } from '@/components/ui/Badges';
+import { Pagination } from '@/components/ui/Pagination';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
+import { SkeletonTaskRows } from '@/components/common/Skeleton';
+import { AckStateBadge, circularReference } from '@/components/circulars/circularLabels';
 import { fmtDate } from '@/utils/helpers';
+import type { CircularInboxFilter, CircularInboxItem } from '@/types/models';
 
-export default function CircularsPage() {
-  const { circulars, session, users, markCircularAck, auditAction } = useStore();
-  const { setPageTitle, addToast } = useUIStore();
-  const [tab, setTab] = useState<'active' | 'archive'>('active');
+const PAGE_SIZE = 20;
 
-  const me = session ? userById(users, session) : null;
+const FILTERS: [CircularInboxFilter, string][] = [
+  ['all', 'All'],
+  ['unread', 'Unread'],
+  ['unacknowledged', 'To acknowledge'],
+  ['acknowledged', 'Acknowledged'],
+];
+
+/**
+ * The recipient inbox: circulars the signed-in user was sent. "In force" is
+ * what's published now; the archive holds expired and superseded ones.
+ * Withdrawn circulars never appear — the backend removes them.
+ */
+export default function CircularsInboxPage() {
+  const router = useRouter();
+  const { setPageTitle } = useUIStore();
+  const { hasPermission } = usePermissions();
+  const [archived, setArchived] = useState(false);
+  const [filter, setFilter] = useState<CircularInboxFilter>('all');
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+
+  const { data, isLoading, isError, refetch } = useCircularInbox({
+    archived,
+    filter,
+    search: query || undefined,
+    page,
+    limit: PAGE_SIZE,
+  });
+  const { data: summary } = useCircularInboxSummary();
+  const items = data?.data ?? [];
 
   useEffect(() => {
     setPageTitle('Circulars');
   }, [setPageTitle]);
 
-  const cutoff = Date.now() - 7 * 86400000; // 7 days
-  const list = circulars
-    .filter((c: any) =>
-      tab === 'active'
-        ? c.published >= cutoff || (c.requiresAck && !c.ackBy.includes(session))
-        : true,
-    )
-    .sort((a: any, b: any) => b.published - a.published);
-
-  const handleAck = (c: any) => {
-    markCircularAck(c.id);
-    auditAction('ACK_CIRCULAR', c.id, 'Acknowledged: ' + c.title);
-    addToast('Acknowledgement recorded', 'success');
-  };
+  // Debounce the search box so each keystroke isn't a request.
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setQuery(search.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [search]);
 
   return (
     <div>
@@ -38,70 +69,158 @@ export default function CircularsPage() {
         <div>
           <div className="page-title">Circulars</div>
           <div className="page-sub">
-            Organisation-wide notices. Some require your acknowledgement.
+            Notices sent to you.
+            {summary && summary.unacknowledged > 0 && (
+              <>
+                {' '}
+                <b>{summary.unacknowledged}</b> waiting for your acknowledgement.
+              </>
+            )}
           </div>
         </div>
+        {hasPermission('circular', 'view') && (
+          <div className="actions">
+            <Link className="btn btn-secondary" href="/circulars/manage">
+              Manage circulars
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="tabs">
         <button
-          className={`tab ${tab === 'active' ? 'active' : ''}`}
-          onClick={() => setTab('active')}
+          className={`tab ${!archived ? 'active' : ''}`}
+          onClick={() => {
+            setArchived(false);
+            setPage(1);
+          }}
         >
-          Active
+          In force
+          {summary && summary.unread > 0 ? ` (${summary.unread} unread)` : ''}
         </button>
         <button
-          className={`tab ${tab === 'archive' ? 'active' : ''}`}
-          onClick={() => setTab('archive')}
+          className={`tab ${archived ? 'active' : ''}`}
+          onClick={() => {
+            setArchived(true);
+            setPage(1);
+          }}
         >
-          Archive (all)
+          Archive
         </button>
       </div>
 
-      {list.length > 0 ? (
-        list.map((c: any) => {
-          const acked = session ? c.ackBy.includes(session) : false;
-          return (
-            <div key={c.id} className="card card-pad mb-4">
-              <div className="flex justify-between items-center flex-wrap gap-3">
-                <div style={{ minWidth: 0 }}>
-                  <div className="h2" style={{ marginBottom: '4px' }}>
-                    {c.title}
-                  </div>
-                  <div className="caption">
-                    Published {fmtDate(c.published)} by {userById(users, c.by).name} · Audience:{' '}
-                    {c.audience}
-                  </div>
-                </div>
-                {c.requiresAck ? (
-                  acked ? (
-                    <span className="badge b-status-closed">
-                      <span style={{ marginRight: '4px' }}><Icon name="check" size={10} /></span> Acknowledged
-                    </span>
-                  ) : (
-                    <button className="btn btn-accent btn-sm" onClick={() => handleAck(c)}>
-                      Acknowledge
-                    </button>
-                  )
-                ) : (
-                  <span className="badge b-urg-low">FYI — no acknowledgement</span>
-                )}
-              </div>
-              <p style={{ marginTop: '12px', lineHeight: 1.65, fontSize: '13px' }}>{c.body}</p>
-            </div>
-          );
-        })
-      ) : (
-        <div className="card">
-          <div className="empty">
-            <Icon name="speaker" size={32} />
-            <div className="h3 mt-4 mb-2">No circulars</div>
-            <p className="caption mb-4">
-              Published circulars from your administrators appear here.
-            </p>
-          </div>
+      <div className="flex gap-2 flex-wrap items-center mb-4">
+        <div className="seg" role="group" aria-label="Filter circulars">
+          {FILTERS.map(([value, label]) => (
+            <button
+              key={value}
+              className={filter === value ? 'active' : ''}
+              aria-pressed={filter === value}
+              onClick={() => {
+                setFilter(value);
+                setPage(1);
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
+        <input
+          className="input"
+          style={{ maxWidth: 280, height: 32 }}
+          placeholder="Search reference, title or category…"
+          aria-label="Search circulars"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      <div className="card">
+        {isLoading ? (
+          <div role="status" aria-busy="true" aria-label="Loading circulars">
+            <SkeletonTaskRows rows={6} />
+          </div>
+        ) : isError ? (
+          <div style={{ padding: 32 }}>
+            <ErrorMessage message="Failed to load your circulars." retry={() => refetch()} />
+          </div>
+        ) : items.length > 0 ? (
+          <div className="rowlist">
+            {items.map((c) => (
+              <InboxRow key={c.id} item={c} onOpen={() => router.push(`/circulars/${c.id}`)} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon="speaker"
+            title={archived ? 'Nothing in the archive' : 'No circulars'}
+            message={
+              query || filter !== 'all'
+                ? 'Nothing matches these filters.'
+                : archived
+                  ? 'Expired and replaced circulars move here.'
+                  : 'Circulars sent to you appear here.'
+            }
+          />
+        )}
+      </div>
+
+      {data?.pagination && data.pagination.totalPages > 1 && (
+        <Pagination
+          page={data.pagination.page}
+          totalPages={data.pagination.totalPages}
+          total={data.pagination.total}
+          limit={data.pagination.limit}
+          onPageChange={setPage}
+        />
       )}
+    </div>
+  );
+}
+
+function InboxRow({ item: c, onOpen }: { item: CircularInboxItem; onOpen: () => void }) {
+  const unread = !c.receipt.readAt;
+  const overdue =
+    c.requiresAcknowledgement &&
+    !c.receipt.acknowledgedAt &&
+    !!c.acknowledgementDueAt &&
+    new Date(c.acknowledgementDueAt) < new Date();
+
+  return (
+    <div
+      className={`task-row ${overdue ? 'overdue' : ''}`}
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      <Icon name="speaker" size={18} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: unread ? 800 : 600, fontSize: 13.5 }}>
+          {unread && <span className="sr-only">Unread: </span>}
+          {c.title}
+        </div>
+        <div className="caption" style={{ marginTop: 3 }}>
+          {circularReference(c)}
+          {c.category ? ` · ${c.category}` : ''} · {fmtDate(c.publishedAt)}
+          {c.publisher?.name ? ` · ${c.publisher.name}` : ''}
+          {c.requiresAcknowledgement && !c.receipt.acknowledgedAt && c.acknowledgementDueAt
+            ? ` · acknowledge by ${fmtDate(c.acknowledgementDueAt)}`
+            : ''}
+          {c.status === 'superseded' ? ' · replaced by a newer version' : ''}
+          {c.status === 'expired' ? ' · expired' : ''}
+        </div>
+      </div>
+      {c.urgency !== 'normal' && <UrgBadge level={c.urgency} />}
+      <AckStateBadge
+        requiresAcknowledgement={c.requiresAcknowledgement}
+        acknowledgedAt={c.receipt.acknowledgedAt}
+      />
     </div>
   );
 }

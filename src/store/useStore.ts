@@ -28,7 +28,6 @@ export interface AppStore extends AppState {
   setPrefs: (prefs: any) => void;
   updateUser: (userId: string, updates: any) => void;
   addUser: (user: any) => void;
-  markCircularAck: (circularId: string) => void;
   updateRoleMatrix: (roleName: string, perms: any) => void;
   updatePolicyControl: (ruleName: string, enabled: boolean) => void;
   updatePolicyConfidentiality: (level: string, updates: any) => void;
@@ -38,8 +37,6 @@ export interface AppStore extends AppState {
   updateCabinet: (cabId: string, updates: any) => void;
   addCabinet: (cab: any) => void;
   updateBranding: (updates: any) => void;
-  updateCircular: (id: string, updates: any) => void;
-  addCircular: (c: any) => void;
   updatePlan: (id: string, updates: any) => void;
   addPlan: (p: any) => void;
   updateTenant: (id: string, updates: any) => void;
@@ -126,16 +123,6 @@ export const useStore = create<AppStore>()(
         const { users } = get();
         set({ users: [...users, user] });
       },
-      markCircularAck: (circularId) => {
-        const { circulars, currentUser } = get();
-        if (!currentUser) return;
-        const newCir = circulars.map((c: any) =>
-          c.id === circularId && !c.ackBy.includes(currentUser.id)
-            ? { ...c, ackBy: [...c.ackBy, currentUser.id] }
-            : c,
-        );
-        set({ circulars: newCir });
-      },
       updateRoleMatrix: (roleName, perms) => {
         const { rolesMatrix } = get();
         const newRoles = rolesMatrix.map((r: any) => (r.role === roleName ? { ...r, perms } : r));
@@ -182,15 +169,6 @@ export const useStore = create<AppStore>()(
       },
       updateBranding: (updates) => {
         set({ branding: { ...get().branding, ...updates } });
-      },
-      updateCircular: (id, updates) => {
-        const { circulars } = get();
-        const newCir = circulars.map((c: any) => (c.id === id ? { ...c, ...updates } : c));
-        set({ circulars: newCir });
-      },
-      addCircular: (c) => {
-        const { circulars } = get();
-        set({ circulars: [c, ...circulars] });
       },
       updatePlan: (id, updates) => {
         const { plans } = get();

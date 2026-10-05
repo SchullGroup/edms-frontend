@@ -60,9 +60,11 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 > ⚠️ **Supersedes `../../out/DOCUMENTATION.md` and `../../out/USER_FLOWS.md`.**
 > Those two documents describe endpoints that were never built
 > (`POST /documents/:id/route`, `POST /workflows/instances/:id/approve`,
-> `POST /users/invite`, `POST /circulars`, `POST /circulars/:id/ack`) and a
+> `POST /users/invite`, `POST /circulars/:id/ack`) and a
 > `multipart/form-data` upload path that does not exist. Treat them as design
-> intent from an earlier phase, not as a description of the system.
+> intent from an earlier phase, not as a description of the system. (`POST /circulars`
+> was later built, as a *draft* create with a separate publish step; acknowledgement is
+> `POST /circulars/inbox/:id/acknowledge` — see §7 Circulars.)
 
 ---
 
@@ -868,7 +870,7 @@ It holds two very different kinds of thing:
 | Kind | Examples | Should it be here? |
 |---|---|---|
 | **Genuine client session state** | `currentUser`, `prefs` (theme, density), `branding` | ✅ Yes |
-| **Demo-mode server data** | `documents`, `users`, `cabinets`, `workflows`, `audit`, `notifications`, `circulars`, `findings`, `tenants`, `plans`, `featureFlags`, `policies`, `rolesMatrix` | ❌ No — this is server state |
+| **Demo-mode server data** | `documents`, `users`, `cabinets`, `workflows`, `audit`, `notifications`, `findings`, `tenants`, `plans`, `featureFlags`, `policies`, `rolesMatrix` (`circulars` removed 2026-10-05 — now server state via the API) | ❌ No — this is server state |
 
 Plus ~25 synchronous mutators (`updateDocumentStatus`, `addTenant`, `updateFinding`, …)
 that write to the persisted copy and are never sent anywhere.
@@ -1036,13 +1038,43 @@ per-cabinet need-to-know work, the backend exposes full CRUD for it, and **no sc
 product can grant or revoke a cabinet permission.** The Cabinet Designer at
 `/admin/cabinets` manages cabinets but not their access grants.
 
+### Circulars *(wired 2026-10-05)*
+
+Backend `src/modules/circulars/` — 15 routes, two BullMQ workers (delivery fan-out and a
+reconcile/expiry/reminder sweep), and `circular:view|create|publish|withdraw` permissions
+seeded for `client_admin`, `supervisor`, `management` and `internal_auditor`. Frontend:
+`circulars.service.ts` + `useCirculars.ts`. Every row is 🟨 — **built and type/build-checked,
+not verified end to end against a live backend.**
+| Frontend call | Backend route | Status |
+|---|---|---|
+| `getInbox` | `GET /circulars/inbox` | 🟨 |
+| `getInboxSummary` | `GET /circulars/inbox/summary` | 🟨 sidebar badge = `unacknowledged` |
+| `getInboxItem` | `GET /circulars/inbox/:id` (first open = read receipt) | 🟨 |
+| `acknowledge` | `POST /circulars/inbox/:id/acknowledge` | 🟨 |
+| `getAll` | `GET /circulars` (`circular:view`) | 🟨 |
+| `getById` | `GET /circulars/:id` | 🟨 |
+| `create` · `update` · `remove` | `POST /circulars` · `PATCH`/`DELETE /circulars/:id` (`circular:create`, drafts only) | 🟨 |
+| `publish` · `cancelSchedule` | `POST /circulars/:id/publish` · `/cancel-schedule` (`circular:publish`) | 🟨 |
+| `withdraw` | `POST /circulars/:id/withdraw` (`circular:withdraw`) | 🟨 |
+| `revise` | `POST /circulars/:id/revisions` (`circular:create`) | 🟨 |
+| `getRecipients` | `GET /circulars/:id/recipients` | 🟨 |
+| `sendReminders` | `POST /circulars/:id/reminders` (`circular:publish`) | 🟨 |
+
+Contract notes: list endpoints use the standard paginated envelope; `archived` is sent as
+the string `'true'|'false'` (axios serialises the boolean); a `PATCH` that includes
+`attachments` replaces the whole list, so the form only sends it when the list changed;
+an existing uploaded attachment round-trips by re-sending its signed `fileUrl`, since
+`extractFileKey` reads only the URL's path. `GET /roles` needs `role:view`, which
+supervisors and management lack, so their audience editor offers department groups and
+named people but not role groups. Circular notifications carry `actionUrl: /circulars/:id`
+(published, reminder) or `/circulars` (withdrawn) — both are real routes here.
+
 ### Modules with no backend at all
 
 | Frontend service | Endpoints called | Backend | Status |
 |---|---|---|---|
 | `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 |
 | `branding.service.ts` | none — returns `SEED.branding` | no module, no schema | 🔴 |
-| `circulars.service.ts` | none — returns `SEED.circulars` | no module, no schema | 🔴 |
 
 **DRIFT-10 (notifications) — ✅ RESOLVED (verified 2026-09-21).**
 
@@ -1490,4 +1522,5 @@ re-diagnosed but still open and still item 1.*
 **Then — close the feature gaps**
 15. ✅ ~~Comments + signatures endpoints~~ — resolved, and deliberately left un-wired
     (DRIFT-08); a gated `GET /documents/:id/download`
-16. Circulars, policies and branding — currently mock on both sides
+16. ~~Circulars~~ (wired 2026-10-05, pending a live check), policies and branding —
+    policies and branding still mock on both sides

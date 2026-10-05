@@ -816,48 +816,6 @@ export const NOTIFICATIONS = [
   },
 ];
 
-export const CIRCULARS = [
-  {
-    id: 'cir-1',
-    title: 'H2 2026 Performance Review Cycle — Timeline & Templates',
-    body: 'The half-year performance review cycle opens on 15 July 2026. All officers should complete self-assessments in the HR cabinet by 22 July. Supervisors must complete reviews by 5 August. Templates are filed under Human Resources › HR Policies.',
-    published: d(-2, 9),
-    by: 'u-bola',
-    requiresAck: true,
-    ackBy: ['u-david'],
-    audience: 'All Staff',
-  },
-  {
-    id: 'cir-2',
-    title: 'Updated Clean Desk & Confidentiality Directive',
-    body: 'Effective immediately: documents classified Confidential or above must not be left unattended on desks or shared screens. Printing of Restricted documents now requires supervisor approval, and all print jobs are watermarked and audited. Violations will be logged as compliance exceptions.',
-    published: d(-1, 9),
-    by: 'u-bola',
-    requiresAck: true,
-    ackBy: [],
-    audience: 'All Staff',
-  },
-  {
-    id: 'cir-3',
-    title: 'Scheduled Maintenance — EDMS Platform, Sunday 02:00–04:00 WAT',
-    body: 'The EDMS platform will undergo scheduled maintenance this Sunday between 02:00 and 04:00 WAT. Document upload and signing will be unavailable. In-flight workflows are not affected; SLA timers are paused during the window.',
-    published: d(-5, 16),
-    by: 'u-adaeze',
-    requiresAck: false,
-    ackBy: [],
-    audience: 'All Tenants',
-  },
-  {
-    id: 'cir-4',
-    title: 'New Procurement Threshold Matrix (Effective 01 Aug)',
-    body: 'Approval thresholds have been revised: purchases above ₦25M now require dual supervisor approval, and above ₦100M require management sign-off with maker-checker enforced. The Procurement workflow has been updated to v4 to reflect this.',
-    published: d(-9, 11),
-    by: 'u-bola',
-    requiresAck: true,
-    ackBy: ['u-chika', 'u-david', 'u-seun'],
-    audience: 'Procurement, Finance',
-  },
-];
 
 export const WORKFLOWS = [
   {
@@ -1482,7 +1440,6 @@ export const SEED = {
   docTypes: DOC_TYPES,
   documents: DOCUMENTS,
   notifications: NOTIFICATIONS,
-  circulars: CIRCULARS,
   workflows: WORKFLOWS,
   rolesMatrix: ROLES_MATRIX,
   tenants: TENANTS,

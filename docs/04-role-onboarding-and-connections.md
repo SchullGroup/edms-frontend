@@ -214,7 +214,7 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 
 > **Persona:** Bola · the tenant's own system owner, usually IT or Operations management
 > **Landing page:** `/admin` · **Sidebar:** Client Administration
-> **Overall status:** 🟨 **Structure is real; policy, branding and circulars are mock**
+> **Overall status:** 🟨 **Structure is real; policy and branding are mock** (circulars wired 2026-10-05, not yet verified live)
 
 ### Identity and rights
 
@@ -243,7 +243,7 @@ This must be done in order; each step produces the input for the next.
 | 8 | **Design and publish workflows** | `/admin/workflows` | `POST /workflows`, `/publish` | 🟨 **no authorization** |
 | 9 | Set retention and confidentiality policy | `/admin/policies` | — | 🟥 `SEED.policies` |
 | 10 | Apply branding | `/admin/branding` | — | 🟥 `SEED.branding` |
-| 11 | Publish a welcome circular | `/admin/circulars` | — | 🟥 `SEED.circulars` |
+| 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | 🟨 wired 2026-10-05, not yet verified live |
 | 12 | Review the tenant audit trail | `/admin/audit` | `GET /audit`, `/audit/verify` | ✅ wired 2026-09-18 (was `SEED.audit`) |
 
 **Steps 2, 3, 4, 7, 8 and 12 are real.** Everything else is either missing a UI or writes
@@ -282,7 +282,7 @@ consistently fails.
 | Read `top_secret` documents | ❌ **nobody can** | — |
 | Configure retention | ❌ | 🟥 |
 | Configure branding | ❌ | 🟥 |
-| Publish circulars | ❌ | 🟥 |
+| Publish circulars | ✅ `circular:*` at `global` scope | 🟨 wired 2026-10-05, not verified live |
 | View the audit trail | ✅ | ✅ wired 2026-09-18 |
 
 ### Where it breaks, ranked
@@ -296,7 +296,8 @@ consistently fails.
 4. ⛔ **New-user creation still hardcodes a default password** rather than emailing a real
    invite — they hand-communicate every initial password. (Resending an invite to an
    already-created active user *is* wired, via `POST /users/:id/invitation`.)
-5. 🟥 **Branding, policies and circulars all reset on cache clear.**
+5. 🟥 **Branding and policies reset on cache clear.** (Circulars no longer do — they're
+   server state since 2026-10-05.)
 6. ✅ ~~Their audit view is fabricated data.~~ **Fixed 2026-09-18** — `/admin/audit` reads
    the real, hash-chained trail.
 
@@ -342,7 +343,7 @@ workflow:route:global
 | 6 | Open it and check the details | `/doc/[id]` | ✅ |
 | 7 | Route it for approval | `/doc/[id]` | ⛔ **404 (DRIFT-09)** |
 | 8 | Check their task queue | `/staff/tasks` | ✅ |
-| 9 | Read circulars | `/circulars` | 🟥 `SEED` |
+| 9 | Read circulars | `/circulars` | 🟨 `GET /circulars/inbox` — wired 2026-10-05, not verified live |
 | 10 | Check notifications | `/notifications` | ⛔ HTML 404 |
 
 ### First week — habits that form
