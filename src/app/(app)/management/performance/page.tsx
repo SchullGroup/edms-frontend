@@ -4,7 +4,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useUIStore } from '@/store/useUIStore';
 import { useTaskStats } from '@/apis/hooks/useTasks';
 import { DonutChart } from '@/components/ui/Charts';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage } from '@/components/common/Skeleton';
 
 export default function PerformanceOverviewPage() {
   const { setPageTitle } = useUIStore();
@@ -26,7 +26,7 @@ export default function PerformanceOverviewPage() {
     return totals.total === 0 ? 100 : Math.round((totals.onTime / totals.total) * 100);
   }, [buckets]);
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <SkeletonPage kpis={4} charts={2} />;
 
   return (
     <div>

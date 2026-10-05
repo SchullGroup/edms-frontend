@@ -8,7 +8,7 @@ import { useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { HBarChart } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
@@ -199,7 +199,10 @@ export default function BottlenecksPage() {
       </div>
 
       {isLoading || isLoadingUsers ? (
-        <Spinner />
+        <SkeletonTable
+          columns={['Document', 'Stuck at stage', 'Assignee', 'Age', 'SLA Status', 'Workflow Status', '']}
+          rows={8}
+        />
       ) : isError ? (
         <ErrorMessage message="Failed to load bottlenecks" retry={() => refetch()} />
       ) : (

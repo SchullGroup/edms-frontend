@@ -12,7 +12,7 @@ import {
 import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { Department } from '@/types/models';
 
@@ -418,7 +418,7 @@ export default function DepartmentsAdminPage() {
     },
   ];
 
-  if (isLoading) return <Spinner text="Loading departments..." />;
+  if (isLoading) return <SkeletonPage columns={['Department', 'Parent', 'Sub-departments', '']} rows={7} />;
   if (isError) return <ErrorMessage message="Failed to load departments." retry={refetch} />;
 
   return (

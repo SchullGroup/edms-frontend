@@ -6,7 +6,7 @@ import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuditEntries, useExportAuditCsv, useVerifyAuditChain } from '@/apis/hooks/useAudit';
 import { useUsers } from '@/apis/hooks/useUsers';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { AuditEntry } from '@/types/models';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -203,7 +203,7 @@ export default function TenantAuditPage() {
           </div>
         </div>
         {isLoadingAudit || isLoadingUsers ? (
-          <Spinner text="Loading audit logs..." />
+          <SkeletonTable columns={['When', 'Actor', 'Action', 'Object', 'Detail']} rows={8} />
         ) : isErrorAudit ? (
           <ErrorMessage message="Failed to load audit logs." retry={refetchAudit} />
         ) : (

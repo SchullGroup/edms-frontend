@@ -11,7 +11,7 @@ import {
 import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage, SkeletonTaskRows } from '@/components/common/Skeleton';
 import { Icon } from '@/components/ui/Icons';
 import { Table, Column } from '@/components/ui/Table';
 import { Avatar } from '@/components/ui/Avatar';
@@ -42,7 +42,7 @@ export default function SupervisorDashboard() {
     setPageTitle('Team Overview');
   }, [setPageTitle]);
 
-  if (isLoadingMatrix || isLoadingByCabinet || isLoadingUsers) return <Spinner />;
+  if (isLoadingMatrix || isLoadingByCabinet || isLoadingUsers) return <SkeletonPage kpis={4} columns={['Member', 'Open', 'Overdue', 'Due today']} rows={5} />;
 
   const team = members || [];
 
@@ -294,7 +294,7 @@ function MemberDrawerBody({
       </div>
 
       {isLoading ? (
-        <Spinner text="Loading open items…" />
+        <SkeletonTaskRows rows={4} />
       ) : tasks.length > 0 ? (
         <div className="rowlist">
           {tasks.map((t) => {

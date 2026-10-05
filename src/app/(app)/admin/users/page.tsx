@@ -18,6 +18,7 @@ import { buildDepartmentIndex, departmentName } from '@/apis/utils/managementAgg
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
+import { SkeletonTable } from '@/components/common/Skeleton';
 
 const USERS_PAGE_SIZE = 10;
 
@@ -371,9 +372,7 @@ export default function UsersPage() {
           </div>
         </div>
         {isLoading ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-soft)' }}>
-            Loading users...
-          </div>
+          <SkeletonTable columns={['Name', 'Role', 'Department', 'Status', '']} rows={8} />
         ) : (
           <>
             <Table cols={userCols} rows={users} />

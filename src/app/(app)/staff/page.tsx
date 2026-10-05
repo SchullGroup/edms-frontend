@@ -16,7 +16,7 @@ import {
 import { Icon } from '@/components/ui/Icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TaskRow } from '@/components/ui/TaskRow';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonNotifRows, SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { timeAgo, fmtDate } from '@/utils/helpers';
 
@@ -219,7 +219,7 @@ export default function StaffDashboard() {
               </button>
             </div>
             {isNotifLoading ? (
-              <Spinner text="Loading notifications…" />
+              <SkeletonNotifRows rows={4} />
             ) : myNotifs.length ? (
               myNotifs.map((n) => (
                 <div
@@ -303,9 +303,7 @@ export default function StaffDashboard() {
               <ErrorMessage message="Failed to load tasks" retry={refetchTasks} />
             </div>
           ) : isTasksLoading ? (
-            <div style={{ padding: '32px' }}>
-              <Spinner text="Loading tasks..." />
-            </div>
+            <SkeletonTaskRows rows={6} />
           ) : list.length ? (
             <div className="rowlist">
               {list.slice(0, 8).map((t) => (

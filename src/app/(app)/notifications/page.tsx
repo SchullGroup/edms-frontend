@@ -20,7 +20,7 @@ import { Notification } from '@/types/models';
 import { Icon } from '@/components/ui/Icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Pagination } from '@/components/ui/Pagination';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonNotifRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { timeAgo } from '@/utils/helpers';
 
@@ -97,7 +97,7 @@ export default function NotificationCenterPage() {
 
       <div className="card">
         {isLoading ? (
-          <Spinner text="Loading notifications…" />
+          <SkeletonNotifRows rows={6} />
         ) : isError ? (
           <ErrorMessage message="Failed to load notifications." retry={() => refetch()} />
         ) : list.length > 0 ? (

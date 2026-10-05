@@ -9,7 +9,7 @@ import { useUsers } from '@/apis/hooks/useUsers';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { AuditEntry } from '@/types/models';
 
@@ -266,7 +266,7 @@ export default function AuditorTrailPage() {
           </div>
         </div>
         {isLoading ? (
-          <Spinner text="Loading audit trail..." />
+          <SkeletonTable columns={['Timestamp', 'Actor', 'Action', 'Object', 'Detail', '']} rows={8} />
         ) : isError ? (
           <ErrorMessage message="Failed to load the audit trail." retry={refetch} />
         ) : (

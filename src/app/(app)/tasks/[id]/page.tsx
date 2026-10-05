@@ -3,7 +3,7 @@
 import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTask } from '@/apis/hooks/useTasks';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 
 /**
@@ -30,5 +30,5 @@ export default function TaskLink({ params }: { params: Promise<{ id: string }> }
       />
     );
   }
-  return <Spinner text="Opening task…" />;
+  return <SkeletonPage charts={2} />;
 }

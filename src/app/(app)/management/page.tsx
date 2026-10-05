@@ -13,7 +13,7 @@ import {
 import { exportCsv } from '@/utils/exportCsv';
 import { HBarChart, LineChart } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage } from '@/components/common/Skeleton';
 import {
   buildDepartmentIndex,
   departmentName,
@@ -170,7 +170,7 @@ export default function ManagementDashboard() {
     },
   ];
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <SkeletonPage kpis={4} charts={2} columns={['Department', 'Volume', 'Closed', 'SLA']} rows={5} />;
 
   return (
     <div>

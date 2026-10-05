@@ -8,7 +8,7 @@ import { exportCsv } from '@/utils/exportCsv';
 import { LineChart, DonutChart } from '@/components/ui/Charts';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { Icon } from '@/components/ui/Icons';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonKpis } from '@/components/common/Skeleton';
 
 export default function MyPerformancePage() {
   const { currentUser } = useStore();
@@ -99,9 +99,7 @@ export default function MyPerformancePage() {
       </div>
 
       {tasksLoading ? (
-        <div style={{ padding: '32px' }}>
-          <Spinner text="Loading performance data..." />
-        </div>
+        <SkeletonKpis count={4} />
       ) : (
         <>
           <div className="grid cols-4 mb-4">

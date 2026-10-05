@@ -12,6 +12,7 @@ import { calculateChecksum } from '@/apis/services/s3.service';
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
 import { fmtDate } from '@/utils/helpers';
+import { SkeletonText } from '@/components/common/Skeleton';
 
 interface Props {
   documentId: string;
@@ -119,7 +120,7 @@ export function DocumentVersionsPanel({
             document.
           </div>
         )}
-        {isLoading && <div className="caption">Loading versions…</div>}
+        {isLoading && <SkeletonText lines={3} />}
         {!isLoading && sorted.length === 0 && <div className="caption">No version history.</div>}
         {sorted.map((v) => {
           const isCurrent = v.id === currentVersionId;
