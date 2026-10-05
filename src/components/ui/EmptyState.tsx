@@ -18,7 +18,7 @@ export const EmptyState = ({ icon, title, message, action }: EmptyStateProps) =>
       <div style={{ fontSize: '12.5px', maxWidth: '340px', margin: '0 auto', lineHeight: '1.55' }}>
         {message}
       </div>
-      {action && <div className="mt16">{action}</div>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 };

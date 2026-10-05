@@ -2,13 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { routeConfig } from '@/config/routes.config';
+import { evaluateRouteAccess } from '@/lib/routeAccess';
 import { useStore } from '@/store/useStore';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useUIStore } from '@/store/useUIStore';
 import { authService } from '@/apis/services/auth.service';
 import { usePermissions } from '@/hooks/usePermissions';
+import { SessionExpiredModal } from '@/components/common/SessionExpiredModal';
+import { ServiceUnavailableOverlay } from '@/components/common/ServiceUnavailableOverlay';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -27,12 +29,12 @@ function lighten(hex: string, amt: number) {
 export const AppShell = ({ children }: AppShellProps) => {
   const router = useRouter();
   const pathname = usePathname();
-  const { currentUser, branding, prefs } = useStore();
+  const { currentUser, branding, prefs, patchCurrentUser } = useStore();
   const { pageTitle } = useUIStore();
   const [collapsed, setCollapsed] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const { hasPermission } = usePermissions();
+  const { granted, isReady: permsReady } = usePermissions();
 
   useEffect(() => {
     const unsub = useStore.persist.onFinishHydration(() => setHydrated(true));
@@ -47,55 +49,32 @@ export const AppShell = ({ children }: AppShellProps) => {
   }, []);
 
   useEffect(() => {
-    // --- Route Guard Logic ---
+    // --- Route Guard Logic (cosmetic — middleware.ts is the real gate now) ---
     if (!isMounted || !hydrated) return;
+    // Wait until we actually know the user's permissions, otherwise a custom
+    // role (empty fallback grants) would be bounced to /unauthorized on first paint.
+    if (!permsReady) return;
 
     if (currentUser && pathname && pathname !== '/unauthorized') {
-      let isAllowed = true;
-      let matchedRule = false;
-
-      for (const rule of routeConfig) {
-        let match = false;
-        if (rule.matchType === 'exact') {
-          match = pathname === rule.path;
-        } else if (rule.matchType === 'prefix') {
-          const isExcluded = rule.exclude?.some((ex) => pathname.startsWith(ex));
-          match = pathname.startsWith(rule.path) && !isExcluded;
-        } else if (rule.matchType === 'whitelist') {
-          const isIncluded = rule.include?.some((inc) => pathname.startsWith(inc));
-          match = pathname === rule.path || !!isIncluded;
-        }
-
-        if (match) {
-          matchedRule = true;
-          // Check role first
-          if (!rule.roles || rule.roles.length === 0) {
-            isAllowed = true;
-          } else {
-            isAllowed = currentUser.roles.some((r) => rule.roles!.includes(r));
-          }
-
-          // Then check granular permissions if required
-          if (isAllowed && rule.permissions && rule.permissions.length > 0) {
-            isAllowed = rule.permissions.every((p) => {
-              if (typeof p === 'string') {
-                const [res, act] = p.split(':');
-                return hasPermission(res, act || '*');
-              }
-              return hasPermission(p.resource, p.action);
-            });
-          }
-
-          break; // Stop at first match
-        }
-      }
-
-      if (matchedRule && !isAllowed) {
+      const { matched, allowed } = evaluateRouteAccess(pathname, {
+        roles: currentUser.roles ?? [],
+        permissions: granted,
+      });
+      if (matched && !allowed) {
         router.replace('/unauthorized');
       }
     }
-  }, [currentUser, pathname, router, isMounted]);
+  }, [currentUser, pathname, router, isMounted, hydrated, permsReady, granted]);
 
+  // Verify the session once per signed-in user, and adopt fresh `roles` /
+  // `permissions` from `/auth/me` (both are now live — see docs/01 DRIFT-03).
+  // This is the only source of permission gap-filling — a role's permission
+  // changes reach a user the next time this call happens, on token refresh,
+  // or on their next login; there's no separate `GET /roles` top-up (removed:
+  // most roles can't call that endpoint at all, so it only ever produced a
+  // 403 in the network tab for most users, useless work masquerading as a
+  // safety net). Keyed on `currentUser?.id` (a primitive) — NOT the object —
+  // so the `patchCurrentUser` below can't retrigger it.
   useEffect(() => {
     if (!isMounted || !hydrated) return;
 
@@ -104,18 +83,49 @@ export const AppShell = ({ children }: AppShellProps) => {
       return;
     }
 
-    // Verify session in background
+    let cancelled = false;
     authService
       .me()
       .then((res) => {
-        // Could optionally update currentUser here if needed
+        if (cancelled || !res) return;
+        const cur = useStore.getState().currentUser;
+        if (!cur) return;
+        const patch: Record<string, unknown> = {};
+        if (res.roles && JSON.stringify(res.roles) !== JSON.stringify(cur.roles)) {
+          patch.roles = res.roles;
+        }
+        if (
+          res.permissions &&
+          res.permissions.length > 0 &&
+          JSON.stringify(res.permissions) !== JSON.stringify(cur.permissions)
+        ) {
+          patch.permissions = res.permissions;
+        }
+        if (Object.keys(patch).length) patchCurrentUser(patch);
       })
-      .catch(() => {
-        // interceptor handles the 401, we just need to clear state
-        useStore.getState().setCurrentUser(null);
-        router.push('/');
+      .catch((err) => {
+        if (cancelled) return;
+        // Same distinction as api-client.ts's interceptor: a real response
+        // confirming the token is dead (401/403) means the session is
+        // genuinely over — hand off to SessionExpiredModal rather than a
+        // silent hard redirect. A network error/timeout here means the
+        // backend was unreachable for this one call, not that the user is
+        // logged out — previously this branch treated the two identically,
+        // so a single transient blip right after login forced every user
+        // back to the login screen. Do nothing in that case: the session
+        // stays as-is, and ServiceUnavailableOverlay picks up the pattern
+        // if it keeps happening across other queries.
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+          useUIStore.getState().setSessionExpired(true);
+        }
       });
-  }, [currentUser, router, isMounted]);
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, isMounted, hydrated]);
 
   useEffect(() => {
     if (branding && prefs) {
@@ -149,6 +159,8 @@ export const AppShell = ({ children }: AppShellProps) => {
       <main className="main" id="main-content">
         <div className="main-inner">{children}</div>
       </main>
+      <SessionExpiredModal />
+      <ServiceUnavailableOverlay />
     </div>
   );
 };

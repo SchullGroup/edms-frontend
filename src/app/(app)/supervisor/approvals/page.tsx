@@ -1,92 +1,77 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useStore, userById } from '@/store/useStore';
+import React, { useEffect, useState } from 'react';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments, useUpdateDocument } from '@/apis/hooks/useDocuments';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useApprovalTasks, useReassignTask } from '@/apis/hooks/useTasks';
+import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
-import { Spinner } from '@/components/common/Spinner';
+import { usePermissions } from '@/hooks/usePermissions';
+import { SkeletonTaskRows } from '@/components/common/Skeleton';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { TaskRow } from '@/components/ui/TaskRow';
+import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
+import { Task } from '@/types/models';
+
+const PAGE_SIZE = 20;
 
 export default function ApprovalsQueuePage() {
-  const { currentUser } = useStore();
-  const session = currentUser?.id;
+  const [tab, setTab] = useState<'pending' | 'escalated'>('pending');
+  const [page, setPage] = useState(1);
 
-  const { data: docsData, isLoading: isLoadingDocs } = useDocuments();
+  // The purpose-built approvals endpoint, not a generic /tasks filter — it's
+  // already ordered by urgency then due date server-side, and `scope: 'all'`
+  // gives the team's queue rather than just tasks assigned directly to me.
+  const {
+    data: tasksData,
+    isLoading: isLoadingTasks,
+    isError: isTasksError,
+    refetch: refetchTasks,
+  } = useApprovalTasks({ scope: 'all', status: tab, page, limit: PAGE_SIZE });
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
-  const documents = docsData?.data || [];
+  const tasks = tasksData?.data || [];
+  const pagination = tasksData?.pagination;
   const users = usersData?.data || [];
+  // Reassign targets: active users in the reassigner's own department only.
+  const { users: colleagues } = useDepartmentColleagues();
 
-  const updateDocument = useUpdateDocument();
+  const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
 
-  const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
+  const { setPageTitle, openModal, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canReassign = can('task', 'reassign');
 
   useEffect(() => {
     setPageTitle('Approvals Queue');
   }, [setPageTitle]);
 
-  if (isLoadingDocs || isLoadingUsers) return <Spinner />;
-
-  const queue = documents
-    .filter((d) => d.assignee === session && d.status !== 'closed')
-    .sort((a, b) => {
-      const u = { Critical: 0, High: 1, Normal: 2, Low: 3 };
-      return (u[a.urgency as keyof typeof u] || 2) - (u[b.urgency as keyof typeof u] || 2);
-    });
-
-  const handleApprove = (d: any) => {
-    openConfirm({
-      title: `Approve “${d.title.slice(0, 40)}…”?`,
-      message:
-        'The current stage completes and the file advances. Your decision is recorded in the immutable audit trail.',
-      confirmLabel: 'Approve',
-      onConfirm: () => {
-        // Mock workflow advance
-        updateDocument.mutate({
-          id: d.id,
-          updates: {
-            workflow: d.workflow.map((s: any) =>
-              s.state === 'current' ? { ...s, state: 'past' } : s,
-            ),
-          } as any,
-        });
-        createAuditLog.mutate({
-          action: 'APPROVE',
-          target: d.id,
-          detail: 'Approved via approvals queue',
-        });
-        addToast('Approved', 'success');
-      },
-    });
+  const setTabAndReset = (next: 'pending' | 'escalated') => {
+    setTab(next);
+    setPage(1);
   };
 
-  const handleReassign = (d: any) => {
+  const handleReassign = (t: Task) => {
     let newAssignee = '';
     let note = '';
+    const title = t.workflowInstance?.document?.title || 'this document';
     openModal({
-      title: `Reassign — ${d.title.slice(0, 44)}${d.title.length > 44 ? '…' : ''}`,
+      title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
       body: (
         <div>
           <div className="field">
             <label>Current assignee</label>
-            <input
-              className="input"
-              disabled
-              value={userById(users, d.assignee as string)?.name || ''}
-            />
+            <input className="input" disabled value={t.assignee?.name || t.assignedRole?.name || ''} />
           </div>
           <div className="field">
             <label>New assignee</label>
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select user...</option>
-              {users
-                .filter((u) => u.status === 'active' && u.id !== d.assignee)
+              {colleagues
+                .filter((u) => u.id !== t.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} — {(u as any).roleLabel || (u as any).role || u.roles?.[0]}
+                    {u.name}
                   </option>
                 ))}
             </select>
@@ -109,18 +94,21 @@ export default function ApprovalsQueuePage() {
           onClick: () => {
             if (!newAssignee) {
               addToast('Please select a new assignee', 'error');
-              return;
+              return false;
             }
-            const prev = d.assignee;
-            updateDocument.mutate({ id: d.id, updates: { assignee: newAssignee } });
-            addToast('Document ' + d.title + ' reassigned', 'success');
-            createAuditLog.mutate({
-              action: 'REASSIGN',
-              target: d.id,
-              detail: `Reassigned from ${userById(users, prev as string)?.name} to ${userById(users, newAssignee as string)?.name}`,
-            });
-            addToast(`Reassigned to ${userById(users, newAssignee as string)?.name}`, 'success');
-            closeModal();
+            const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
+            const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
+            return reassignTask
+              .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
+              .then(() => {
+                createAuditLog.mutate({
+                  action: 'REASSIGN',
+                  target: t.workflowInstance?.documentId || t.id,
+                  detail: `Reassigned from ${prevName} to ${newName}`,
+                });
+                addToast(`Reassigned to ${newName}`, 'success');
+              })
+              .catch(() => false);
           },
         },
       ],
@@ -136,46 +124,78 @@ export default function ApprovalsQueuePage() {
             Items awaiting your decision — approve inline or open for full context.
           </div>
         </div>
+        <div className="actions">
+          <div className="seg">
+            <button
+              className={tab === 'pending' ? 'active' : ''}
+              onClick={() => setTabAndReset('pending')}
+            >
+              Pending
+            </button>
+            <button
+              className={tab === 'escalated' ? 'active' : ''}
+              onClick={() => setTabAndReset('escalated')}
+            >
+              Escalated
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="card">
-        {queue.length > 0 ? (
-          <div className="rowlist">
-            {queue.map((d: any) => (
-              <TaskRow
-                key={d.id}
-                item={d}
-                extraActions={
-                  <>
-                    <button
-                      className="btn btn-success btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleApprove(d);
-                      }}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleReassign(d);
-                      }}
-                    >
-                      Reassign
-                    </button>
-                  </>
-                }
+        {isLoadingUsers || isLoadingTasks ? (
+          <SkeletonTaskRows rows={6} />
+        ) : isTasksError ? (
+          <ErrorMessage message="Failed to load the approvals queue" retry={() => refetchTasks()} />
+        ) : tasks.length > 0 ? (
+          <>
+            <div className="rowlist">
+              {tasks.map((t) => (
+                <TaskRow
+                  key={t.id}
+                  item={t}
+                  // Approving happens on the workflow page ("Open"), where the
+                  // documents can actually be read first — not from the list.
+                  extraActions={
+                    <>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        disabled={!canReassign}
+                        title={
+                          !canReassign ? "You don't have permission to reassign tasks" : undefined
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleReassign(t);
+                        }}
+                      >
+                        Reassign
+                      </button>
+                    </>
+                  }
+                />
+              ))}
+            </div>
+            {pagination && (
+              <Pagination
+                page={pagination.page}
+                totalPages={pagination.totalPages}
+                total={pagination.total}
+                limit={pagination.limit}
+                onPageChange={setPage}
               />
-            ))}
-          </div>
+            )}
+          </>
         ) : (
           <div className="empty">
             <Icon name="approve" size={32} />
-            <div className="h3 mt16 mb8">Approvals queue is clear</div>
-            <p className="caption mb16">
-              Items routed for your decision will appear here, ordered by urgency and SLA.
+            <div className="h3 mt-4 mb-2">
+              {tab === 'escalated' ? 'No escalated approvals' : 'Approvals queue is clear'}
+            </div>
+            <p className="caption mb-4">
+              {tab === 'escalated'
+                ? 'Escalated items will appear here once something breaches its SLA.'
+                : 'Items routed for your decision will appear here, ordered by urgency and SLA.'}
             </p>
           </div>
         )}

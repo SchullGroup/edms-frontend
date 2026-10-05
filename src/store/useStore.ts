@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AuthUser } from '@/types/models';
+import { AuthUser, SavedSearch } from '@/types/models';
 import { SEED, FINDINGS } from './initialData';
 
 export { FINDINGS };
@@ -13,6 +13,7 @@ export type AppState = typeof SEED & {
 export interface AppStore extends AppState {
   currentUser: AuthUser | null;
   setCurrentUser: (user: AuthUser | null) => void;
+  patchCurrentUser: (partial: Partial<AuthUser>) => void;
   resetData: () => void;
   auditAction: (action: string, target: string, detail: string) => void;
   notifyUser: (
@@ -46,6 +47,8 @@ export interface AppStore extends AppState {
   updateFeatureFlag: (id: string, updates: any) => void;
   updateFinding: (id: string, updates: any) => void;
   addFinding: (f: any) => void;
+  addSavedSearch: (userId: string, search: SavedSearch) => void;
+  removeSavedSearch: (userId: string, id: string) => void;
 
   // --- Async API Actions (New Pattern) ---
   fetchDocuments: () => Promise<void>;
@@ -62,6 +65,19 @@ export const useStore = create<AppStore>()(
       findings: FINDINGS,
       currentUser: null,
       setCurrentUser: (user) => set({ currentUser: user }),
+      patchCurrentUser: (partial) =>
+        set((s) => {
+          if (!s.currentUser) return s;
+          // No-op if every patched key already deep-equals what's stored —
+          // otherwise a new object reference is produced on every call and any
+          // effect that depends on `currentUser` re-runs forever.
+          const cur = s.currentUser as any;
+          const changed = Object.keys(partial).some(
+            (k) => JSON.stringify(cur[k]) !== JSON.stringify((partial as any)[k]),
+          );
+          if (!changed) return s;
+          return { currentUser: { ...s.currentUser, ...partial } };
+        }),
       setPrefs: (prefs) => set({ prefs }),
       resetData: () => set(SEED),
       auditAction: (action, target, detail) => {
@@ -212,6 +228,24 @@ export const useStore = create<AppStore>()(
         const { findings } = get();
         set({ findings: [f, ...(findings || [])] });
       },
+      addSavedSearch: (userId, search) => {
+        const { savedSearches } = get();
+        set({
+          savedSearches: {
+            ...savedSearches,
+            [userId]: [...(savedSearches[userId] ?? []), search],
+          },
+        });
+      },
+      removeSavedSearch: (userId, id) => {
+        const { savedSearches } = get();
+        set({
+          savedSearches: {
+            ...savedSearches,
+            [userId]: (savedSearches[userId] ?? []).filter((s) => s.id !== id),
+          },
+        });
+      },
 
       // --- Async API Actions Implementation ---
       fetchDocuments: async () => {
@@ -227,23 +261,32 @@ export const useStore = create<AppStore>()(
     }),
     {
       name: 'edms-state-v3',
-      version: 3,
+      version: 5,
+      // v4: drop any stale `currentUser.permissions` persisted by an older build
+      // so it gets re-derived cleanly from `GET /roles` / `GET /auth/me`.
+      // v5: `savedSearches` went from one shared array (seeded with two fake
+      // entries) to a per-user map with a new shape — start it empty.
+      migrate: (persisted: any, version) => {
+        let next = persisted;
+        if (version < 4 && next?.currentUser) {
+          const { permissions, ...rest } = next.currentUser;
+          next = { ...next, currentUser: rest };
+        }
+        if (version < 5 && next) {
+          next = { ...next, savedSearches: {} };
+        }
+        return next;
+      },
     },
   ),
 );
-
-export const effStatus = (doc: any) => {
-  if (doc.status === 'Closed' || doc.status === 'On Hold') return doc.status;
-  if (doc.due && doc.due < Date.now()) return 'Overdue';
-  return doc.status;
-};
 
 export const canView = (doc: any, user: any) => {
   if (!doc.restrictedTo) return true;
   return doc.restrictedTo.includes(user.id);
 };
 
-export const userById = (users: any[], id: string) =>
+export const userById = (users: any[], id: string | null | undefined) =>
   users.find((u) => u.id === id) || {
     id,
     name: id === 'system' ? 'System' : 'Unknown',

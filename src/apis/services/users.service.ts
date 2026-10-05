@@ -11,7 +11,14 @@ export interface UserFilters {
 export interface CreateUserInput {
   email: string;
   name: string;
-  password: string;
+  /**
+   * Optional — confirmed live 2026-09-18 that `POST /users` accepts omitting
+   * this entirely and returns `{ invited: true }`, triggering the real
+   * invite-email flow server-side instead of setting a caller-chosen
+   * password. Kept in the type for any future direct-set use case, but no
+   * call site should populate it for ordinary user creation.
+   */
+  password?: string;
   status?: 'active' | 'inactive' | 'suspended';
   departmentId?: string;
   roleIds?: string[];
@@ -80,5 +87,17 @@ export const usersService = {
 
   removeRole: async (id: string, roleId: string): Promise<void> => {
     await apiClient.delete(`/users/${id}/roles/${roleId}`);
+  },
+
+  /**
+   * Issues a fresh set-password link and emails it to the user; any link sent
+   * previously stops working. Backend rejects with 409 if the user isn't
+   * `active` and 502 if the email itself fails to send.
+   */
+  resendInvitation: async (id: string): Promise<{ id: string; email: string; invited: boolean }> => {
+    const response = await apiClient.post<ApiResponse<{ id: string; email: string; invited: boolean }>>(
+      `/users/${id}/invitation`,
+    );
+    return response.data.data;
   },
 };

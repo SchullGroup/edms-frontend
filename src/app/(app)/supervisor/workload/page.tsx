@@ -1,42 +1,48 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useStore, userById } from '@/store/useStore';
+import React, { useEffect, useState } from 'react';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments, useUpdateDocument } from '@/apis/hooks/useDocuments';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useTaskWorkload, useTasks, useReassignTask } from '@/apis/hooks/useTasks';
+import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
-import { Spinner } from '@/components/common/Spinner';
+import { usePermissions } from '@/hooks/usePermissions';
+import { SkeletonTable, SkeletonTaskRows } from '@/components/common/Skeleton';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { TaskRow } from '@/components/ui/TaskRow';
+import { Icon } from '@/components/ui/Icons';
+import { Task, TaskWorkloadMember } from '@/types/models';
 
 export default function WorkloadPage() {
-  const { currentUser } = useStore();
-  const session = currentUser?.id;
-
-  const { data: docsData, isLoading: isLoadingDocs } = useDocuments();
+  // Real per-member capacity/utilization from the backend — only directly
+  // assigned, active, current-stage tasks count; role-pool tasks aren't
+  // duplicated across every holder of the role. Omit departmentId; the
+  // backend resolves the supervisor's own department automatically.
+  const {
+    data: workload,
+    isLoading: isLoadingWorkload,
+    isError: isWorkloadError,
+    refetch: refetchWorkload,
+  } = useTaskWorkload();
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
-  const documents = docsData?.data || [];
   const users = usersData?.data || [];
+  // Reassign targets: active users in the reassigner's own department only.
+  const { users: colleagues } = useDepartmentColleagues();
 
-  const updateDocument = useUpdateDocument();
+  const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
 
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+  const { setPageTitle, openModal, addToast } = useUIStore();
 
   useEffect(() => {
     setPageTitle('Workload & Reassign');
   }, [setPageTitle]);
 
-  if (isLoadingDocs || isLoadingUsers) return <Spinner />;
-
-  const team = users.slice(0, 5); // mock team
-  const cap = 8;
-
-  const handleReassign = (d: any) => {
+  const handleReassign = (t: Task) => {
     let newAssignee = '';
     let note = '';
+    const title = t.workflowInstance?.document?.title || 'this document';
     openModal({
-      title: `Reassign — ${d.title.slice(0, 44)}${d.title.length > 44 ? '…' : ''}`,
+      title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
       body: (
         <div>
           <div className="field">
@@ -44,18 +50,18 @@ export default function WorkloadPage() {
             <input
               className="input"
               disabled
-              value={userById(users, d.assignee as string)?.name || ''}
+              value={t.assignee?.name || t.assignedRole?.name || ''}
             />
           </div>
           <div className="field">
             <label>New assignee</label>
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select user...</option>
-              {users
-                .filter((u) => u.status === 'active' && u.id !== d.assignee)
+              {colleagues
+                .filter((u) => u.id !== t.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} — {(u as any).roleLabel || (u as any).role || u.roles?.[0]}
+                    {u.name}
                   </option>
                 ))}
             </select>
@@ -78,18 +84,21 @@ export default function WorkloadPage() {
           onClick: () => {
             if (!newAssignee) {
               addToast('Please select a new assignee', 'error');
-              return;
+              return false;
             }
-            const prev = d.assignee;
-            updateDocument.mutate({ id: d.id, updates: { assignee: newAssignee } });
-            addToast('Tasks reassigned', 'success');
-            createAuditLog.mutate({
-              action: 'REASSIGN',
-              target: d.id,
-              detail: `Reassigned from ${userById(users, prev as string)?.name} to ${userById(users, newAssignee as string)?.name}`,
-            });
-            addToast(`Reassigned to ${userById(users, newAssignee as string)?.name}`, 'success');
-            closeModal();
+            const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
+            const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
+            return reassignTask
+              .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
+              .then(() => {
+                createAuditLog.mutate({
+                  action: 'REASSIGN',
+                  target: t.workflowInstance?.documentId || t.id,
+                  detail: `Reassigned from ${prevName} to ${newName}`,
+                });
+                addToast(`Reassigned to ${newName}`, 'success');
+              })
+              .catch(() => false);
           },
         },
       ],
@@ -102,90 +111,138 @@ export default function WorkloadPage() {
         <div>
           <div className="page-title">Workload & Reassign</div>
           <div className="page-sub">
-            Per-member load against capacity. Reassign directly from any row.
+            Per-member load against capacity. Expand a row to reassign directly from it.
           </div>
         </div>
       </div>
 
-      <div>
-        {team.map((u) => {
-          const open = documents.filter((d) => d.assignee === u.id && d.status !== 'closed');
-          const pct = Math.min(100, Math.round((open.length / cap) * 100));
-          const color =
-            pct >= 90
-              ? 'var(--status-overdue)'
-              : pct >= 65
-                ? 'var(--status-pending)'
-                : 'var(--status-closed)';
+      {isLoadingWorkload || isLoadingUsers ? (
+        <SkeletonTable columns={['Member', 'Load', '']} rows={6} />
+      ) : isWorkloadError ? (
+        <ErrorMessage message="Failed to load workload" retry={() => refetchWorkload()} />
+      ) : (
+        <div>
+          {(workload?.members || []).map((m) => (
+            <WorkloadMemberCard key={m.memberId} member={m} onReassign={handleReassign} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
-          return (
-            <div key={u.id} className="card card-pad mb16">
-              <div className="flex jcb aic wrap g12">
-                <div className="flex aic g12">
-                  <div className="avatar">{u.name.charAt(0)}</div>
-                  <div>
-                    <b>{u.name}</b>
-                    <div className="caption">
-                      {(u as any).departmentId || 'System'} · {open.length} open / capacity {cap}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ flex: 1, minWidth: '160px', maxWidth: '300px' }}>
-                  <div
-                    className="pbar"
-                    style={{
-                      height: '8px',
-                      background: 'var(--bg-body)',
-                      borderRadius: '4px',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <i
-                      style={{
-                        display: 'block',
-                        height: '100%',
-                        width: `${pct}%`,
-                        background: color,
-                      }}
-                    />
-                  </div>
-                </div>
-                <span
-                  className="tnum"
-                  style={{
-                    fontWeight: 800,
-                    color: pct >= 90 ? 'var(--status-overdue)' : 'inherit',
-                  }}
-                >
-                  {pct}%
-                </span>
-              </div>
+/**
+ * A member's open tasks are only fetched once the row is expanded — the
+ * workload summary above already gives real counts/capacity without walking
+ * every task in the tenant.
+ */
+function WorkloadMemberCard({
+  member,
+  onReassign,
+}: {
+  member: TaskWorkloadMember;
+  onReassign: (task: Task) => void;
+}) {
+  const { can } = usePermissions();
+  const canReassign = can('task', 'reassign');
+  const [expanded, setExpanded] = useState(false);
+  const { data, isLoading } = useTasks(
+    { assigneeId: member.memberId, status: 'pending', scope: 'all', limit: 100 },
+    { enabled: expanded },
+  );
+  const tasks = data?.data || [];
 
-              {open.length > 0 && (
-                <div className="rowlist mt8" style={{ borderTop: '1px solid var(--border)' }}>
-                  {open.map((d: any) => (
-                    <TaskRow
-                      key={d.id}
-                      item={d}
-                      extraActions={
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleReassign(d);
-                          }}
-                        >
-                          Reassign
-                        </button>
-                      }
-                    />
-                  ))}
-                </div>
+  const pct = Math.min(100, Math.round(member.utilizationPercent));
+  const color =
+    pct >= 90 ? 'var(--status-overdue)' : pct >= 65 ? 'var(--status-pending)' : 'var(--status-closed)';
+
+  return (
+    <div className="card card-pad mb-4">
+      <div
+        className="flex justify-between items-center flex-wrap gap-3"
+        style={{ cursor: 'pointer' }}
+        role="button"
+        tabIndex={0}
+        onClick={() => setExpanded((e) => !e)}
+      >
+        <div className="flex items-center gap-3">
+          <div className="avatar">{member.memberName.charAt(0)}</div>
+          <div>
+            <b>{member.memberName}</b>
+            <div className="caption">
+              {member.departmentName || 'No department'} · {member.open} open / capacity{' '}
+              {member.capacity}
+              {member.overdue > 0 && (
+                <span style={{ color: 'var(--status-overdue)' }}> · {member.overdue} overdue</span>
               )}
             </div>
-          );
-        })}
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: '160px', maxWidth: '300px' }}>
+          <div
+            className="pbar"
+            style={{
+              height: '8px',
+              background: 'var(--bg-body)',
+              borderRadius: '4px',
+              overflow: 'hidden',
+            }}
+          >
+            <i
+              style={{
+                display: 'block',
+                height: '100%',
+                width: `${pct}%`,
+                background: color,
+              }}
+            />
+          </div>
+        </div>
+        <span
+          className="tabular-nums"
+          style={{
+            fontWeight: 800,
+            color: pct >= 90 ? 'var(--status-overdue)' : 'inherit',
+          }}
+        >
+          {pct}%
+        </span>
+        <Icon name={expanded ? 'chevD' : 'chevR'} size={14} />
       </div>
+
+      {expanded && (
+        <div className="rowlist mt-2" style={{ borderTop: '1px solid var(--border)' }}>
+          {isLoading ? (
+            <SkeletonTaskRows rows={3} />
+          ) : tasks.length > 0 ? (
+            tasks.map((t) => (
+              <TaskRow
+                key={t.id}
+                item={t}
+                extraActions={
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    disabled={!canReassign}
+                    title={
+                      !canReassign ? "You don't have permission to reassign tasks" : undefined
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onReassign(t);
+                    }}
+                  >
+                    Reassign
+                  </button>
+                }
+              />
+            ))
+          ) : (
+            <p className="caption" style={{ padding: '12px 0' }}>
+              No open tasks.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

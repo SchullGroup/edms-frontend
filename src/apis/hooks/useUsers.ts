@@ -2,6 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersService, UserFilters } from '@/apis/services/users.service';
 import { User } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
+import { useStore } from '@/store/useStore';
+
+// Scope policy (not yet enforced — tracked as part of the internal write/scope
+// gating follow-up, see the sidebar permission work): `useUsers`/`useAllUsers`
+// are called from ~14 places, most of which are pickers/dropdowns rendering a
+// user list inside a page (reassign, delegate, uploader/assignee names, etc.)
+// — those only need department-scoped `user:view`. Only the tenant-wide
+// directory (`/admin/users`, gated on *global* scope — see useNavigation.ts)
+// legitimately needs every user in the tenant. When these hooks gain scope
+// awareness, that's the split to apply — not a blanket global requirement.
 
 export const userKeys = {
   all: ['users'] as const,
@@ -31,6 +41,29 @@ export function useAllUsers(
     queryFn: () => usersService.getAllPages(filters),
     enabled: options?.enabled ?? true,
   });
+}
+
+/**
+ * Active users in the signed-in user's own department — the only valid targets
+ * for a reassign (the backend 403s `TASK_REASSIGN_DEPARTMENT_FORBIDDEN` for a
+ * department-scoped reassigner picking anyone outside it). `/auth/me` doesn't
+ * return `departmentId`, so it's read from the user's own `GET /users/:id`
+ * record. A user with no department gets an empty list, not the whole tenant.
+ */
+export function useDepartmentColleagues() {
+  const meId = useStore((s) => s.currentUser?.id) ?? '';
+  const { data: me, isLoading: isLoadingMe } = useUser(meId);
+  const departmentId = me?.departmentId ?? null;
+  const { data, isLoading: isLoadingUsers } = useAllUsers(
+    { departmentId: departmentId ?? undefined, status: 'active' },
+    { enabled: !!departmentId },
+  );
+
+  return {
+    users: departmentId ? (data?.items ?? []) : [],
+    departmentId,
+    isLoading: isLoadingMe || (!!departmentId && isLoadingUsers),
+  };
 }
 
 export function useUser(id: string) {
@@ -87,6 +120,57 @@ export function useDeleteUser() {
     },
     onError: (err: any) => {
       addToast(err.response?.data?.message || 'Failed to delete user', 'error');
+    },
+  });
+}
+
+/** `POST /users/:id/roles` — adds the given role ids to a user. */
+export function useAssignUserRoles() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, roleIds }: { id: string; roleIds: string[] }) =>
+      usersService.assignRoles(id, roleIds),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: userKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to assign roles', 'error');
+    },
+  });
+}
+
+/** `DELETE /users/:id/roles/:roleId` — removes one role from a user. */
+export function useRemoveUserRole() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, roleId }: { id: string; roleId: string }) =>
+      usersService.removeRole(id, roleId),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: userKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to remove role', 'error');
+    },
+  });
+}
+
+/** `POST /users/:id/invitation` — resends the set-password email. */
+export function useResendInvitation() {
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: (id: string) => usersService.resendInvitation(id),
+    onSuccess: (data) => {
+      addToast(`Invitation resent to ${data.email}`, 'success');
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to resend invitation', 'error');
     },
   });
 }

@@ -11,7 +11,13 @@ export interface ModalAction {
   label: string;
   kind?: string;
   disabled?: boolean;
-  onClick?: () => boolean | void;
+  /**
+   * Return a Promise to keep the modal open (with a loading state on this
+   * button) until it settles. The modal closes on resolve and stays open on
+   * reject so the user can see the error and retry. Returning `false`
+   * (sync or resolved) also keeps the modal open.
+   */
+  onClick?: () => boolean | void | Promise<boolean | void>;
 }
 
 export interface ModalConfig {
@@ -32,7 +38,14 @@ export interface ConfirmConfig {
   message: string;
   confirmLabel?: string;
   danger?: boolean;
-  onConfirm: () => void;
+  /**
+   * Return a Promise (e.g. `mutateAsync(...)`) to show a loading state on the
+   * confirm button until it settles. This is forwarded as-is to a `ModalAction.onClick`
+   * under the hood, so the same `false` convention applies: resolve (or return) `false`
+   * to keep the modal open — e.g. `.catch(() => false)` after a rejected mutation, so a
+   * failed confirm doesn't silently close as if it had succeeded.
+   */
+  onConfirm: () => boolean | void | Promise<boolean | void>;
 }
 
 interface UIStore {
@@ -48,6 +61,17 @@ interface UIStore {
   closeDrawer: () => void;
   pageTitle: string;
   setPageTitle: (title: string) => void;
+  /** A live backend confirmed the token is dead (401 after a failed refresh)
+   *  — not merely unreachable. Drives `SessionExpiredModal`; see
+   *  `api-client.ts`'s response interceptor for the only place this is set. */
+  sessionExpired: boolean;
+  setSessionExpired: (sessionExpired: boolean) => void;
+  /** Repeated network-level/5xx query failures across the app (see
+   *  `react-query-provider.tsx`) — the backend appears to be down, as
+   *  opposed to a single page's own data being missing. Drives
+   *  `ServiceUnavailableOverlay`. */
+  serviceUnavailable: boolean;
+  setServiceUnavailable: (serviceUnavailable: boolean) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -68,13 +92,12 @@ export const useUIStore = create<UIStore>((set) => ({
       body: React.createElement('div', { style: { marginBottom: '16px' } }, config.message),
       actions: [
         { label: 'Cancel' },
-        { 
-          label: config.confirmLabel || 'Confirm', 
-          kind: config.danger ? 'btn-danger' : 'btn-primary', 
-          onClick: () => {
-            config.onConfirm();
-            set({ modal: null });
-          } 
+        {
+          label: config.confirmLabel || 'Confirm',
+          kind: config.danger ? 'btn-danger' : 'btn-primary',
+          // Returned as-is: if this is a Promise, UIProviders shows a loading
+          // state on the button and only closes the modal once it resolves.
+          onClick: () => config.onConfirm(),
         }
       ]
     }
@@ -85,4 +108,8 @@ export const useUIStore = create<UIStore>((set) => ({
   closeDrawer: () => set({ drawer: null }),
   pageTitle: 'Dashboard',
   setPageTitle: (pageTitle) => set({ pageTitle }),
+  sessionExpired: false,
+  setSessionExpired: (sessionExpired) => set({ sessionExpired }),
+  serviceUnavailable: false,
+  setServiceUnavailable: (serviceUnavailable) => set({ serviceUnavailable }),
 }));

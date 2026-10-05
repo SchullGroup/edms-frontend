@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { UPLOAD_ACCEPT, UPLOAD_TYPES_LABEL, resolveUploadMimeType } from '@/constants/uploadTypes';
 import { useRouter } from 'next/navigation';
 import { useStore, cabById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
+import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
+import { DOCUMENT_TYPES } from '@/constants/documentTypes';
 
 const IDU_GUESSES = [
   {
@@ -45,6 +48,7 @@ const IDU_GUESSES = [
 export default function UploadCapturePage() {
   const router = useRouter();
   const { setPageTitle, addToast } = useUIStore();
+  const { routeDocuments } = useRouteToWorkflow();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [files, setFiles] = useState<
@@ -55,6 +59,7 @@ export default function UploadCapturePage() {
       progress: number;
       guess?: any;
       docId?: string;
+      abortUpload?: () => void;
     }[]
   >([]);
 
@@ -118,13 +123,13 @@ export default function UploadCapturePage() {
         </div>
         <div style={{ fontWeight: 700, fontSize: '14px' }}>Drag & drop documents here</div>
         <div className="muted" style={{ marginTop: '5px', fontSize: '12.5px' }}>
-          or click to browse · PDF, DOCX, XLSX, TIFF, JPG up to 100 MB · email-in and scanner
-          channels are also connected
+          or click to browse · {UPLOAD_TYPES_LABEL}
         </div>
       </div>
       <input
         type="file"
         multiple
+        accept={UPLOAD_ACCEPT}
         style={{ display: 'none' }}
         ref={fileInputRef}
         onChange={(e) => {
@@ -133,28 +138,7 @@ export default function UploadCapturePage() {
         }}
       />
 
-      <div className="flex g8 mt16">
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => {
-            const f = new File([''], 'Scanned_Agreement_0034.pdf', { type: 'application/pdf' });
-            ingest([f]);
-          }}
-        >
-          Simulate scanner intake
-        </button>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => {
-            const f = new File([''], 'FWD_Invoice_MeridianLtd.pdf', { type: 'application/pdf' });
-            ingest([f]);
-          }}
-        >
-          Simulate email-in
-        </button>
-      </div>
-
-      <div className="mt16">
+      <div className="mt-4">
         {files.map((file) => {
           if (file.status === 'uploading' || file.status === 'processing') {
             return (
@@ -173,6 +157,16 @@ export default function UploadCapturePage() {
                       : 'Uploading…'}
                   </div>
                 </div>
+                {file.status === 'uploading' && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    title="Cancel upload"
+                    aria-label="Cancel upload"
+                    onClick={() => file.abortUpload?.()}
+                  >
+                    <Icon name="x" size={14} />
+                  </button>
+                )}
               </div>
             );
           }
@@ -181,7 +175,7 @@ export default function UploadCapturePage() {
           }
           if (file.status === 'filed') {
             return (
-              <div key={file.id} className="banner success mt16">
+              <div key={file.id} className="banner success mt-4">
                 <span>
                   <Icon name="check" size={15} />
                 </span>{' '}
@@ -191,6 +185,13 @@ export default function UploadCapturePage() {
                   style={{ fontWeight: 700, cursor: 'pointer' }}
                 >
                   Open document
+                </a>
+                {' · '}
+                <a
+                  onClick={() => file.docId && routeDocuments([{ id: file.docId, title: file.name }])}
+                  style={{ fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Route to workflow
                 </a>
               </div>
             );
@@ -205,20 +206,22 @@ export default function UploadCapturePage() {
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { documentsService } from '@/apis/services/documents.service';
-import { uploadFile, calculateChecksum } from '@/apis/services/s3.service';
+import { calculateChecksum } from '@/apis/services/s3.service';
+import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 
 function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
-  const { docTypes, session, users } = useStore();
+  const { session, users } = useStore();
   const { data: cabinetsData } = useCabinets();
   const cabinets = cabinetsData?.data || [];
   const { addToast } = useUIStore();
   const guess = file.guess;
   const me = session ? users.find((u) => u.id === session) : null;
+  const { startUpload, uploadProgress, abort } = useMultipartUploader();
 
   const [title, setTitle] = useState(file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]/g, ' '));
   const [type, setType] = useState(guess.type);
   const [selCab, setSelCab] = useState(guess.cab || '');
-  const { data: folData } = useCabinetFolders(selCab);
+  const { data: folData, isLoading: foldersLoading } = useCabinetFolders(selCab);
   const folders = folData?.data || [];
   const [selFol, setSelFol] = useState(guess.folder || '');
 
@@ -231,9 +234,24 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
     }
   }, [cabinets, selCab]);
 
+  // The IDU guess carries a sample folder id, so drop it (and any stale pick
+  // from a previous cabinet) once the real folder list for the cabinet arrives.
+  useEffect(() => {
+    if (!selFol || !folders.length) return;
+    if (!folders.find((f: any) => f.id === selFol)) setSelFol('');
+  }, [folders, selFol]);
+
+  // Mirror the multipart uploader's chunk-by-chunk progress into the shared
+  // files list, same as the old per-call onProgress callback used to.
+  useEffect(() => {
+    if (uploadProgress <= 0) return;
+    setFiles((current: any[]) =>
+      current.map((f) => (f.id === file.id ? { ...f, progress: uploadProgress } : f)),
+    );
+  }, [uploadProgress, file.id, setFiles]);
+
   const [conf, setConf] = useState('internal');
   const [urg, setUrg] = useState('normal');
-  const [due, setDue] = useState(new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10));
   const [showErr, setShowErr] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -252,7 +270,9 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
   ];
 
   const fileDoc = async () => {
-    if (!title.trim()) {
+    // A document must land in a folder — filing straight into a cabinet leaves
+    // it floating at the cabinet root.
+    if (!title.trim() || !selCab || !selFol) {
       setShowErr(true);
       return;
     }
@@ -260,7 +280,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
     setIsSubmitting(true);
     setFiles((current: any[]) =>
       current.map((f) => {
-        if (f.id === file.id) return { ...f, status: 'uploading', progress: 0 };
+        if (f.id === file.id) return { ...f, status: 'uploading', progress: 0, abortUpload: abort };
         return f;
       }),
     );
@@ -269,22 +289,12 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
       // 1. Compute checksum
       const checksum = await calculateChecksum(file.file);
 
-      // 2. Upload to S3
-      const uploadRes = await uploadFile(file.file, {
-        folderName: 'edms-documents',
-        onProgress: (progressEvent) => {
-          setFiles((current: any[]) =>
-            current.map((f) => {
-              if (f.id === file.id) return { ...f, progress: progressEvent.progress };
-              return f;
-            }),
-          );
-        },
+      // 2. Upload to S3 via the chunked multipart flow
+      const fileUrl = await startUpload({
+        file: file.file,
+        fileName: file.file.name,
+        folderName: 'edmsDocuments',
       });
-
-      if (uploadRes.type === 'error') {
-        throw new Error(uploadRes.result);
-      }
 
       setFiles((current: any[]) =>
         current.map((f) => {
@@ -298,11 +308,11 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         title: title.trim(),
         documentType: type,
         cabinetId: selCab,
-        folderId: selFol || undefined,
+        folderId: selFol,
         confidentiality: conf,
         urgency: urg,
-        fileUrl: uploadRes.result,
-        mimeType: file.file.type || 'application/pdf',
+        fileUrl,
+        mimeType: resolveUploadMimeType(file.file) ?? file.file.type,
         fileSize: file.file.size,
         checksum: checksum,
       });
@@ -312,16 +322,17 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
       setFiles((current: any[]) =>
         current.map((f) => {
           if (f.id === file.id)
-            return { ...f, status: 'filed', docId: createdDoc.id, name: title.trim() };
+            return { ...f, status: 'filed', docId: createdDoc.id, name: title.trim(), abortUpload: undefined };
           return f;
         }),
       );
     } catch (err: any) {
-      addToast(err.message || 'Failed to upload document', 'error');
+      const wasAborted = err?.message === 'Upload aborted';
+      addToast(wasAborted ? 'Upload canceled' : err.message || 'Failed to upload document', wasAborted ? 'info' : 'error');
       // Revert to ready state
       setFiles((current: any[]) =>
         current.map((f) => {
-          if (f.id === file.id) return { ...f, status: 'ready' };
+          if (f.id === file.id) return { ...f, status: 'ready', abortUpload: undefined };
           return f;
         }),
       );
@@ -331,9 +342,9 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
   };
 
   return (
-    <div className="idu-card mt16">
-      <div className="flex jcb aic mb8">
-        <div className="flex aic g8">
+    <div className="idu-card mt-4">
+      <div className="flex justify-between items-center mb-2">
+        <div className="flex items-center gap-2">
           <span style={{ color: 'var(--brand-primary-light)' }}>
             <Icon name="doc" size={18} />
           </span>
@@ -348,7 +359,9 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         </div>
       )}
 
-      <div className="grid cols-2" style={{ gap: '12px' }}>
+      {/* `.field` carries its own bottom margin, which would stack on top of the
+          grid's row gap — zero it out so row and column spacing stay equal. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start mb-4 [&_.field]:mb-0!">
         <div className="field">
           <label>
             Title <span className="req">*</span>
@@ -367,7 +380,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         <div className="field">
           <label>Document type</label>
           <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
-            {docTypes.map((t) => (
+            {DOCUMENT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
@@ -375,9 +388,11 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
           </select>
         </div>
         <div className="field">
-          <label>Destination Cabinet</label>
+          <label>
+            Destination Cabinet <span className="req">*</span>
+          </label>
           <select
-            className="input mb2"
+            className="input"
             value={selCab}
             onChange={(e) => {
               setSelCab(e.target.value);
@@ -390,24 +405,35 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
               </option>
             ))}
           </select>
-          <label>Destination Folder (Optional)</label>
-          <select className="input" value={selFol} onChange={(e) => setSelFol(e.target.value)}>
-            <option value="">-- No Folder --</option>
+        </div>
+        <div className="field">
+          <label>
+            Destination Folder <span className="req">*</span>
+          </label>
+          <select
+            className={`input ${showErr && !selFol ? 'invalid' : ''}`}
+            value={selFol}
+            disabled={!selCab || foldersLoading}
+            onChange={(e) => setSelFol(e.target.value)}
+          >
+            <option value="">
+              {foldersLoading ? 'Loading folders…' : '-- Select a folder --'}
+            </option>
             {folders.map((f: any) => (
               <option key={f.id} value={f.id}>
                 {f.name}
               </option>
             ))}
           </select>
-        </div>
-        <div className="field">
-          <label>Due date</label>
-          <input
-            className="input"
-            type="date"
-            value={due}
-            onChange={(e) => setDue(e.target.value)}
-          />
+          {showErr && !selFol ? (
+            <div className="err" style={{ display: 'block' }}>
+              {folders.length || foldersLoading
+                ? 'Choose a folder before filing.'
+                : 'This cabinet has no folders yet — create one before filing here.'}
+            </div>
+          ) : (
+            <div className="help">Documents must be filed into a folder, not a cabinet root.</div>
+          )}
         </div>
         <div className="field">
           <label>
@@ -437,11 +463,11 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
       </div>
 
       {Object.keys(guess.fields).length > 0 && (
-        <div className="mb8">
+        <div className="mb-2">
           <div className="caption" style={{ fontWeight: 700, marginBottom: '6px' }}>
             EXTRACTED METADATA (IDU)
           </div>
-          <div className="flex g8 wrap">
+          <div className="flex gap-2 flex-wrap">
             {Object.entries(guess.fields).map(([k, v]) => (
               <span key={k} className="tag">
                 {k}: {String(v)}
@@ -451,7 +477,7 @@ function IDUCard({ file, setFiles }: { file: any; setFiles: any }) {
         </div>
       )}
 
-      <div className="flex g8" style={{ justifyContent: 'flex-end', marginTop: '10px' }}>
+      <div className="flex gap-2" style={{ justifyContent: 'flex-end', marginTop: '10px' }}>
         <button
           className="btn btn-secondary btn-sm"
           onClick={() => {

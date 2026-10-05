@@ -3,14 +3,12 @@
 import React, { useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments } from '@/apis/hooks/useDocuments';
 import { useTasks } from '@/apis/hooks/useTasks';
 import { exportCsv } from '@/utils/exportCsv';
-import { effStatus } from '@/utils/helpers';
 import { LineChart, DonutChart } from '@/components/ui/Charts';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { Icon } from '@/components/ui/Icons';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonKpis } from '@/components/common/Skeleton';
 
 export default function MyPerformancePage() {
   const { currentUser } = useStore();
@@ -20,18 +18,12 @@ export default function MyPerformancePage() {
     setPageTitle('My Performance');
   }, [setPageTitle]);
 
-  const { data: documentsData, isLoading: docsLoading } = useDocuments();
   const { data: tasksData, isLoading: tasksLoading } = useTasks({ scope: 'mine' });
 
   if (!currentUser) return null;
 
-  const allDocuments = documentsData?.data || [];
-  const documents = allDocuments.filter((d: any) => d.assignee === currentUser.id);
   const tasks = tasksData?.data || [];
-  
-  const mine = documents;
-  const closed = mine.filter((d: any) => d.status === 'closed');
-  
+
   // Dynamic SLA calculations
   const closedTasks = tasks.filter((t: any) => t.status === 'completed');
   let onTime = 0;
@@ -89,7 +81,7 @@ export default function MyPerformancePage() {
     { value: `${slaCompliance}%`, label: 'SLA compliance', delta: 'vs last period', dir: 'up' },
     { value: avgTurnaround, label: 'Avg turnaround', delta: '-0.4 d vs last period', dir: 'up' },
     {
-      value: String(closed.length),
+      value: String(closedTasks.length),
       label: 'Items closed',
       delta: 'Lifetime',
       dir: 'up',
@@ -106,13 +98,11 @@ export default function MyPerformancePage() {
         </div>
       </div>
 
-      {docsLoading || tasksLoading ? (
-        <div style={{ padding: '32px' }}>
-          <Spinner text="Loading performance data..." />
-        </div>
+      {tasksLoading ? (
+        <SkeletonKpis count={4} />
       ) : (
         <>
-          <div className="grid cols-4 mb16">
+          <div className="grid cols-4 mb-4">
             {metrics.map((m, i) => (
               <div key={i} className="card kpi">
                 <div className="kv">{m.value}</div>
@@ -124,7 +114,7 @@ export default function MyPerformancePage() {
             ))}
           </div>
 
-          <div className="grid cols-2 mb16">
+          <div className="grid cols-2 mb-4">
             <div className="card">
               <div className="card-head">
                 <span className="h3">Weekly throughput</span>
@@ -172,7 +162,12 @@ export default function MyPerformancePage() {
                     <div className="metric-li">
                       <span>At risk now</span>
                       <b style={{ color: 'var(--status-pending)' }}>
-                        {tasks.filter((t: any) => t.status !== 'completed' && effStatus(t) === 'Overdue').length} items
+                        {
+                          tasks.filter(
+                            (t: any) => t.status === 'pending' && t.dueAt && new Date(t.dueAt) < new Date(),
+                          ).length
+                        }{' '}
+                        items
                       </b>
                     </div>
                   </div>
@@ -186,22 +181,22 @@ export default function MyPerformancePage() {
               <span className="h3">Recently closed — drill-down</span>
               <button
                 className="btn btn-secondary btn-sm"
-                onClick={() => exportCsv('My_Performance_Closed', closed)}
+                onClick={() => exportCsv('My_Performance_Closed', closedTasks)}
               >
                 Export
               </button>
             </div>
-            {closed.length > 0 ? (
+            {closedTasks.length > 0 ? (
               <div className="rowlist">
-                {closed.map((d: any) => (
-                  <TaskRow key={d.id} item={d} />
+                {closedTasks.map((t: any) => (
+                  <TaskRow key={t.id} item={t} />
                 ))}
               </div>
             ) : (
               <div className="empty">
                 <Icon name="approve" size={32} />
-                <div className="h3 mt16 mb8">Nothing closed yet</div>
-                <p className="caption mb16">Items you complete will appear here.</p>
+                <div className="h3 mt-4 mb-2">Nothing closed yet</div>
+                <p className="caption mb-4">Items you complete will appear here.</p>
               </div>
             )}
           </div>

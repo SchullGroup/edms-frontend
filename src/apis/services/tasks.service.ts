@@ -1,5 +1,21 @@
 import { apiClient } from '@/lib/api-client';
-import { ApiResponse, PaginatedResponse, Task, TaskActionRequest, TaskStatus } from '@/types/models';
+import {
+  ApiResponse,
+  PaginatedResponse,
+  Task,
+  TaskActionRequest,
+  TaskSlaStatsResponse,
+  TaskStatus,
+  TaskWorkloadData,
+} from '@/types/models';
+
+export interface TaskStatsParams {
+  groupBy?: 'department';
+  departmentId?: string;
+  /** ISO date — filters on `completedAt`. */
+  from?: string;
+  to?: string;
+}
 
 /** Mirrors `listTasksQuerySchema` on the backend, which is `.strict()` — any key
  *  not listed here is rejected with a 400. */
@@ -14,11 +30,19 @@ export interface TaskFilters {
   scope?: 'mine' | 'all';
 }
 
-/** The backend caps `limit` at 100. */
-const MAX_LIMIT = 100;
+/** Query for `GET /tasks/approvals` — the purpose-built supervisor queue. */
+export interface ApprovalTaskFilters {
+  page?: number;
+  limit?: number;
+  status?: 'pending' | 'escalated';
+  scope?: 'mine' | 'all';
+}
 
-/** Safety valve so a large tenant can never spin the browser forever. */
-const MAX_PAGES = 20;
+/** A supervisor should normally omit `departmentId` — the backend resolves
+ *  their own department automatically. */
+export interface DepartmentScopedTaskParams {
+  departmentId?: string;
+}
 
 export const tasksService = {
   getAll: async (params?: TaskFilters): Promise<PaginatedResponse<Task>> => {
@@ -26,38 +50,33 @@ export const tasksService = {
     return response.data;
   },
 
-  /**
-   * Walks every page of `GET /tasks` and returns the flattened list.
-   *
-   * The supervisor dashboards aggregate over the whole task set (counts, ageing
-   * buckets, per-member rollups), so a single 20-row page would silently produce
-   * wrong numbers. `truncated` is true when we hit MAX_PAGES and stopped early,
-   * so callers can warn instead of quietly under-reporting.
-   */
-  getAllPages: async (
-    params?: Omit<TaskFilters, 'page' | 'limit'>,
-  ): Promise<{ items: Task[]; total: number; truncated: boolean }> => {
-    const items: Task[] = [];
-    let page = 1;
-    let total = 0;
-    let totalPages = 1;
-
-    while (page <= totalPages && page <= MAX_PAGES) {
-      const response = await apiClient.get<PaginatedResponse<Task>>('/tasks', {
-        params: { ...params, page, limit: MAX_LIMIT },
-      });
-
-      items.push(...response.data.data);
-      total = response.data.pagination.total;
-      totalPages = response.data.pagination.totalPages;
-      page += 1;
-    }
-
-    return { items, total, truncated: totalPages > MAX_PAGES };
-  },
-
   getById: async (id: string): Promise<Task> => {
     const response = await apiClient.get<ApiResponse<Task>>(`/tasks/${id}`);
+    return response.data.data;
+  },
+
+  // Completed-task SLA rollup by department (`GET /tasks/stats`).
+  getStats: async (params?: TaskStatsParams): Promise<TaskSlaStatsResponse> => {
+    const response = await apiClient.get<ApiResponse<TaskSlaStatsResponse>>('/tasks/stats', {
+      params,
+    });
+    return response.data.data;
+  },
+
+  /** Purpose-built supervisor approvals queue — ordered by urgency then due
+   *  date server-side. Prefer this over `getAll({status:'pending'})` for the
+   *  Approvals Queue screen. */
+  getApprovals: async (params?: ApprovalTaskFilters): Promise<PaginatedResponse<Task>> => {
+    const response = await apiClient.get<PaginatedResponse<Task>>('/tasks/approvals', { params });
+    return response.data;
+  },
+
+  /** Per-member open-task counts against a fixed capacity, for Workload &
+   *  Reassign. Only directly assigned, active, current-stage tasks count. */
+  getWorkload: async (params?: DepartmentScopedTaskParams): Promise<TaskWorkloadData> => {
+    const response = await apiClient.get<ApiResponse<TaskWorkloadData>>('/tasks/workload', {
+      params,
+    });
     return response.data.data;
   },
 

@@ -1,7 +1,8 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, userById } from '@/store/useStore';
-import { effStatus, dueLabel, currentStage } from '@/utils/helpers';
+import { dueLabel, documentStatusLabel } from '@/utils/helpers';
+import { taskStatusLabel } from '@/utils/supervisor';
 import { StatusBadge, UrgBadge, ConfBadge } from './Badges';
 
 export const TaskRow = ({
@@ -17,15 +18,19 @@ export const TaskRow = ({
   const { users } = useStore();
   const isTask = !!item.workflowInstance;
   const doc = isTask ? item.workflowInstance.document : item;
-  
-  const eff = isTask 
-    ? (item.status === 'completed' ? 'Closed' : 'Pending')
-    : (doc.status === 'closed' ? 'Closed' : doc.status === 'in_progress' ? 'In Progress' : 'Pending');
-    
-  const due = { text: isTask && item.dueAt ? new Date(item.dueAt).toLocaleDateString('en-GB') : 'N/A', late: isTask && item.dueAt && new Date(item.dueAt) < new Date() };
+
+  const eff = isTask ? taskStatusLabel(item) : documentStatusLabel(doc);
+
+  // Only a task has a real due date (`dueAt`) — a bare document doesn't carry
+  // one anywhere in the backend schema.
+  const due = isTask ? dueLabel(item.dueAt) : { text: 'N/A', late: false };
   const owner = doc?.createdBy;
   const stage = isTask ? item.stage : null;
   const docId = doc?.id || item.documentId;
+  // A task is worked on its workflow page; a bare document opens its own page.
+  const href = isTask
+    ? `/workflow-instances/${item.workflowInstanceId}?task=${item.id}`
+    : `/doc/${docId}`;
 
   const agePct = 30; // Placeholder
 
@@ -34,21 +39,17 @@ export const TaskRow = ({
       className={`task-row ${doc?.urgency === 'critical' ? 'overdue' : ''}`}
       tabIndex={0}
       role="button"
-      onClick={() => router.push(`/doc/${docId}`)}
+      onClick={() => router.push(href)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') router.push(`/doc/${docId}`);
+        if (e.key === 'Enter') router.push(href);
       }}
     >
       <div className="task-main">
         <div className="task-title">{doc?.title || 'Unknown Document'}</div>
         <div className="task-meta">
           <StatusBadge status={eff} />
-          {doc?.urgency && <UrgBadge level={doc.urgency.charAt(0).toUpperCase() + doc.urgency.slice(1)} />}
-          {doc?.confidentiality && (
-            <ConfBadge
-              level={doc.confidentiality.charAt(0).toUpperCase() + doc.confidentiality.slice(1)}
-            />
-          )}
+          {doc?.urgency && <UrgBadge level={doc.urgency} />}
+          {doc?.confidentiality && <ConfBadge level={doc.confidentiality} />}
           {stage && <span>{stage}</span>}
           {showAssignee ? (
             <span>· Assignee</span>
@@ -72,7 +73,7 @@ export const TaskRow = ({
           className="btn btn-primary btn-sm"
           onClick={(e) => {
             e.stopPropagation();
-            router.push(`/doc/${docId}`);
+            router.push(href);
           }}
         >
           Open
