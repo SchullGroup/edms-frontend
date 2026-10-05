@@ -11,7 +11,7 @@ import {
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icons';
@@ -206,7 +206,9 @@ export default function DelegationsPage() {
       </div>
 
       {isLoading || isLoadingUsers || isLoadingCabinets ? (
-        <Spinner />
+        <div className="card" role="status" aria-busy="true" aria-label="Loading delegations">
+          <SkeletonTaskRows rows={4} />
+        </div>
       ) : isError ? (
         <ErrorMessage message="Failed to load delegations" retry={() => refetch()} />
       ) : (

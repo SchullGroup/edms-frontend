@@ -34,7 +34,7 @@ import { documentsService } from '@/apis/services/documents.service';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { useRoles } from '@/apis/hooks/useRoles';
 import { useAllUsers, useUser } from '@/apis/hooks/useUsers';
-import { Skeleton, SkeletonTable, SkeletonTreeRows } from '@/components/common/Skeleton';
+import { Skeleton, SkeletonTable, SkeletonText, SkeletonTreeRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { CabinetAccessPermission } from '@/types/models';
 
@@ -1260,8 +1260,8 @@ function FolderDocuments({
 
   if (isLoading) {
     return (
-      <div className="caption" style={{ padding: '8px 0 8px 34px' }}>
-        Loading documents…
+      <div style={{ padding: '8px 0 8px 34px' }} aria-hidden="true">
+        <SkeletonText lines={2} />
       </div>
     );
   }
@@ -1323,8 +1323,8 @@ function UnfiledDocuments({
 
   if (isLoading) {
     return (
-      <div className="caption" style={{ paddingTop: '8px' }}>
-        Loading unfiled documents…
+      <div style={{ paddingTop: '8px' }} aria-hidden="true">
+        <SkeletonText lines={2} />
       </div>
     );
   }
@@ -1422,7 +1422,7 @@ function MoveDocumentModalBody({
 function DocumentPreviewBody({ documentId }: { documentId: string }) {
   const { data: doc, isLoading } = useDocument(documentId);
 
-  if (isLoading) return <div className="caption">Loading document…</div>;
+  if (isLoading) return <SkeletonText lines={2} />;
   if (!doc) return <div className="caption">Document not found.</div>;
 
   // Same handling as the full document page: prefer the backend's pre-signed

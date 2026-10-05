@@ -15,7 +15,7 @@ import { WorkflowActivityPanel } from '@/components/workflowInstances/WorkflowAc
 import { DocumentVersionsPanel } from '@/components/documents/DocumentVersionsPanel';
 import { StatusBadge, UrgBadge } from '@/components/ui/Badges';
 import { Icon } from '@/components/ui/Icons';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { fmtDateTime } from '@/utils/helpers';
 import type { Task, WorkflowInstanceStatus, WorkflowStageAction } from '@/types/models';
@@ -42,7 +42,7 @@ const ACTIVE_TASK_STATUSES = ['pending', 'escalated'];
 export default function WorkflowInstancePage({ params }: { params: Promise<{ id: string }> }) {
   // useSearchParams needs a Suspense boundary above it.
   return (
-    <Suspense fallback={<Spinner text="Loading workflow…" />}>
+    <Suspense fallback={<SkeletonPage charts={2} />}>
       <WorkflowInstanceView params={params} />
     </Suspense>
   );
@@ -176,7 +176,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
     me: { id: me?.id ?? '', name: me?.name ?? '' },
   });
 
-  if (isLoading) return <Spinner text="Loading workflow…" />;
+  if (isLoading) return <SkeletonPage charts={2} />;
   if (isError || !instance) {
     return (
       <ErrorMessage
@@ -185,7 +185,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
       />
     );
   }
-  if (!me) return <Spinner text="Loading…" />;
+  if (!me) return <SkeletonPage charts={2} />;
 
   // Revisions an earlier stage asked for, still waiting on a new version.
   const pendingRevisions = taskDetail?.pendingDocumentRevisions ?? [];

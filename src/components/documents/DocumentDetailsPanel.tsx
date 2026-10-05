@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDocumentMetadata, useUpdateDocumentMetadata } from '@/apis/hooks/useDocuments';
 import { Icon } from '@/components/ui/Icons';
+import { SkeletonText } from '@/components/common/Skeleton';
 
 export interface DocumentDetailsPanelProps {
   documentId: string;
@@ -89,7 +90,7 @@ function MetadataEditor({ documentId }: { documentId: string }) {
     setDirty(false);
   }, [fields]);
 
-  if (isLoading) return <div className="meta-row caption">Loading metadata…</div>;
+  if (isLoading) return <SkeletonText lines={3} />;
   if (!fields || fields.length === 0) {
     return <div className="meta-row caption">No custom metadata fields on this cabinet.</div>;
   }

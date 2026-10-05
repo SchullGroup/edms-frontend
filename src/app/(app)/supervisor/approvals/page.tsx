@@ -6,7 +6,7 @@ import { useApprovalTasks, useReassignTask } from '@/apis/hooks/useTasks';
 import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { Pagination } from '@/components/ui/Pagination';
@@ -144,7 +144,7 @@ export default function ApprovalsQueuePage() {
 
       <div className="card">
         {isLoadingUsers || isLoadingTasks ? (
-          <Spinner />
+          <SkeletonTaskRows rows={6} />
         ) : isTasksError ? (
           <ErrorMessage message="Failed to load the approvals queue" retry={() => refetchTasks()} />
         ) : tasks.length > 0 ? (

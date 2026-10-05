@@ -4,6 +4,7 @@ import React from 'react';
 import { useWorkflowHistory } from '@/apis/hooks/useWorkflowHistory';
 import { fmtDateTime } from '@/utils/helpers';
 import type { WorkflowStage } from '@/types/models';
+import { SkeletonText } from '@/components/common/Skeleton';
 
 /**
  * `action` on a history row is a free-form string — the engine emits both
@@ -95,7 +96,7 @@ export function WorkflowHistoryTimeline({
   };
 
   if (!enabled) return <div className="caption">No workflow started for this document.</div>;
-  if (isLoading) return <div className="caption">Loading activity…</div>;
+  if (isLoading) return <SkeletonText lines={4} />;
   if (isError) return <div className="caption">Couldn&apos;t load the workflow trail.</div>;
 
   const records = data?.data || [];

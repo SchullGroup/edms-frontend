@@ -15,6 +15,7 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { exportCsv } from '@/utils/exportCsv';
 import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
 import type { Document, SavedSearch } from '@/types/models';
+import { SkeletonTaskRows } from '@/components/common/Skeleton';
 
 type Filters = SavedSearch['filters'];
 type Option = readonly [value: string, label: string];
@@ -392,19 +393,21 @@ export default function SearchPage() {
 
           {active.isError ? (
             <ErrorMessage message="Search failed." retry={active.refetch} />
+          ) : active.isLoading && !results.length ? (
+            <div className="card" role="status" aria-busy="true" aria-label="Searching">
+              <SkeletonTaskRows rows={8} />
+            </div>
           ) : !results.length ? (
             <div className="card">
               <div className="empty">
                 <Icon name="search" size={32} />
-                <div className="h3 mt-4 mb-2">{active.isLoading ? 'Loading…' : 'No results'}</div>
+                <div className="h3 mt-4 mb-2">No results</div>
                 <p className="caption mb-4">
-                  {active.isLoading
-                    ? 'Fetching documents…'
-                    : q
-                      ? `Nothing matched “${q}”. Try fewer words, or a different cabinet.`
-                      : hasFilters
-                        ? 'No documents match these filters.'
-                        : 'No documents yet.'}
+                  {q
+                    ? `Nothing matched “${q}”. Try fewer words, or a different cabinet.`
+                    : hasFilters
+                      ? 'No documents match these filters.'
+                      : 'No documents yet.'}
                 </p>
               </div>
             </div>

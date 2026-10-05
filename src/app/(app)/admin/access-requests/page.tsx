@@ -11,7 +11,7 @@ import {
   useGrantAccessRequest,
   useDenyAccessRequest,
 } from '@/apis/hooks/useDocuments';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { AccessRequest } from '@/types/models';
 import { fmtDateTime } from '@/utils/helpers';
@@ -190,7 +190,7 @@ export default function AccessRequestsInboxPage() {
           <span className="h3">{data?.pagination?.total ?? 0} requests</span>
         </div>
         {isLoading ? (
-          <Spinner text="Loading access requests..." />
+          <SkeletonTable columns={['Document', 'Requester', 'Reason', 'Requested', 'Status', '']} rows={5} />
         ) : isError ? (
           <ErrorMessage message="Failed to load access requests." retry={refetch} />
         ) : rows.length === 0 ? (

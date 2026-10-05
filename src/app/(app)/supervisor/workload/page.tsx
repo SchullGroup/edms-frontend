@@ -6,7 +6,7 @@ import { useTaskWorkload, useTasks, useReassignTask } from '@/apis/hooks/useTask
 import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonTable, SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { Icon } from '@/components/ui/Icons';
@@ -117,7 +117,7 @@ export default function WorkloadPage() {
       </div>
 
       {isLoadingWorkload || isLoadingUsers ? (
-        <Spinner />
+        <SkeletonTable columns={['Member', 'Load', '']} rows={6} />
       ) : isWorkloadError ? (
         <ErrorMessage message="Failed to load workload" retry={() => refetchWorkload()} />
       ) : (
@@ -213,7 +213,7 @@ function WorkloadMemberCard({
       {expanded && (
         <div className="rowlist mt-2" style={{ borderTop: '1px solid var(--border)' }}>
           {isLoading ? (
-            <Spinner text="Loading tasks…" />
+            <SkeletonTaskRows rows={3} />
           ) : tasks.length > 0 ? (
             tasks.map((t) => (
               <TaskRow
