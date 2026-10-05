@@ -402,6 +402,15 @@ textarea.input { height: auto; padding: 10px 12px; min-height: 76px; resize: ver
 .datefield-pop .rdp-selected .rdp-day_button { background: var(--brand-primary-light); color: #fff; border-color: transparent; }
 .datefield-pop .rdp-day_button:hover:not([disabled]) { background: var(--surface); }
 .datefield-pop .rdp-selected .rdp-day_button:hover { background: var(--brand-primary-light); }
+/* Month / year dropdowns: a transparent native <select> sits over each label, so
+   the label is what's styled. The chevron marks it as something to open. */
+.datefield-pop .rdp-dropdowns { gap: 4px; }
+.datefield-pop .rdp-dropdown_root { border-radius: 7px; cursor: pointer; }
+.datefield-pop .rdp-dropdown_root:hover { background: var(--surface); }
+.datefield-pop .rdp-dropdown { cursor: pointer; }
+.datefield-pop .rdp-caption_label { gap: 4px; padding: 3px 6px; font-size: 13px; font-weight: 700; }
+.datefield-pop .rdp-caption_label .rdp-chevron { width: 10px; height: 10px; fill: var(--muted); }
+.datefield-pop .rdp-dropdown:focus-visible ~ .rdp-caption_label { outline: 2px solid var(--focus); outline-offset: 1px; border-radius: 7px; }
 .datefield-time { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 4px; color: var(--muted); }
 .datefield-time select.input { width: auto; height: 32px; padding: 0 8px; }
 .datefield-time .btn { margin-left: auto; }
