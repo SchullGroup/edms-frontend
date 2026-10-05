@@ -1019,19 +1019,219 @@ export interface Cabinet {
 }
 
 // --- Circulars ---
+// Mirrors edms-backend `src/modules/circulars`. Lifecycle:
+// draft → scheduled → published → expired | withdrawn | superseded. Only a draft
+// is editable; anything that has gone out changes by revision (a new version
+// with the same reference number).
 
-export interface Circular {
+export type CircularStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'published'
+  | 'expired'
+  | 'withdrawn'
+  | 'superseded';
+
+export type CircularInboxFilter = 'all' | 'unread' | 'unacknowledged' | 'acknowledged';
+
+export type CircularRecipientFilter = 'all' | 'read' | 'unread' | 'acknowledged' | 'outstanding';
+
+/** A department alone, a role alone, or both (role-holders within the department). */
+export interface CircularAudienceGroup {
+  departmentId?: string;
+  roleId?: string;
+  includeSubDepartments?: boolean;
+}
+
+/** Recipients are the union of everything selected. At least one must be set. */
+export interface CircularAudience {
+  allStaff: boolean;
+  groups: CircularAudienceGroup[];
+  userIds: string[];
+}
+
+/** An uploaded file (`fileUrl` + metadata) or a link to an existing document — never both. */
+export interface CircularAttachmentInput {
+  documentId?: string;
+  fileUrl?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
+  checksum?: string;
+}
+
+export interface CircularAttachment {
   id: string;
+  kind: 'file' | 'document';
+  fileName: string | null;
+  mimeType: string | null;
+  fileSize: number | string | null;
+  checksum?: string | null;
+  /** Short-lived signed download URL, for uploaded files only. */
+  fileUrl: string | null;
+  document: {
+    id: string;
+    title: string;
+    referenceNumber: string | null;
+    confidentiality: string;
+  } | null;
+  createdAt?: string;
+}
+
+export interface CircularPersonSummary {
+  id: string;
+  name: string;
+}
+
+export interface CircularVersionSummary {
+  id: string;
+  versionNumber: number;
+  status?: CircularStatus;
+}
+
+/** Null until the circular has gone out. */
+export interface CircularStats {
+  recipients: number;
+  delivered: number;
+  read: number;
+  acknowledged: number;
+  outstanding: number;
+  /** Percentage, one decimal place. Null when acknowledgement is not required. */
+  acknowledgementRate: number | null;
+  byDepartment: {
+    departmentId: string | null;
+    departmentName: string | null;
+    recipients: number;
+    read: number;
+    acknowledged: number;
+  }[];
+}
+
+/** A row of `GET /circulars` — the authoring/oversight archive. */
+export interface CircularListItem {
+  id: string;
+  seriesId: string;
+  versionNumber: number;
+  supersedesId: string | null;
+  /** Assigned when first scheduled or published, e.g. `CIR-2026-0014`. */
+  referenceNumber: string | null;
+  title: string;
+  category: string | null;
+  confidentiality: DocumentConfidentiality;
+  urgency: DocumentUrgency;
+  status: CircularStatus;
+  requiresAcknowledgement: boolean;
+  acknowledgementDueAt: string | null;
+  publishAt: string | null;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  withdrawnAt: string | null;
+  departmentId: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  creator?: CircularPersonSummary | null;
+  department?: CircularPersonSummary | null;
+  recipientCount: number;
+}
+
+/** `GET /circulars/:id` — full detail for someone managing the circular. */
+export interface Circular extends Omit<CircularListItem, 'recipientCount'> {
+  body: string;
+  audience: CircularAudience;
+  reminderIntervalHours: number | null;
+  maxReminders: number;
+  withdrawalReason: string | null;
+  publisher?: CircularPersonSummary | null;
+  withdrawer?: CircularPersonSummary | null;
+  supersedes?: CircularVersionSummary | null;
+  supersededBy?: CircularVersionSummary | null;
+  attachments: CircularAttachment[];
+  stats: CircularStats | null;
+}
+
+export interface CircularReceipt {
+  readAt: string | null;
+  acknowledgedAt: string | null;
+}
+
+/** A row of `GET /circulars/inbox` — what a recipient is shown. */
+export interface CircularInboxItem {
+  id: string;
+  seriesId: string;
+  referenceNumber: string;
+  versionNumber: number;
+  title: string;
+  category: string | null;
+  confidentiality: DocumentConfidentiality;
+  urgency: DocumentUrgency;
+  status: Extract<CircularStatus, 'published' | 'expired' | 'superseded'>;
+  requiresAcknowledgement: boolean;
+  acknowledgementDueAt: string | null;
+  publishedAt: string;
+  expiresAt: string | null;
+  publisher?: CircularPersonSummary | null;
+  department?: CircularPersonSummary | null;
+  /** The newer version to read instead, once it has been published. */
+  supersededBy: CircularVersionSummary | null;
+  receipt: CircularReceipt;
+}
+
+/** `GET /circulars/inbox/:id` — opening it records the read receipt. */
+export interface CircularInboxDetail extends CircularInboxItem {
+  body: string;
+  attachments: CircularAttachment[];
+}
+
+export interface CircularInboxSummary {
+  unread: number;
+  unacknowledged: number;
+}
+
+export interface CircularRecipient {
+  id: string;
+  deliveredAt: string | null;
+  readAt: string | null;
+  acknowledgedAt: string | null;
+  reminderCount: number;
+  lastRemindedAt: string | null;
+  user: { id: string; name: string; email: string; status: string };
+  department: CircularPersonSummary | null;
+}
+
+export interface CircularAcknowledgement {
+  circularId: string;
+  referenceNumber: string | null;
+  versionNumber: number;
+  readAt: string;
+  acknowledgedAt: string;
+}
+
+/** Body for `POST /circulars` (creates a draft). */
+export interface CreateCircularRequest {
   title: string;
   body: string;
-  published: number;
-  by: string;
-  requiresAck: boolean;
-  ackBy: string[];
-  audience: string;
-  type?: string;
-  urgent?: boolean;
+  category?: string;
+  confidentiality?: DocumentConfidentiality;
+  urgency?: DocumentUrgency;
+  audience: CircularAudience;
+  requiresAcknowledgement?: boolean;
+  acknowledgementDueAt?: string;
+  /** Omitted → backend default (24h) when acknowledgement is required; null → no automatic reminders. */
+  reminderIntervalHours?: number | null;
+  maxReminders?: number;
+  expiresAt?: string;
+  attachments?: CircularAttachmentInput[];
 }
+
+/** Body for `PATCH /circulars/:id` — drafts only. `attachments`, when sent, replaces the list. */
+export type UpdateCircularRequest = Partial<
+  Omit<CreateCircularRequest, 'category' | 'acknowledgementDueAt' | 'expiresAt'>
+> & {
+  category?: string | null;
+  acknowledgementDueAt?: string | null;
+  expiresAt?: string | null;
+};
 
 // --- Policies ---
 

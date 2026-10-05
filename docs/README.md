@@ -68,8 +68,11 @@ setting up an environment.
 
 ## The short version
 
-**53 frontend pages · 106 backend routes · 6 roles · 0 tests.**
-*(Pages re-derived 2026-10-02: +2 redirect-only notification landing pages, DRIFT-17. Backend route count not re-derived since 2026-09-18 — `5144fc7` added at least `POST /workflow-instances/:id/documents`.)*
+**57 frontend pages · 130 backend routes · 6 roles · 0 tests.**
+*(Re-derived 2026-10-05 with the commands in `AGENTS.md`, backend @ `dev` `c353105`: pages
++4 for the circulars area; routes 106 → 130, of which 15 are the new `circulars` module —
+the rest accumulated since the 2026-09-18 count and weren't attributed individually.)*
+*(Pages re-derived 2026-10-02: +2 redirect-only notification landing pages, DRIFT-17.)*
 *(Re-derived 2026-09-18 — was 42 pages / 90 routes at last full count. Route count is
 solid, from the live Swagger spec. Page count is solid; the 9 newly-counted pages beyond
 `/admin/access-requests` haven't been individually classified — see doc 05's Portfolio
@@ -82,9 +85,9 @@ The DOCUMENT half is real
                                                     ✅ works end to end
 
 The GOVERNANCE half is a UI over fixtures
-  notifications · circulars · policies
+  notifications · policies          (circulars: wired 2026-10-05, 🟨 unverified)
   findings · retention · platform operations
-                                                    🟥 at least 19 of 53 pages
+                                                    🟥 at least 17 of 57 pages
 ```
 
 ### The four defects that matter most
@@ -426,7 +429,7 @@ These supersede two files in `../../out/`:
 - `out/USER_FLOWS.md`
 
 Both describe endpoints that were never built — `POST /documents/:id/route`,
-`POST /workflows/instances/:id/approve`, `POST /users/invite`, `POST /circulars`,
+`POST /workflows/instances/:id/approve`, `POST /users/invite`,
 `POST /circulars/:id/ack` — and a `multipart/form-data` upload path that does not exist
 (the real flow is a client-side upload to a third-party gateway, then a JSON `fileUrl`).
 They also state that separation-of-duties enforcement is a platform feature; no such logic

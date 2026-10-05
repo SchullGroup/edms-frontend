@@ -29,6 +29,7 @@ const MODULE_MAP: { label: string; resources: string[] }[] = [
   },
   { label: 'Workflow', resources: ['workflow'] },
   { label: 'Administration', resources: ['user', 'role', 'department'] },
+  { label: 'Communication', resources: ['circular'] },
   { label: 'Audit & Compliance', resources: ['audit'] },
 ];
 

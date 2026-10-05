@@ -1193,41 +1193,48 @@ beautifully and persists nowhere.** No `Branding` model, no endpoint.
 
 ## Epic J — Communication & Circulars
 
-> ⚠️ **Entirely mock.** No model, no endpoint, no persistence.
+> 🟨 **Circulars wired 2026-10-05** against the backend `circulars` module (model,
+> 15 routes, delivery and reminder workers). Built and type/build-checked; **not yet
+> verified end to end against a live backend**, so J1/J2 are 🟨, not ✅.
 
 ---
 
-### J1 — Broadcast a circular · 🟥 **Mock**
+### J1 — Broadcast a circular · 🟨 **Partial** *(was 🟥 Mock)*
 
 > **As** Bola,
 > **I want to** send a policy update to all staff and require acknowledgement,
 > **so that** I have proof everyone was told.
 
-**Current state:** `/admin/circulars` (263 lines) and `/circulars` (107 lines) are fully
-built against `SEED.circulars`. `circularsService` is four `setTimeout` stubs. There is no
-`Circular` model in Prisma.
+**Current state (2026-10-05):** authoring lives at `/circulars/manage` (shared by
+`client_admin`, `supervisor`, `management`, and read-only for `internal_auditor`;
+`/admin/circulars` redirects there). A circular is written as a draft, then published now
+or scheduled; recipients are fixed at publication. Published circulars change by
+**revision** (same reference number, next version, everyone acknowledges afresh) or are
+**withdrawn** with a reason.
 
 **Acceptance criteria**
-- [ ] `Circular` model: title, body, audience, urgency, `requiresAck`, `publishedAt`
-- [ ] CRUD + publish endpoints
-- [ ] Audience targeting by role, department or explicit user list
-- [ ] Fan-out to notifications on publish
-- [ ] `POST /circulars/:id/ack`
-- [ ] Acknowledgement compliance dashboard for the admin
-- [ ] `circular.acknowledged` audit entry
+- [x] `Circular` model: title, body, audience, urgency, acknowledgement, publish/expiry dates — plus versioning, confidentiality and attachments
+- [x] CRUD + publish endpoints — plus schedule, cancel, withdraw, revise
+- [x] Audience targeting by role, department (optionally with sub-departments) or explicit user list
+- [x] Fan-out to notifications on publish (backend delivery worker)
+- [x] Acknowledgement endpoint — `POST /circulars/inbox/:id/acknowledge`
+- [x] Acknowledgement compliance dashboard — stats, per-department breakdown and recipients report on `/circulars/manage/[id]`, with reminders
+- [x] `circular.acknowledged` audit entry (backend `audit` middleware, with the version acknowledged)
+- [ ] Verified end to end against a live backend
 
 ---
 
-### J2 — Acknowledge a circular · 🟥 **Mock**
+### J2 — Acknowledge a circular · 🟨 **Partial** *(was 🟥 Mock)*
 
 > **As** Chika,
 > **I want to** mark a circular as read,
 > **so that** my compliance obligation is discharged and recorded.
 
 **Acceptance criteria**
-- [x] UI exists (`markCircularAck` in the store)
-- [ ] Persisted anywhere
-- [ ] Pending-acknowledgement badge driven by real data (currently `SEED`)
+- [x] UI exists — `/circulars` inbox and `/circulars/[id]` reading view (the store's `markCircularAck` was removed 2026-10-05)
+- [x] Persisted — `POST /circulars/inbox/:id/acknowledge`; opening a circular records the read receipt
+- [x] Pending-acknowledgement badge driven by real data — `GET /circulars/inbox/summary`
+- [ ] Verified end to end against a live backend
 
 ---
 
@@ -1411,14 +1418,15 @@ error paths and workers).
 | G — Executive Reporting | 0 | 3 | 0 | 0 | Works today; will not scale |
 | H — Audit & Compliance | 0 | 0 | 2 | 1 | **Entirely mock — the biggest gap** |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
-| J — Circulars & Notifications | 0 | 1 | 2 | 0 | Circulars mock; notifications **plumbed but silent** |
+| J — Circulars & Notifications | 0 | 3 | 0 | 0 | Circulars wired 2026-10-05, not verified live; notifications **plumbed but silent** |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **13** | **15** | **11** | **3** | 42 functional stories |
+| **Total** | **13** | **17** | **9** | **3** | 42 functional stories |
 
 **The honest one-paragraph summary:** the *document* half of this EDMS — capture, filing,
 versioning, checkout, classification, task execution and approval — is genuinely built and
-mostly works. The *governance* half — audit, notifications, circulars, policies, findings,
-platform operations — is a convincing UI over fixture data. Two defects sit across the
+mostly works. The *governance* half — audit, notifications, policies, findings,
+platform operations — is a convincing UI over fixture data (circulars moved onto the real
+API 2026-10-05, pending a live check). Two defects sit across the
 seam and matter more than any individual gap: **workflow routes have no authorization at
 all**, and **the audit trail the product's compliance positioning rests on has never
 recorded a single event.**

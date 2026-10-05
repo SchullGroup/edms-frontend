@@ -71,11 +71,13 @@ For each of the six role dashboards this document lists:
 
 ## Portfolio summary
 
-**53 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
-2026-10-02 — was 51 on 2026-09-18, 42 at last full classification). The +2 are the
-notification-link landing pages `/tasks/[id]` (redirect-only) and `/workflow-instances/[id]`
-(DRIFT-17) — the latter became the full workflow page later the same day. Both are listed
-under Shared pages below.
+**57 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
+2026-10-05 — was 53 on 2026-10-02, 51 on 2026-09-18, 42 at last full classification). The
++4 on 2026-10-05 are the circulars pages `/circulars/[id]`, `/circulars/manage`,
+`/circulars/manage/new` and `/circulars/manage/[id]` (classified under Shared pages). The +2
+on 2026-10-02 were the notification-link landing pages `/tasks/[id]` (redirect-only) and
+`/workflow-instances/[id]` (DRIFT-17) — the latter became the full workflow page later the
+same day. All are listed under Shared pages below.
 
 > ⚠️ **Count updated, classification not yet caught up.** Of the +9 pages, this document
 > classifies one (`/admin/access-requests`, below). The other eight —
@@ -99,13 +101,16 @@ Every classification below was verified by inspecting what each page destructure
 | Staff Workspace | 4 | 3 | 1 | — | **Strongest.** Real data throughout. |
 | Supervisor Console | 6 | 3 | 1 | 2 | Approvals and ageing real; exceptions/performance fixture. |
 | Management Portal | 7 | 4 | 1 | 2 | The only fully API-driven pages — and the ones that don't scale. |
-| Client Administration | 8 | 3 | 1 | 4 | Structure real; policy/branding/circulars/audit mock. |
+| Client Administration | 8 | 3 | 1 | 3 | Structure real; policy/branding mock. `/admin/circulars` is now a redirect to `/circulars/manage` (2026-10-05). |
 | Audit & Compliance | 4 | — | — | 4 | **Weakest. Zero API calls.** |
 | Platform Admin | 6 | — | — | 6 | Mock by design (Phase 2). |
-| Shared | 7 | 2 | 2 | 2 | Login and upload real; notifications and circulars fixture. |
-| **Total** | **42** | **15** | **6** | **20** | |
+| Shared | 11 | 2 | 7 | 1 | Login and upload real; circulars wired to the API (5 pages, 🟨 not verified live); notifications fixture. |
+| **Total** | **46** | **15** | **11** | **18** | |
 
-*(41 classified + `/unauthorized`, which is static markup.)*
+*(44 classified + `/unauthorized`, which is static markup, + the `/admin/circulars`
+redirect. The 🟨 column counts 6 Hybrid pages and 5 circulars pages that are API-only but
+not yet verified end to end — 🟨 Partial, not ✅, per house rule 1. Re-derived 2026-10-05
+for the circulars rows only; the other rows carry their earlier counts.)*
 
 ### By data source
 
@@ -116,6 +121,10 @@ Both, on the same page     ██████░░░░░░░░░░░�
 Neither (inline / nothing) ███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   3 pages (7%)
 ```
 
+*These bars are from the 42-page classification and were **not** re-derived on
+2026-10-05. Known movement since: the five circulars pages now call the API and none of
+them reads `SEED`; `/admin/circulars` is a redirect.*
+
 The split is cleaner than it first looks: most pages are decisively one thing or the other.
 The **20 mock pages cluster almost entirely in three dashboards** — Auditor (4/4), Platform
 (6/6), and the governance half of Client Admin (4/8). The operational dashboards — Staff,
@@ -123,14 +132,14 @@ Supervisor, Management — are largely wired.
 
 ### The four mock service modules
 
-Four pages appear "wired" because they call a hook, but the hook resolves a fixture:
+Three pages appear "wired" because they call a hook, but the hook resolves a fixture
+(was four — `circulars.service.ts` moved onto the real API 2026-10-05):
 
 | Hook | Service | Actually returns |
 |---|---|---|
 | `useAuditLogs`, `useCreateAuditLog` | `audit.service.ts` | `SEED.audit` after `setTimeout(400)` |
 | `usePolicies`, `useUpdatePolicy*` | `policies.service.ts` | `SEED.policies` |
 | `useBranding`, `useUpdateBranding` | `branding.service.ts` | `SEED.branding` |
-| `useCirculars`, `useAcknowledgeCircular` | `circulars.service.ts` | `SEED.circulars` |
 
 `useCreateAuditLog()` in particular is called from **seven** pages and resolves
 successfully every time without doing anything. That is why so many admin and supervisor
@@ -146,7 +155,7 @@ Not all fixtures are the same, and the fix differs for each.
 `localStorage` under `edms-state-v3`**.
 
 Contains: `USERS`, `documents`, `cabinets`, `workflows`, `audit`, `notifications`,
-`circulars`, `findings`, `tenants`, `plans`, `featureFlags`, `policies`, `rolesMatrix`,
+`findings`, `tenants`, `plans`, `featureFlags`, `policies`, `rolesMatrix`,
 `branding`, `prefs`, `docTypes`, `session`, `seq`.
 
 **Why it's the worst kind:** it is persisted, so a stale snapshot survives rebuilds and
@@ -156,14 +165,15 @@ convincing success toasts for operations that never leave the browser.
 
 ### Type 2 — mock service modules
 
-Five files in `src/apis/services/` return `SEED` slices after a `setTimeout(400)` to
-simulate latency:
+Three files in `src/apis/services/` return `SEED` slices after a `setTimeout(400)` to
+simulate latency (re-derived 2026-10-05 with `grep -l setTimeout src/apis/services/*.ts`,
+excluding `uploader.ts`'s retry back-off; the old "Five" didn't match its own four-row
+table):
 
 | File | Returns | Marked |
 |---|---|---|
 | `audit.service.ts` | `SEED.audit` | `// TODO: Replace with actual API call when backend is ready` |
 | `branding.service.ts` | `SEED.branding` | same |
-| `circulars.service.ts` | `SEED.circulars` | same |
 | `policies.service.ts` | `SEED.policies` | same |
 
 **Why it's the best kind:** these are honest, isolated and clearly labelled. Swapping each
@@ -218,6 +228,10 @@ POST /documents/:id/versions                 new version
 GET  /documents/:id/metadata                 metadata read
 PUT  /documents/:id/metadata                 metadata write
 GET  /documents/search                       ⚠️ index now built on backend dev (search_vector + worker); not yet verified live
+GET   /circulars/inbox             ?filter=&archived=&search=   recipient inbox (no permission — being sent it is the grant)
+GET   /circulars/inbox/summary     unread / unacknowledged counts (sidebar badge)
+GET   /circulars/inbox/:id         open a circular — records the read receipt
+POST  /circulars/inbox/:id/acknowledge   🟨 wired 2026-10-05, not verified live
 ```
 
 ### APIs missing ⛔
@@ -228,13 +242,12 @@ GET  /documents/search                       ⚠️ index now built on backend d
 | `GET/PATCH /notifications*` | Backend module is an empty directory | Bell badge and notification panel dead |
 | ~~`POST /documents/:id/comments`~~ | Not a real endpoint — use the `comment` field on `POST /tasks/:id/action` | — |
 | `GET /documents/:id/download` | Not built | No way to retrieve the file |
-| `GET /circulars`, `POST /circulars/:id/ack` | No model, no endpoint | Circulars page is fixture-only |
+| ~~`GET /circulars`, `POST /circulars/:id/ack`~~ | ✅ **Built** (backend `circulars` module) and wired 2026-10-05 — the real routes are `/circulars/inbox*` (see APIs wired) | — |
 
 ### Dummy data 🟥
 
 | Where | Fixture | Consequence |
 |---|---|---|
-| `/circulars` | `SEED.circulars` | Acknowledgements vanish on cache clear |
 | Sidebar badges | `SEED.documents`, `SEED.notifications` | Counts don't match the real task queue |
 | `/upload` IDU card | `IDU_GUESSES` inline | Fake classification with a fake confidence score |
 | `/staff/performance` | partly `SEED.documents` | Personal stats blend real and fabricated |
@@ -255,7 +268,7 @@ GET  /documents/search                       ⚠️ index now built on backend d
 | Act on a task | ✅ | |
 | Receive a notification | ⛔ | Endpoints 404 with an HTML body |
 | Comment on a document | ⛔ | 404 |
-| Read/acknowledge a circular | 🟥 | localStorage only |
+| Read/acknowledge a circular | 🟨 | Wired 2026-10-05 to `/circulars/inbox*` — read receipt on open, acknowledgement recorded and audited server-side. Not yet verified live |
 
 ### What's left, in order
 
@@ -296,6 +309,19 @@ PATCH /tasks/:id/reassign       gated by TASK_REASSIGN_ROLES
 GET   /documents                team documents
 GET   /users                    team roster
 GET   /cabinets                 cabinet context
+GET   /circulars/inbox             ?filter=&archived=&search=   recipient inbox (no permission — being sent it is the grant)
+GET   /circulars/inbox/summary     unread / unacknowledged counts (sidebar badge)
+GET   /circulars/inbox/:id         open a circular — records the read receipt
+POST  /circulars/inbox/:id/acknowledge
+GET   /circulars                   archive within circular:view scope
+GET   /circulars/:id               detail + acknowledgement stats
+POST  /circulars · PATCH/DELETE /circulars/:id    drafts (circular:create)
+POST  /circulars/:id/publish  /cancel-schedule    publish now or schedule (circular:publish)
+POST  /circulars/:id/withdraw  /revisions          withdraw · start a revision
+GET   /circulars/:id/recipients    acknowledgement report
+POST  /circulars/:id/reminders     remind outstanding recipients
+                                circulars 🟨 wired 2026-10-05, not verified live — supervisors write
+                                circulars at `own` scope and publish/withdraw at `department` scope
 ```
 
 ### APIs missing ⛔
@@ -426,6 +452,19 @@ GET /tasks/stats       groupBy=department          SLA rate, on-time/overdue per
 GET /workflow-instances/stats           closed-per-month buckets + avg turnaround
 GET /workflow-instances/open-items-by-cabinet      pending/in-progress rolled up by department
 GET /users                              headcount per department
+GET   /circulars/inbox             ?filter=&archived=&search=   recipient inbox (no permission — being sent it is the grant)
+GET   /circulars/inbox/summary     unread / unacknowledged counts (sidebar badge)
+GET   /circulars/inbox/:id         open a circular — records the read receipt
+POST  /circulars/inbox/:id/acknowledge
+GET   /circulars                   archive within circular:view scope
+GET   /circulars/:id               detail + acknowledgement stats
+POST  /circulars · PATCH/DELETE /circulars/:id    drafts (circular:create)
+POST  /circulars/:id/publish  /cancel-schedule    publish now or schedule (circular:publish)
+POST  /circulars/:id/withdraw  /revisions          withdraw · start a revision
+GET   /circulars/:id/recipients    acknowledgement report
+POST  /circulars/:id/reminders     remind outstanding recipients
+                                        circulars 🟨 wired 2026-10-05, not verified live — management
+                                        writes at `own` scope, publishes/withdraws at `global`
 ```
 
 `useDocuments`/`useAllDocuments`/`useAllTasks`/`useAllWorkflowInstances`-style full-list
@@ -504,7 +543,7 @@ approximation, not a silent one.
 | `/admin/workflows` | 493 | `auditAction` only | `useWorkflows` + mutations ✅ · `@ts-nocheck` | ✅ Live ⚠️ **no authorization on the endpoints** |
 | `/admin/policies` | 244 | `auditAction` | `usePolicies` 🟥 | 🟥 Mock |
 | `/admin/branding` | 397 | `auditAction` | `useBranding` 🟥 | 🟥 Mock |
-| `/admin/circulars` | 263 | `auditAction`, `currentUser` | `useCirculars` 🟥 | 🟥 Mock |
+| `/admin/circulars` | 20 | — | — | ↪️ redirect to `/circulars/manage` (2026-10-05) — management moved to a shared area because supervisors and management author and publish circulars too, and can't enter this portal |
 | `/admin/audit` | 150 | — | `useAuditEntries`, `useExportAuditCsv`, `useVerifyAuditChain` ✅ · `useUsers` ✅ | ✅ Live — wired 2026-09-18 (was `SEED.audit`) |
 | `/admin/access-requests` | ~200 | — | `useAccessRequestsInbox`, `useGrantAccessRequest`, `useDenyAccessRequest` ✅ | ✅ Live — **new page, 2026-09-18**. client_admin-only grant/deny inbox for `POST /documents/:id/access-requests` |
 
@@ -530,6 +569,18 @@ GET    /audit/verify                       hash-chain integrity check
 POST   /documents/:id/access-requests/:reqId/grant   client_admin-only (added 2026-09-18)
 POST   /documents/:id/access-requests/:reqId/deny    client_admin-only
 GET    /documents/access-requests                    admin inbox, all documents
+GET   /circulars/inbox             ?filter=&archived=&search=   recipient inbox (no permission — being sent it is the grant)
+GET   /circulars/inbox/summary     unread / unacknowledged counts (sidebar badge)
+GET   /circulars/inbox/:id         open a circular — records the read receipt
+POST  /circulars/inbox/:id/acknowledge
+GET   /circulars                   archive within circular:view scope
+GET   /circulars/:id               detail + acknowledgement stats
+POST  /circulars · PATCH/DELETE /circulars/:id    drafts (circular:create)
+POST  /circulars/:id/publish  /cancel-schedule    publish now or schedule (circular:publish)
+POST  /circulars/:id/withdraw  /revisions          withdraw · start a revision
+GET   /circulars/:id/recipients    acknowledgement report
+POST  /circulars/:id/reminders     remind outstanding recipients
+                                                     circulars 🟨 wired 2026-10-05, not verified live
 ```
 
 ### APIs missing ⛔
@@ -543,7 +594,7 @@ GET    /documents/access-requests                    admin inbox, all documents
 | Password reset | ✅ **Built** — `POST /auth/reset-password`; was broken by a field-name bug until fixed 2026-09-18 (DRIFT-15) | New users/resets both land on `/set-password` |
 | Retention policy CRUD + enforcement job | Model only | Nothing ever expires |
 | Branding model + endpoints | Not built | Theming resets on cache clear |
-| Circulars model + endpoints | Not built | |
+| ~~Circulars model + endpoints~~ | ✅ **Built** (backend `circulars` module, 15 routes) and wired 2026-10-05 | Not yet verified live |
 | `GET /audit` | ✅ **Built & wired 2026-09-18** | Tenant audit view is real now |
 
 ### Dummy data 🟥
@@ -552,7 +603,6 @@ GET    /documents/access-requests                    admin inbox, all documents
 |---|---|---|
 | `/admin/policies` | `SEED.policies` | Confidentiality/urgency/control config is decorative |
 | `/admin/branding` | `SEED.branding` | ⚠️ **Theming genuinely applies** via CSS custom properties in `AppShell`, including a dark-mode `lighten()` — so it looks completely real and persists nowhere |
-| `/admin/circulars` | `SEED.circulars` | |
 | Role matrix editor | `SEED.rolesMatrix` via `updateRoleMatrix` | **Permission changes appear to save and don't** |
 
 ### Flows
@@ -572,7 +622,7 @@ GET    /documents/access-requests                    admin inbox, all documents
 | Design and publish a workflow | ✅ | ⛔ **but so can any authenticated user** |
 | Configure retention policy | 🟥 | |
 | Apply branding | 🟥 | Applies visually, persists nowhere |
-| Publish a circular | 🟥 | |
+| Publish a circular | 🟨 | Wired 2026-10-05 at `/circulars/manage` — draft → publish now or schedule → recipients' inbox, acknowledgement report, reminders, withdraw, revise. Not yet verified live |
 | Review the tenant audit trail | ✅ | Wired 2026-09-18 — filter by actor/action/date, paginated, "Verify integrity" action; "Export" 403s for `client_admin` (no `audit:export` grant) |
 
 ### What's left, in order
@@ -591,7 +641,8 @@ GET    /documents/access-requests                    admin inbox, all documents
    creation still isn't email-driven. Login rate limiting still unaddressed.
 5. **Add authorization to the workflow endpoints** (backend — DRIFT-05).
 6. **Build branding**: model, endpoints, logo upload.
-7. **Build circulars**: model, endpoints, audience targeting, acknowledgement tracking.
+7. ~~**Build circulars**: model, endpoints, audience targeting, acknowledgement tracking.~~
+   **Wired 2026-10-05** against the backend module; pending a live end-to-end check.
 8. **Build retention**: endpoints + an enforcement job.
 9. ~~Build the audit module and point `/admin/audit` at it.~~ **Done 2026-09-18**
    (DRIFT-11 revised).
@@ -638,6 +689,12 @@ vocabulary (`user.login`, `document.viewed`, `role.permissions_updated`, …) in
 the old app-invented codes (`REDACT_RELEASE`, `SIGN`, …), which matched nothing real. The
 "Raise a finding" feature is untouched — it still writes to the local `auditAction`
 pseudo-log, since findings has no real backend to migrate *to* either.
+
+**Circulars** (🟨 wired 2026-10-05, not verified live): the recipient inbox
+(`/circulars/inbox*`) like every role, plus read-only `/circulars/manage` — auditors hold
+`circular:view` at `global` scope, so they see the whole archive, each circular's stats and
+its recipient/acknowledgement report (`GET /circulars`, `/circulars/:id`,
+`/circulars/:id/recipients`), with no authoring buttons.
 
 ### APIs missing ⛔
 
@@ -789,7 +846,11 @@ This is a **phase**, not a backlog item:
 | `/search` | 457 | all | `currentUser`, `savedSearches` (per-user, user-created — not `SEED`) | `useDocuments` (server-side filters + pagination), `useDocumentSearch` (text + cabinet), `useCabinets` ✅ | 🟨 Pending check — rebuilt 2026-09-30: no `SEED` reads, no `@ts-nocheck`; types from `constants/documentTypes.ts`. Not yet verified end to end, so not marked ✅ |
 | `/upload` | 475 | staff, supervisor, management, client_admin | `docTypes`, `session`, `users` | `useCabinets`, `useCabinetFolders`, `documentsService`, `s3` ✅ | ✅ Live  **2026-10-02:** accepted types unified in `src/constants/uploadTypes.ts` — PDF, DOCX, XLSX, TIFF, JPG, PNG up to 100 MB (was PDF ≤50 MB + images ≤10 MB, despite the page text claiming DOCX/XLSX/TIFF). DOCX/XLSX/TIFF upload but **don't preview** in the viewer and **aren't OCR'd** (Textract can't read DOCX/XLSX), so they're not text-searchable |
 | `/notifications` | 106 | all | `notifications`, `session` | **none** | 🟥 Mock |
-| `/circulars` | 107 | all | `circulars`, `session`, `users` | **none** | 🟥 Mock |
+| `/circulars` | 226 | all | — | `useCircularInbox`, `useCircularInboxSummary` → `GET /circulars/inbox`, `/inbox/summary` | 🟨 **rewired 2026-10-05** (was `SEED.circulars`) — in-force / archive tabs, read-state filters, search. built and type/build-checked 2026-10-05, not yet verified end to end against a live backend |
+| `/circulars/[id]` | 181 | all | — | `useCircularInboxItem`, `useAcknowledgeCircular` → `GET /circulars/inbox/:id`, `POST …/acknowledge` | 🟨 **new 2026-10-05** — reading view and landing page for the backend's circular notification links (`actionUrl: /circulars/:id`). Opening it records the read receipt. built and type/build-checked 2026-10-05, not yet verified end to end against a live backend |
+| `/circulars/manage` | 206 | `circular:view` | — | `useCirculars` → `GET /circulars` | 🟨 **new 2026-10-05** — the archive, any status, within scope. built and type/build-checked 2026-10-05, not yet verified end to end against a live backend |
+| `/circulars/manage/new` | 41 | `circular:create` | — | `useCreateCircular` → `POST /circulars` · `useDepartments`, `useRoles` (only with `role:view`), `useAllUsers`, `useDocuments`, multipart upload | 🟨 **new 2026-10-05** — compose a draft: audience (all staff / department+role groups / named people), acknowledgement + deadline + reminders, expiry, file and linked-document attachments. built and type/build-checked 2026-10-05, not yet verified end to end against a live backend |
+| `/circulars/manage/[id]` | 712 | `circular:view` | — | `useCircular`, `useCircularRecipients`, update / delete / publish / cancel-schedule / withdraw / revise / reminders mutations | 🟨 **new 2026-10-05** — detail, inline draft editing, lifecycle actions gated per permission, stats + per-department breakdown + recipients report. built and type/build-checked 2026-10-05, not yet verified end to end against a live backend |
 | `/unauthorized` | 58 | all | — | — | static |
 | `/tasks/[id]` | 33 | all | — | `useTask` → `GET /tasks/:id` | ↪️ redirect to `/workflow-instances/{instanceId}?task={id}` — landing page for backend `/tasks/:id` notification links (DRIFT-17). Not yet verified live |
 | `/workflow-instances/[id]` | 351 | all | `currentUser` | `useWorkflowInstance`, `useTask`, `useDocument`, `useTaskAction`, versions ✅ | 🟨 **new 2026-10-02** — the workflow page (see below). Was a 33-line redirect earlier the same day. Not yet verified e2e |
@@ -939,7 +1000,7 @@ ageing indicator.*
 | 19a | Optional `signature` on the `review` task action (BE-16) — "Mark reviewed" already has an optional-comment modal; needs the backend to accept a signature there too, the same way `approve` does | Backend |
 | 19b | ~~Support more than one document per workflow instance (BE-17)~~ — **backend done 2026-09-24** (`5144fc7`). Frontend half open: attach UI, per-document `request_changes`, and a workflow view page that lists the instance's documents — planning started 2026-10-02 | Frontend |
 | 20 | Document download/export/print, gated by the existing tier allowlists | Backend |
-| 21 | Circulars: model, endpoints, audience targeting, ack tracking | Both |
+| 21 | 🟨 ~~Circulars: model, endpoints, audience targeting, ack tracking~~ — **backend module built; frontend wired 2026-10-05** (inbox, reader, manage area). Remaining: verify end to end against a live backend. (The Roles editor already offers `circular:*` — its matrix is built from the `GET /roles` union, and the backend accepts any seeded key — grouped under "Communication" in `MODULE_MAP`) | Frontend |
 | 22 | Retention policy endpoints + enforcement job | Backend |
 | 23 | Branding model + endpoints + logo upload | Both |
 | 24 | ✅ ~~Version-restore and archive buttons~~ — **done 2026-09-10.** `/doc/[id]` right column has a `DocumentVersionsPanel` (list · open · restore · upload new version) and an "Archive document" item in the More menu; `DocumentDetailsPanel` gains an inline metadata editor when the user holds `document:edit` | Frontend |
@@ -972,8 +1033,9 @@ classification, task queues and approval decisions all work end to end, and the 
 layer discipline is genuinely good — `db` passed as a parameter everywhere, RBAC scope
 resolved in SQL, confidentiality filtered in the query rather than after it.
 
-**The governance half is a convincing UI over fixture data.** Notifications, circulars,
-policies, findings and platform operations account for at least 19 of the 51 pages
+**The governance half is a convincing UI over fixture data.** Notifications,
+policies, findings and platform operations (circulars moved onto the real API
+2026-10-05, not yet verified live) account for at least 19 of the 51 pages
 rendering `initialData.ts` (was 20 of 42 — `/admin/audit` moved off `SEED.audit`
 2026-09-18; the other eight newly-counted pages aren't classified yet, so this is a
 floor, not a final count) — and they cluster: the Auditor dashboard is still 4/4 mock,
