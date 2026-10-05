@@ -5,7 +5,7 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { ConfBadge, UrgBadge } from '@/components/ui/Badges';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import {
   usePolicies,
@@ -32,7 +32,7 @@ export default function PoliciesPage() {
   }, [setPageTitle]);
 
   if (isLoading) {
-    return <Spinner text="Loading policies..." />;
+    return <SkeletonPage columns={['Level', 'Behaviour', 'Watermark', 'Download', 'Print']} rows={4} />;
   }
 
   if (isError) {

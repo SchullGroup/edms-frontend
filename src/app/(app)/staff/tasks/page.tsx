@@ -8,7 +8,7 @@ import { useTasks } from '@/apis/hooks/useTasks';
 import { taskStatusLabel } from '@/utils/supervisor';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 
 const URG_ORDER: Record<string, number> = { Critical: 1, High: 2, Normal: 3, Low: 4 };
@@ -140,9 +140,7 @@ export default function MyTasksPage() {
             <ErrorMessage message="Failed to load tasks" retry={refetch} />
           </div>
         ) : isLoading ? (
-          <div style={{ padding: '32px' }}>
-            <Spinner text="Loading tasks..." />
-          </div>
+          <SkeletonTaskRows rows={6} />
         ) : list.length > 0 ? (
           <div className="rowlist">
             {list.map((t: any) => (

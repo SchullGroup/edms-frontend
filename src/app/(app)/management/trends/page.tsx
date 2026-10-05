@@ -7,7 +7,7 @@ import { useDocumentStats } from '@/apis/hooks/useDocuments';
 import { useWorkflowInstanceStats } from '@/apis/hooks/useWorkflowInstances';
 import { LineChart } from '@/components/ui/Charts';
 import { Icon } from '@/components/ui/Icons';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage } from '@/components/common/Skeleton';
 import { buildDepartmentIndex, alignMonthlyBuckets, lastNMonths } from '@/apis/utils/managementAggregation';
 
 export default function TrendsForecastPage() {
@@ -67,7 +67,7 @@ export default function TrendsForecastPage() {
   ];
   const lastClosed = closed.values[closed.values.length - 1] ?? 0;
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <SkeletonPage kpis={4} charts={2} />;
 
   return (
     <div>

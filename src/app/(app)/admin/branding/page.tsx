@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { Icon } from '@/components/ui/Icons';
 import { useBranding, useUpdateBranding } from '@/apis/hooks/useBranding';
@@ -141,7 +141,7 @@ export default function BrandingPage() {
     });
   };
 
-  if (isLoading) return <Spinner text="Loading branding..." />;
+  if (isLoading) return <SkeletonPage charts={2} />;
   if (isError) return <ErrorMessage message="Failed to load branding." retry={refetch} />;
 
   return (

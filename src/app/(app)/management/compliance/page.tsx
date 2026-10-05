@@ -6,7 +6,7 @@ import { useStore, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useAuditEntries } from '@/apis/hooks/useAudit';
 import { useUsers } from '@/apis/hooks/useUsers';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage } from '@/components/common/Skeleton';
 import { HBarChart } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
 import { SevBadge } from '@/components/ui/Badges';
@@ -47,7 +47,7 @@ export default function CompliancePosturePage() {
     setPageTitle('Compliance Posture');
   }, [setPageTitle]);
 
-  if (isLoadingAudit || isLoadingUsers) return <Spinner />;
+  if (isLoadingAudit || isLoadingUsers) return <SkeletonPage kpis={4} columns={['Finding', 'Status', 'Raised']} rows={5} />;
 
   const open = findings?.filter((f: any) => f.status !== 'Closed') || [];
 

@@ -13,7 +13,7 @@ import {
 import { isSystemRoleName } from '@/lib/permissions';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonTreeRows } from '@/components/common/Skeleton';
 import { Role, RolePermission, RolePermissionScope } from '@/types/models';
 
 /** Friendly grouping of the (data-driven) resource list into modules. Anything the
@@ -449,7 +449,7 @@ export default function RolesPermissionsPage() {
               onChange={(e) => setFilter(e.target.value)}
             />
             {isLoading ? (
-              <Spinner />
+              <SkeletonTreeRows rows={6} />
             ) : visibleRoles.length === 0 ? (
               <div className="caption" style={{ padding: '12px 4px' }}>
                 No roles match.

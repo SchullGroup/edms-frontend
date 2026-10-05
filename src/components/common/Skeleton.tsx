@@ -10,9 +10,8 @@ export interface SkeletonProps {
 }
 
 /**
- * A single shimmering placeholder block. The shimmer itself (`.skel`,
- * `globals.css`) already existed in the design system but nothing used it —
- * every loading state in the app fell back to `<Spinner>` instead.
+ * A single shimmering placeholder block (`.skel`, `globals.css`). Loading states
+ * mirror the shape of the content they stand in for rather than showing a spinner.
  */
 export function Skeleton({
   width,
@@ -74,6 +73,108 @@ export function SkeletonTreeRows({ rows = 5 }: { rows?: number }) {
           <Skeleton height={12} width={`${58 + ((i * 13) % 30)}%`} />
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Rows shaped like `.task-row` — task lists (avatar, title + caption, trailing chip). */
+export function SkeletonTaskRows({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="rowlist" aria-hidden="true" role="presentation">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="task-row" style={{ cursor: 'default' }}>
+          <Skeleton width={30} height={30} radius={8} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Skeleton height={13} width={`${48 + ((i * 17) % 35)}%`} style={{ marginBottom: 6 }} />
+            <Skeleton height={10} width={`${22 + ((i * 11) % 20)}%`} />
+          </div>
+          <Skeleton height={20} width={72} radius={99} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Rows shaped like `.notif-item` — a dot, a message line and a timestamp line. */
+export function SkeletonNotifRows({ rows = 4 }: { rows?: number }) {
+  return (
+    <div aria-hidden="true">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="notif-item" style={{ cursor: 'default' }}>
+          <Skeleton width={7} height={7} circle style={{ marginTop: 6, flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <Skeleton height={12} width={`${70 + ((i * 9) % 25)}%`} style={{ marginBottom: 6 }} />
+            <Skeleton height={10} width={70} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A row of `.kpi` cards. */
+export function SkeletonKpis({ count = 4 }: { count?: number }) {
+  return (
+    <div className={`grid cols-${count} mb-4`} aria-hidden="true">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="card kpi" style={{ cursor: 'default' }}>
+          <Skeleton height={10} width="45%" style={{ marginBottom: 12 }} />
+          <Skeleton height={24} width="40%" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A titled card holding a chart-sized block — stands in for `Charts` panels. */
+export function SkeletonChartCard({ height = 220 }: { height?: number }) {
+  return (
+    <div className="card" aria-hidden="true">
+      <div className="card-head">
+        <Skeleton height={14} width={140} />
+      </div>
+      <div className="card-body">
+        <Skeleton height={height} radius={10} style={{ width: '100%' }} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Whole-page placeholder for pages that gate their entire render on a data
+ * load: page head, optional KPI row, then either a table or chart cards.
+ * Exposes a single polite status so screen readers hear one "Loading".
+ */
+export function SkeletonPage({
+  kpis = 0,
+  columns,
+  charts = 0,
+  rows = 6,
+}: {
+  kpis?: number;
+  /** Header labels for a body table; omit for no table. */
+  columns?: string[];
+  /** Number of chart cards, laid out two-up. */
+  charts?: number;
+  rows?: number;
+}) {
+  return (
+    <div role="status" aria-busy="true" aria-label="Loading">
+      <div className="page-head" aria-hidden="true">
+        <div>
+          <Skeleton height={26} width={240} style={{ marginBottom: 8 }} />
+          <Skeleton height={12} width={360} />
+        </div>
+      </div>
+      {kpis > 0 && <SkeletonKpis count={kpis} />}
+      {charts > 0 && (
+        <div className="grid cols-2 mb-4">
+          {Array.from({ length: charts }).map((_, i) => (
+            <SkeletonChartCard key={i} />
+          ))}
+        </div>
+      )}
+      {columns && <SkeletonTable columns={columns} rows={rows} />}
     </div>
   );
 }

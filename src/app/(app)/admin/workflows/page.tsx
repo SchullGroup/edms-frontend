@@ -20,6 +20,7 @@ import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { StagePanel } from '@/components/workflows/StagePanel';
 import { WorkflowDesignerGuide } from '@/components/workflows/WorkflowDesignerGuide';
 import { DEFAULT_WORKFLOW_DEFINITION, reconcileTransitions } from '@/components/workflows/constants';
+import { SkeletonPage } from '@/components/common/Skeleton';
 
 export default function WorkflowDesignerPage() {
   const { auditAction } = useStore();
@@ -110,7 +111,7 @@ export default function WorkflowDesignerPage() {
   }, [setPageTitle]);
 
   if (isLoading) {
-    return <div className="p-8 text-center muted">Loading workflow designer...</div>;
+    return <SkeletonPage columns={['Workflow', 'Stages', 'Status', '']} rows={5} />;
   }
 
   if (error) {

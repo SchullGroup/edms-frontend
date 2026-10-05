@@ -8,7 +8,7 @@ import { useDocumentStats } from '@/apis/hooks/useDocuments';
 import { useTaskStats } from '@/apis/hooks/useTasks';
 import { workflowInstancesService } from '@/apis/services/workflowInstances.service';
 import { HBarChart, LineChart } from '@/components/ui/Charts';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonPage } from '@/components/common/Skeleton';
 import {
   buildDepartmentIndex,
   alignMonthlyBuckets,
@@ -89,7 +89,7 @@ export default function DeptComparisonPage() {
     values: alignMonthlyBuckets(closedByDeptQueries[i]?.data?.buckets ?? [], range).values,
   }));
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <SkeletonPage charts={2} columns={['Department', 'Volume', 'Closed', 'SLA']} rows={6} />;
 
   return (
     <div>
