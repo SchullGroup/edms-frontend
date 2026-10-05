@@ -42,7 +42,7 @@ export default function TeamPerformancePage() {
         </div>
       </div>
 
-      <div className="grid cols-3 mb16">
+      <div className="grid cols-3 mb-4">
         <div className="card kpi">
           <div className="kv">85%</div>
           <div className="kl">Team SLA compliance</div>
@@ -60,7 +60,7 @@ export default function TeamPerformancePage() {
         </div>
       </div>
 
-      <div className="card mb16">
+      <div className="card mb-4">
         <div className="card-head">
           <span className="h3">Weekly closures — team</span>
         </div>

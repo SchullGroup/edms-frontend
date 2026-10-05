@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AuthUser } from '@/types/models';
+import { AuthUser, SavedSearch } from '@/types/models';
 import { SEED, FINDINGS } from './initialData';
 
 export { FINDINGS };
@@ -13,6 +13,7 @@ export type AppState = typeof SEED & {
 export interface AppStore extends AppState {
   currentUser: AuthUser | null;
   setCurrentUser: (user: AuthUser | null) => void;
+  patchCurrentUser: (partial: Partial<AuthUser>) => void;
   resetData: () => void;
   auditAction: (action: string, target: string, detail: string) => void;
   notifyUser: (
@@ -46,6 +47,8 @@ export interface AppStore extends AppState {
   updateFeatureFlag: (id: string, updates: any) => void;
   updateFinding: (id: string, updates: any) => void;
   addFinding: (f: any) => void;
+  addSavedSearch: (userId: string, search: SavedSearch) => void;
+  removeSavedSearch: (userId: string, id: string) => void;
 
   // --- Async API Actions (New Pattern) ---
   fetchDocuments: () => Promise<void>;
@@ -62,6 +65,19 @@ export const useStore = create<AppStore>()(
       findings: FINDINGS,
       currentUser: null,
       setCurrentUser: (user) => set({ currentUser: user }),
+      patchCurrentUser: (partial) =>
+        set((s) => {
+          if (!s.currentUser) return s;
+          // No-op if every patched key already deep-equals what's stored —
+          // otherwise a new object reference is produced on every call and any
+          // effect that depends on `currentUser` re-runs forever.
+          const cur = s.currentUser as any;
+          const changed = Object.keys(partial).some(
+            (k) => JSON.stringify(cur[k]) !== JSON.stringify((partial as any)[k]),
+          );
+          if (!changed) return s;
+          return { currentUser: { ...s.currentUser, ...partial } };
+        }),
       setPrefs: (prefs) => set({ prefs }),
       resetData: () => set(SEED),
       auditAction: (action, target, detail) => {
@@ -113,10 +129,10 @@ export const useStore = create<AppStore>()(
       markCircularAck: (circularId) => {
         const { circulars, currentUser } = get();
         if (!currentUser) return;
-        const newCir = circulars.map((c: any) => 
-          c.id === circularId && !c.ackBy.includes(currentUser.id) 
-            ? { ...c, ackBy: [...c.ackBy, currentUser.id] } 
-            : c
+        const newCir = circulars.map((c: any) =>
+          c.id === circularId && !c.ackBy.includes(currentUser.id)
+            ? { ...c, ackBy: [...c.ackBy, currentUser.id] }
+            : c,
         );
         set({ circulars: newCir });
       },
@@ -127,17 +143,23 @@ export const useStore = create<AppStore>()(
       },
       updatePolicyControl: (ruleName, enabled) => {
         const { policies } = get();
-        const newControls = policies.controls.map((c: any) => (c.rule === ruleName ? { ...c, enabled } : c));
+        const newControls = policies.controls.map((c: any) =>
+          c.rule === ruleName ? { ...c, enabled } : c,
+        );
         set({ policies: { ...policies, controls: newControls } });
       },
       updatePolicyConfidentiality: (level, updates) => {
         const { policies } = get();
-        const newConf = policies.confidentiality.map((c: any) => (c.level === level ? { ...c, ...updates } : c));
+        const newConf = policies.confidentiality.map((c: any) =>
+          c.level === level ? { ...c, ...updates } : c,
+        );
         set({ policies: { ...policies, confidentiality: newConf } });
       },
       updatePolicyUrgency: (level, updates) => {
         const { policies } = get();
-        const newUrg = policies.urgency.map((u: any) => (u.level === level ? { ...u, ...updates } : u));
+        const newUrg = policies.urgency.map((u: any) =>
+          u.level === level ? { ...u, ...updates } : u,
+        );
         set({ policies: { ...policies, urgency: newUrg } });
       },
       updateWorkflow: (wfId, updates) => {
@@ -190,17 +212,39 @@ export const useStore = create<AppStore>()(
       },
       updateFeatureFlag: (id, updates) => {
         const { featureFlags } = get();
-        const newFlags = (featureFlags || []).map((f: any) => (f.id === id ? { ...f, ...updates } : f));
+        const newFlags = (featureFlags || []).map((f: any) =>
+          f.id === id ? { ...f, ...updates } : f,
+        );
         set({ featureFlags: newFlags });
       },
       updateFinding: (id, updates) => {
         const { findings } = get();
-        const newFindings = (findings || []).map((f: any) => (f.id === id ? { ...f, ...updates } : f));
+        const newFindings = (findings || []).map((f: any) =>
+          f.id === id ? { ...f, ...updates } : f,
+        );
         set({ findings: newFindings });
       },
       addFinding: (f) => {
         const { findings } = get();
         set({ findings: [f, ...(findings || [])] });
+      },
+      addSavedSearch: (userId, search) => {
+        const { savedSearches } = get();
+        set({
+          savedSearches: {
+            ...savedSearches,
+            [userId]: [...(savedSearches[userId] ?? []), search],
+          },
+        });
+      },
+      removeSavedSearch: (userId, id) => {
+        const { savedSearches } = get();
+        set({
+          savedSearches: {
+            ...savedSearches,
+            [userId]: (savedSearches[userId] ?? []).filter((s) => s.id !== id),
+          },
+        });
       },
 
       // --- Async API Actions Implementation ---
@@ -217,23 +261,32 @@ export const useStore = create<AppStore>()(
     }),
     {
       name: 'edms-state-v3',
-      version: 3,
+      version: 5,
+      // v4: drop any stale `currentUser.permissions` persisted by an older build
+      // so it gets re-derived cleanly from `GET /roles` / `GET /auth/me`.
+      // v5: `savedSearches` went from one shared array (seeded with two fake
+      // entries) to a per-user map with a new shape — start it empty.
+      migrate: (persisted: any, version) => {
+        let next = persisted;
+        if (version < 4 && next?.currentUser) {
+          const { permissions, ...rest } = next.currentUser;
+          next = { ...next, currentUser: rest };
+        }
+        if (version < 5 && next) {
+          next = { ...next, savedSearches: {} };
+        }
+        return next;
+      },
     },
   ),
 );
-
-export const effStatus = (doc: any) => {
-  if (doc.status === 'Closed' || doc.status === 'On Hold') return doc.status;
-  if (doc.due && doc.due < Date.now()) return 'Overdue';
-  return doc.status;
-};
 
 export const canView = (doc: any, user: any) => {
   if (!doc.restrictedTo) return true;
   return doc.restrictedTo.includes(user.id);
 };
 
-export const userById = (users: any[], id: string) =>
+export const userById = (users: any[], id: string | null | undefined) =>
   users.find((u) => u.id === id) || {
     id,
     name: id === 'system' ? 'System' : 'Unknown',
@@ -244,6 +297,6 @@ export const docById = (docs: any[], id: string) => docs.find((x) => x.id === id
 export const cabById = (cabs: any[], id: string) => cabs.find((c) => c.id === id);
 export const folderName = (cabs: any[], cabId: string, fId: string) => {
   const c = cabById(cabs, cabId);
-  const f = c && c.folders.find((f: any) => f.id === fId);
+  const f = c && c.folders && c.folders.find((f: any) => f.id === fId);
   return f ? f.name : '';
 };

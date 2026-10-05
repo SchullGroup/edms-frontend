@@ -2,110 +2,104 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments, useUpdateDocument } from '@/apis/hooks/useDocuments';
-import { useUsers } from '@/apis/hooks/useUsers';
-import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useTasks, useReassignTask } from '@/apis/hooks/useTasks';
+import {
+  useTeamStatusMatrix,
+  useOpenItemsByCabinet,
+} from '@/apis/hooks/useWorkflowInstances';
+import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
-import { Spinner } from '@/components/common/Spinner';
+import { usePermissions } from '@/hooks/usePermissions';
+import { SkeletonPage, SkeletonTaskRows } from '@/components/common/Skeleton';
 import { Icon } from '@/components/ui/Icons';
 import { Table, Column } from '@/components/ui/Table';
 import { Avatar } from '@/components/ui/Avatar';
 import { HBarChart } from '@/components/ui/Charts';
-import { StatusBadge, UrgBadge } from '@/components/ui/Badges';
+import { StatusBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
-import { effStatus } from '@/utils/helpers';
-
-const TEAM = ['u-chika', 'u-ngozi', 'u-tunde', 'u-amara', 'u-seun'];
+import { Task, WorkflowTeamStatusMember } from '@/types/models';
 
 export default function SupervisorDashboard() {
   const router = useRouter();
-  const { setPageTitle, openModal, closeModal, openDrawer, closeDrawer, addToast } = useUIStore();
+  const { setPageTitle, openModal, openDrawer, closeDrawer, addToast } = useUIStore();
 
-  const { data: docsData, isLoading: isLoadingDocs } = useDocuments();
+  // Both endpoints omit departmentId — the backend resolves the supervisor's
+  // own department automatically. See the Workflow Module API guide §4.
+  const { data: members, isLoading: isLoadingMatrix } = useTeamStatusMatrix();
+  const { data: byCabinetData, isLoading: isLoadingByCabinet } = useOpenItemsByCabinet();
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
-  const { data: cabsData, isLoading: isLoadingCabs } = useCabinets();
 
-  const documents = docsData?.data || [];
   const users = usersData?.data || [];
-  const cabinets = cabsData?.data || [];
+  // Reassign targets: active users in the reassigner's own department only.
+  const { users: colleagues } = useDepartmentColleagues();
+  const byCabinet = byCabinetData?.cabinets || [];
 
-  const updateDocument = useUpdateDocument();
+  const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
 
   useEffect(() => {
     setPageTitle('Team Overview');
   }, [setPageTitle]);
 
-  if (isLoadingDocs || isLoadingUsers || isLoadingCabs) return <Spinner />;
+  if (isLoadingMatrix || isLoadingByCabinet || isLoadingUsers) return <SkeletonPage kpis={4} columns={['Member', 'Open', 'Overdue', 'Due today']} rows={5} />;
 
-  const teamDocs = documents.filter(
-    (d: any) => TEAM.includes(d.assignee as string) || d.assignee === 'u-david',
+  const team = members || [];
+
+  const totals = team.reduce(
+    (acc, m) => ({
+      pending: acc.pending + m.pending,
+      inProgress: acc.inProgress + m.inProgress,
+      overdue: acc.overdue + m.overdue,
+      closed: acc.closed + m.closed,
+    }),
+    { pending: 0, inProgress: 0, overdue: 0, closed: 0 },
   );
-  const count = (arr: any[], st: string) => arr.filter((d) => effStatus(d) === st).length;
 
   const tiles = [
-    { label: 'Pending', val: count(teamDocs, 'Pending'), cls: 't-pending', ico: 'clock' },
-    { label: 'In Progress', val: count(teamDocs, 'In Progress'), cls: 't-progress', ico: 'pulse' },
-    {
-      label: 'Closed (30d)',
-      val: teamDocs.filter((d) => d.status === 'closed').length,
-      cls: 't-closed',
-      ico: 'check',
-    },
-    { label: 'Overdue / SLA', val: count(teamDocs, 'Overdue'), cls: 't-overdue', ico: 'alert' },
+    { label: 'Pending', val: totals.pending, cls: 't-pending', ico: 'clock' },
+    { label: 'In Progress', val: totals.inProgress, cls: 't-progress', ico: 'pulse' },
+    { label: 'Closed (30d)', val: totals.closed, cls: 't-closed', ico: 'check' },
+    { label: 'Overdue / SLA', val: totals.overdue, cls: 't-overdue', ico: 'alert' },
   ];
 
-  const matrix = TEAM.map((uid) => {
-    const u = userById(users, uid);
-    const md = documents.filter((d) => d.assignee === uid);
-    return {
-      uid,
-      name: u?.name || 'Unknown',
-      dept: (u as any)?.departmentId || '',
-      pending: count(md, 'Pending'),
-      progress: count(md, 'In Progress'),
-      overdue: count(md, 'Overdue'),
-      closed: md.filter((d) => d.status === 'closed').length,
-      total: md.length,
-    };
-  });
-
-  const byCab = cabinets
+  const byCab = byCabinet
+    .filter((c) => c.openItems > 0)
     .map((c) => ({
-      label: c.name,
-      value: teamDocs.filter((d) => d.cabinetId === c.id && d.status !== 'closed').length,
+      label: c.cabinetName,
+      value: c.openItems,
       color: 'var(--brand-primary-light)',
-      onClick: () => router.push(`/cabinets?cab=${c.id}`),
-    }))
-    .filter((c) => c.value > 0);
+      onClick: () => router.push(`/staff/cabinets?cabinetId=${c.cabinetId}`),
+    }));
 
-  const handleReassignModal = (doc: any, onDone?: () => void) => {
+  const handleReassignModal = (t: Task, onDone?: () => void) => {
     let newAssignee = '';
     let note = '';
-    const currentAssigneeUser = userById(users, doc.assignee);
+    const title = t.workflowInstance?.document?.title || 'this document';
 
     openModal({
-      title: `Reassign — ${doc.title.slice(0, 44)}${doc.title.length > 44 ? '…' : ''}`,
+      title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
       body: (
         <div>
-          <div className="field mb12">
+          <div className="field mb-3">
             <label>Current Assignee</label>
-            <input className="input" disabled value={currentAssigneeUser?.name || 'Unassigned'} />
+            <input
+              className="input"
+              disabled
+              value={t.assignee?.name || t.assignedRole?.name || 'Unassigned'}
+            />
           </div>
-          <div className="field mb12">
+          <div className="field mb-3">
             <label>
               New Assignee <span className="req">*</span>
             </label>
             <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select team member...</option>
-              {users
-                .filter((u) => u.status === 'active' && u.id !== doc.assignee)
+              {colleagues
+                .filter((u) => u.id !== t.assigneeId)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} — {(u as any).roleLabel || (u as any).role || u.roles?.[0]} (
-                    {(u as any).departmentId || 'System'})
+                    {u.name}
                   </option>
                 ))}
             </select>
@@ -128,119 +122,61 @@ export default function SupervisorDashboard() {
           onClick: () => {
             if (!newAssignee) {
               addToast('Please select a new assignee', 'error');
-              return;
+              return false;
             }
-            const prev = doc.assignee;
-            const newUser = userById(users, newAssignee as string);
+            const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
+            const newUser = users.find((u) => u.id === newAssignee);
 
-            updateDocument.mutate({ id: doc.id, updates: { assignee: newAssignee } });
-            createAuditLog.mutate({
-              action: 'REASSIGN',
-              target: doc.id,
-              detail: `Reassigned from ${userById(users, prev as string)?.name} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`,
-            });
-
-            addToast(`Reassigned to ${newUser?.name}`, 'success');
-            closeModal();
-            if (onDone) onDone();
+            return reassignTask
+              .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
+              .then(() => {
+                createAuditLog.mutate({
+                  action: 'REASSIGN',
+                  target: t.workflowInstance?.documentId || t.id,
+                  detail: `Reassigned from ${prevName} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`,
+                });
+                addToast(`Reassigned to ${newUser?.name}`, 'success');
+                if (onDone) onDone();
+              })
+              .catch(() => false);
           },
         },
       ],
     });
   };
 
-  const handleRowClick = (r: any) => {
-    const member = userById(users, r.uid);
-    const mDocs = documents.filter((d) => d.assignee === r.uid && d.status !== 'closed');
-
+  const handleRowClick = (m: WorkflowTeamStatusMember) => {
     openDrawer({
-      title: `${r.name} — open items`,
+      title: `${m.memberName} — open items`,
       body: (
-        <div>
-          <div className="flex aic g12 mb16">
-            <Avatar user={{ name: r.name }} />
-            <div>
-              <b style={{ fontSize: '14px', color: 'var(--ink)' }}>{r.name}</b>
-              <div className="caption">
-                {(member as any)?.roleLabel || 'Staff Officer'} · {r.dept}
-              </div>
-            </div>
-          </div>
-
-          {mDocs.length > 0 ? (
-            <div className="rowlist">
-              {mDocs.map((d: any) => (
-                <div
-                  key={d.id}
-                  className="task-row"
-                  style={{
-                    border: '1px solid var(--border)',
-                    borderRadius: '9px',
-                    marginBottom: '8px',
-                    padding: '12px 14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => {
-                    closeDrawer();
-                    router.push(`/doc/${d.id}`);
-                  }}
-                >
-                  <div className="task-main">
-                    <div
-                      className="task-title"
-                      style={{ fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}
-                    >
-                      {d.title}
-                    </div>
-                    <div className="task-meta flex aic g8">
-                      <StatusBadge status={effStatus(d)} />
-                      <UrgBadge level={d.urgency} />
-                    </div>
-                  </div>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ marginLeft: '12px', flexShrink: 0 }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleReassignModal(d, () => handleRowClick(r));
-                    }}
-                  >
-                    Reassign
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty" style={{ padding: '32px 16px' }}>
-              <Icon name="approve" size={32} />
-              <div className="h3 mt16 mb8">No open items</div>
-              <p className="caption">This member’s queue is clear.</p>
-            </div>
-          )}
-        </div>
+        <MemberDrawerBody
+          member={m}
+          onReassign={(t) => handleReassignModal(t, () => handleRowClick(m))}
+          onOpenDocument={(instanceId, taskId) => {
+            closeDrawer();
+            router.push(`/workflow-instances/${instanceId}?task=${taskId}`);
+          }}
+        />
       ),
     });
   };
 
-  const cols: Column<any>[] = [
+  const cols: Column<WorkflowTeamStatusMember>[] = [
     {
-      key: 'name',
+      key: 'memberName',
       label: 'Member',
       render: (r) => (
-        <span className="flex aic g8">
-          <Avatar user={{ name: r.name }} sm />
+        <span className="flex items-center gap-2">
+          <Avatar user={{ name: r.memberName }} sm />
           <span>
-            <div style={{ fontWeight: 700 }}>{r.name}</div>
-            <div className="caption">{r.dept}</div>
+            <div style={{ fontWeight: 700 }}>{r.memberName}</div>
+            <div className="caption">{r.departmentName || '—'}</div>
           </span>
         </span>
       ),
     },
     { key: 'pending', label: 'Pending', num: true, sortable: true },
-    { key: 'progress', label: 'In Prog.', num: true, sortable: true },
+    { key: 'inProgress', label: 'In Prog.', num: true, sortable: true },
     {
       key: 'overdue',
       label: 'Overdue',
@@ -271,7 +207,7 @@ export default function SupervisorDashboard() {
         </div>
       </div>
 
-      <div className="grid cols-4 mb16">
+      <div className="grid cols-4 mb-4">
         {tiles.map((t, i) => (
           <div
             key={i}
@@ -298,12 +234,12 @@ export default function SupervisorDashboard() {
             <span className="h3">Member × status matrix</span>
             <button
               className="btn btn-secondary btn-sm"
-              onClick={() => exportCsv('Team_Overview_Matrix', matrix)}
+              onClick={() => exportCsv('Team_Overview_Matrix', team)}
             >
               Export
             </button>
           </div>
-          <Table cols={cols} rows={matrix} onRow={handleRowClick} />
+          <Table cols={cols} rows={team} onRow={handleRowClick} />
         </div>
 
         <div className="card">
@@ -315,6 +251,105 @@ export default function SupervisorDashboard() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The matrix only carries counts, so a member's open items are fetched here
+ * on demand when their drawer opens — a standalone component (not a closure
+ * inside the page) so it keeps rendering itself as the query resolves,
+ * independent of whatever else re-renders the dashboard.
+ */
+function MemberDrawerBody({
+  member,
+  onReassign,
+  onOpenDocument,
+}: {
+  member: WorkflowTeamStatusMember;
+  onReassign: (task: Task) => void;
+  /** Opens the task on its workflow page. */
+  onOpenDocument: (workflowInstanceId: string, taskId: string) => void;
+}) {
+  const { can } = usePermissions();
+  const canReassign = can('task', 'reassign');
+  const { data, isLoading } = useTasks({
+    assigneeId: member.memberId,
+    status: 'pending',
+    scope: 'all',
+    limit: 100,
+  });
+  const tasks = data?.data || [];
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <Avatar user={{ name: member.memberName }} />
+        <div>
+          <b style={{ fontSize: '14px', color: 'var(--ink)' }}>{member.memberName}</b>
+          <div className="caption">
+            {member.memberEmail} · {member.departmentName || 'No department'}
+          </div>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <SkeletonTaskRows rows={4} />
+      ) : tasks.length > 0 ? (
+        <div className="rowlist">
+          {tasks.map((t) => {
+            const doc = t.workflowInstance?.document;
+            const overdue = !!(t.dueAt && new Date(t.dueAt) < new Date());
+            return (
+              <div
+                key={t.id}
+                className="task-row"
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: '9px',
+                  marginBottom: '8px',
+                  padding: '12px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer',
+                }}
+                onClick={() => onOpenDocument(t.workflowInstanceId, t.id)}
+              >
+                <div className="task-main">
+                  <div
+                    className="task-title"
+                    style={{ fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}
+                  >
+                    {doc?.title || 'Unknown document'}
+                  </div>
+                  <div className="task-meta flex items-center gap-2">
+                    <StatusBadge status={overdue ? 'Overdue' : 'Pending'} />
+                  </div>
+                </div>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ marginLeft: '12px', flexShrink: 0 }}
+                  disabled={!canReassign}
+                  title={!canReassign ? "You don't have permission to reassign tasks" : undefined}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReassign(t);
+                  }}
+                >
+                  Reassign
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="empty" style={{ padding: '32px 16px' }}>
+          <Icon name="approve" size={32} />
+          <div className="h3 mt-4 mb-2">No open items</div>
+          <p className="caption">This member’s queue is clear.</p>
+        </div>
+      )}
     </div>
   );
 }

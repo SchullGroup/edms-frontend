@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, effStatus } from '@/store/useStore';
+import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
+import { taskStatusLabel } from '@/utils/supervisor';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
-import { Spinner } from '@/components/common/Spinner';
+import { SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 
 const URG_ORDER: Record<string, number> = { Critical: 1, High: 2, Normal: 3, Low: 4 };
@@ -51,12 +52,11 @@ export default function MyTasksPage() {
   if (!currentUser) return null;
 
   let list = tasks;
-  // Fallback frontend filtering for status just to be safe with Overdue since backend 'pending' includes overdue
+  // Backend 'pending' covers both — refine the Pending/Overdue split client-side
+  // using the real `dueAt` field (see `taskStatusLabel`, `@/utils/supervisor`).
   if (statusF !== 'All') {
     list = list.filter((t: any) => {
-      const isCompleted = t.status === 'completed';
-      const eff = isCompleted ? 'Closed' : effStatus(t);
-      // Backend handles exact status mapping, but for 'Pending'/'Overdue' split we need to refine:
+      const eff = taskStatusLabel(t);
       if (statusF === 'Overdue') return eff === 'Overdue';
       if (statusF === 'Pending') return eff === 'Pending';
       return true; // Already filtered by backend for other exact matches
@@ -140,9 +140,7 @@ export default function MyTasksPage() {
             <ErrorMessage message="Failed to load tasks" retry={refetch} />
           </div>
         ) : isLoading ? (
-          <div style={{ padding: '32px' }}>
-            <Spinner text="Loading tasks..." />
-          </div>
+          <SkeletonTaskRows rows={6} />
         ) : list.length > 0 ? (
           <div className="rowlist">
             {list.map((t: any) => (
@@ -152,8 +150,8 @@ export default function MyTasksPage() {
         ) : (
           <div className="empty">
             <Icon name="inbox" size={32} />
-            <div className="h3 mt16 mb8">No tasks in this view</div>
-            <p className="caption mb16">Adjust the filters, or enjoy the quiet moment.</p>
+            <div className="h3 mt-4 mb-2">No tasks in this view</div>
+            <p className="caption mb-4">Adjust the filters, or enjoy the quiet moment.</p>
           </div>
         )}
       </div>

@@ -84,21 +84,21 @@ export default function PlansPage() {
         </div>
       </div>
       
-      <div className="grid cols-3 mb16">
+      <div className="grid cols-3 mb-4">
         {plans?.map((p: any) => (
           <div key={p.id || p.name} className="card card-pad">
             <div className="h2">{p.name}</div>
             <div style={{ fontSize: '26px', fontWeight: 800, margin: '8px 0' }}>
               ${p.priceMo.toLocaleString()} <span className="caption" style={{ fontWeight: 400 }}> /month</span>
             </div>
-            <div className="caption mb8">Up to {p.users.toLocaleString()} users · {p.storageGb} GB storage</div>
+            <div className="caption mb-2">Up to {p.users.toLocaleString()} users · {p.storageGb} GB storage</div>
             <div className="divider"></div>
             {p.features?.map((f: string, i: number) => (
-              <div key={i} className="flex aic g8" style={{ padding: '4px 0', fontSize: '12.5px' }}>
+              <div key={i} className="flex items-center gap-2" style={{ padding: '4px 0', fontSize: '12.5px' }}>
                 <span style={{ color: 'var(--status-closed)', display: 'inline-flex' }}><Icon name="check" size={13} /></span> {f}
               </div>
             ))}
-            <div className="caption mt16">
+            <div className="caption mt-4">
               {tenants?.filter((t: any) => t.plan === p.name).length || 0} tenant(s) on this plan
             </div>
           </div>

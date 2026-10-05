@@ -62,8 +62,8 @@ export default function CircularsPage() {
         list.map((c: any) => {
           const acked = session ? c.ackBy.includes(session) : false;
           return (
-            <div key={c.id} className="card card-pad mb16">
-              <div className="flex jcb aic wrap g12">
+            <div key={c.id} className="card card-pad mb-4">
+              <div className="flex justify-between items-center flex-wrap gap-3">
                 <div style={{ minWidth: 0 }}>
                   <div className="h2" style={{ marginBottom: '4px' }}>
                     {c.title}
@@ -95,8 +95,8 @@ export default function CircularsPage() {
         <div className="card">
           <div className="empty">
             <Icon name="speaker" size={32} />
-            <div className="h3 mt16 mb8">No circulars</div>
-            <p className="caption mb16">
+            <div className="h3 mt-4 mb-2">No circulars</div>
+            <p className="caption mb-4">
               Published circulars from your administrators appear here.
             </p>
           </div>

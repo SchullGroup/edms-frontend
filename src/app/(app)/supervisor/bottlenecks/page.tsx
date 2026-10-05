@@ -1,83 +1,109 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, userById, effStatus } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useDocuments, useUpdateDocument } from '@/apis/hooks/useDocuments';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useBottlenecksAgeing } from '@/apis/hooks/useWorkflowInstances';
+import { useReassignTask } from '@/apis/hooks/useTasks';
+import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
-import { Spinner } from '@/components/common/Spinner';
+import { usePermissions } from '@/hooks/usePermissions';
+import { SkeletonTable } from '@/components/common/Skeleton';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { HBarChart } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
+import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
-import { StatusBadge } from '@/components/ui/Badges';
+import { StatusBadge, SlaBadge } from '@/components/ui/Badges';
+import { WorkflowBottleneckItem } from '@/types/models';
+
+const PAGE_SIZE = 20;
+
+// Process state, not time-risk — kept as its own badge, separate from SlaBadge.
+const WORKFLOW_STATUS_LABEL: Record<string, string> = {
+  pending: 'Pending',
+  in_progress: 'In Progress',
+  on_hold: 'On Hold',
+};
 
 export default function BottlenecksPage() {
   const router = useRouter();
-  const { currentUser } = useStore();
-  const session = currentUser?.id;
+  const [page, setPage] = useState(1);
 
-  const { data: docsData, isLoading: isLoadingDocs } = useDocuments();
+  const { data, isLoading, isError, refetch } = useBottlenecksAgeing({ page, limit: PAGE_SIZE });
   const { data: usersData, isLoading: isLoadingUsers } = useUsers();
-  const documents = docsData?.data || [];
   const users = usersData?.data || [];
+  // Reassign targets: active users in the reassigner's own department only.
+  const { users: colleagues } = useDepartmentColleagues();
 
-  const updateDocument = useUpdateDocument();
+  const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+  const { setPageTitle, openModal, addToast } = useUIStore();
+  const { can } = usePermissions();
+  const canReassign = can('task', 'reassign');
 
   useEffect(() => {
     setPageTitle('Bottlenecks & Ageing');
   }, [setPageTitle]);
 
-  if (isLoadingDocs || isLoadingUsers) return <Spinner />;
+  const summary = data?.summary;
+  const ageingDistribution = data?.ageingDistribution || [];
+  const stageDistribution = data?.stageDistribution || [];
+  const items = data?.items || [];
+  const pagination = data?.pagination;
 
-  const teamDocs = documents; // mock team docs
-  const open = teamDocs.filter(d => d.status !== 'closed');
-  const aged = open.map(d => ({
-    d,
-    ageDays: Math.floor((Date.now() - (d.createdAt ? new Date(d.createdAt).getTime() : Date.now())) / 86400000),
-    stage: ((d as any).workflow?.find((s: any) => s.state === 'current') || {}).name || '—',
-    overdue: effStatus(d) === 'Overdue'
-  })).sort((a, b) => b.ageDays - a.ageDays);
+  const buckets = ageingDistribution.map((b) => ({
+    label: b.label,
+    value: b.count,
+    color:
+      b.bucket === '0_3_days'
+        ? 'var(--status-closed)'
+        : b.bucket === '4_7_days'
+          ? 'var(--status-pending)'
+          : b.bucket === '8_14_days'
+            ? 'var(--brand-accent)'
+            : 'var(--status-overdue)',
+  }));
 
-  const breaches = aged.filter(a => a.overdue);
+  const stageItems = stageDistribution.map((s) => ({
+    label: s.stageName,
+    value: s.count,
+    color: 'var(--brand-primary-light)',
+  }));
 
-  const buckets = [
-    { label: '0–3 days', value: aged.filter(a => a.ageDays <= 3).length, color: 'var(--status-closed)' },
-    { label: '4–7 days', value: aged.filter(a => a.ageDays > 3 && a.ageDays <= 7).length, color: 'var(--status-pending)' },
-    { label: '8–14 days', value: aged.filter(a => a.ageDays > 7 && a.ageDays <= 14).length, color: 'var(--brand-accent)' },
-    { label: '15+ days', value: aged.filter(a => a.ageDays > 14).length, color: 'var(--status-overdue)' }
-  ];
-
-  const byStage: Record<string, number> = {};
-  aged.forEach(a => { byStage[a.stage] = (byStage[a.stage] || 0) + 1; });
-  const stageItems = Object.entries(byStage).map(([label, value]) => ({ label, value, color: 'var(--brand-primary-light)' }));
-
-  const handleReassign = (d: any) => {
+  const handleReassign = (item: WorkflowBottleneckItem) => {
+    if (!item.canReassign || !item.currentTaskId) return;
+    const currentTaskId = item.currentTaskId;
     let newAssignee = '';
     let note = '';
     openModal({
-      title: `Reassign — ${d.title.slice(0, 44)}${d.title.length > 44 ? '…' : ''}`,
+      title: `Reassign — ${item.documentTitle.slice(0, 44)}${item.documentTitle.length > 44 ? '…' : ''}`,
       body: (
         <div>
           <div className="field">
             <label>Current assignee</label>
-            <input className="input" disabled value={userById(users, d.assignee as string)?.name || ''} />
+            <input className="input" disabled value={item.assigneeName} />
           </div>
           <div className="field">
             <label>New assignee</label>
-            <select className="input" onChange={e => newAssignee = e.target.value}>
+            <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
               <option value="">Select user...</option>
-              {users.filter(u => u.status === 'active' && u.id !== d.assignee).map(u => (
-                <option key={u.id} value={u.id}>{u.name} — {(u as any).roleLabel || (u as any).role || u.roles?.[0]}</option>
-              ))}
+              {colleagues
+                .filter((u) => u.id !== item.assigneeId)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
             </select>
           </div>
           <div className="field">
             <label>Note</label>
-            <input className="input" placeholder="Optional handover note" onChange={e => note = e.target.value} />
+            <input
+              className="input"
+              placeholder="Optional handover note"
+              onChange={(e) => (note = e.target.value)}
+            />
           </div>
         </div>
       ),
@@ -89,31 +115,78 @@ export default function BottlenecksPage() {
           onClick: () => {
             if (!newAssignee) {
               addToast('Please select a new assignee', 'error');
-              return;
+              return false;
             }
-            const prev = d.assignee;
-            updateDocument.mutate({ id: d.id, updates: { assignee: newAssignee } });
-            const name = userById(users, newAssignee as string)?.name;
-            createAuditLog.mutate({
-              action: 'REASSIGN',
-              target: d.id,
-              detail: `Reassigned from ${userById(users, prev as string)?.name} to ${name}`
-            });
-            addToast('Document reassigned to ' + name, 'success');
-            closeModal();
-          }
-        }
-      ]
+            const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
+            return reassignTask
+              .mutateAsync({ id: currentTaskId, assigneeId: newAssignee, note: note || undefined })
+              .then(() => {
+                createAuditLog.mutate({
+                  action: 'REASSIGN',
+                  target: item.documentId,
+                  detail: `Reassigned from ${item.assigneeName} to ${newName}`,
+                });
+                addToast(`Reassigned to ${newName}`, 'success');
+                refetch();
+              })
+              .catch(() => false);
+          },
+        },
+      ],
     });
   };
 
-  const cols: Column<any>[] = [
-    { key: 'title', label: 'Document', render: r => <b>{r.d.title}</b> },
-    { key: 'stage', label: 'Stuck at stage' },
-    { key: 'assignee', label: 'Assignee', render: r => <span>{userById(users, r.d.assignee as string)?.name}</span> },
-    { key: 'ageDays', label: 'Age', sortable: true, render: r => <span style={r.ageDays > 7 ? { color: 'var(--status-overdue)', fontWeight: 800 } : {}}>{r.ageDays}d</span> },
-    { key: 'status', label: 'Status', render: r => <StatusBadge status={effStatus(r.d)} /> },
-    { key: 'act', label: '', render: r => <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleReassign(r.d); }}>Reassign</button> },
+  const cols: Column<WorkflowBottleneckItem>[] = [
+    {
+      key: 'documentTitle',
+      label: 'Document',
+      render: (r) => (
+        <span>
+          <b>{r.documentTitle}</b>
+          <div className="caption">{r.cabinetName}</div>
+        </span>
+      ),
+    },
+    { key: 'currentStageName', label: 'Stuck at stage' },
+    { key: 'assigneeName', label: 'Assignee' },
+    {
+      key: 'ageDays',
+      label: 'Age',
+      sortable: true,
+      render: (r) => (
+        <span style={r.ageDays > 7 ? { color: 'var(--status-overdue)', fontWeight: 800 } : {}}>
+          {r.ageDays}d
+        </span>
+      ),
+    },
+    {
+      key: 'slaStatus',
+      label: 'SLA Status',
+      render: (r) => <SlaBadge status={r.slaStatus} />,
+    },
+    {
+      key: 'workflowStatus',
+      label: 'Workflow Status',
+      render: (r) => <StatusBadge status={WORKFLOW_STATUS_LABEL[r.workflowStatus] || r.workflowStatus} />,
+    },
+    {
+      key: 'canReassign',
+      label: '',
+      render: (r) =>
+        r.canReassign ? (
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled={!canReassign}
+            title={!canReassign ? "You don't have permission to reassign tasks" : undefined}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleReassign(r);
+            }}
+          >
+            Reassign
+          </button>
+        ) : null,
+    },
   ];
 
   return (
@@ -125,40 +198,69 @@ export default function BottlenecksPage() {
         </div>
       </div>
 
-      {breaches.length > 0 ? (
-        <div className="banner error">
-          <span dangerouslySetInnerHTML={{ __html: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>` }} style={{ marginRight: '8px' }} />
-          <b>{breaches.length} SLA breach{breaches.length > 1 ? 'es' : ''}</b> — escalations have been sent. Oldest: “{breaches[0].d.title.slice(0, 48)}…”
-        </div>
+      {isLoading || isLoadingUsers ? (
+        <SkeletonTable
+          columns={['Document', 'Stuck at stage', 'Assignee', 'Age', 'SLA Status', 'Workflow Status', '']}
+          rows={8}
+        />
+      ) : isError ? (
+        <ErrorMessage message="Failed to load bottlenecks" retry={() => refetch()} />
       ) : (
-        <div className="banner success">No active SLA breaches. Nice.</div>
+        <>
+          {summary && summary.breachedItems > 0 ? (
+            <div className="banner error">
+              <span style={{ marginRight: '8px' }}>
+                <Icon name="alert" size={15} />
+              </span>
+              <b>
+                {summary.breachedItems} SLA breach{summary.breachedItems > 1 ? 'es' : ''}
+              </b>{' '}
+              — review and reassign before they age further.
+            </div>
+          ) : (
+            <div className="banner success">No active SLA breaches. Nice.</div>
+          )}
+
+          <div className="grid cols-2 mb-4">
+            <div className="card">
+              <div className="card-head">
+                <span className="h3">Ageing distribution (open items)</span>
+              </div>
+              <div className="card-body">
+                <HBarChart items={buckets} />
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-head">
+                <span className="h3">Open items by workflow stage</span>
+              </div>
+              <div className="card-body">
+                <HBarChart items={stageItems} />
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <span className="h3">Ageing detail — oldest first</span>
+            </div>
+            <Table
+              cols={cols}
+              rows={items}
+              onRow={(r) => router.push(`/workflow-instances/${r.workflowInstanceId}`)}
+            />
+            {pagination && (
+              <Pagination
+                page={pagination.page}
+                totalPages={pagination.totalPages}
+                total={pagination.total}
+                limit={pagination.limit}
+                onPageChange={setPage}
+              />
+            )}
+          </div>
+        </>
       )}
-
-      <div className="grid cols-2 mb16">
-        <div className="card">
-          <div className="card-head">
-            <span className="h3">Ageing distribution (open items)</span>
-          </div>
-          <div className="card-body">
-            <HBarChart items={buckets} />
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-head">
-            <span className="h3">Open items by workflow stage</span>
-          </div>
-          <div className="card-body">
-            <HBarChart items={stageItems} />
-          </div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-head">
-          <span className="h3">Ageing detail — oldest first</span>
-        </div>
-        <Table cols={cols} rows={aged} onRow={(r) => router.push(`/doc/${r.d.id}`)} />
-      </div>
     </div>
   );
 }

@@ -6,17 +6,35 @@ import {
   DocumentVersion,
   CheckoutLock,
   DocumentMetadataField,
+  DocumentMetadataValueInput,
+  CreateVersionRequest,
+  UploadDocumentRequest,
+  DocumentStatsResponse,
+  AccessRequest,
 } from '@/types/models';
+
+export interface AccessRequestInboxFilters {
+  status?: 'pending' | 'approved' | 'denied';
+  page?: number;
+  limit?: number;
+}
+
+export interface DocumentStatsParams {
+  groupBy?: 'month' | 'department';
+  /** Only applied when `groupBy=month`. */
+  departmentId?: string;
+  from?: string;
+  to?: string;
+}
 
 export interface DocumentFilters {
   cabinetId?: string;
   folderId?: string;
   status?: 'pending' | 'in_progress' | 'on_hold' | 'closed';
-  confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted';
+  confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
   urgency?: 'low' | 'normal' | 'high' | 'critical';
   documentType?: string;
   createdBy?: string;
-  assignee?: string;
   includeArchived?: 'true' | 'false';
   page?: number;
   limit?: number;
@@ -29,9 +47,11 @@ export const documentsService = {
     return res.data;
   },
 
+  // Spec supports `q`, `cabinetId`, `page`, `limit`; kept permissive for call sites
+  // that pass a wider `DocumentFilters` object.
   search: async (
     query: string,
-    params?: Omit<DocumentFilters, 'page' | 'limit'> & { page?: number; limit?: number },
+    params?: DocumentFilters,
   ): Promise<PaginatedResponse<Document>> => {
     const res = await apiClient.get<PaginatedResponse<Document>>('/documents/search', {
       params: { q: query, ...params },
@@ -44,13 +64,32 @@ export const documentsService = {
     return response.data.data;
   },
 
-  create: async (data: any): Promise<Document> => {
+  // Server-side count aggregates for the management dashboards — see
+  // `DocumentStatsResponse` for the (verified) shape.
+  getStats: async (params?: DocumentStatsParams): Promise<DocumentStatsResponse> => {
+    const response = await apiClient.get<ApiResponse<DocumentStatsResponse>>('/documents/stats', {
+      params,
+    });
+    return response.data.data;
+  },
+
+  // Registers a document whose file is already in storage (S3). See `UploadDocumentRequest`
+  // for the documented shape; kept loose because the upload page passes string-typed enums.
+  create: async (data: UploadDocumentRequest | Record<string, any>): Promise<Document> => {
     const response = await apiClient.post<ApiResponse<Document>>('/documents', data);
     return response.data.data;
   },
 
+  // Documented fields: `title`, `documentType`, `folderId`, `confidentiality`, `urgency`,
+  // `status` (see `UpdateDocumentRequest`). Kept as `Partial<Document>` for existing callers.
   update: async (id: string, updates: Partial<Document>): Promise<Document> => {
     const response = await apiClient.patch<ApiResponse<Document>>(`/documents/${id}`, updates);
+    return response.data.data;
+  },
+
+  // Soft-archive — `DELETE /documents/{id}` sets `archivedAt`.
+  archive: async (id: string): Promise<Document> => {
+    const response = await apiClient.delete<ApiResponse<Document>>(`/documents/${id}`);
     return response.data.data;
   },
 
@@ -74,13 +113,14 @@ export const documentsService = {
     return response.data.data;
   },
 
+  // `PUT /documents/{id}/metadata` takes a raw array of `{ fieldId, value }`.
   updateMetadata: async (
     id: string,
-    fields: DocumentMetadataField[],
+    values: DocumentMetadataValueInput[],
   ): Promise<DocumentMetadataField[]> => {
     const response = await apiClient.put<ApiResponse<DocumentMetadataField[]>>(
       `/documents/${id}/metadata`,
-      { fields },
+      values,
     );
     return response.data.data;
   },
@@ -100,10 +140,63 @@ export const documentsService = {
     return response.data.data;
   },
 
+  // Registers a new version whose file is already in storage, and makes it current.
+  addVersion: async (id: string, data: CreateVersionRequest): Promise<DocumentVersion> => {
+    const response = await apiClient.post<ApiResponse<DocumentVersion>>(
+      `/documents/${id}/versions`,
+      data,
+    );
+    return response.data.data;
+  },
+
   restoreVersion: async (id: string, versionId: string): Promise<DocumentVersion> => {
     const response = await apiClient.post<ApiResponse<DocumentVersion>>(
       `/documents/${id}/versions/${versionId}/restore`,
     );
     return response.data.data;
+  },
+
+  // Access requests — any authenticated user may request access to any
+  // document by id (409 if they already have a pending request on it);
+  // grant/deny is client_admin-only. Verified live 2026-09-18.
+  requestAccess: async (id: string, reason?: string): Promise<AccessRequest> => {
+    const response = await apiClient.post<ApiResponse<AccessRequest>>(
+      `/documents/${id}/access-requests`,
+      reason ? { reason } : {},
+    );
+    return response.data.data;
+  },
+
+  getAccessRequests: async (id: string): Promise<AccessRequest[]> => {
+    const response = await apiClient.get<ApiResponse<AccessRequest[]>>(
+      `/documents/${id}/access-requests`,
+    );
+    return response.data.data;
+  },
+
+  grantAccessRequest: async (id: string, requestId: string): Promise<AccessRequest> => {
+    const response = await apiClient.post<ApiResponse<AccessRequest>>(
+      `/documents/${id}/access-requests/${requestId}/grant`,
+    );
+    return response.data.data;
+  },
+
+  denyAccessRequest: async (id: string, requestId: string): Promise<AccessRequest> => {
+    const response = await apiClient.post<ApiResponse<AccessRequest>>(
+      `/documents/${id}/access-requests/${requestId}/deny`,
+    );
+    return response.data.data;
+  },
+
+  /** `GET /documents/access-requests` — client_admin-only admin inbox across
+   *  every document, newest first. */
+  getAccessRequestsInbox: async (
+    filters?: AccessRequestInboxFilters,
+  ): Promise<PaginatedResponse<AccessRequest>> => {
+    const response = await apiClient.get<PaginatedResponse<AccessRequest>>(
+      '/documents/access-requests',
+      { params: filters },
+    );
+    return response.data;
   },
 };

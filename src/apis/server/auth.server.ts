@@ -45,4 +45,19 @@ export const authServer = {
     }
     return data;
   },
+
+  /** Used by `middleware.ts` to resolve the live, current-right-now roles and
+   *  permissions for a request — never cached, so a permission toggled on/off
+   *  for a user takes effect on their very next navigation. */
+  meWithBackend: async (accessToken: string): Promise<any> => {
+    const response = await fetch(`${API_URL}/api/v1/auth/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw { status: response.status || 401, data };
+    }
+    return data;
+  },
 };
