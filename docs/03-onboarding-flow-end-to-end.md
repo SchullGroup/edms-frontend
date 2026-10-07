@@ -300,8 +300,10 @@ Departments are the spine of the access model. Until they exist:
 ## Phase 3 — Filing architecture (Client Admin)
 
 **Actor:** Bola
-**Screen:** `/admin/cabinets` (Cabinet Designer)
-**Status:** ✅ **Real** for cabinets and folders · ⛔ **No UI** for metadata fields
+**Screen:** `/admin/cabinets` (Cabinet Designer); folder trees on `/staff/cabinets`
+**Status:** ✅ **Real** for cabinets, metadata fields and access grants · 🟨 folder trees moved to
+`/staff/cabinets` 2026-10-06 (not yet verified live). *This header said "⛔ No UI for metadata
+fields" until 2026-10-06 — stale since the field editor shipped (2026-09-18).*
 
 ### Steps
 
@@ -309,9 +311,10 @@ Departments are the spine of the access model. Until they exist:
 |---|---|---|---|
 | 3.1 | Create a cabinet | `POST /cabinets` `{name, description, departmentId, retentionPolicyId?}` | ✅ |
 | 3.2 | Attach to a department | same payload | ✅ — **this is what makes department-scoped document access work** |
-| 3.3 | Build the folder tree | `POST /cabinets/:cabinetId/folders` `{name, parentId?}` | ✅ |
-| 3.4 | Define custom metadata fields | `POST /cabinets/:id/metadata-fields` | ⛔ **backend only, no UI** |
-| 3.5 | Attach a retention policy | — | ⛔ no endpoint, no UI, no enforcement job |
+| 3.3 | Delegate the cabinet: grant its manager (role or user) `upload` / `edit` / `delete` | `POST /cabinets/:id/access` | ✅ Access card |
+| 3.4 | Define custom metadata fields | `POST /cabinets/:id/metadata-fields` | ✅ Metadata schema card (*was "⛔ backend only", stale — corrected 2026-10-06*) |
+| 3.5 | Build the folder tree — normally the cabinet's manager, on `/staff/cabinets` | `POST /cabinets/:cabinetId/folders` `{name, parentId?}` | 🟨 needs `folder:create` **and** `upload` on the cabinet; not verified live |
+| 3.6 | Attach a retention policy | — | ⛔ no endpoint, no UI, no enforcement job |
 
 ### The metadata gap in practice
 
@@ -330,8 +333,11 @@ Values are type-validated and normalised on write (`normalizeMetadataValue` coer
 numbers, parses dates to ISO, validates select options against the allowlist, enforces
 required fields). It is well built.
 
-**Nothing in the product can create a field.** The Cabinet Designer does not expose them.
-Consequences:
+> *Superseded 2026-09-18:* the Cabinet Designer (and, since 2026-10-06, the Cabinets page
+> for a cabinet's manager) now has a metadata-schema editor. The consequences below describe
+> a tenant where nobody has defined fields yet.
+
+**Until someone defines fields, a cabinet has none.** Consequences:
 - No cabinet has metadata fields, so `GET /documents/:id/metadata` returns `[]` for
   everything
 - The upload form has no fields to render, so documents are filed with title and type only
@@ -834,9 +840,9 @@ npm run dev                # Web   :3000
 |---|---|---|---|
 | 1 | Create the department tree | `/management/departments` | 200-row cap; no cycle detection |
 | 2 | Create cabinets, assign each to a department | `/admin/cabinets` | 100-row cap |
-| 3 | Build folder trees | `/admin/cabinets` | `folderId` isn't validated against `cabinetId` |
-| 4 | ~~Define metadata fields~~ | ⛔ | **Backend only. Use the API directly or skip.** |
-| 5 | ~~Grant cabinet access~~ | ⛔ | **No UI. Also not enforced on reads — skip for now.** |
+| 3 | Define metadata fields | `/admin/cabinets` → Metadata schema | (*was "⛔ backend only" — stale, corrected 2026-10-06*) |
+| 4 | Delegate each cabinet — grant its manager `upload`/`edit`/`delete` | `/admin/cabinets` → Access | Grants to users need step 6 first; grants to roles don't. Whether reads honour grants end to end is unverified (doc 05) |
+| 5 | Build folder trees (or leave to each cabinet's manager) | `/staff/cabinets` — not in a client_admin's sidebar; reach it via the URL or the Designer's "Open in Cabinets" | `folderId` isn't validated against `cabinetId`. 🟨 moved 2026-10-06, not verified live |
 | 6 | Create users, assign departments and roles | `/admin/users` | **You will set and communicate each password by hand.** |
 | 7 | Design and publish workflows | `/admin/workflows` | **Anyone can publish or archive these. Restrict who has an account until fixed.** |
 | 8 | Set branding | `/admin/branding` | 🟥 **localStorage only — resets on cache clear.** |

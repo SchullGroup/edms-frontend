@@ -236,9 +236,9 @@ This must be done in order; each step produces the input for the next.
 | 1 | Log in, land on Admin Home | `/admin` | `GET /users`, `GET /cabinets` | ✅ |
 | 2 | **Create the department tree** | `/management/departments` | `POST /departments` | ✅ |
 | 3 | **Create cabinets, assign to departments** | `/admin/cabinets` | `POST /cabinets` | ✅ |
-| 4 | **Build folder trees** | `/admin/cabinets` | `POST /cabinets/:id/folders` | ✅ |
-| 5 | Define cabinet metadata fields | — | `POST /cabinets/:id/metadata-fields` | ⛔ **no UI** |
-| 6 | Grant cabinet access to roles/users | — | `POST /cabinets/:id/access` | ⛔ **no UI** |
+| 4 | **Delegate each cabinet** — grant its manager (a role or user) `upload`/`edit`/`delete` on it | `/admin/cabinets` → Access card | `POST /cabinets/:id/access` | ✅ (*was "⛔ no UI" here — stale since 2026-09-18, corrected 2026-10-06*) |
+| 5 | Define cabinet metadata fields | `/admin/cabinets` → Metadata schema card | `POST /cabinets/:id/metadata-fields` | ✅ (*same stale "⛔ no UI", corrected 2026-10-06*) |
+| 6 | Build folder trees — usually by the cabinet's manager, not the admin | `/staff/cabinets` | `POST /cabinets/:id/folders` | 🟨 moved here from `/admin/cabinets` 2026-10-06, not yet verified live |
 | 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles`, `POST /users/:id/invitation` | 🟨 new users get a hardcoded default password, not an emailed invite; **resending** an invite (for existing active users) is wired |
 | 8 | **Design and publish workflows** | `/admin/workflows` | `POST /workflows`, `/publish` | 🟨 **no authorization** |
 | 9 | Set retention and confidentiality policy | `/admin/policies` | — | 🟥 `SEED.policies` |
@@ -246,7 +246,7 @@ This must be done in order; each step produces the input for the next.
 | 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | 🟨 wired 2026-10-05, not yet verified live |
 | 12 | Review the tenant audit trail | `/admin/audit` | `GET /audit`, `/audit/verify` | ✅ wired 2026-09-18 (was `SEED.audit`) |
 
-**Steps 2, 3, 4, 7, 8 and 12 are real.** Everything else is either missing a UI or writes
+**Steps 2, 3, 4, 5, 7, 8 and 12 are real; step 6 is wired but not yet verified live.** Everything else is either missing a UI or writes
 only to localStorage.
 
 ### First week
@@ -337,7 +337,7 @@ workflow:route:global
 |---|---|---|---|
 | 1 | Log in with the password the admin gave them | `/` | ✅ ⚠️ no forced change |
 | 2 | Land on the Staff Dashboard | `/staff` | 🟨 tasks from API, notifications ⛔ 404 |
-| 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ |
+| 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (🟨 added 2026-10-06, not verified live; each action needs the role permission **and** the cabinet level — see doc 05) |
 | 4 | Upload their first document | `/upload` | ✅ |
 | 5 | Watch it appear in the cabinet | `/staff/cabinets` | ✅ |
 | 6 | Open it and check the details | `/doc/[id]` | ✅ |

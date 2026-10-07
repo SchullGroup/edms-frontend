@@ -101,16 +101,18 @@ Every classification below was verified by inspecting what each page destructure
 | Staff Workspace | 4 | 3 | 1 | — | **Strongest.** Real data throughout. |
 | Supervisor Console | 6 | 3 | 1 | 2 | Approvals and ageing real; exceptions/performance fixture. |
 | Management Portal | 7 | 4 | 1 | 2 | The only fully API-driven pages — and the ones that don't scale. |
-| Client Administration | 8 | 3 | 1 | 3 | Structure real; policy/branding mock. `/admin/circulars` is now a redirect to `/circulars/manage` (2026-10-05). |
+| Client Administration | 8 | 2 | 2 | 3 | Structure real; policy/branding mock. `/admin/circulars` is now a redirect to `/circulars/manage` (2026-10-05). |
 | Audit & Compliance | 4 | — | — | 4 | **Weakest. Zero API calls.** |
 | Platform Admin | 6 | — | — | 6 | Mock by design (Phase 2). |
 | Shared | 11 | 2 | 7 | 1 | Login and upload real; circulars wired to the API (5 pages, 🟨 not verified live); notifications fixture. |
-| **Total** | **46** | **15** | **11** | **18** | |
+| **Total** | **46** | **14** | **12** | **18** | |
 
 *(44 classified + `/unauthorized`, which is static markup, + the `/admin/circulars`
 redirect. The 🟨 column counts 6 Hybrid pages and 5 circulars pages that are API-only but
 not yet verified end to end — 🟨 Partial, not ✅, per house rule 1. Re-derived 2026-10-05
-for the circulars rows only; the other rows carry their earlier counts.)*
+for the circulars rows only; the other rows carry their earlier counts. 2026-10-06:
+`/admin/cabinets` moved ✅ → 🟨 after its rework, pending a re-check; Staff's one 🟨 is
+now `/staff/cabinets` as Partial rather than Hybrid — see its row.)*
 
 ### By data source
 
@@ -210,7 +212,7 @@ shared — see [Shared pages](#shared-pages-used-by-multiple-roles).*
 |---|---:|---|---|---|
 | `/staff` | 283 | `currentUser` | `useTasks` ✅ · `useNotifications` ⛔ | ✅ Live (notification panel dead) |
 | `/staff/tasks` | 162 | `currentUser` | `useTasks` ✅ | ✅ Live |
-| `/staff/cabinets` | 423 | `session`, **`users`** | `useCabinets`, `useCabinetFolders`, `useDocuments` ✅ | 🟨 Hybrid — names resolved from `SEED.USERS` |
+| `/staff/cabinets` | 821 | `auditAction` only | `useCabinets`, `useCabinet`, `useCabinetFolders`, `useDocuments`, `useUsers` ✅ · folder create/rename/delete, `documentsService.update` (move), metadata-field + access-grant hooks via the shared `components/cabinets/` cards | 🟨 Partial — cabinet management added 2026-10-06 (see below), not yet verified live. *Uploader names come from `useUsers`, not `SEED.USERS` as this row used to say — corrected 2026-10-06* |
 | `/staff/performance` | 212 | `currentUser` | `useDocuments`, `useTasks` ✅ | ✅ Live |
 
 ### APIs wired ✅
@@ -232,7 +234,27 @@ GET   /circulars/inbox             ?filter=&archived=&search=   recipient inbox 
 GET   /circulars/inbox/summary     unread / unacknowledged counts (sidebar badge)
 GET   /circulars/inbox/:id         open a circular — records the read receipt
 POST  /circulars/inbox/:id/acknowledge   🟨 wired 2026-10-05, not verified live
+GET    /cabinets/:id                         cabinet detail — its embedded `access` grants give the caller's own level
+POST   /cabinets/:cabinetId/folders          🟨 new folder        folder:create + `upload` on the cabinet
+PATCH  /folders/:id                          🟨 rename folder     folder:edit   + `edit`
+DELETE /folders/:id                          🟨 delete folder     folder:delete + `delete` (empty folders only)
+PATCH  /documents/:id   { folderId }         🟨 move document     document:edit + `edit` (same cabinet only)
 ```
+
+**Cabinet management on `/staff/cabinets` (2026-10-06, not yet verified live).** Folder
+structure moved here from Cabinet Designer, so a client admin can delegate a cabinet to
+staff instead of running every cabinet's structure themselves. Every action shows only when
+the user holds **both** the role permission and the cabinet level in the table above (the
+two checks the API makes). The level is read from the grants embedded in
+`GET /cabinets/:id` by `useMyCabinetAccess` (`src/components/cabinets/cabinetAccess.ts`) —
+client_admin has every level, otherwise the strongest grant to the user or one of their
+roles, otherwise `view`. Users who can also manage the schema
+(`cabinet_metadata_field:*` + `edit`) or grant access (`cabinet_access:create` + `edit`) get
+**Metadata schema** / **Access** tabs on the cabinet — the same cards Cabinet Designer uses.
+Known limits, all on the API side: documents can't move between cabinets or out of a folder
+(`PATCH /documents/:id` drops `cabinetId` and rejects a null `folderId`), so the move dialog
+offers only this cabinet's other folders; and the grant rules (no granting to yourself, to a
+role you hold, or above your own level) are enforced by the UI only.
 
 ### APIs missing ⛔
 
@@ -539,7 +561,7 @@ approximation, not a silent one.
 | `/admin` | 114 | `currentUser` | `useUsers`, `useCabinets` ✅ | ✅ Live |
 | `/admin/users` | ~320 | `auditAction` only | `useUsers` + mutations, `useRoles` (picker), `useAssign/RemoveUserRole`, `useResendInvitation` ✅ | ✅ Live — users only since 2026-09-10 (roles split out); "Resend invite" added 2026-09-18 |
 | `/admin/roles` | ~470 | `auditAction` only | `useRoles`, `useCreate/Update/DeleteRole`, `useSetRolePermissions` ✅ | ✅ Live — rail + data-driven permission matrix; catalog derived from the `GET /roles` union (no `GET /permissions` exists); built-in roles read-only |
-| `/admin/cabinets` | 346 | `auditAction` only | `useCabinets`, `useCabinetFolders`, `useDepartments` ✅ | ✅ Live |
+| `/admin/cabinets` | 448 | `auditAction` only | `useCabinets`, `useDepartments`, `useCreateFolder` (seeds "General") ✅ · metadata-field + access-grant hooks via the shared `components/cabinets/` cards | 🟨 Partial — reworked 2026-10-06: folder tools and the document browser moved to `/staff/cabinets`; schema and access cards extracted into shared components. Pending end-to-end re-check |
 | `/admin/workflows` | 493 | `auditAction` only | `useWorkflows` + mutations ✅ · `@ts-nocheck` | ✅ Live ⚠️ **no authorization on the endpoints** |
 | `/admin/policies` | 244 | `auditAction` | `usePolicies` 🟥 | 🟥 Mock |
 | `/admin/branding` | 397 | `auditAction` | `useBranding` 🟥 | 🟥 Mock |
@@ -587,8 +609,8 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 
 | Needed | Backend status | Impact |
 |---|---|---|
-| `POST/PATCH/DELETE /cabinets/:id/metadata-fields` | ✅ **Wired** — `admin/cabinets/page.tsx` has a metadata-field designer (this row was stale, caught 2026-09-18) | — |
-| `GET/POST /cabinets/:id/access`, `DELETE .../:grantId` | ✅ **Wired** — `useCabinetAccessGrants`/`useGrantCabinetAccess` in `admin/cabinets/page.tsx` (stale here; caught 2026-09-18) | — |
+| `POST/PATCH/DELETE /cabinets/:id/metadata-fields` | ✅ **Wired** — `components/cabinets/CabinetSchemaCard.tsx`, used by `admin/cabinets` and (since 2026-10-06) `staff/cabinets` (this row was stale, caught 2026-09-18) | — |
+| `GET/POST /cabinets/:id/access`, `DELETE .../:grantId` | ✅ **Wired** — `components/cabinets/CabinetAccessCard.tsx`, used by `admin/cabinets` and (since 2026-10-06) `staff/cabinets` (stale here; caught 2026-09-18). ⚠️ The API doesn't stop a non-admin granting to themselves, to a role they hold, or above their own level — only the card's pickers do | — |
 | `PUT /roles/:id/permissions` | ✅ **Wired** via `useSetRolePermissions` — this row contradicted the page's own inventory entry above (`/admin/roles`), which already correctly said so; see the README's 2026-09-10 correction note | — |
 | `POST /users/:id/invitation` | ✅ **Built & wired 2026-09-18** | "Resend invite" button, shown for active users with no `lastLoginAt` |
 | Password reset | ✅ **Built** — `POST /auth/reset-password`; was broken by a field-name bug until fixed 2026-09-18 (DRIFT-15) | New users/resets both land on `/set-password` |
@@ -611,9 +633,9 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 |---|---|---|
 | Create departments | ✅ | ⚠️ 200 cap, no cycle detection |
 | Create cabinets, assign to departments | ✅ | ⚠️ 100 cap |
-| Build folder trees | ✅ | ⚠️ `folderId` not validated against `cabinetId` |
-| Define cabinet metadata fields | ✅ | Wired in `admin/cabinets/page.tsx` — row was stale, caught 2026-09-18 |
-| Grant cabinet access | ✅ | Wired in `admin/cabinets/page.tsx` — row was stale, caught 2026-09-18 |
+| Build folder trees | 🟨 | Moved 2026-10-06 from `/admin/cabinets` to `/staff/cabinets`, for whoever the cabinet is delegated to; not yet verified live. ⚠️ `folderId` not validated against `cabinetId` |
+| Define cabinet metadata fields | ✅ | Wired in `admin/cabinets/page.tsx` — row was stale, caught 2026-09-18. Also on `/staff/cabinets` since 2026-10-06 (🟨 not verified live there) |
+| Grant cabinet access | ✅ | Wired in `admin/cabinets/page.tsx` — row was stale, caught 2026-09-18. Also on `/staff/cabinets` since 2026-10-06 (🟨 not verified live there) |
 | Create users with dept + roles | ✅ | ⚠️ new users get a default password (`password`), not an emailed invite — see backlog |
 | Resend a user's invitation email | ✅ | Added 2026-09-18; shown for active users with no `lastLoginAt` |
 | Assign / remove roles | ✅ | |
