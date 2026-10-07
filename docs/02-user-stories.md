@@ -369,8 +369,13 @@ with required metadata is still filed incomplete every time.
 - [x] Backend: fields definable per cabinet with all five types
 - [x] Backend: values validated against the field type on write
 - [x] Backend: required-field enforcement on update
-- [x] Admin UI to add and delete fields (`/admin/cabinets` metadata panel)
-- [ ] Admin UI to edit and reorder an existing field (`PATCH` endpoint is unused)
+- [x] Admin UI to add and delete fields (`/admin/cabinets` metadata panel; since 2026-10-06
+      also the cabinet's **Metadata schema** tab on `/staff/cabinets` for its manager — 🟨 not
+      verified live there)
+- [x] Edit an existing field's name and required flag (`PATCH .../metadata-fields/:fieldId`)
+      — *this box said the PATCH endpoint was unused; the Designer's "Edit" button has called it
+      since at least 2026-09-21. Corrected 2026-10-06*
+- [ ] Reorder fields (`displayOrder` is only set on create)
 - [ ] Upload form renders the target cabinet's fields
 - [ ] Document detail renders and edits them
 - [ ] ⚠️ Backend bug: sending all-null values to clear metadata silently no-ops
@@ -782,16 +787,28 @@ Full CRUD exists at `GET/POST /cabinets/:id/access` and
 (role or individual user, with the permission level) on the live endpoints. The
 outstanding problem is the one that always mattered:
 
-- **Grants are not enforced on reads.** `requireCabinetAccess` appears only on write
-  routes. Cabinet listing, cabinet detail, document listing, document detail and search
-  never consult the table. A user with `cabinet:view:global` sees everything. Backend fix.
+- **Grants are not enforced on every read.** *Partly stale — corrected 2026-10-06 from the
+  backend code (not a live test):* the cabinet **list** now filters on grants
+  (`buildCabinetWhere`), and cabinet **detail** and **folder** reads go through
+  `requireCabinetAccess('view')`. Document listing, document detail and search were not
+  re-checked and may still ignore grants. Backend fix if so.
+
+**Delegated cabinet management (2026-10-06, 🟨 not verified live).** The same access panel
+now also appears as an **Access** tab on `/staff/cabinets` for anyone holding
+`cabinet_access:create` and `edit` on that cabinet, so a client admin can hand a cabinet to
+a records officer. The picker leaves out the user themselves, roles they hold, client admins
+(who already reach every cabinet) and levels above their own — **UI-only**: the API doesn't
+refuse any of these yet.
 
 **Acceptance criteria**
 - [x] Backend: role and user grants with a permission hierarchy
 - [x] Backend: `client_admin` bypasses grants by design
 - [x] Backend: enforced on document upload, edit, delete and routing
 - [x] Admin UI to view, grant and revoke (`/admin/cabinets` access panel)
-- [ ] 🔴 Enforced on **read** paths — the whole point of the model
+- [ ] 🟨 Delegated managers grant and revoke from `/staff/cabinets` (built 2026-10-06, not
+      verified live); self-grant / escalation blocked in the UI only — needs a backend rule
+- [ ] 🔴 Enforced on **read** paths — cabinet list/detail and folders now are (code-read
+      2026-10-06); document list/detail/search unverified
 - [ ] "Who can see this cabinet?" view for auditors (`cabinet_access:view` is already
       granted to `internal_auditor` with no endpoint to use it)
 

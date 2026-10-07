@@ -419,6 +419,17 @@ unchanged (53). Doc 05's `/doc/[id]` table also claimed "file preview/download �
 exists"; the code clearly uses the pre-signed `currentVersion.fileUrl`, so that row is
 re-marked 🟨 pending a live check rather than ✅.
 
+**Correction (2026-10-06).** While moving folder management from Cabinet Designer to
+`/staff/cabinets`, several stale claims turned up and were fixed in place: doc 04's
+client-admin day one and doc 03's Phase 3 / runbook still said cabinet metadata fields and
+access grants had **no UI** (both shipped 2026-09-18 — doc 05 already said so); doc 02's
+B1 said the metadata-field `PATCH` was unused (the Designer's Edit button calls it); doc 02
+said cabinet list/detail reads ignore grants (the backend's `buildCabinetWhere` and
+`requireCabinetAccess('view')` now consult them — checked by reading `edms-backend` `dev`,
+not live); and doc 05's `/staff/cabinets` row said uploader names come from `SEED.USERS`
+(they come from `useUsers`). `/admin/cabinets` moved ✅ → 🟨 in doc 05's portfolio table
+pending a re-check after the rework, so Client Administration is now 2 ✅ / 2 🟨.
+
 ---
 
 ## Relationship to the older docs

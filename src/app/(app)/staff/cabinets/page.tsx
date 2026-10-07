@@ -2,21 +2,30 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { cabById, userById } from '@/store/useStore';
+import { cabById, userById, useStore } from '@/store/useStore';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useDocuments, useAllDocuments } from '@/apis/hooks/useDocuments';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { documentsService } from '@/apis/services/documents.service';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCabinetFolders } from '@/apis/hooks/useFolders';
+import {
+  useCabinetFolders,
+  useCreateFolder,
+  useUpdateFolder,
+  useDeleteFolder,
+} from '@/apis/hooks/useFolders';
 import { useUIStore } from '@/store/useUIStore';
+import { usePermissions } from '@/hooks/usePermissions';
 import { documentStatusLabel } from '@/utils/helpers';
 import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
 import { Table, Column } from '@/components/ui/Table';
 import { Skeleton, SkeletonTable, SkeletonTreeRows } from '@/components/common/Skeleton';
+import { cabinetAllows, useMyCabinetAccess } from '@/components/cabinets/cabinetAccess';
+import { CabinetSchemaCard, useCanManageSchema } from '@/components/cabinets/CabinetSchemaCard';
+import { CabinetAccessCard, useCanGrantAccess } from '@/components/cabinets/CabinetAccessCard';
 
 /** Sentinel `activeFolder` value for "documents in this cabinet with no
  *  folder" — `GET /documents` has no `folderId=null` filter (only exact
@@ -38,7 +47,9 @@ export default function CabinetBrowserPage() {
   const queryClient = useQueryClient();
   const { data: usersData } = useUsers();
   const users = usersData?.data || [];
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+  const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
+  const { auditAction } = useStore();
+  const { can } = usePermissions();
 
   const [activeCab, setActiveCab] = useState<string | null>(searchParams?.get('cab') || null);
   const [activeFolder, setActiveFolder] = useState<string | null>(
@@ -46,6 +57,7 @@ export default function CabinetBrowserPage() {
   );
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [selected, setSelected] = useState<any[]>([]);
+  const [cabTab, setCabTab] = useState<'folders' | 'schema' | 'access'>('folders');
 
   useEffect(() => {
     setPageTitle('Cabinet Browser');
@@ -81,85 +93,180 @@ export default function CabinetBrowserPage() {
     activeCab || undefined,
   );
   const activeCabFolders = activeCabFoldersData?.data || [];
+  const activeCabinet = activeCab ? cabById(cabinets, activeCab) : undefined;
+  const openFolder = showingRealFolder
+    ? activeCabFolders.find((f: any) => f.id === activeFolder)
+    : undefined;
 
   const { routeDocuments } = useRouteToWorkflow();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const MoveModalBody = ({ cabinets, selectedDocs, onMove }: any) => {
-    const [selCab, setSelCab] = useState(cabinets[0]?.id || '');
-    const { data: folData } = useCabinetFolders(selCab);
-    const folders = folData?.data || [];
-    const [selFol, setSelFol] = useState('');
+  // Every action below needs a role permission AND a level on this cabinet —
+  // the two checks the API makes — so each shows only when both pass.
+  const myLevel = useMyCabinetAccess(activeCab);
+  const canCreateFolder = can('folder', 'create') && cabinetAllows(myLevel, 'upload');
+  const canRenameFolder = can('folder', 'edit') && cabinetAllows(myLevel, 'edit');
+  const canDeleteFolder = can('folder', 'delete') && cabinetAllows(myLevel, 'delete');
+  const canMoveDocuments = can('document', 'edit') && cabinetAllows(myLevel, 'edit');
+  const canManageSchema = useCanManageSchema(activeCabinet);
+  const canGrantAccess = useCanGrantAccess(activeCabinet);
 
-    return (
-      <div className="field">
-        <label>Destination Cabinet</label>
-        <select
-          className="input mb2"
-          value={selCab}
-          onChange={(e) => {
-            setSelCab(e.target.value);
-            setSelFol('');
-          }}
-        >
-          {cabinets.map((c: any) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <label>Destination Folder (Optional)</label>
-        <select className="input" value={selFol} onChange={(e) => setSelFol(e.target.value)}>
-          <option value="">-- No Folder --</option>
-          {folders.map((f: any) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-            </option>
-          ))}
-        </select>
-        <div className="mt-1 flex justify-end" style={{ gap: '8px' }}>
-          <button className="btn" onClick={closeModal}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" onClick={() => onMove(selCab, selFol)}>
-            Move
-          </button>
+  useEffect(() => {
+    setCabTab('folders');
+  }, [activeCab]);
+
+  const createFolder = useCreateFolder();
+  const updateFolder = useUpdateFolder();
+  const deleteFolder = useDeleteFolder();
+
+  const handleNewFolder = () => {
+    if (!activeCabinet) return;
+    let name = '';
+    openModal({
+      title: 'New folder in ' + activeCabinet.name,
+      body: (
+        <div className="field">
+          <label>Name</label>
+          <input
+            className="input"
+            placeholder="Folder name"
+            maxLength={200}
+            onChange={(e) => (name = e.target.value)}
+          />
         </div>
-      </div>
-    );
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Add folder',
+          kind: 'btn-primary',
+          onClick: () => {
+            if (!name.trim()) return false;
+            return createFolder
+              .mutateAsync({ cabinetId: activeCabinet.id, data: { name: name.trim() } })
+              .then(() => {
+                auditAction('FOLDER_CREATE', activeCabinet.id, 'Added folder ' + name.trim());
+              })
+              .catch(() => false);
+          },
+        },
+      ],
+    });
   };
 
-  const handleMoveModal = () => {
+  const handleRenameFolder = (f: any) => {
+    let name = f.name;
     openModal({
-      title: `Move ${selected.length} document(s)`,
+      title: `Rename folder "${f.name}"`,
       body: (
-        <MoveModalBody
-          cabinets={cabinets}
-          selectedDocs={selected}
-          onMove={(cab: string, fol: string) => {
-            setIsSubmitting(true);
-            (async () => {
-              try {
-                await Promise.all(
-                  selected.map((d) =>
-                    documentsService.update(d.id, { cabinetId: cab, folderId: fol || undefined }),
-                  ),
-                );
-                queryClient.invalidateQueries({ queryKey: ['documents'] });
-                addToast('Documents moved', 'success');
-                setSelected([]);
-                closeModal();
-              } catch (err: any) {
-                addToast(err.message || 'Failed to move documents', 'error');
-              } finally {
-                setIsSubmitting(false);
-              }
-            })();
-          }}
+        <div className="field">
+          <label>Folder name</label>
+          <input
+            className="input"
+            defaultValue={f.name}
+            maxLength={200}
+            onChange={(e) => (name = e.target.value)}
+          />
+        </div>
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save',
+          kind: 'btn-primary',
+          onClick: () => {
+            if (!name.trim() || name.trim() === f.name) return;
+            return updateFolder
+              .mutateAsync({ id: f.id, updates: { name: name.trim() } })
+              .then(() => {
+                auditAction('FOLDER_EDIT', f.cabinetId, `Renamed folder → ${name.trim()}`);
+              })
+              .catch(() => false);
+          },
+        },
+      ],
+    });
+  };
+
+  const handleDeleteFolder = (f: any) => {
+    if ((f._count?.documents ?? 0) > 0) {
+      addToast('Folder contains documents — move them first', 'error');
+      return;
+    }
+    openConfirm({
+      title: `Delete folder "${f.name}"?`,
+      message: 'The folder is empty and will be removed from the cabinet structure.',
+      confirmLabel: 'Delete folder',
+      danger: true,
+      onConfirm: () =>
+        deleteFolder
+          .mutateAsync({ id: f.id, cabinetId: f.cabinetId })
+          .then(() => {
+            auditAction('FOLDER_DELETE', f.cabinetId, 'Deleted ' + f.name);
+            setActiveFolder(null);
+            setSelected([]);
+          })
+          .catch(() => false),
+    });
+  };
+
+  /**
+   * Moves the selected documents to another folder in the same cabinet. The API
+   * can't move a document between cabinets (`PATCH /documents/{id}` ignores
+   * `cabinetId`) or take it out of a folder (`folderId` can't be null), so the
+   * picker offers neither — only this cabinet's other folders.
+   */
+  const handleMoveModal = () => {
+    const docs = selected;
+    const destinations = activeCabFolders.filter((f: any) => f.id !== activeFolder);
+    let destFolderId = '';
+    openModal({
+      title: docs.length > 1 ? `Move ${docs.length} documents` : `Move “${docs[0].title}”`,
+      body: (
+        <MoveDocumentsModalBody
+          folders={destinations}
+          onChange={(folderId) => (destFolderId = folderId)}
         />
       ),
-      actions: [],
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: docs.length > 1 ? `Move ${docs.length}` : 'Move',
+          kind: 'btn-primary',
+          onClick: () => {
+            if (!destFolderId) {
+              addToast('Choose a destination folder', 'error');
+              return false;
+            }
+            setIsSubmitting(true);
+            return Promise.all(
+              docs.map((d) => documentsService.update(d.id, { folderId: destFolderId })),
+            )
+              .then(() => {
+                docs.forEach((d) => auditAction('DOCUMENT_MOVE', d.id, `Moved “${d.title}”`));
+                addToast(
+                  docs.length > 1 ? `${docs.length} documents moved` : 'Document moved',
+                  'success',
+                );
+                setSelected([]);
+              })
+              .catch((err: any) => {
+                addToast(err.response?.data?.message || 'Failed to move documents', 'error');
+                return false;
+              })
+              .finally(() => {
+                // Promise.all rejects on the first failure while others may
+                // still have landed, so refetch either way. Folder and cabinet
+                // queries carry the document counts shown on the cards.
+                queryClient.invalidateQueries({ queryKey: ['documents'] });
+                queryClient.invalidateQueries({ queryKey: ['folders'] });
+                queryClient.invalidateQueries({ queryKey: ['cabinets'] });
+                setIsSubmitting(false);
+              });
+          },
+        },
+      ],
     });
   };
 
@@ -320,8 +427,30 @@ export default function CabinetBrowserPage() {
               )}
             </div>
 
+            {activeCab && !activeFolder && canCreateFolder && cabTab === 'folders' && (
+              <button className="btn btn-secondary btn-sm" onClick={handleNewFolder}>
+                + New folder
+              </button>
+            )}
+
             {activeFolder && (
               <div className="flex items-center gap-3">
+                {openFolder && canRenameFolder && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => handleRenameFolder(openFolder)}
+                  >
+                    Rename folder
+                  </button>
+                )}
+                {openFolder && canDeleteFolder && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => handleDeleteFolder(openFolder)}
+                  >
+                    Delete folder
+                  </button>
+                )}
                 <div className="urg-legend">
                   <span>
                     <span className="urg-dot critical" /> Critical
@@ -351,13 +480,15 @@ export default function CabinetBrowserPage() {
           {selected.length > 0 && (
             <div className="bulkbar">
               <b>{selected.length} selected</b>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={handleMoveModal}
-                disabled={isSubmitting}
-              >
-                Move
-              </button>
+              {canMoveDocuments && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleMoveModal}
+                  disabled={isSubmitting}
+                >
+                  Move
+                </button>
+              )}
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={handleRouteModal}
@@ -419,66 +550,123 @@ export default function CabinetBrowserPage() {
               )}
             </div>
           ) : !activeFolder ? (
-            <div className="card">
-              {isLoadingFolders || isLoadingCabinetAllDocs ? (
-                <div className="doc-grid">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="doc-card" style={{ cursor: 'default' }} aria-hidden="true">
-                      <Skeleton height={70} radius={10} style={{ width: '100%', marginBottom: '11px' }} />
-                      <Skeleton height={12} width="70%" />
-                    </div>
-                  ))}
+            <>
+              {(canManageSchema || canGrantAccess) && (
+                <div className="tabs mb-4" role="tablist" aria-label="Cabinet sections">
+                  <button
+                    role="tab"
+                    aria-selected={cabTab === 'folders'}
+                    className={`tab ${cabTab === 'folders' ? 'active' : ''}`}
+                    onClick={() => setCabTab('folders')}
+                  >
+                    Folders
+                  </button>
+                  {canManageSchema && (
+                    <button
+                      role="tab"
+                      aria-selected={cabTab === 'schema'}
+                      className={`tab ${cabTab === 'schema' ? 'active' : ''}`}
+                      onClick={() => setCabTab('schema')}
+                    >
+                      Metadata schema
+                    </button>
+                  )}
+                  {canGrantAccess && (
+                    <button
+                      role="tab"
+                      aria-selected={cabTab === 'access'}
+                      className={`tab ${cabTab === 'access' ? 'active' : ''}`}
+                      onClick={() => setCabTab('access')}
+                    >
+                      Access
+                    </button>
+                  )}
                 </div>
-              ) : activeCabFolders.length === 0 && unfiledDocs.length === 0 ? (
-                <div className="empty">
-                  <Icon name="folder" size={32} />
-                  <div className="h3 mt-4 mb-2">No folders in this cabinet yet</div>
-                  <p className="caption mb-4">An administrator sets these up.</p>
-                </div>
+              )}
+              {cabTab === 'schema' && canManageSchema && activeCabinet ? (
+                <CabinetSchemaCard cabinet={activeCabinet} />
+              ) : cabTab === 'access' && canGrantAccess && activeCabinet ? (
+                <CabinetAccessCard cabinet={activeCabinet} />
               ) : (
-                <div className="doc-grid">
-                  {activeCabFolders.map((f: any) => (
-                    <div
-                      key={f.id}
-                      className="doc-card"
-                      onClick={() => {
-                        setActiveFolder(f.id);
-                        setSelected([]);
-                      }}
-                    >
-                      <div className="doc-thumb">
-                        <Icon name="folder" size={28} />
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: '12.5px', lineHeight: 1.4 }}>
-                        {f.name}
-                      </div>
-                      <div className="caption" style={{ marginTop: '4px' }}>
-                        {f._count?.documents ?? 0} doc{f._count?.documents === 1 ? '' : 's'}
-                      </div>
+                <div className="card">
+                  {isLoadingFolders || isLoadingCabinetAllDocs ? (
+                    <div className="doc-grid">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="doc-card"
+                          style={{ cursor: 'default' }}
+                          aria-hidden="true"
+                        >
+                          <Skeleton
+                            height={70}
+                            radius={10}
+                            style={{ width: '100%', marginBottom: '11px' }}
+                          />
+                          <Skeleton height={12} width="70%" />
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                  {unfiledDocs.length > 0 && (
-                    <div
-                      className="doc-card"
-                      onClick={() => {
-                        setActiveFolder(UNFILED);
-                        setSelected([]);
-                      }}
-                    >
-                      <div className="doc-thumb">
-                        <Icon name="doc" size={28} />
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: '12.5px', lineHeight: 1.4 }}>
-                        Unfiled documents
-                      </div>
-                      <div className="caption" style={{ marginTop: '4px' }}>
-                        {unfiledDocs.length} doc{unfiledDocs.length === 1 ? '' : 's'}
-                      </div>
+                  ) : activeCabFolders.length === 0 && unfiledDocs.length === 0 ? (
+                    <div className="empty">
+                      <Icon name="folder" size={32} />
+                      <div className="h3 mt-4 mb-2">No folders in this cabinet yet</div>
+                      {canCreateFolder ? (
+                        <button className="btn btn-primary btn-sm" onClick={handleNewFolder}>
+                          + New folder
+                        </button>
+                      ) : (
+                        <p className="caption mb-4">
+                          Folders are set up by whoever manages this cabinet.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="doc-grid">
+                      {activeCabFolders.map((f: any) => (
+                        <div
+                          key={f.id}
+                          className="doc-card"
+                          onClick={() => {
+                            setActiveFolder(f.id);
+                            setSelected([]);
+                          }}
+                        >
+                          <div className="doc-thumb">
+                            <Icon name="folder" size={28} />
+                          </div>
+                          <div style={{ fontWeight: 700, fontSize: '12.5px', lineHeight: 1.4 }}>
+                            {f.name}
+                          </div>
+                          <div className="caption" style={{ marginTop: '4px' }}>
+                            {f._count?.documents ?? 0} doc{f._count?.documents === 1 ? '' : 's'}
+                          </div>
+                        </div>
+                      ))}
+                      {unfiledDocs.length > 0 && (
+                        <div
+                          className="doc-card"
+                          onClick={() => {
+                            setActiveFolder(UNFILED);
+                            setSelected([]);
+                          }}
+                        >
+                          <div className="doc-thumb">
+                            <Icon name="doc" size={28} />
+                          </div>
+                          <div style={{ fontWeight: 700, fontSize: '12.5px', lineHeight: 1.4 }}>
+                            Unfiled documents
+                          </div>
+                          <div className="caption" style={{ marginTop: '4px' }}>
+                            {unfiledDocs.length} doc{unfiledDocs.length === 1 ? '' : 's'}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
-            </div>
+            </>
           ) : isLoadingDocList ? (
             <div className="card">
               {view === 'grid' ? (
@@ -555,6 +743,49 @@ export default function CabinetBrowserPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Destination picker for moving documents within one cabinet. Reports the
+ *  chosen folder through `onChange` (the modal's action reads it on submit). */
+function MoveDocumentsModalBody({
+  folders,
+  onChange,
+}: {
+  folders: { id: string; name: string }[];
+  onChange: (folderId: string) => void;
+}) {
+  const [folderId, setFolderId] = useState('');
+
+  if (folders.length === 0) {
+    return (
+      <p className="caption" style={{ lineHeight: 1.6 }}>
+        There are no other folders in this cabinet to move these documents into.
+      </p>
+    );
+  }
+  return (
+    <div className="field">
+      <label>Destination folder</label>
+      <select
+        className="input"
+        value={folderId}
+        onChange={(e) => {
+          setFolderId(e.target.value);
+          onChange(e.target.value);
+        }}
+      >
+        <option value="" disabled>
+          Choose a folder…
+        </option>
+        {folders.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}
+          </option>
+        ))}
+      </select>
+      <div className="help">Documents can only be moved between folders in the same cabinet.</div>
     </div>
   );
 }

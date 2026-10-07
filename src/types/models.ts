@@ -1012,6 +1012,9 @@ export interface Cabinet {
    *  schema, and never on the `GET /cabinets` list, but confirmed embedded on the
    *  live single-cabinet response. */
   metadataFields?: CabinetMetadataField[];
+  /** Only on `GET /cabinets/{id}`: every access grant on the cabinet, each with
+   *  its `role`/`user` embedded. `useMyCabinetAccess` reads the caller's level from it. */
+  access?: CabinetAccessGrant[];
   _count?: {
     documents: number;
     folders?: number;

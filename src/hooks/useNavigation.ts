@@ -369,20 +369,16 @@ export const useNavigation = () => {
         {
           label: 'Configuration',
           items: [
-            {
-              route: '/staff/cabinets',
-              label: 'Cabinets',
-              icon: 'cabinet',
-              anyPermissions: [{ resource: 'cabinet', action: 'view', minScope: 'department' }],
-            },
+            // No "Cabinets" item here: an administrator works on cabinets through
+            // Cabinet Designer. Folder structure and document moves live on the
+            // Cabinets page for the staff a cabinet is delegated to.
             {
               route: '/admin/cabinets',
               label: 'Cabinet Designer',
               icon: 'cabinet',
               // Requires BOTH global-scoped `cabinet:view` and `cabinet:create` — a
               // department-scoped or read-only viewer gets the plain Cabinets browser
-              // instead. The page's New/Edit/Delete buttons are still unguarded
-              // internally, so this link is the only gate in front of them.
+              // instead. Inside, each action is also gated on its own permission.
               permissions: [
                 { resource: 'cabinet', action: 'view', minScope: 'global' },
                 'cabinet:create',
