@@ -376,7 +376,15 @@ with required metadata is still filed incomplete every time.
       — *this box said the PATCH endpoint was unused; the Designer's "Edit" button has called it
       since at least 2026-09-21. Corrected 2026-10-06*
 - [ ] Reorder fields (`displayOrder` is only set on create)
-- [ ] Upload form renders the target cabinet's fields
+- [ ] 🟨 Upload form renders the target cabinet's fields — built 2026-10-07, not yet verified
+      live. Values are saved by a second call after the upload (`POST /documents` takes no
+      metadata), and that call needs `document_metadata:edit` **and** `edit` on the cabinet —
+      which seeded `staff` don't have — so for most uploaders the form only *lists* the fields.
+      Backend ask: accept metadata on `POST /documents` under the upload permission
+- [ ] ⚠️ Metadata now drives **workflow routing** (backend conditional routing, merged
+      2026-10-06): a branch condition on an empty field evaluates to "no match" without an
+      error, so a document filed without its metadata silently skips that branch. Search also
+      indexes metadata values, but only once, when OCR finishes — later edits aren't re-indexed
 - [ ] Document detail renders and edits them
 - [ ] ⚠️ Backend bug: sending all-null values to clear metadata silently no-ops
       (`normalized.length === 0` short-circuits the write)

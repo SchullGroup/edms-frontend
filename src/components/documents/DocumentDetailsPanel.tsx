@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useDocumentMetadata, useUpdateDocumentMetadata } from '@/apis/hooks/useDocuments';
 import { Icon } from '@/components/ui/Icons';
 import { SkeletonText } from '@/components/common/Skeleton';
+import { MetadataFieldInput, toInputValue } from './MetadataFieldInput';
 
 export interface DocumentDetailsPanelProps {
   documentId: string;
@@ -85,7 +86,11 @@ function MetadataEditor({ documentId }: { documentId: string }) {
   useEffect(() => {
     if (!fields) return;
     const next: Record<string, string> = {};
-    for (const f of fields) next[f.fieldId] = f.value ?? '';
+    // An unset boolean shows as an unticked box, so start it at "false" — saving
+    // '' would fail a required boolean even though the box reads "No".
+    for (const f of fields) {
+      next[f.fieldId] = toInputValue(f, f.value) || (f.fieldType === 'boolean' ? 'false' : '');
+    }
     setDraft(next);
     setDirty(false);
   }, [fields]);
@@ -122,35 +127,11 @@ function MetadataEditor({ documentId }: { documentId: string }) {
               {f.isRequired ? ' *' : ''}
             </span>
             <span className="v" style={{ maxWidth: '60%' }}>
-              {f.fieldType === 'select' && f.options?.length ? (
-                <select
-                  className="input"
-                  value={draft[f.fieldId] ?? ''}
-                  onChange={(e) => set(f.fieldId, e.target.value)}
-                >
-                  <option value="">—</option>
-                  {f.options.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              ) : f.fieldType === 'boolean' ? (
-                <input
-                  type="checkbox"
-                  checked={draft[f.fieldId] === 'true'}
-                  onChange={(e) => set(f.fieldId, e.target.checked ? 'true' : 'false')}
-                />
-              ) : (
-                <input
-                  className="input"
-                  type={
-                    f.fieldType === 'number' ? 'number' : f.fieldType === 'date' ? 'date' : 'text'
-                  }
-                  value={draft[f.fieldId] ?? ''}
-                  onChange={(e) => set(f.fieldId, e.target.value)}
-                />
-              )}
+              <MetadataFieldInput
+                field={f}
+                value={draft[f.fieldId] ?? ''}
+                onChange={(v) => set(f.fieldId, v)}
+              />
             </span>
           </div>
         ))}
