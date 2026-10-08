@@ -71,15 +71,25 @@ export default function DeptComparisonPage() {
   const isLoading =
     loadingDepts || loadingVolume || loadingSla || closedByDeptQueries.some((q) => q.isLoading);
 
+  // Clicking a department's bar narrows the page to it; clicking it again (the
+  // only bar left) widens back to all departments.
+  const drill = (id: string) => setDept(dept === id ? 'All' : id);
+
   const volumeItems = scope.map((d) => ({
     label: d.name,
     value: volumeByDept.get(d.id) ?? 0,
     color: 'var(--brand-primary-light)',
+    onClick: () => drill(d.id),
   }));
 
   const slaItems = scope.map((d) => {
     const sla = Math.round(slaByDept.get(d.id) ?? 100);
-    return { label: d.name, value: sla, color: sla >= 85 ? 'var(--status-closed)' : 'var(--status-overdue)' };
+    return {
+      label: d.name,
+      value: sla,
+      color: sla >= 85 ? 'var(--status-closed)' : 'var(--status-overdue)',
+      onClick: () => drill(d.id),
+    };
   });
 
   const lineLabels = lastNMonths(range).map((m) => m.label);

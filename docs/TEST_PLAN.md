@@ -803,7 +803,12 @@ Items whose backend already exists (or needs none). Worked through one at a time
       fresh tenant every step shows pending; create a department, a cabinet (it gets "General"),
       a second user and publish a workflow — each ticks off and the % reaches 100. Add a cabinet
       with no folders → "Folders in every cabinet (1 without one)" and a pending task appear
-- [ ] Chart drill-downs to filtered record lists (21.6, 22.3)
+- [ ] Chart drill-downs to filtered record lists (21.6, 22.3). **Partly done 2026-10-08:** on
+      `/management` and `/management/departments`, clicking a department's bar scopes the
+      dashboard to that department (clicking it again on Departments widens back). **The record
+      list needs backend:** the charts are per department, and neither `GET /documents` nor
+      `GET /workflow-instances` takes a `departmentId` filter, so there's no list to open.
+      To test: click a department bar on each page
 - [ ] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6)
 - [x] Configuration history: audit log filtered to config actions (18.7). **Built 2026-10-08**
       on `/admin/audit` (and `/auditor/trail`): a record-type dropdown whose Configuration group

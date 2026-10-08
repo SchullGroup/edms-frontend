@@ -268,7 +268,10 @@ export default function ManagementDashboard() {
                       : r.sla >= 80
                         ? 'var(--status-pending)'
                         : 'var(--status-overdue)',
-                  onClick: () => router.push('/management/departments'),
+                  // Drill into that department: the whole dashboard scopes to it.
+                  // (A record list per department needs a `departmentId` filter
+                  // on `GET /documents`, which the API doesn't have.)
+                  onClick: () => setSt({ ...st, dept: r.deptId }),
                 }))}
                 max={100}
                 unit="%"
