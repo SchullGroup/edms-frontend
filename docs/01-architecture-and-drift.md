@@ -965,6 +965,8 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents/search` | ✅ | ✅ (misses a document if its OCR job gets stuck at `pending` — see DRIFT-06) |
 | `GET /documents/:id` | ✅ | ✅ — embeds `checkoutLock` + `locker {id,name,email}` since `edms-backend` `b4a3f81` (2026-09-29); before that only `isCheckedOut` came back, so even the lock holder couldn't check the document back in (TEST_PLAN "Things to check") |
 | `POST /documents` | ✅ | ✅ |
+| `POST /documents/batch` (≤ 20, one transaction) | ✅ | 🟨 wired 2026-10-08 — `/upload`'s "File all", in chunks of 20; not verified live. *This row was missing from the matrix* |
+| `POST /documents/versions/batch` (≤ 20) | ✅ | ⚠️ backend only — nothing uploads several new versions at once |
 | `PATCH /documents/:id` | ✅ | ✅ |
 | `POST /documents/:id/checkout` | ✅ | ✅ |
 | `POST /documents/:id/checkin` | ✅ | ✅ — holder, **or** a `document_lock:delete` holder at `global` scope / `department` scope for the cabinet's department (`canReleaseLock`). Frontend offers that "Force check in" only once the lock is past `expectedReturnAt` (2026-10-02) |
@@ -984,15 +986,15 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 |---|---|---|
 | `GET/POST /workflows`, `GET/PATCH /workflows/:id` | ✅ | ✅ |
 | `POST /workflows/:id/publish` `/archive` | ✅ | ✅ |
-| `GET /workflow-instances`, `GET /workflow-instances/:id` | ✅ | ✅ |
-| ~~`POST /workflow-instances/start`~~ | now the two-call `POST /workflow-instances` **then** `POST /:instanceId/start` | ✅ **DRIFT-09 resolved** |
+| `GET /workflow-instances`, `GET /workflow-instances/:id` | ✅ — since `919d0ef` an instance has `documents[]` and no `documentId`/`currentStage`/`stageDueAt`; the list doesn't return per-document executions (DRIFT-19) | ✅ reshaped 2026-10-07 (DRIFT-19), not verified live |
+| ~~`POST /workflow-instances/start`~~ | now the two-call `POST /workflow-instances` **then** `POST /:instanceId/start`; since `919d0ef` the create body is `{ workflowDefinitionId, documents: [{ documentId, comment? }] }` | ✅ **DRIFT-09 resolved**; body updated 2026-10-07 — documents routed together go into one workflow (DRIFT-19) |
 | `POST /workflow-instances/:id/hold` `/resume` `/close` | ✅ | ✅ |
-| `GET /tasks`, `GET /tasks/:id` | ✅ | ✅ |
+| `GET /tasks`, `GET /tasks/:id` | ✅ — since `919d0ef` no `Task.dueAt`; documents come through `documents[].workflowDocumentExecution`, and only `/:id` carries their stage and deadline (DRIFT-19) | ✅ reshaped 2026-10-07, not verified live |
 | `POST /tasks/:id/action` | ✅ | ✅ — `request_changes` sends `documents: [{documentId}]` from the workflow page's document picker since 2026-10-02 (**DRIFT-18** fixed; the field became required in `edms-backend` `5144fc7`). Not yet verified e2e |
-| — | `POST /workflow-instances/:id/documents` `{documentId, comment?}` (`5144fc7`) | ⚠️ backend only — attaches an extra document to an instance; **no UI yet** |
+| — | `POST /workflow-instances/:id/documents` `{documentId, comment?}` (`5144fc7`) | ✅ wired — "Mark reviewed" attaches the reviewer's documents through it (`useWorkflowTaskActions`). *This row said "no UI yet"; stale, corrected 2026-10-07* |
 | `PATCH /tasks/:id/reassign` | ✅ | ✅ |
 | `GET/POST /delegations`, `POST /delegations/:id/end` | ✅ | ✅ wired — `/delegations` (344 lines) exists; this row was stale, caught 2026-09-18 while investigating DRIFT-11 |
-| — | `GET /workflow-history`, `GET /workflow-history/:id` | ⚠️ backend only — **no UI at all** |
+| — | `GET /workflow-history`, `GET /workflow-history/:id` | ✅ wired — the activity trail (`WorkflowHistoryTimeline`), and since 2026-10-07 each document's live stage and deadline (`useWorkflowDocumentPositions`). *This row said "no UI at all"; stale, corrected 2026-10-07* |
 
 **DRIFT-09 — ✅ RESOLVED (verified 2026-09-04).**
 
@@ -1462,6 +1464,7 @@ suspiciously few documents.
 | ~~— Cabinet access-grant CRUD has no UI~~ | ✅ **Corrected (2026-09-21) — already built** | `admin/cabinets` has a full "Access" card: grant modal (role/user picker + permission select), grant table, revoke button with confirm. Wired to `useCabinetAccessGrants`/`useGrantCabinetAccess`/`useRevokeCabinetAccess`, which already existed too. This doc's claim was stale, not a real gap | — | — |
 | ~~— Enum casing mismatch~~ | ✅ **Resolved (frontend, 2026-09-22)** | `StatusBadge`/`ConfBadge`/`UrgBadge` now run a shared `titleCase()` (`@/utils/helpers`) on their display text — handles snake_case → words and lowercase → Title Case in one pass, idempotent on already-correct input, so every current and future caller is right regardless of which casing its data source used. Also fixed a real functional bug this uncovered: `search/page.tsx`'s facet filter/count used a naive `charAt(0).toUpperCase() + slice(1)`, which mishandled `'top_secret'` (→ `"Top_secret"`, matching nothing in the Title-Case facet list) — a `top_secret` document could never be found via that filter, and its count always showed 0 | Frontend | Was: badges showed raw lowercase/snake_case text on some pages; `top_secret` documents were invisible to the confidentiality facet specifically |
 | — | 🟡 Low | `roles` has three shapes across endpoints | Both | Defensive shims scattered through components |
+| DRIFT-19 | 🟠 Med | Multi-document workflows (`edms-backend` `919d0ef`): list responses carry no stage or deadline | Both | **Frontend done 2026-10-07, not verified live:** routing sends `documents[]` (one workflow per routed group); types rebuilt (`WorkflowDocumentExecution`); `@/utils/workflowDocuments` derives titles, deadlines and stages; the workflow page and Monitor drawer rebuild each document's position from workflow history; approve/reject/review can act on chosen documents. **Still missing (backend):** deadlines in `GET /tasks` and executions in `GET /workflow-instances`, so task due labels, the Overdue filter (now backed by open SLA breaches), the Monitor's stage/due columns show "—"; and no endpoint over `workflow_sla_outcomes`, so on-time % shows "—". Requested 2026-10-07 |
 | ~~— Duplicate `NEXT_PUBLIC_API_URL` in `.env`~~ | ✅ **Corrected (2026-09-22) — not real, doc was stale** | The user checked the live `.env` directly: one `NEXT_PUBLIC_API_URL` key, no duplicate, no dead `API_URL`/`LOCAL_API_URL`/`STAGING_URL` keys either. See §9. | — | — |
 
 ### Suggested order of attack

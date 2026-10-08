@@ -1,10 +1,10 @@
 /**
  * Title-cases a `Document`'s real backend status for `StatusBadge`. There is
  * no `Overdue` here on purpose — `Document` carries no due date anywhere in
- * the backend schema (that lives on `Task.dueAt` / `WorkflowInstance.
- * stageDueAt`), so a document-level "Overdue" would be a fabricated signal.
- * Use `taskStatusLabel` (`@/utils/supervisor`) for task rows, which does have
- * a real due date to check.
+ * the backend schema (deadlines live on each workflow document's execution,
+ * `WorkflowDocumentExecution.stageDueAt`), so a document-level "Overdue" would
+ * be a fabricated signal. Use `taskStatusLabel` (`@/utils/supervisor`) for task
+ * rows, which checks the task's documents' deadlines.
  */
 const DOCUMENT_STATUS_LABEL: Record<string, string> = {
   pending: 'Pending',

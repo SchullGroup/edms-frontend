@@ -1,6 +1,7 @@
 'use client';
 
-import { CONDITION_FIELDS, operatorsForField, valueOptionsForField } from './constants';
+import { CONDITION_FIELDS, operatorsForField } from './constants';
+import { RuleValueInput } from './RuleValueInput';
 import { useBranchDraft } from '@/hooks/useBranchDraft';
 import type { WorkflowConditionField, WorkflowStage, WorkflowTransition } from '@/types/models';
 
@@ -37,6 +38,10 @@ export function BranchEditorCard({ stage, stages, transitions, onSave, saving, c
     updateRule,
     setMode,
     handleFieldChange,
+    handleMetadataFieldChange,
+    handleOperatorChange,
+    fieldById,
+    ruleIssue,
     handleSave,
     handleDiscard,
   } = useBranchDraft(stage, stages, transitions, onSave);
@@ -89,45 +94,42 @@ export function BranchEditorCard({ stage, stages, transitions, onSave, saving, c
                 {isConditional && d.condition && (
                   <div className="flex flex-col gap-2">
                     {d.condition.rules.map((rule, idx) => {
-                      const valueOptions = valueOptionsForField(rule.field);
+                      const metadataField =
+                        rule.field === 'metadata' ? fieldById(rule.metadata_field_id) : undefined;
+                      const issue = ruleIssue(rule);
                       return (
-                        <div key={idx} className="wfd-rule-row">
-                          <select
-                            className="input"
-                            style={{ fontSize: '12px', padding: '4px 6px' }}
-                            value={rule.field}
-                            disabled={!canEdit}
-                            onChange={(e) => handleFieldChange(d._key, idx, e.target.value as WorkflowConditionField)}
-                          >
-                            {CONDITION_FIELDS.map((f) => (
-                              <option key={f.value} value={f.value}>
-                                {f.label}
-                              </option>
-                            ))}
-                          </select>
+                        <div key={idx}>
+                          {/* Reads as a sentence: field · (which field) · operator · value. */}
+                          <div className="wfd-rule-row">
+                            <select
+                              className="input"
+                              style={{ fontSize: '12px', padding: '4px 6px' }}
+                              value={rule.field}
+                              disabled={!canEdit}
+                              onChange={(e) =>
+                                handleFieldChange(
+                                  d._key,
+                                  idx,
+                                  e.target.value as WorkflowConditionField,
+                                )
+                              }
+                            >
+                              {CONDITION_FIELDS.map((f) => (
+                                <option key={f.value} value={f.value}>
+                                  {f.label}
+                                </option>
+                              ))}
+                            </select>
 
-                          <select
-                            className="input"
-                            style={{ fontSize: '12px', padding: '4px 6px' }}
-                            value={rule.operator}
-                            disabled={!canEdit}
-                            onChange={(e) => updateRule(d._key, idx, { operator: e.target.value as any })}
-                          >
-                            {operatorsForField(rule.field).map((op) => (
-                              <option key={op.value} value={op.value}>
-                                {op.label}
-                              </option>
-                            ))}
-                          </select>
-
-                          {rule.field === 'metadata' ? (
-                            <>
+                            {rule.field === 'metadata' && (
                               <select
                                 className="input"
                                 style={{ fontSize: '12px', padding: '4px 6px' }}
                                 value={rule.metadata_field_id || ''}
                                 disabled={!canEdit}
-                                onChange={(e) => updateRule(d._key, idx, { metadata_field_id: e.target.value })}
+                                onChange={(e) =>
+                                  handleMetadataFieldChange(d._key, idx, rule, e.target.value)
+                                }
                               >
                                 <option value="" disabled>
                                   Field…
@@ -138,42 +140,48 @@ export function BranchEditorCard({ stage, stages, transitions, onSave, saving, c
                                   </option>
                                 ))}
                               </select>
-                              <input
-                                className="input"
-                                style={{ fontSize: '12px', padding: '4px 6px', width: '72px' }}
-                                type="text"
-                                placeholder="value"
-                                value={String(rule.value)}
-                                disabled={!canEdit}
-                                onChange={(e) => updateRule(d._key, idx, { value: e.target.value })}
-                              />
-                            </>
-                          ) : (
+                            )}
+
                             <select
                               className="input"
                               style={{ fontSize: '12px', padding: '4px 6px' }}
-                              value={String(rule.value)}
+                              value={rule.operator}
                               disabled={!canEdit}
-                              onChange={(e) => updateRule(d._key, idx, { value: e.target.value })}
+                              onChange={(e) =>
+                                handleOperatorChange(d._key, idx, rule, e.target.value as any)
+                              }
                             >
-                              {(valueOptions || []).map((v) => (
-                                <option key={v.value} value={v.value}>
-                                  {v.label}
+                              {operatorsForField(rule.field, metadataField?.fieldType).map((op) => (
+                                <option key={op.value} value={op.value}>
+                                  {op.label}
                                 </option>
                               ))}
                             </select>
-                          )}
 
-                          {d.condition!.rules.length > 1 && (
-                            <button
-                              type="button"
-                              className="icon-btn"
-                              aria-label="Remove rule"
+                            <RuleValueInput
+                              rule={rule}
+                              metadataField={metadataField}
+                              invalid={!!issue}
                               disabled={!canEdit}
-                              onClick={() => removeRule(d._key, idx)}
-                            >
-                              ✕
-                            </button>
+                              onChange={(value) => updateRule(d._key, idx, { value })}
+                            />
+
+                            {d.condition!.rules.length > 1 && (
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                aria-label="Remove rule"
+                                disabled={!canEdit}
+                                onClick={() => removeRule(d._key, idx)}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                          {issue && (
+                            <div className="err" style={{ display: 'block', marginTop: '4px' }}>
+                              {issue}
+                            </div>
                           )}
                         </div>
                       );

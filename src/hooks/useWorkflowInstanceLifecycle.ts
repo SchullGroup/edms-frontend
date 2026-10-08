@@ -8,12 +8,11 @@ import {
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useUIStore } from '@/store/useUIStore';
 import type { WorkflowInstance } from '@/types/models';
+import { instanceTitle } from '@/utils/workflowDocuments';
 
-type InstanceLike = Pick<WorkflowInstance, 'id' | 'documentId'> & {
-  document?: { title?: string } | null;
-};
+type InstanceLike = Pick<WorkflowInstance, 'id' | 'documents'>;
 
-const titleOf = (i: InstanceLike) => i.document?.title || 'this document';
+const titleOf = (i: InstanceLike) => instanceTitle(i);
 
 /**
  * Hold / resume / close for a running instance, with the confirmations and
@@ -41,7 +40,7 @@ export function useWorkflowInstanceLifecycle() {
         await hold.mutateAsync({ id: instance.id });
         createAuditLog.mutate({
           action: 'WORKFLOW_HOLD',
-          target: instance.documentId,
+          target: instance.id,
           detail: 'Workflow put on hold',
         });
         addToast('Workflow put on hold', 'warning');
@@ -57,7 +56,7 @@ export function useWorkflowInstanceLifecycle() {
         await resume.mutateAsync(instance.id);
         createAuditLog.mutate({
           action: 'WORKFLOW_RESUME',
-          target: instance.documentId,
+          target: instance.id,
           detail: 'Workflow resumed',
         });
         addToast('Workflow resumed', 'success');
@@ -67,14 +66,14 @@ export function useWorkflowInstanceLifecycle() {
   const confirmClose = (instance: InstanceLike) =>
     openConfirm({
       title: 'Close this workflow?',
-      message: `Any remaining stages on “${titleOf(instance)}” are skipped and the document is finalised. This can't be undone — the file would have to be routed again from scratch.`,
+      message: `Any remaining stages on “${titleOf(instance)}” are skipped and its documents are finalised. This can't be undone — the file would have to be routed again from scratch.`,
       confirmLabel: 'Close workflow',
       danger: true,
       onConfirm: async () => {
         await close.mutateAsync(instance.id);
         createAuditLog.mutate({
           action: 'WORKFLOW_CLOSE',
-          target: instance.documentId,
+          target: instance.id,
           detail: 'Workflow force-closed',
         });
         addToast('Workflow closed', 'success');

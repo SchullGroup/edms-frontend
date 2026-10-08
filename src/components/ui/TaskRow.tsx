@@ -2,7 +2,14 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore, userById } from '@/store/useStore';
 import { dueLabel, documentStatusLabel } from '@/utils/helpers';
-import { taskStatusLabel } from '@/utils/supervisor';
+import { stageLabel, taskStatusLabel } from '@/utils/supervisor';
+import {
+  overdueDocumentCount,
+  taskDueAt,
+  taskPrimaryDocument,
+  taskTitle,
+  taskUrgency,
+} from '@/utils/workflowDocuments';
 import { StatusBadge, UrgBadge, ConfBadge } from './Badges';
 
 export const TaskRow = ({
@@ -17,15 +24,29 @@ export const TaskRow = ({
   const router = useRouter();
   const { users } = useStore();
   const isTask = !!item.workflowInstance;
-  const doc = isTask ? item.workflowInstance.document : item;
+  // A task can cover several documents (edms-backend `919d0ef`): its title and
+  // urgency come from all of them, its badges from the first.
+  const doc = isTask ? taskPrimaryDocument(item) : item;
+  const title = isTask ? taskTitle(item) : doc?.title || 'Unknown Document';
+  const urgency = isTask ? taskUrgency(item) : doc?.urgency;
 
   const eff = isTask ? taskStatusLabel(item) : documentStatusLabel(doc);
 
-  // Only a task has a real due date (`dueAt`) — a bare document doesn't carry
-  // one anywhere in the backend schema.
-  const due = isTask ? dueLabel(item.dueAt) : { text: 'N/A', late: false };
+  // A task's deadline is the earliest of its documents'. `GET /tasks` doesn't
+  // return deadlines yet, so a list row usually shows "—" — not "No due date",
+  // which would be wrong. A bare document has no deadline anywhere.
+  const dueAt = isTask ? taskDueAt(item) : null;
+  const lateDocs = isTask ? overdueDocumentCount(item) : 0;
+  const docCount = isTask ? (item.documents?.length ?? 0) : 0;
+  const due = !isTask
+    ? { text: 'N/A', late: false }
+    : dueAt
+      ? lateDocs > 0 && docCount > 1
+        ? { text: `${lateDocs} of ${docCount} overdue`, late: true }
+        : dueLabel(dueAt)
+      : { text: '—', late: false };
   const owner = doc?.createdBy;
-  const stage = isTask ? item.stage : null;
+  const stage = isTask ? stageLabel(item.stage) : null;
   const docId = doc?.id || item.documentId;
   // A task is worked on its workflow page; a bare document opens its own page.
   const href = isTask
@@ -36,7 +57,7 @@ export const TaskRow = ({
 
   return (
     <div
-      className={`task-row ${doc?.urgency === 'critical' ? 'overdue' : ''}`}
+      className={`task-row ${urgency === 'critical' ? 'overdue' : ''}`}
       tabIndex={0}
       role="button"
       onClick={() => router.push(href)}
@@ -45,10 +66,10 @@ export const TaskRow = ({
       }}
     >
       <div className="task-main">
-        <div className="task-title">{doc?.title || 'Unknown Document'}</div>
+        <div className="task-title">{title}</div>
         <div className="task-meta">
           <StatusBadge status={eff} />
-          {doc?.urgency && <UrgBadge level={doc.urgency} />}
+          {urgency && <UrgBadge level={urgency} />}
           {doc?.confidentiality && <ConfBadge level={doc.confidentiality} />}
           {stage && <span>{stage}</span>}
           {showAssignee ? (

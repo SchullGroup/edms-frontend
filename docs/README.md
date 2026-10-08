@@ -430,6 +430,12 @@ not live); and doc 05's `/staff/cabinets` row said uploader names come from `SEE
 (they come from `useUsers`). `/admin/cabinets` moved ✅ → 🟨 in doc 05's portfolio table
 pending a re-check after the rework, so Client Administration is now 2 ✅ / 2 🟨.
 
+**Correction (2026-10-07).** While wiring multi-document workflows (DRIFT-19), two rows
+in doc 01's drift matrix turned out stale: `POST /workflow-instances/:id/documents` was
+marked "no UI yet" (the "Mark reviewed" flow has attached documents through it since
+2026-10-02), and `GET /workflow-history` was marked "no UI at all" (the activity trail
+reads it). Both corrected in place.
+
 ---
 
 ## Relationship to the older docs

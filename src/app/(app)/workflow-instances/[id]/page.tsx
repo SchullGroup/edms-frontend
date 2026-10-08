@@ -18,6 +18,7 @@ import { Icon } from '@/components/ui/Icons';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { fmtDateTime } from '@/utils/helpers';
+import { instanceTitle, taskDueAt } from '@/utils/workflowDocuments';
 import type { Task, WorkflowInstanceStatus, WorkflowStageAction } from '@/types/models';
 
 const STATUS_LABEL: Record<WorkflowInstanceStatus, string> = {
@@ -63,13 +64,14 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   const isMineTask = (t: Pick<Task, 'assigneeId' | 'assignedRole'>) =>
     !!me &&
     (t.assigneeId === me.id || (!!t.assignedRole?.name && !!me.roles?.includes(t.assignedRole.name)));
-  const isActiveTask = (t: Pick<Task, 'status' | 'stage'>) =>
-    ACTIVE_TASK_STATUSES.includes(t.status) && t.stage === instance?.currentStage;
+  // A workflow has no single current stage any more (edms-backend `919d0ef`):
+  // its documents move on their own, so several tasks — at different stages, or
+  // in parallel branches — can be live at once.
+  const isActiveTask = (t: Pick<Task, 'status'>) => ACTIVE_TASK_STATUSES.includes(t.status);
 
   // Which task this page is about: the one in the link if it's still live,
-  // else the caller's own live task, else whoever holds the current stage,
-  // else (a finished workflow) the most recent one — its document list is the
-  // workflow's final set.
+  // else the caller's own live task, else any live task, else (a finished
+  // workflow) the most recent one.
   const tasks = instance?.tasks ?? [];
   const linkedTask = tasks.find((t) => t.id === taskParam);
   const activeTasks = tasks.filter(isActiveTask);
@@ -83,28 +85,28 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
     linkedTask ??
     latestTask;
 
-  // `GET /tasks/:id` is what carries the documents. Someone who can see the
-  // workflow but not its task (e.g. the document owner) gets a 403 here and
-  // falls back to the primary document alone.
+  // `GET /tasks/:id` carries the documents this task covers, each with the
+  // version under review. Someone who can see the workflow but not its task
+  // (e.g. a document owner) gets a 403 there and falls back to the workflow's
+  // full document list.
   const { data: taskDetail } = useTask(focusTask?.id ?? '');
 
   const documents = taskDetail?.documents?.length
-    ? taskDetail.documents.map((s) => ({
-        id: s.workflowInstanceDocument.documentId,
-        title: s.workflowInstanceDocument.document.title,
-        confidentiality: s.workflowInstanceDocument.document.confidentiality,
-        versionNumber: s.documentVersion.versionNumber,
-      }))
-    : instance
-      ? [
-          {
-            id: instance.documentId,
-            title: instance.document?.title || 'Document',
-            confidentiality: instance.document?.confidentiality || 'internal',
-            versionNumber: undefined as number | undefined,
-          },
-        ]
-      : [];
+    ? taskDetail.documents.map((s) => {
+        const wid = s.workflowDocumentExecution.workflowInstanceDocument;
+        return {
+          id: wid.documentId,
+          title: wid.document.title,
+          confidentiality: wid.document.confidentiality,
+          versionNumber: s.documentVersion?.versionNumber,
+        };
+      })
+    : (instance?.documents ?? []).map((d) => ({
+        id: d.documentId ?? d.document.id,
+        title: d.document.title || 'Document',
+        confidentiality: d.document.confidentiality || 'internal',
+        versionNumber: d.document.currentVersion?.versionNumber,
+      }));
 
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const selected = documents.find((d) => d.id === selectedId) ?? documents[0];
@@ -118,10 +120,11 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
     setPageTitle(workflowName);
   }, [workflowName, setPageTitle]);
 
+  // The stage being actioned is the focus task's own.
   const stageDef = instance?.workflowDefinition?.definition?.stages?.find(
-    (s) => s.id === instance?.currentStage,
+    (s) => s.id === focusTask?.stage,
   );
-  const stageLabel = stageDef?.name || stageDef?.id || instance?.currentStage || 'Current stage';
+  const stageLabel = stageDef?.name || stageDef?.id || focusTask?.stage || 'Current stage';
 
   const canActPermission = can('task', 'action');
   const focusActive = !!focusTask && isActiveTask(focusTask);
@@ -153,7 +156,8 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   // "Request changes" sends work back one stage, so it can't apply on the first
   // stage — the backend 409s (`WORKFLOW_PREVIOUS_STAGE_NOT_FOUND`). Hidden there
   // even if an older definition still lists it.
-  const isFirstStage = instance?.workflowDefinition?.definition?.stages?.[0]?.id === instance?.currentStage;
+  const isFirstStage =
+    !!focusTask && instance?.workflowDefinition?.definition?.stages?.[0]?.id === focusTask.stage;
   const allowedActions = allowedRaw.filter(
     (a, _i, arr) =>
       (a !== 'review' || !arr.includes('approve')) && !(a === 'request_changes' && isFirstStage),
@@ -164,13 +168,14 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
     stageLabel,
     documents,
     selectedDocumentId: selected?.id,
-    auditTargetId: instance?.documentId ?? id,
+    auditTargetId: selected?.id ?? id,
     instanceId: id,
     canAttachDocuments: can('workflow_instance', 'create'),
+    // A document added mid-workflow defaults to where the one on screen lives.
     uploadDefaults: {
-      cabinetId: instance?.document?.cabinetId,
-      confidentiality: instance?.document?.confidentiality,
-      urgency: instance?.document?.urgency,
+      cabinetId: selectedDoc?.cabinetId,
+      confidentiality: selectedDoc?.confidentiality,
+      urgency: selectedDoc?.urgency,
     },
     users,
     me: { id: me?.id ?? '', name: me?.name ?? '' },
@@ -228,11 +233,11 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
       <div className="page-head">
         <div style={{ minWidth: 0 }}>
           <div className="page-title" style={{ fontSize: '19px' }}>
-            {instance.document?.title || workflowName}
+            {instance.documents?.length ? instanceTitle(instance) : workflowName}
           </div>
           <div className="flex gap-2 mt-2 flex-wrap items-center">
             <StatusBadge status={STATUS_LABEL[instance.status]} />
-            {instance.document?.urgency && <UrgBadge level={instance.document.urgency} />}
+            {selectedDoc?.urgency && <UrgBadge level={selectedDoc.urgency} />}
             <span className="caption">
               {workflowName}
               {instance.workflowDefinition?.version ? ` v${instance.workflowDefinition.version}` : ''}{' '}
@@ -265,7 +270,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
       </div>
       <div className="caption mb-4">
         {canAct
-          ? `Your action is needed on “${stageLabel}”${focusTask?.dueAt ? ` — due ${fmtDateTime(focusTask.dueAt)}` : ''}.`
+          ? `Your action is needed on “${stageLabel}”${taskDetail && taskDueAt(taskDetail) ? ` — due ${fmtDateTime(taskDueAt(taskDetail)!)}` : ''}.`
           : disabledReason}
       </div>
 

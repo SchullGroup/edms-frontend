@@ -403,26 +403,87 @@ export interface WorkflowDefinitionSummary {
   definition?: WorkflowDefinitionJson;
 }
 
+/**
+ * Where one document stands in its workflow (edms-backend `919d0ef`). Each
+ * document routed into a workflow moves through the stages on its own; a
+ * parallel branch splits an execution into children (`parentExecutionId`).
+ * `waiting` = a parent paused while its children run.
+ */
+export type WorkflowExecutionStatus =
+  'pending' | 'in_progress' | 'on_hold' | 'waiting' | 'completed' | 'cancelled';
+
+export interface WorkflowDocumentExecution {
+  id: string;
+  workflowInstanceDocumentId?: string;
+  parentExecutionId?: string | null;
+  currentStage: string;
+  status: WorkflowExecutionStatus;
+  /** The SLA deadline for `currentStage`. Deadlines live here now — neither the
+   *  workflow nor a task carries one. */
+  stageDueAt?: string | null;
+  slaCycle?: number;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  createdAt?: string;
+}
+
+/** A document's membership of a workflow. */
+export interface WorkflowInstanceDocument {
+  id: string;
+  workflowInstanceId?: string;
+  /** On the list response; on `GET /workflow-instances/{id}` read `document.id`. */
+  documentId?: string;
+  status: WorkflowInstanceStatus;
+  addedAtStage?: string | null;
+  startedAt?: string | null;
+  closedAt?: string | null;
+  comment?: string | null;
+  addedBy?: string | null;
+  addedAt?: string;
+  document: {
+    id: string;
+    title: string;
+    status: string;
+    confidentiality: string;
+    urgency: string;
+    documentType?: string | null;
+    currentVersionId?: string | null;
+    cabinetId?: string;
+    archivedAt?: string | null;
+    createdBy?: string;
+    currentVersion?: {
+      id: string;
+      versionNumber: number;
+      mimeType: string;
+      uploadedBy: string;
+      createdAt: string;
+    } | null;
+  };
+  /** Not returned yet — requested from the backend on the instance list. */
+  executions?: WorkflowDocumentExecution[];
+}
+
+/**
+ * A workflow carries one or more documents (edms-backend `919d0ef`). It has no
+ * single current stage or deadline any more: each document's position is its
+ * execution — see `WorkflowDocumentExecution`.
+ */
 export interface WorkflowInstance {
   id: string;
   workflowDefinitionId: string;
-  documentId: string;
-  document?: Document;
   status: WorkflowInstanceStatus;
-  currentStage?: string | null;
-  stageDueAt?: string | null;
   startedAt: string;
   closedAt?: string | null;
+  documents: WorkflowInstanceDocument[];
   tasks?: Task[];
-  /** Present on `GET /workflow-instances/{id}` (confirmed live) — not
-   *  documented on this schema, and not present on the list response. */
   workflowDefinition?: WorkflowDefinitionSummary;
 }
 
-/** Body for `POST /workflow-instances` — creates a pending instance. */
+/** Body for `POST /workflow-instances` (edms-backend `919d0ef`): one workflow
+ *  carries every document routed together. At least one; no duplicates. */
 export interface CreateWorkflowInstanceRequest {
-  documentId: string;
   workflowDefinitionId: string;
+  documents: { documentId: string; comment?: string }[];
 }
 
 /** `data` shape of `GET /workflow-instances/stats`. */
@@ -581,6 +642,14 @@ export interface WorkflowHistoryRecord {
    *  the completed task's own `comment`/`note`. */
   task?: (Record<string, any> & { signature?: TaskActionSignature | null }) | null;
   workflowInstance?: Record<string, any>;
+  /** The document this event is about, when it is about one. */
+  workflowInstanceDocumentId?: string | null;
+  workflowInstanceDocument?: WorkflowInstanceDocument | null;
+  /** That document's execution as it stands NOW (not at the event) — the live
+   *  stage and deadline. `stageDueAt` above is the deadline at the event. */
+  workflowDocumentExecutionId?: string | null;
+  workflowDocumentExecution?: WorkflowDocumentExecution | null;
+  stageDueAt?: string | null;
 }
 
 /**
@@ -596,16 +665,14 @@ export interface TaskDocumentSummary {
   cabinetId: string;
 }
 
+/** The workflow a task belongs to. Its documents come on the task itself
+ *  (`Task.documents`), not here. */
 export interface TaskWorkflowInstance {
   id: string;
-  documentId: string;
   workflowDefinitionId: string;
-  currentStage: string;
   status: WorkflowInstanceStatus;
-  stageDueAt?: string | null;
   startedAt?: string | null;
   closedAt?: string | null;
-  document: TaskDocumentSummary;
   workflowDefinition: WorkflowDefinitionSummary;
 }
 
@@ -626,7 +693,6 @@ export interface Task {
   assignedRoleId?: string | null;
   action?: string | null;
   status: TaskStatus;
-  dueAt?: string | null;
   completedAt?: string | null;
   completedBy?: string | null;
   note?: string | null;
@@ -635,37 +701,46 @@ export interface Task {
   assignedRole?: { id: string; name: string } | null;
   completer?: TaskUserSummary | null;
   workflowInstance: TaskWorkflowInstance;
-  /** `GET /tasks/:id` only — the documents this task covers, each pinned to
-   *  the version the task was raised against. */
+  comment?: string | null;
+  /** The documents this task covers. On `GET /tasks` each carries only the
+   *  document summary; `GET /tasks/:id` adds the execution's stage, status and
+   *  deadline and the version the task was raised against. */
   documents?: TaskDocumentSnapshot[];
   /** `GET /tasks/:id` only — revisions an earlier stage asked for on this
    *  task's documents that are still waiting on a new version. */
   pendingDocumentRevisions?: PendingDocumentRevision[];
 }
 
-/** One `TaskDocument` row: a workflow document as this task saw it. */
+/** One `TaskDocument` row: a document's execution as this task saw it. */
 export interface TaskDocumentSnapshot {
   id: string;
-  workflowInstanceDocumentId: string;
-  documentVersionId: string;
+  workflowDocumentExecutionId: string;
+  /** `GET /tasks/:id` only. */
+  documentVersionId?: string;
   createdAt: string;
-  workflowInstanceDocument: {
+  /** Stage, status and deadline: `GET /tasks/:id` only (requested on the list). */
+  workflowDocumentExecution: Partial<WorkflowDocumentExecution> & {
     id: string;
-    documentId: string;
-    addedAtStage?: string | null;
-    comment?: string | null;
-    addedAt: string;
-    document: {
+    workflowInstanceDocument: {
       id: string;
-      title: string;
-      documentType?: string | null;
-      status: string;
-      confidentiality: string;
-      urgency: string;
-      currentVersionId?: string | null;
+      documentId: string;
+      addedAtStage?: string | null;
+      comment?: string | null;
+      addedAt?: string;
+      document: {
+        id: string;
+        title: string;
+        documentType?: string | null;
+        status: string;
+        confidentiality: string;
+        urgency: string;
+        currentVersionId?: string | null;
+        cabinetId?: string;
+      };
     };
   };
-  documentVersion: {
+  /** `GET /tasks/:id` only. */
+  documentVersion?: {
     id: string;
     versionNumber: number;
     mimeType: string;
@@ -679,6 +754,7 @@ export interface TaskDocumentSnapshot {
 export interface PendingDocumentRevision {
   id: string;
   workflowInstanceDocumentId: string;
+  workflowDocumentExecutionId?: string;
   requestedFromTaskId: string;
   sourceVersionId: string;
   comment?: string | null;
@@ -705,8 +781,18 @@ export type TaskActionRequest =
       signature: TaskActionSignature;
       comment?: string;
       note?: string;
+      /** Which of the task's documents this covers (edms-backend `919d0ef`).
+       *  Omitted = all of them. The rest stay at this stage in a new task for
+       *  the same assignee. Same on `review` and `reject`. */
+      documents?: { documentId: string }[];
     }
-  | { action: 'review' | 'reject' | 'close'; comment?: string; note?: string }
+  | {
+      action: 'review' | 'reject';
+      comment?: string;
+      note?: string;
+      documents?: { documentId: string }[];
+    }
+  | { action: 'close'; comment?: string; note?: string }
   | {
       /** Sends the work back one stage. Since `edms-backend` `5144fc7` the
        *  backend requires at least one entry in `documents` — each must be one

@@ -8,6 +8,7 @@ import { documentStatusLabel } from '@/utils/helpers';
 import { useDocuments, useDocumentSearch } from '@/apis/hooks/useDocuments';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
 import { Icon } from '@/components/ui/Icons';
 import { Pagination } from '@/components/ui/Pagination';
@@ -115,6 +116,21 @@ export default function SearchPage() {
   const { setPageTitle, openModal, addToast } = useUIStore();
   const saved = me ? (savedByUser[me.id] ?? []) : [];
 
+  // Picking documents to route together. The selection survives paging, new
+  // searches and filter changes on purpose — it's how documents from different
+  // folders and cabinets end up in one workflow.
+  const { routeDocuments, canRoute } = useRouteToWorkflow();
+  const [selected, setSelected] = useState<Map<string, { id: string; title: string }>>(
+    () => new Map(),
+  );
+  const toggleSelected = (d: Pick<Document, 'id' | 'title'>, on: boolean) =>
+    setSelected((cur) => {
+      const next = new Map(cur);
+      if (on) next.set(d.id, { id: d.id, title: d.title });
+      else next.delete(d.id);
+      return next;
+    });
+
   const { data: cabinetsData } = useCabinets();
   const cabinets = useMemo(() => cabinetsData?.data ?? [], [cabinetsData]);
   const cabinetName = useMemo(
@@ -171,6 +187,16 @@ export default function SearchPage() {
   const results: Document[] = active.data?.data ?? [];
   const pagination = active.data?.pagination;
   const total = pagination?.total ?? results.length;
+
+  const allOnPageSelected = results.length > 0 && results.every((d) => selected.has(d.id));
+  const setPageSelected = (on: boolean) =>
+    setSelected((cur) => {
+      const next = new Map(cur);
+      results.forEach((d) =>
+        on ? next.set(d.id, { id: d.id, title: d.title }) : next.delete(d.id),
+      );
+      return next;
+    });
 
   const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => {
     setFilters((f) => ({ ...f, [key]: value }));
@@ -391,6 +417,29 @@ export default function SearchPage() {
             </button>
           </div>
 
+          {selected.size > 0 && (
+            <div className="bulkbar">
+              <b>{selected.size} selected</b>
+              <span style={{ fontSize: '12px', opacity: 0.75 }}>
+                Kept as you search and change pages.
+              </span>
+              <button
+                className="btn btn-primary btn-sm"
+                style={{ marginLeft: 'auto' }}
+                onClick={() =>
+                  routeDocuments([...selected.values()], {
+                    onSuccess: () => setSelected(new Map()),
+                  })
+                }
+              >
+                Route to workflow
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setSelected(new Map())}>
+                Clear selection
+              </button>
+            </div>
+          )}
+
           {active.isError ? (
             <ErrorMessage message="Search failed." retry={active.refetch} />
           ) : active.isLoading && !results.length ? (
@@ -413,6 +462,19 @@ export default function SearchPage() {
             </div>
           ) : (
             <div className="card">
+              {canRoute && (
+                <label
+                  className="flex items-center gap-2"
+                  style={{ padding: '10px 20px 0', cursor: 'pointer', fontSize: '12.5px' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    onChange={(e) => setPageSelected(e.target.checked)}
+                  />
+                  Select all on this page
+                </label>
+              )}
               <div className="rowlist">
                 {results.map((d) => (
                   <div
@@ -425,6 +487,17 @@ export default function SearchPage() {
                     role="button"
                     tabIndex={0}
                   >
+                    {canRoute && (
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${d.title}`}
+                        checked={selected.has(d.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        onChange={(e) => toggleSelected(d, e.target.checked)}
+                        style={{ flexShrink: 0 }}
+                      />
+                    )}
                     <div className="task-main">
                       <div className="task-title">{d.title}</div>
                       <div className="caption" style={{ margin: '4px 0' }}>

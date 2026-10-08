@@ -98,7 +98,7 @@ export default function CabinetBrowserPage() {
     ? activeCabFolders.find((f: any) => f.id === activeFolder)
     : undefined;
 
-  const { routeDocuments } = useRouteToWorkflow();
+  const { routeDocuments, canRoute } = useRouteToWorkflow();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -489,13 +489,15 @@ export default function CabinetBrowserPage() {
                   Move
                 </button>
               )}
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={handleRouteModal}
-                disabled={isSubmitting}
-              >
-                Route
-              </button>
+              {canRoute && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleRouteModal}
+                  disabled={isSubmitting}
+                >
+                  Route
+                </button>
+              )}
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => exportCsv('Cabinet_Selected_Documents', selected)}

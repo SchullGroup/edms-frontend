@@ -1,4 +1,5 @@
 import { Task, User } from '@/types/models';
+import { taskDueAt, taskUrgency } from '@/utils/workflowDocuments';
 
 /**
  * Task-status helpers — originally written for the supervisor dashboards
@@ -6,10 +7,10 @@ import { Task, User } from '@/types/models';
  * (`staff/tasks`, `TaskRow`). `utils/helpers.ts` used to have a same-named
  * `effStatus` that compared against title-case statuses ('Closed', 'Pending')
  * left over from the old seed data, while the real API returns snake_case
- * ('closed', 'in_progress') and puts the due date on `Task.dueAt` /
- * `WorkflowInstance.stageDueAt`, not on the document — `effStatus` was
- * deleted 2026-09-21 (DRIFT-13) in favour of `taskStatusLabel`/`isOverdue`
- * here, which already worked off tasks and got this right.
+ * ('closed', 'in_progress') and keeps due dates off the document — `effStatus`
+ * was deleted 2026-09-21 (DRIFT-13) in favour of `taskStatusLabel`/`isOverdue`
+ * here. Since edms-backend `919d0ef` a task's deadline is the earliest of its
+ * documents' execution deadlines (`taskDueAt`, `@/utils/workflowDocuments`).
  */
 
 /** A task the assignee still has to act on. */
@@ -19,8 +20,11 @@ export function isActiveTask(task: Task): boolean {
   return (ACTIVE_TASK_STATUSES as readonly string[]).includes(task.status);
 }
 
+/** False when the task's deadline isn't known — `GET /tasks` doesn't return
+ *  deadlines yet, only `GET /tasks/:id` does. */
 export function isOverdue(task: Task, now: number = Date.now()): boolean {
-  return isActiveTask(task) && !!task.dueAt && Date.parse(task.dueAt) < now;
+  const due = taskDueAt(task);
+  return isActiveTask(task) && !!due && Date.parse(due) < now;
 }
 
 /** The badge vocabulary `StatusBadge` expects, derived from task state. */
@@ -57,11 +61,13 @@ export function turnaroundDays(task: Task): number | null {
   return Math.max(0, (Date.parse(task.completedAt) - Date.parse(task.createdAt)) / 86400000);
 }
 
-/** True when a completed task landed on or before its SLA deadline. Tasks with
- *  no `dueAt` have no SLA to meet and are excluded by returning null. */
-export function metSla(task: Task): boolean | null {
-  if (task.status !== 'completed' || !task.completedAt || !task.dueAt) return null;
-  return Date.parse(task.completedAt) <= Date.parse(task.dueAt);
+/** Whether a completed task met its SLA — always null now. Tasks lost `dueAt`
+ *  in edms-backend `919d0ef`, and a completed task's documents have moved on to
+ *  the next stage's deadline, so this can't be worked out client-side. The
+ *  backend records it in `workflow_sla_outcomes`; an endpoint over that is
+ *  requested. Callers already treat null as "no SLA to judge". */
+export function metSla(_task: Task): boolean | null {
+  return null;
 }
 
 export function roleNames(user?: Partial<User> | null): string[] {
@@ -86,12 +92,13 @@ export function stageLabel(stage?: string | null): string {
 
 /** Sort key matching the backend's own ordering: urgency, then due date. */
 export function byUrgencyThenDue(a: Task, b: Task): number {
-  const rank = urgencyRank(a.workflowInstance?.document?.urgency) -
-    urgencyRank(b.workflowInstance?.document?.urgency);
+  const rank = urgencyRank(taskUrgency(a)) - urgencyRank(taskUrgency(b));
   if (rank !== 0) return rank;
 
-  const aDue = a.dueAt ? Date.parse(a.dueAt) : Number.MAX_SAFE_INTEGER;
-  const bDue = b.dueAt ? Date.parse(b.dueAt) : Number.MAX_SAFE_INTEGER;
+  const aDueIso = taskDueAt(a);
+  const bDueIso = taskDueAt(b);
+  const aDue = aDueIso ? Date.parse(aDueIso) : Number.MAX_SAFE_INTEGER;
+  const bDue = bDueIso ? Date.parse(bDueIso) : Number.MAX_SAFE_INTEGER;
   return aDue - bDue;
 }
 

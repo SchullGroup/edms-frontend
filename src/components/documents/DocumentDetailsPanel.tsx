@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useDocumentMetadata, useUpdateDocumentMetadata } from '@/apis/hooks/useDocuments';
+import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
 import { SkeletonText } from '@/components/common/Skeleton';
-import { MetadataFieldInput, toInputValue } from './MetadataFieldInput';
+import { fmtDate } from '@/utils/helpers';
+import type { DocumentMetadataField } from '@/types/models';
+import { MetadataFieldInput, isMetadataValueMissing, toInputValue } from './MetadataFieldInput';
 
 export interface DocumentDetailsPanelProps {
   documentId: string;
@@ -14,9 +17,28 @@ export interface DocumentDetailsPanelProps {
   /** Omitted on the view-only document page, which has no task context. */
   assigneeName?: string;
   createdAtLabel: string;
+  /** The values embedded on the document — a fallback for anyone who can't
+   *  read `GET /documents/:id/metadata` (it needs `document_metadata:view`). */
   metadata: { fieldId: string; name: string; value?: string | null }[];
-  /** When true, custom metadata fields become editable with a Save action. */
+  /** Shows "Edit metadata", which opens the editor in a dialog. */
   canEditMetadata?: boolean;
+}
+
+/** A stored value as people read it: dates and numbers formatted, yes/no in words. */
+function displayValue(field: Pick<DocumentMetadataField, 'fieldType'>, value?: string | null) {
+  if (value === null || value === undefined || value === '') return '—';
+  switch (field.fieldType) {
+    case 'date':
+      return fmtDate(value);
+    case 'boolean':
+      return value === 'true' ? 'Yes' : 'No';
+    case 'number': {
+      const n = Number(value);
+      return Number.isFinite(n) ? n.toLocaleString('en-GB') : value;
+    }
+    default:
+      return value;
+  }
 }
 
 export function DocumentDetailsPanel({
@@ -29,10 +51,61 @@ export function DocumentDetailsPanel({
   metadata,
   canEditMetadata = false,
 }: DocumentDetailsPanelProps) {
+  // Every field on the document's cabinet, set or not — the document itself
+  // only embeds the ones that have a value.
+  const { data: fields, isLoading, isError } = useDocumentMetadata(documentId);
+  const { openModal } = useUIStore();
+  const updateMetadata = useUpdateDocumentMetadata();
+
+  const sorted = (fields ?? []).slice().sort((a, b) => a.displayOrder - b.displayOrder);
+  const canEdit = canEditMetadata && sorted.length > 0;
+
+  const openEditor = () => {
+    // The dialog's body owns the draft; the Save action reads it from here.
+    const form: { values: Record<string, string>; showErrors: () => void } = {
+      values: {},
+      showErrors: () => {},
+    };
+    openModal({
+      title: 'Edit metadata',
+      body: <MetadataEditor fields={sorted} form={form} />,
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save changes',
+          kind: 'btn-primary',
+          onClick: () => {
+            if (sorted.some((f) => isMetadataValueMissing(f, form.values[f.fieldId]))) {
+              form.showErrors();
+              return false;
+            }
+            // Only what changed. A field cleared back to empty is left out:
+            // the API keeps a saved value rather than removing it.
+            const changed = sorted
+              .map((f) => ({ fieldId: f.fieldId, value: form.values[f.fieldId] ?? '' }))
+              .filter(
+                (v, i) => v.value !== '' && v.value !== toInputValue(sorted[i], sorted[i].value),
+              );
+            if (changed.length === 0) return;
+            return updateMetadata
+              .mutateAsync({ id: documentId, values: changed })
+              .then(() => undefined)
+              .catch(() => false);
+          },
+        },
+      ],
+    });
+  };
+
   return (
     <div className="card">
       <div className="card-head">
         <span className="h3">Details</span>
+        {canEdit && (
+          <button className="btn btn-secondary btn-sm" onClick={openEditor}>
+            <Icon name="edit" size={13} /> Edit metadata
+          </button>
+        )}
       </div>
       <div className="card-body" style={{ paddingTop: '6px' }}>
         <div className="meta-row">
@@ -62,13 +135,20 @@ export function DocumentDetailsPanel({
           <span className="v">{createdAtLabel}</span>
         </div>
 
-        {canEditMetadata ? (
-          <MetadataEditor documentId={documentId} />
+        {isLoading ? (
+          <SkeletonText lines={2} />
+        ) : !isError && fields ? (
+          sorted.map((f) => (
+            <div key={f.fieldId} className="meta-row">
+              <span className="k">{f.name}</span>
+              <span className="v">{displayValue(f, f.value)}</span>
+            </div>
+          ))
         ) : (
           metadata.map((f) => (
             <div key={f.fieldId} className="meta-row">
               <span className="k">{f.name}</span>
-              <span className="v">{f.value ?? '—'}</span>
+              <span className="v">{f.value || '—'}</span>
             </div>
           ))
         )}
@@ -77,73 +157,57 @@ export function DocumentDetailsPanel({
   );
 }
 
-function MetadataEditor({ documentId }: { documentId: string }) {
-  const { data: fields, isLoading } = useDocumentMetadata(documentId);
-  const updateMetadata = useUpdateDocumentMetadata();
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [dirty, setDirty] = useState(false);
-
-  useEffect(() => {
-    if (!fields) return;
-    const next: Record<string, string> = {};
-    // An unset boolean shows as an unticked box, so start it at "false" — saving
-    // '' would fail a required boolean even though the box reads "No".
+/** The dialog body: one input per metadata field, typed to the field. */
+function MetadataEditor({
+  fields,
+  form,
+}: {
+  fields: DocumentMetadataField[];
+  form: { values: Record<string, string>; showErrors: () => void };
+}) {
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    // An unset yes/no shows as an unticked "No", so it starts as "false".
     for (const f of fields) {
-      next[f.fieldId] = toInputValue(f, f.value) || (f.fieldType === 'boolean' ? 'false' : '');
+      initial[f.fieldId] = toInputValue(f, f.value) || (f.fieldType === 'boolean' ? 'false' : '');
     }
-    setDraft(next);
-    setDirty(false);
-  }, [fields]);
+    form.values = initial;
+    return initial;
+  });
+  const [showErrors, setShowErrors] = useState(false);
+  form.showErrors = () => setShowErrors(true);
 
-  if (isLoading) return <SkeletonText lines={3} />;
-  if (!fields || fields.length === 0) {
-    return <div className="meta-row caption">No custom metadata fields on this cabinet.</div>;
-  }
-
-  const set = (fieldId: string, value: string) => {
-    setDraft((d) => ({ ...d, [fieldId]: value }));
-    setDirty(true);
-  };
-
-  const save = () => {
-    updateMetadata.mutate(
-      {
-        id: documentId,
-        values: fields.map((f) => ({ fieldId: f.fieldId, value: draft[f.fieldId] ?? '' })),
-      },
-      { onSuccess: () => setDirty(false) },
-    );
-  };
+  const set = (fieldId: string, value: string) =>
+    setValues((current) => {
+      const next = { ...current, [fieldId]: value };
+      form.values = next;
+      return next;
+    });
 
   return (
-    <>
-      {fields
-        .slice()
-        .sort((a, b) => a.displayOrder - b.displayOrder)
-        .map((f) => (
-          <div key={f.fieldId} className="meta-row" style={{ alignItems: 'center' }}>
-            <span className="k">
-              {f.name}
-              {f.isRequired ? ' *' : ''}
-            </span>
-            <span className="v" style={{ maxWidth: '60%' }}>
-              <MetadataFieldInput
-                field={f}
-                value={draft[f.fieldId] ?? ''}
-                onChange={(v) => set(f.fieldId, v)}
-              />
-            </span>
+    <div className="grid" style={{ gap: '12px' }}>
+      {fields.map((f) => {
+        const missing = showErrors && isMetadataValueMissing(f, values[f.fieldId]);
+        return (
+          <div key={f.fieldId} className="field" style={{ marginBottom: 0 }}>
+            <label>
+              {f.name} {f.isRequired && <span className="req">*</span>}
+            </label>
+            <MetadataFieldInput
+              field={f}
+              value={values[f.fieldId] ?? ''}
+              invalid={missing}
+              onChange={(v) => set(f.fieldId, v)}
+            />
+            {missing && (
+              <div className="err" style={{ display: 'block' }}>
+                Enter {f.name} — it&rsquo;s required.
+              </div>
+            )}
           </div>
-        ))}
-      <div className="flex justify-end mt-2">
-        <button
-          className="btn btn-primary btn-sm"
-          disabled={!dirty || updateMetadata.isPending}
-          onClick={save}
-        >
-          <Icon name="save" size={13} /> {updateMetadata.isPending ? 'Saving…' : 'Save metadata'}
-        </button>
-      </div>
-    </>
+        );
+      })}
+      <div className="help">Saved values can be changed, but not cleared.</div>
+    </div>
   );
 }

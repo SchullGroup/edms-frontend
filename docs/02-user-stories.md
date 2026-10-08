@@ -487,7 +487,8 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
       `comment`/`approve`'s `signature`), not split across a second thread. "Mark
       reviewed" now opens an optional-comment modal too — see DRIFT-08 in doc 01 and
       BE-16/BE-17 in `BACKEND_REQUESTS.md` for what's still needed (an optional
-      signature on `review`, and multi-document workflow instances).
+      signature on `review`; multi-document workflow instances shipped in the
+      backend and were wired 2026-10-07 — DRIFT-19 in doc 01).
 - [ ] 🟨 **The backend audit trail is real now (DRIFT-11 revised, 2026-09-18)** — it
       auto-writes hash-chained entries server-side and `/admin/audit` reads it live. But
       this page still calls the old no-op `useCreateAuditLog` (there's no write endpoint
