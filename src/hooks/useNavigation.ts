@@ -623,7 +623,10 @@ export const useNavigation = () => {
     ...filteredNav.sections,
     {
       label: 'Reference',
-      items: [{ route: '/user-stories', label: 'Product Guide', icon: 'flow' }],
+      items: [
+        { route: '/help', label: 'Help', icon: 'info' },
+        { route: '/user-stories', label: 'Product Guide', icon: 'flow' },
+      ],
     },
   ];
 

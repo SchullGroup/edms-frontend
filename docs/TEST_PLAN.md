@@ -839,7 +839,12 @@ Items whose backend already exists (or needs none). Worked through one at a time
       word into "Find in document", press Enter to step through matches; Ctrl+F inside the
       viewer focuses the box; Print on a Confidential document — the printout carries the
       watermark. Left: Office/email previews (backend)
-- [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3)
+- [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3).
+      **Help done 2026-10-08:** `/help` (topics for your role, search, a topic per area), the
+      Topbar's "?" opens the topic for the page you're on, the sidebar's Help & support goes
+      there, and "/" now focuses search as its hint says. To test: press "?" on Upload, a
+      workflow page and Policies — each opens its own topic. **Deferred by product decision
+      (2026-10-08):** responsive layout, accessibility, i18n and frontend tests
 - [x] Permission gates on the P4 actions — see the P4 table (2026-10-08)
 - [x] Role switcher for multi-role users (doc 05 #29). **Built 2026-10-08.** To test: give a
       supervisor the `internal_auditor` role too, sign in — they land on `/auditor` and the

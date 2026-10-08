@@ -185,7 +185,7 @@ export function DocumentViewerPanel({
               <Icon name="doc" size={32} />
               <div className="h3 mt-4 mb-2">Preview not available</div>
               <p className="caption mb-4">
-                {fileKindLabel(fileMimeType)} can&rsquo;t be previewed yet.
+                {fileKindLabel(fileMimeType)} can’t be previewed yet.
                 {canDownload
                   ? ' Download it to read it.'
                   : ` Download is turned off for ${confidentiality} documents.`}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -15,7 +15,7 @@ export const Sidebar = () => {
   const router = useRouter();
   const pathname = usePathname();
   const { currentUser, branding, resetData, prefs, setPrefs } = useStore();
-  const { openModal, addToast } = useUIStore();
+  const { addToast } = useUIStore();
   const queryClient = useQueryClient();
 
   const handleSignOut = () => {
@@ -73,6 +73,20 @@ export const Sidebar = () => {
     };
   }, [menuOpen, placeMenu]);
 
+  // "/" anywhere (outside a text field) jumps to search, as the box's hint says.
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
   if (!me || !nav) return null;
 
   const storagePct = 79;
@@ -93,6 +107,7 @@ export const Sidebar = () => {
             <Icon name="search" size={16} />
           </span>
           <input
+            ref={searchRef}
             type="search"
             placeholder="Search…"
             aria-label="Global search"
@@ -142,25 +157,7 @@ export const Sidebar = () => {
       </div>
 
       <div className="sidebar-foot">
-        <button
-          className="foot-link"
-          onClick={() =>
-            openModal({
-              title: 'Help & support',
-              body: (
-                <div>
-                  <p style={{ lineHeight: 1.65, fontSize: '13px' }}>
-                    SchullTech EDMS v1.0 — role-based demo build. Press{' '}
-                    <span className="kbd">/</span> anywhere to search. Workflows, signing,
-                    redaction, theming and audit trails are fully interactive; data persists locally
-                    and can be reset from your profile menu.
-                  </p>
-                </div>
-              ),
-              actions: [{ label: 'Got it', kind: 'btn-primary' }],
-            })
-          }
-        >
+        <button className="foot-link" onClick={() => router.push('/help')}>
           <span>
             <Icon name="circle" size={16} />
           </span>

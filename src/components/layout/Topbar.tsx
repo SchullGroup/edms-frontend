@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { helpTopicForPath } from '@/constants/helpTopics';
 import { useStore } from '@/store/useStore';
 import { useNavigation } from '@/hooks/useNavigation';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -32,6 +33,7 @@ const QUICK_ACTION: Record<string, { label: string; icon: string; go: string }> 
 
 export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav: () => void }) => {
   const router = useRouter();
+  const pathname = usePathname();
   const { currentUser, prefs, setPrefs } = useStore();
   const nav = useNavigation();
   const { portal, portals } = usePermissions();
@@ -121,6 +123,15 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
       ) : (
         <span className="surface-label">{nav.surface}</span>
       )}
+
+      <button
+        className="icon-btn"
+        aria-label="Help for this page"
+        title="Help for this page"
+        onClick={() => router.push(`/help#${helpTopicForPath(pathname)}`)}
+      >
+        <Icon name="info" />
+      </button>
 
       <button
         className="icon-btn"

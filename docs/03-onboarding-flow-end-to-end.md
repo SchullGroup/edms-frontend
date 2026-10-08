@@ -313,7 +313,7 @@ fields" until 2026-10-06 — stale since the field editor shipped (2026-09-18).*
 | 3.2 | Attach to a department | same payload | ✅ — **this is what makes department-scoped document access work** |
 | 3.3 | Delegate the cabinet: grant its manager (role or user) `upload` / `edit` / `delete` | `POST /cabinets/:id/access` | ✅ Access card |
 | 3.4 | Define custom metadata fields | `POST /cabinets/:id/metadata-fields` | ✅ Metadata schema card (*was "⛔ backend only", stale — corrected 2026-10-06*) |
-| 3.5 | Build the folder tree — normally the cabinet's manager, on `/staff/cabinets` | `POST /cabinets/:cabinetId/folders` `{name, parentId?}` | 🟨 needs `folder:create` **and** `upload` on the cabinet; not verified live |
+| 3.5 | Build the folder tree — normally the cabinet's manager, on `/staff/cabinets` | `POST /cabinets/:cabinetId/folders` `{name, parentId?}` | ✅ needs `folder:create` **and** `upload` on the cabinet; sub-folders confirmed in testing 2026-10-08 |
 | 3.6 | Attach a retention policy | — | ⛔ no endpoint, no UI, no enforcement job |
 
 ### The metadata gap in practice

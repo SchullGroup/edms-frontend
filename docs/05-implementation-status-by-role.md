@@ -71,7 +71,7 @@ For each of the six role dashboards this document lists:
 
 ## Portfolio summary
 
-**57 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
+**58 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
 2026-10-05 — was 53 on 2026-10-02, 51 on 2026-09-18, 42 at last full classification). The
 +4 on 2026-10-05 are the circulars pages `/circulars/[id]`, `/circulars/manage`,
 `/circulars/manage/new` and `/circulars/manage/[id]` (classified under Shared pages). The +2
@@ -101,11 +101,16 @@ Every classification below was verified by inspecting what each page destructure
 | Client Administration | 12 | 7 | 2 | 1 | 2 | Structure real; branding mock, policies Hybrid (SLA tab real). `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
 | Audit & Compliance | 4 | 1 | 1 | 2 | — | Trail real; dashboard and findings fixture. |
 | Platform Admin | 6 | — | — | 6 | — | Mock by design (Phase 2). |
-| Shared | 17 | 2 | 11 | 1 | 3 | Login and upload real; circulars, delegations and the workflow page wired but 🟨 not verified live; notifications fixture. |
-| **Total** | **57** | **21** | **18** | **13** | **5** | |
+| Shared | 18 | 2 | 11 | 1 | 4 | Login and upload real; circulars, delegations and the workflow page wired but 🟨 not verified live; notifications fixture. |
+| **Total** | **58** | **21** | **18** | **13** | **6** | |
 
 *(Re-tallied 2026-10-08 from each page's row in this doc: all 57 `page.tsx` files. Later the
-same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → 🟨.)*
+same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → 🟨, and `/help`
+(static) was added, making 58.)*
+
+*Confirmed by the product owner's own testing, 2026-10-08:* the admin setup checklist, the SLA
+settings, sub-folders, batch upload ("File all") and multi-document workflows. Page markers
+are unchanged where the page has other unverified parts.
 *(🟨
 counts Hybrid pages and API-only pages not yet verified end to end — Partial, not ✅, per
 house rule 1. ↪️ / static: `/admin/circulars`, `/admin/workflows/instances`, `/tasks/[id]`,
@@ -557,7 +562,7 @@ approximation, not a silent one.
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
-| `/admin` | 168 | — | `useUsers`, `useCabinets`, `useWorkflows` (published + drafts), `useDepartments`, `useAccessRequestsInbox` ✅ | ✅ Live — **2026-10-08 (🟨 not verified live):** the setup checklist and pending tasks were hard-coded ("SSO enrolment (2 users outstanding)", "812 GB", "+2 this month", three invented tasks) despite this row saying Live. Now the checklist follows doc 03's setup chain against live data (departments, cabinets, a folder in every cabinet, users beyond the first, a published workflow), and pending tasks are real: access requests waiting, unpublished workflow drafts, cabinets with no folder. The storage tile became a departments count |
+| `/admin` | 168 | — | `useUsers`, `useCabinets`, `useWorkflows` (published + drafts), `useDepartments`, `useAccessRequestsInbox` ✅ | ✅ Live — **2026-10-08 (confirmed in testing 2026-10-08):** the setup checklist and pending tasks were hard-coded ("SSO enrolment (2 users outstanding)", "812 GB", "+2 this month", three invented tasks) despite this row saying Live. Now the checklist follows doc 03's setup chain against live data (departments, cabinets, a folder in every cabinet, users beyond the first, a published workflow), and pending tasks are real: access requests waiting, unpublished workflow drafts, cabinets with no folder. The storage tile became a departments count |
 | `/admin/users` | ~320 | `auditAction` only | `useUsers` + mutations, `useRoles` (picker), `useAssign/RemoveUserRole`, `useResendInvitation` ✅ | ✅ Live — users only since 2026-09-10 (roles split out); "Resend invite" added 2026-09-18 |
 | `/admin/roles` | ~470 | `auditAction` only | `useRoles`, `useCreate/Update/DeleteRole`, `useSetRolePermissions` ✅ | ✅ Live — rail + data-driven permission matrix; catalog derived from the `GET /roles` union (no `GET /permissions` exists); built-in roles read-only |
 | `/admin/cabinets` | 448 | `auditAction` only | `useCabinets`, `useDepartments`, `useCreateFolder` (seeds "General") ✅ · metadata-field + access-grant hooks via the shared `components/cabinets/` cards | ✅ Live — reworked 2026-10-06: folder tools and the document browser moved to `/staff/cabinets`; schema and access cards extracted into shared components. Tested end to end by the user 2026-10-08 |
@@ -875,6 +880,7 @@ This is a **phase**, not a backlog item:
 | `/set-password` | 145 | signed out | — | `authService.resetPassword` → `POST /auth/reset-password` (invitation and reset tokens) | 🟨 API-only, no `SEED`; DRIFT-15 fixed its payload 2026-09-18. Not re-verified in the 2026-10-08 pass |
 | `/user-stories` | 413 | all | — | — | static — in-app guide built from a local data module (the stories in doc 02), outside the app shell |
 | `/delegations` | 364 | `delegation:view` | `currentUser` | `useDelegations`, `useCreateDelegation`, `useEndDelegation`, `useUsers`, `useCabinets` ✅ | 🟨 API-only, no `SEED`. *Row added 2026-10-08* — the page was wired by 2026-09-18 (backlog #13) but never had an inventory row; not re-verified end to end |
+| `/help` | 516 | none (every signed-in user) | — | none — static content | ↪️ Static — **new 2026-10-08**: help topics ordered for the reader's portal (other roles' topics appear when searched), search box, anchors per topic. The Topbar's "?" opens the topic for the current page (`helpTopicForPath` in `src/constants/helpTopics.ts`), and the sidebar's Help & support goes here instead of a stale demo-build message |
 | `/tasks/[id]` | 33 | all | — | `useTask` → `GET /tasks/:id` | ↪️ redirect to `/workflow-instances/{instanceId}?task={id}` — landing page for backend `/tasks/:id` notification links (DRIFT-17). Not yet verified live |
 | `/workflow-instances/[id]` | 378 | all | `currentUser` | `useWorkflowInstance`, `useTask`, `useDocument`, `useTaskAction`, versions ✅ | 🟨 **new 2026-10-02** — the workflow page (see below). Was a 33-line redirect earlier the same day. Not yet verified e2e |
 
@@ -1031,7 +1037,7 @@ ageing indicator.*
 | 18 | 🟨 ~~Cabinet metadata-field designer~~ (done) + dynamic upload form — **built 2026-10-07, not verified live**; only usable by uploaders with `document_metadata:edit` + `edit` on the cabinet until the backend accepts metadata on `POST /documents` | Frontend |
 | 19 | ✅ ~~Comments and signatures endpoints~~ — task-action fields suffice (`comment` string on any action, `approve`'s required `signature` image). Dedicated `GET/POST /documents/:id/comments`/`/signatures` exist and were briefly wired 2026-09-18, then deliberately un-wired the same day: product wants one workflow trail, not a second task-independent thread. | — |
 | 19a | Optional `signature` on the `review` task action (BE-16) — "Mark reviewed" already has an optional-comment modal; needs the backend to accept a signature there too, the same way `approve` does | Backend |
-| 19b | 🟨 ~~Support more than one document per workflow instance (BE-17)~~ — **backend done** (`5144fc7`, then per-document routing and SLA in `919d0ef`, 2026-10-06). **Frontend done 2026-10-07, not verified live** (DRIFT-19): routing several documents makes one workflow; the workflow page lists its documents with each one's stage and deadline; approve/reject/review/request-changes act on chosen documents. Open on the backend: deadlines in the task and instance **lists**, and an on-time endpoint — until then list due dates, the Monitor's stage/due columns and SLA % show "—" | Frontend |
+| 19b | 🟨 ~~Support more than one document per workflow instance (BE-17)~~ — **backend done** (`5144fc7`, then per-document routing and SLA in `919d0ef`, 2026-10-06). **Frontend done 2026-10-07, confirmed in testing 2026-10-08** (DRIFT-19): routing several documents makes one workflow; the workflow page lists its documents with each one's stage and deadline; approve/reject/review/request-changes act on chosen documents. Open on the backend: deadlines in the task and instance **lists**, and an on-time endpoint — until then list due dates, the Monitor's stage/due columns and SLA % show "—" | Frontend |
 | 20 | 🟨 Document download/export/print — **backend done** (`0dab81a`, 2026-10-08): `document:download`/`export`/`print` permissions plus per-tier `document:view_*` clearance, `GET /documents/:id/export` and `/print`, and old-version reads audited as downloads. **Frontend done 2026-10-08:** Download (not clicked through), Print in the pdf.js viewer (verified against the live API), Export on `/doc/[id]` (not clicked through). **Still open on the backend:** `GET /documents/:id` and the lists hand everyone a signed URL, so download permission can be bypassed | Frontend |
 | 20a | **Full ingestion format support** (logged 2026-10-08). The PRD and tracker require PDF, Office (Word/Excel/PowerPoint), JPG/PNG/TIFF and email (EML/MSG), plus ZIP archives expanded on ingestion, all with validation and preview rendering, and OCR on image-based/scanned files. **Today:** upload accepts PDF, DOCX, XLSX, TIFF, JPG, PNG; only PDF and JPG/PNG preview; PowerPoint, legacy .doc/.xls/.ppt, EML, MSG and ZIP are refused. Every file is sent to Textract, which fails on DOCX/XLSX, and the search index is only built after OCR succeeds — so DOCX/XLSX (and any file whose OCR fails) are **not searchable at all, not even by title**. **Agreed approach:** *backend* — at upload, render a PDF preview copy (LibreOffice for Office; message header + body for email, each attachment filed as its own linked document), extract text directly from born-digital files, OCR only images and scanned PDFs, and index title + metadata even when there's no text; *frontend* — accept the new types, expand ZIPs in the browser into one upload card per file (nested ZIPs too, unsupported entries flagged), show the preview copy in the existing PDF viewer, and until then a readable fallback ("Word documents can't be previewed yet" + Download) instead of the raw MIME type. Rejected: Microsoft's Office viewer (sends documents to a third party). Optional stopgap if the backend is far off: in-browser previews for DOCX/XLSX/TIFF only | Both |
 | 21 | 🟨 ~~Circulars: model, endpoints, audience targeting, ack tracking~~ — **backend module built; frontend wired 2026-10-05** (inbox, reader, manage area). Remaining: verify end to end against a live backend. (The Roles editor already offers `circular:*` — its matrix is built from the `GET /roles` union, and the backend accepts any seeded key — grouped under "Communication" in `MODULE_MAP`) | Frontend |

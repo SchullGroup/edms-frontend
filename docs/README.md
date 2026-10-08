@@ -68,7 +68,7 @@ setting up an environment.
 
 ## The short version
 
-**57 frontend pages · 130 backend routes · 6 roles · 0 tests.**
+**58 frontend pages · 130 backend routes · 6 roles · 0 tests.**
 *(Re-derived 2026-10-05 with the commands in `AGENTS.md`, backend @ `dev` `c353105`: pages
 +4 for the circulars area; routes 106 → 130, of which 15 are the new `circulars` module —
 the rest accumulated since the 2026-09-18 count and weren't attributed individually.)*
@@ -87,7 +87,7 @@ The DOCUMENT half is real
 The GOVERNANCE half is a UI over fixtures
   notifications · policies          (circulars: wired 2026-10-05, 🟨 unverified)
   findings · retention · platform operations
-                                                    🟥 13 of 57 pages
+                                                    🟥 13 of 58 pages
 ```
 
 ### The four defects that matter most
