@@ -785,7 +785,13 @@ Items whose backend already exists (or needs none). Worked through one at a time
 - [ ] Admin home setup checklist (18.1)
 - [ ] Chart drill-downs to filtered record lists (21.6, 22.3)
 - [ ] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6)
-- [ ] Configuration history: audit log filtered to config actions (18.7)
+- [x] Configuration history: audit log filtered to config actions (18.7). **Built 2026-10-08**
+      on `/admin/audit` (and `/auditor/trail`): a record-type dropdown whose Configuration group
+      is roles, departments, cabinets (incl. access and metadata fields), folders, workflow
+      designs and users, and an action dropdown narrowed to that type. Only one type at a time,
+      since `GET /audit` takes a single `objectType`. SLA settings aren't audited server-side.
+      To test: rename a role, then pick Roles & permissions — the rename is listed; Export
+      gives the same rows
 - [ ] PDF/image preview and in-PDF search (4.3, 5.9 — partial; Office/email/OCR need backend).
       **Done 2026-10-08:** readable fallback for files that can't be previewed ("Word
       documents can't be previewed yet" + the audited Download, hidden when the policy turns

@@ -565,7 +565,7 @@ approximation, not a silent one.
 | `/admin/policies` | 244 | `auditAction` | `usePolicies` 🟥 | 🟥 Mock |
 | `/admin/branding` | 397 | `auditAction` | `useBranding` 🟥 | 🟥 Mock |
 | `/admin/circulars` | 20 | — | — | ↪️ redirect to `/circulars/manage` (2026-10-05) — management moved to a shared area because supervisors and management author and publish circulars too, and can't enter this portal |
-| `/admin/audit` | 150 | — | `useAuditEntries`, `useExportAuditCsv`, `useVerifyAuditChain` ✅ · `useUsers` ✅ | ✅ Live — wired 2026-09-18 (was `SEED.audit`) |
+| `/admin/audit` | 234 | — | `useAuditEntries`, `useExportAuditCsv`, `useVerifyAuditChain` ✅ · `useUsers` ✅ | ✅ Live — wired 2026-09-18 (was `SEED.audit`). **2026-10-08 (🟨 not verified live):** record-type and action dropdowns replace the free-text action box. That box sent partial text to `GET /audit`, which only accepts exact action names, so typing "doc" was a 400 and the table showed "Failed to load". The record types' **Configuration** group (roles, departments, cabinets, folders, workflow designs, users) is the configuration history (18.7). Export sends the same filters. SLA settings aren't audited by the backend, so they can't appear |
 | `/admin/access-requests` | ~200 | — | `useAccessRequestsInbox`, `useGrantAccessRequest`, `useDenyAccessRequest` ✅ | ✅ Live — **new page, 2026-09-18**. client_admin-only grant/deny inbox for `POST /documents/:id/access-requests` |
 
 ### APIs wired ✅
@@ -695,7 +695,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
 | `/auditor` | 128 | `findings`, `audit`, `users` | **none** | 🟥 Mock |
-| `/auditor/trail` | 277 | `auditAction` (finding-raise only) | `useAuditEntries`, `useExportAuditCsv` ✅ | ✅ Live — migrated 2026-09-18 |
+| `/auditor/trail` | 295 | `auditAction` (finding-raise only) | `useAuditEntries`, `useExportAuditCsv` ✅ | ✅ Live — migrated 2026-09-18. **2026-10-08 (🟨 not verified live):** same record-type/action dropdowns as `/admin/audit` (`AuditTypeActionFilters`), fixing the same free-text 400 |
 | `/auditor/findings` | 367 | `findings`, `users`, `addFinding`, `updateFinding` | **none** | 🟥 Mock — no backend model regardless |
 | `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟨 Hybrid — inherits the now-real sensitive-activity panel |
 

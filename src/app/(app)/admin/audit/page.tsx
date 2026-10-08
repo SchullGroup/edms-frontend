@@ -11,6 +11,7 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { AuditEntry } from '@/types/models';
 import { usePermissions } from '@/hooks/usePermissions';
 import { DateField } from '@/components/ui/DatePicker';
+import { AuditTypeActionFilters } from '@/components/audit/AuditTypeActionFilters';
 
 const PAGE_SIZE = 20;
 
@@ -20,6 +21,8 @@ export default function TenantAuditPage() {
   const [page, setPage] = useState(1);
   const [actorId, setActorId] = useState('');
   const [action, setAction] = useState('');
+  // "Configuration" record types are the config history (story 18.7).
+  const [objectType, setObjectType] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
 
@@ -27,7 +30,8 @@ export default function TenantAuditPage() {
     page,
     limit: PAGE_SIZE,
     actorId: actorId || undefined,
-    action: action.trim() || undefined,
+    action: action || undefined,
+    objectType: objectType || undefined,
     from: from || undefined,
     to: to || undefined,
   };
@@ -58,7 +62,13 @@ export default function TenantAuditPage() {
       : users.find((u: any) => u.id === a.actorId)?.name || a.actorId;
 
   const handleExport = () => {
-    exportCsv.mutate({ actorId: filters.actorId, action: filters.action, from, to });
+    exportCsv.mutate({
+      actorId: filters.actorId,
+      action: filters.action,
+      objectType: filters.objectType,
+      from,
+      to,
+    });
   };
 
   const handleVerify = () => {
@@ -127,14 +137,12 @@ export default function TenantAuditPage() {
           <div className="page-sub">Tenant-scoped, hash-chained immutable event log.</div>
         </div>
         <div className="actions">
-          <input
-            className="input"
-            type="text"
-            placeholder="Filter by action…"
-            style={{ width: '160px', height: '32px' }}
-            value={action}
-            onChange={(e) => {
-              setAction(e.target.value);
+          <AuditTypeActionFilters
+            objectType={objectType}
+            action={action}
+            onChange={(next) => {
+              setObjectType(next.objectType);
+              setAction(next.action);
               setPage(1);
             }}
           />
