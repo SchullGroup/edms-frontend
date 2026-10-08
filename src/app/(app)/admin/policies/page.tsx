@@ -4,13 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
-import { ConfBadge, UrgBadge } from '@/components/ui/Badges';
+import { ConfBadge } from '@/components/ui/Badges';
+import { SlaSettingsPanel } from '@/components/policies/SlaSettingsPanel';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import {
   usePolicies,
   useUpdatePolicyConfidentiality,
-  useUpdatePolicyUrgency,
   useUpdatePolicyControl,
 } from '@/apis/hooks/usePolicies';
 
@@ -20,7 +20,6 @@ export default function PoliciesPage() {
 
   const { data: policiesData, isLoading, isError, refetch } = usePolicies();
   const updatePolicyConfidentiality = useUpdatePolicyConfidentiality();
-  const updatePolicyUrgency = useUpdatePolicyUrgency();
   const updatePolicyControl = useUpdatePolicyControl();
 
   const [tab, setTab] = useState<'conf' | 'urg' | 'ret' | 'ctl'>('conf');
@@ -45,17 +44,6 @@ export default function PoliciesPage() {
       {
         onSuccess: () => {
           auditAction('POLICY_EDIT', 'confidentiality', `${level}: ${key} → ${value}`);
-        },
-      },
-    );
-  };
-
-  const handleUrgSlaChange = (level: string, sla: number) => {
-    updatePolicyUrgency.mutate(
-      { level, updates: { sla } },
-      {
-        onSuccess: () => {
-          auditAction('POLICY_EDIT', 'urgency', `${level} SLA → ${sla}h`);
         },
       },
     );
@@ -128,28 +116,6 @@ export default function PoliciesPage() {
     },
   ];
 
-  const urgCols: Column<any>[] = [
-    { key: 'level', label: 'Level', render: (r) => <UrgBadge level={r.level} /> },
-    {
-      key: 'sla',
-      label: 'Default SLA',
-      render: (r) => (
-        <input
-          className="input"
-          type="number"
-          defaultValue={r.sla}
-          style={{ width: '90px' }}
-          onBlur={(e) => handleUrgSlaChange(r.level, +e.target.value)}
-        />
-      ),
-    },
-    {
-      key: 'note',
-      label: '',
-      render: () => <span className="caption">hours to breach; escalation per workflow stage</span>,
-    },
-  ];
-
   const retCols: Column<any>[] = [
     { key: 'type', label: 'Record type', render: (r) => <b>{r.type}</b> },
     {
@@ -216,11 +182,9 @@ export default function PoliciesPage() {
         </div>
       )}
 
-      {tab === 'urg' && (
-        <div className="card">
-          <Table cols={urgCols} rows={policies?.urgency || []} />
-        </div>
-      )}
+      {/* The one tab backed by the API (`/sla/configuration`, `/sla/holidays`);
+          the others still read the mock policies service. */}
+      {tab === 'urg' && <SlaSettingsPanel />}
 
       {tab === 'ret' && (
         <div className="card">

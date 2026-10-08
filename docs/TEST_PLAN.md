@@ -767,9 +767,13 @@ Items whose backend already exists (or needs none). Worked through one at a time
       check Restricted is disabled; as staff, check Confidential and Restricted are both
       disabled. Then route the document and check the next stage's deadline follows the new
       urgency
-- [ ] SLA settings screen: business hours, working days, holidays, warning window, urgency
+- [x] SLA settings screen: business hours, working days, holidays, warning window, urgency
       multipliers, breach action — `GET/PATCH /sla/configuration`, `/sla/holidays` (6.7, 6.8,
-      18.2, 18.5)
+      18.2, 18.5). **Built 2026-10-08** as `/admin/policies` → **Urgency & SLA** (replacing a
+      mock table). Saving needs `workflow:edit`; without it the form is read-only. To test: as
+      client_admin, turn on working hours (Mon–Fri 08:00–17:00), add a holiday, set Critical to
+      0.5, save, reload — all kept. Then route a Critical document into a 24 h stage and check
+      its deadline is 12 working hours away. Changes don't move deadlines already set
 - [ ] Sub-folders: create and browse nested folders — folder `parentId` (5.1)
 - [x] Typed signature: render the typed name to an image for approve (9.1). **Built
       2026-10-08:** Sign & approve → Signature → **Type**; the preview is the exact PNG sent.

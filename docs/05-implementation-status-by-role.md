@@ -562,7 +562,7 @@ approximation, not a silent one.
 | `/admin/workflows` | 442 | `auditAction` only | `useWorkflows` + mutations ✅ | ✅ Live ⚠️ **no authorization on the endpoints** — `@ts-nocheck` removed 2026-10-08; the page now type-checks |
 | `/admin/workflows/instances` | 7 | — | — | ↪️ re-exports `/supervisor/instances` (the Workflow Monitor) — intentional, so client admins reach it from their own portal. *Classified 2026-10-08* |
 | `/admin/departments` | 460 | `auditAction` only | `useDepartments`, `useCreate/Update/DeleteDepartment` ✅ | 🟨 Partial — API-only, no `SEED`: create, edit, delete, one level of sub-departments (TEST_PLAN "Things to check"). *Classified 2026-10-08*, not verified end to end in that pass |
-| `/admin/policies` | 244 | `auditAction` | `usePolicies` 🟥 | 🟥 Mock |
+| `/admin/policies` | 208 | `auditAction` | `usePolicies` 🟥 · `useSlaConfiguration`, `useUpdateSlaConfiguration`, `useSlaHolidays`, `useCreate/DeleteSlaHoliday` ✅ | 🟨 Hybrid — **2026-10-08 (not verified live):** the Urgency & SLA tab is the real SLA policy (time zone, working hours and days, holidays, warning window, breach action, urgency multipliers), replacing a mock "Default SLA hours" table. Confidentiality, Retention and Controls tabs are still `SEED.policies` |
 | `/admin/branding` | 397 | `auditAction` | `useBranding` 🟥 | 🟥 Mock |
 | `/admin/circulars` | 20 | — | — | ↪️ redirect to `/circulars/manage` (2026-10-05) — management moved to a shared area because supervisors and management author and publish circulars too, and can't enter this portal |
 | `/admin/audit` | 234 | — | `useAuditEntries`, `useExportAuditCsv`, `useVerifyAuditChain` ✅ · `useUsers` ✅ | ✅ Live — wired 2026-09-18 (was `SEED.audit`). **2026-10-08 (🟨 not verified live):** record-type and action dropdowns replace the free-text action box. That box sent partial text to `GET /audit`, which only accepts exact action names, so typing "doc" was a 400 and the table showed "Failed to load". The record types' **Configuration** group (roles, departments, cabinets, folders, workflow designs, users) is the configuration history (18.7). Export sends the same filters. SLA settings aren't audited by the backend, so they can't appear |
@@ -622,7 +622,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 
 | Where | Fixture | Consequence |
 |---|---|---|
-| `/admin/policies` | `SEED.policies` | Confidentiality/urgency/control config is decorative |
+| `/admin/policies` | `SEED.policies` | Confidentiality/retention/control config is decorative. *(The urgency table was replaced by the real SLA settings 2026-10-08)* |
 | `/admin/branding` | `SEED.branding` | ⚠️ **Theming genuinely applies** via CSS custom properties in `AppShell`, including a dark-mode `lighten()` — so it looks completely real and persists nowhere |
 | Role matrix editor | `SEED.rolesMatrix` via `updateRoleMatrix` | **Permission changes appear to save and don't** |
 

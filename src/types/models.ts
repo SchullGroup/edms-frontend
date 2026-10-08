@@ -869,6 +869,44 @@ export interface TaskWorkloadData {
   summary: TaskWorkloadSummary;
 }
 
+/** What happens when a stage deadline passes (`SLA_BREACH_ACTIONS`). `flag` only
+ *  records the breach; `notify_supervisor` also tells the department's
+ *  supervisors; `escalate` does that and escalates the task. */
+export type SlaBreachAction = 'flag' | 'notify_supervisor' | 'escalate';
+
+/**
+ * `GET/PATCH /sla/configuration` — the tenant's one SLA policy. A stage's
+ * deadline is its `sla_hours` × the document's urgency multiplier, counted in
+ * wall-clock hours or, with `businessHoursEnabled`, working hours only.
+ * `workingDays` are ISO weekdays (1 = Monday … 7 = Sunday); times are "HH:mm"
+ * in `timezone`. Changes apply to deadlines set afterwards, not existing ones.
+ */
+export interface SlaConfiguration {
+  id: string;
+  timezone: string;
+  businessHoursEnabled: boolean;
+  workingDays: number[];
+  workStart: string;
+  workEnd: string;
+  excludeHolidays: boolean;
+  warningHours: number;
+  breachAction: SlaBreachAction;
+  lowUrgencyMultiplier: number;
+  normalUrgencyMultiplier: number;
+  highUrgencyMultiplier: number;
+  criticalUrgencyMultiplier: number;
+}
+
+export type SlaConfigurationUpdate = Partial<Omit<SlaConfiguration, 'id'>>;
+
+/** One row of `GET /sla/holidays`. `date` is a date-only value sent as an ISO
+ *  timestamp at UTC midnight — read its first 10 characters. */
+export interface SlaHoliday {
+  id: string;
+  date: string;
+  name: string;
+}
+
 /** One row of `GET /sla/breaches` — a persisted SLA warning/escalation event. */
 export interface SlaBreach {
   id: string;

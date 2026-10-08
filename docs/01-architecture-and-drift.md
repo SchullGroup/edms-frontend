@@ -993,6 +993,9 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `POST /tasks/:id/action` | ✅ | ✅ — `request_changes` sends `documents: [{documentId}]` from the workflow page's document picker since 2026-10-02 (**DRIFT-18** fixed; the field became required in `edms-backend` `5144fc7`). Not yet verified e2e |
 | — | `POST /workflow-instances/:id/documents` `{documentId, comment?}` (`5144fc7`) | ✅ wired — "Mark reviewed" attaches the reviewer's documents through it (`useWorkflowTaskActions`). *This row said "no UI yet"; stale, corrected 2026-10-07* |
 | `PATCH /tasks/:id/reassign` | ✅ | ✅ |
+| `GET /sla/breaches` | ✅ (`workflow_instance:view`) | ✅ wired — staff dashboard Overdue tile, My Tasks, My Performance. *Row missing from this matrix until 2026-10-08* |
+| `GET/PATCH /sla/configuration` | ✅ (`workflow:view` / `workflow:edit`) | 🟨 wired 2026-10-08, not verified live — `/admin/policies` → Urgency & SLA (`SlaSettingsPanel`). Only changed fields are sent |
+| `GET/POST /sla/holidays`, `DELETE /sla/holidays/:holidayId` | ✅ (`workflow:view` / `workflow:edit`) | 🟨 wired 2026-10-08, not verified live — same tab, Holidays card |
 | `GET/POST /delegations`, `POST /delegations/:id/end` | ✅ | ✅ wired — `/delegations` (344 lines) exists; this row was stale, caught 2026-09-18 while investigating DRIFT-11 |
 | — | `GET /workflow-history`, `GET /workflow-history/:id` | ✅ wired — the activity trail (`WorkflowHistoryTimeline`), and since 2026-10-07 each document's live stage and deadline (`useWorkflowDocumentPositions`). *This row said "no UI at all"; stale, corrected 2026-10-07* |
 
