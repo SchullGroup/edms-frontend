@@ -5,6 +5,7 @@ import { useWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
 import { useWorkflowInstanceLifecycle } from '@/hooks/useWorkflowInstanceLifecycle';
 import { WorkflowStageProgress } from './WorkflowStageProgress';
 import { WorkflowHistoryTimeline } from './WorkflowHistoryTimeline';
+import { useWorkflowDocumentPositions } from './useWorkflowDocumentPositions';
 import { StatusBadge } from '@/components/ui/Badges';
 import { Skeleton, SkeletonText } from '@/components/common/Skeleton';
 import { fmtDateTime } from '@/utils/helpers';
@@ -36,6 +37,8 @@ export function WorkflowInstanceDetail({
 }: WorkflowInstanceDetailProps) {
   const { data: instance, isLoading } = useWorkflowInstance(instanceId);
   const { confirmHold, confirmResume, confirmClose, isPending } = useWorkflowInstanceLifecycle();
+  // The monitor is an oversight view, so read the whole trail.
+  const { positions } = useWorkflowDocumentPositions(instance, 'all');
 
   if (isLoading) return <WorkflowInstanceDetailSkeleton />;
   if (!instance) return <div className="caption">This workflow instance could not be loaded.</div>;
@@ -45,6 +48,11 @@ export function WorkflowInstanceDetail({
   const actorName =
     pendingTask?.assignee?.name || pendingTask?.assignedRole?.name || 'Unassigned';
   const closed = instance.status === 'closed';
+  const nearestDue = positions
+    .flatMap((p) => p.active.map((e) => e.stageDueAt))
+    .filter((d): d is string => !!d)
+    .sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+  const documents = instance.documents ?? [];
 
   return (
     <div>
@@ -66,17 +74,24 @@ export function WorkflowInstanceDetail({
       </div>
 
       <div className="field">
-        <label>Document</label>
-        {onOpenDocument ? (
-          <a
-            onClick={() => onOpenDocument(instance.documentId)}
-            style={{ fontWeight: 700, cursor: 'pointer' }}
-          >
-            {instance.document?.title || instance.documentId}
-          </a>
-        ) : (
-          <b>{instance.document?.title || instance.documentId}</b>
-        )}
+        <label>{documents.length === 1 ? 'Document' : `Documents (${documents.length})`}</label>
+        {documents.map((d) => {
+          const documentId = d.documentId ?? d.document.id;
+          return (
+            <div key={d.id}>
+              {onOpenDocument ? (
+                <a
+                  onClick={() => onOpenDocument(documentId)}
+                  style={{ fontWeight: 700, cursor: 'pointer' }}
+                >
+                  {d.document.title || documentId}
+                </a>
+              ) : (
+                <b>{d.document.title || documentId}</b>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="flex gap-3 flex-wrap mb-4">
@@ -101,10 +116,9 @@ export function WorkflowInstanceDetail({
       {stages?.length ? (
         <WorkflowStageProgress
           stages={stages}
-          currentStage={instance.currentStage}
+          positions={positions}
           status={instance.status}
           currentActorName={actorName}
-          stageDueAt={instance.stageDueAt}
         />
       ) : (
         <div className="caption">
@@ -116,7 +130,7 @@ export function WorkflowInstanceDetail({
       {pendingTask && (
         <div className="wf-detail">
           <b>Waiting on {actorName}</b>
-          {pendingTask.dueAt ? ` · due ${fmtDateTime(pendingTask.dueAt)}` : ''}
+          {nearestDue ? ` · next due ${fmtDateTime(nearestDue)}` : ''}
         </div>
       )}
 

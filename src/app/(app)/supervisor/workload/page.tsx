@@ -11,6 +11,7 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { Icon } from '@/components/ui/Icons';
 import { Task, TaskWorkloadMember } from '@/types/models';
+import { taskPrimaryDocument, taskTitle } from '@/utils/workflowDocuments';
 
 export default function WorkloadPage() {
   // Real per-member capacity/utilization from the backend — only directly
@@ -40,7 +41,7 @@ export default function WorkloadPage() {
   const handleReassign = (t: Task) => {
     let newAssignee = '';
     let note = '';
-    const title = t.workflowInstance?.document?.title || 'this document';
+    const title = taskTitle(t);
     openModal({
       title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
       body: (
@@ -93,7 +94,7 @@ export default function WorkloadPage() {
               .then(() => {
                 createAuditLog.mutate({
                   action: 'REASSIGN',
-                  target: t.workflowInstance?.documentId || t.id,
+                  target: taskPrimaryDocument(t)?.id || t.id,
                   detail: `Reassigned from ${prevName} to ${newName}`,
                 });
                 addToast(`Reassigned to ${newName}`, 'success');

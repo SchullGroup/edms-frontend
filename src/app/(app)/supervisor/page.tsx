@@ -19,6 +19,8 @@ import { HBarChart } from '@/components/ui/Charts';
 import { StatusBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
 import { Task, WorkflowTeamStatusMember } from '@/types/models';
+import { taskPrimaryDocument, taskTitle } from '@/utils/workflowDocuments';
+import { isOverdue } from '@/utils/supervisor';
 
 export default function SupervisorDashboard() {
   const router = useRouter();
@@ -75,7 +77,7 @@ export default function SupervisorDashboard() {
   const handleReassignModal = (t: Task, onDone?: () => void) => {
     let newAssignee = '';
     let note = '';
-    const title = t.workflowInstance?.document?.title || 'this document';
+    const title = taskTitle(t);
 
     openModal({
       title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
@@ -132,7 +134,7 @@ export default function SupervisorDashboard() {
               .then(() => {
                 createAuditLog.mutate({
                   action: 'REASSIGN',
-                  target: t.workflowInstance?.documentId || t.id,
+                  target: taskPrimaryDocument(t)?.id || t.id,
                   detail: `Reassigned from ${prevName} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`,
                 });
                 addToast(`Reassigned to ${newUser?.name}`, 'success');
@@ -298,8 +300,7 @@ function MemberDrawerBody({
       ) : tasks.length > 0 ? (
         <div className="rowlist">
           {tasks.map((t) => {
-            const doc = t.workflowInstance?.document;
-            const overdue = !!(t.dueAt && new Date(t.dueAt) < new Date());
+            const overdue = isOverdue(t);
             return (
               <div
                 key={t.id}
@@ -321,7 +322,7 @@ function MemberDrawerBody({
                     className="task-title"
                     style={{ fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}
                   >
-                    {doc?.title || 'Unknown document'}
+                    {taskTitle(t)}
                   </div>
                   <div className="task-meta flex items-center gap-2">
                     <StatusBadge status={overdue ? 'Overdue' : 'Pending'} />

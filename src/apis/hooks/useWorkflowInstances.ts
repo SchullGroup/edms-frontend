@@ -113,8 +113,8 @@ export const useStartWorkflowInstance = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ workflowId, documentId }: { workflowId: string; documentId: string }) =>
-      workflowInstancesService.createAndStart(workflowId, documentId),
+    mutationFn: ({ workflowId, documentIds }: { workflowId: string; documentIds: string[] }) =>
+      workflowInstancesService.createAndStart(workflowId, documentIds),
     onSuccess: () => {
       invalidateInstanceViews(queryClient);
     },

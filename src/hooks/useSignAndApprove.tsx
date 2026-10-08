@@ -4,6 +4,11 @@ import { useUIStore } from '@/store/useUIStore';
 import { useTaskAction } from '@/apis/hooks/useTasks';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 import { SignaturePad } from '@/components/documents/SignaturePad';
+import {
+  DocumentScopeField,
+  scopedDocuments,
+  type ScopeDocument,
+} from '@/components/workflowInstances/DocumentScopeField';
 import type { TaskActionSignature } from '@/types/models';
 
 type Mime = TaskActionSignature['mimeType'];
@@ -12,6 +17,8 @@ interface PromptArgs {
   taskId: string;
   /** Document / task title for the modal heading. */
   title?: string;
+  /** The task's documents — with more than one, the approver picks which to approve. */
+  documents?: ScopeDocument[];
   onSuccess?: () => void;
 }
 
@@ -26,8 +33,9 @@ export function useSignAndApprove() {
   const taskAction = useTaskAction();
   const { startUpload } = useMultipartUploader();
 
-  const promptSignAndApprove = ({ taskId, title, onSuccess }: PromptArgs) => {
+  const promptSignAndApprove = ({ taskId, title, documents = [], onSuccess }: PromptArgs) => {
     const sig: { current: { blob: Blob; mimeType: Mime } | null } = { current: null };
+    const chosen = new Set(documents.map((d) => d.id));
     const comment: { current: string } = { current: '' };
     let submitting = false;
 
@@ -40,6 +48,11 @@ export function useSignAndApprove() {
             Your signature is stored with the approval and recorded on the workflow trail.
             Approving advances the file to the next stage.
           </div>
+          <DocumentScopeField
+            documents={documents}
+            chosen={chosen}
+            label="Approve which documents?"
+          />
           <div className="field mb-4">
             <label>Signature</label>
             <SignaturePad onChange={(r) => (sig.current = r)} />
@@ -62,10 +75,15 @@ export function useSignAndApprove() {
           kind: 'btn-success',
           onClick: async () => {
             if (submitting) return false;
+            if (documents.length > 1 && chosen.size === 0) {
+              addToast('Pick at least one document to approve', 'error');
+              return false;
+            }
             if (!sig.current) {
               addToast('Add a signature to approve', 'error');
               return false;
             }
+            const scope = scopedDocuments(documents, chosen);
             submitting = true;
             try {
               const { blob, mimeType } = sig.current;
@@ -84,6 +102,7 @@ export function useSignAndApprove() {
                   action: 'approve',
                   signature: { fileUrl, mimeType },
                   ...(comment.current.trim() ? { comment: comment.current.trim() } : {}),
+                  ...(scope ? { documents: scope } : {}),
                 },
               });
               addToast('Approved — advanced to next stage', 'success');

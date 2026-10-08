@@ -19,12 +19,12 @@ import { TaskRow } from '@/components/ui/TaskRow';
 import { SkeletonNotifRows, SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { timeAgo, fmtDate } from '@/utils/helpers';
+import { byUrgencyThenDue, isOverdue, turnaroundDays } from '@/utils/supervisor';
 
-const URG_ORDER: Record<string, number> = { Critical: 0, High: 1, Normal: 2, Low: 3 };
-
-// Simple pure SVG donut
-const Donut = ({ value, color, label }: { value: number; color: string; label: string }) => {
-  const dash = `${value} 100`;
+// Simple pure SVG donut. A null value draws an empty ring with a dash: no data,
+// not a score of zero.
+const Donut = ({ value, color, label }: { value: number | null; color: string; label: string }) => {
+  const dash = `${value ?? 0} 100`;
   return (
     <div style={{ textAlign: 'center' }}>
       <svg
@@ -49,7 +49,7 @@ const Donut = ({ value, color, label }: { value: number; color: string; label: s
           y="20.35"
           style={{ fontSize: '9px', fontWeight: 700, fill: 'var(--ink)', textAnchor: 'middle' }}
         >
-          {value}%
+          {value === null ? '—' : `${value}%`}
         </text>
       </svg>
       <div style={{ fontSize: '12px', fontWeight: 600, marginTop: '8px' }}>{label}</div>
@@ -82,8 +82,11 @@ export default function StaffDashboard() {
   // guide, §5.2) — a different lens from the task list below. `inProgress`
   // already includes on_hold; don't add it again.
   const { data: statusCounts } = useWorkflowInstanceStatusCounts('mine');
-  // Persisted SLA breach events, not ad-hoc `dueAt < now` math.
-  const { data: slaBreaches } = useSlaBreaches({ scope: 'mine', status: 'open', limit: 1 });
+  // Persisted SLA breach events, not ad-hoc deadline math. They also drive the
+  // Overdue filter: `GET /tasks` carries no deadlines (edms-backend `919d0ef`),
+  // but each open breach names its task.
+  const { data: slaBreaches } = useSlaBreaches({ scope: 'mine', status: 'open', limit: 100 });
+  const breachedTaskIds = new Set((slaBreaches?.data ?? []).map((b) => b.taskId));
 
   if (!currentUser) return null;
 
@@ -101,28 +104,12 @@ export default function StaffDashboard() {
 
   let list = open.filter((t) => {
     if (!filter) return true;
-    if (filter === 'Overdue') return t.dueAt && new Date(t.dueAt) < new Date();
+    if (filter === 'Overdue') return breachedTaskIds.has(t.id) || isOverdue(t);
     if (filter === 'Closed') return t.status === 'completed';
     return t.status === 'pending';
   });
 
-  list.sort(
-    (a, b) =>
-      (URG_ORDER[
-        a.workflowInstance?.document?.urgency
-          ? a.workflowInstance.document.urgency.charAt(0).toUpperCase() +
-            a.workflowInstance.document.urgency.slice(1)
-          : 'Normal'
-      ] || 3) -
-        (URG_ORDER[
-          b.workflowInstance?.document?.urgency
-            ? b.workflowInstance.document.urgency.charAt(0).toUpperCase() +
-              b.workflowInstance.document.urgency.slice(1)
-            : 'Normal'
-        ] || 3) ||
-      (a.dueAt ? new Date(a.dueAt).getTime() : 9e15) -
-        (b.dueAt ? new Date(b.dueAt).getTime() : 9e15),
-  );
+  list.sort(byUrgencyThenDue);
 
   const tileDefs = [
     { key: 'Pending', cls: 't-pending', icon: 'clock' },
@@ -134,29 +121,14 @@ export default function StaffDashboard() {
   // `/notifications` is already scoped to the authenticated user server-side.
   const myNotifs = notifications;
 
-  // Mirrors the SLA/turnaround calc on staff/performance — dashboard shows the
-  // same real numbers instead of a hardcoded placeholder.
+  // Same calc as staff/performance. SLA compliance has no source since tasks
+  // lost their due date (edms-backend `919d0ef`) — on-time results are recorded
+  // server-side, and an endpoint over them is requested — so it shows "—".
   const closedTasks = mine.filter((t) => t.status === 'completed');
-  let onTime = 0;
-  let breached = 0;
-  closedTasks.forEach((t: any) => {
-    if (t.dueAt && t.completedAt && new Date(t.completedAt) > new Date(t.dueAt)) breached++;
-    else onTime++;
-  });
-  const totalSla = onTime + breached;
-  const slaPct = totalSla === 0 ? 100 : Math.round((onTime / totalSla) * 100);
-
-  const closedTasksWithDates = closedTasks.filter((t: any) => t.dueAt && t.completedAt);
-  const avgTurnaroundMs =
-    closedTasksWithDates.length > 0
-      ? closedTasksWithDates.reduce(
-          (sum: number, t: any) =>
-            sum + (new Date(t.completedAt).getTime() - new Date(t.dueAt).getTime()),
-          0,
-        ) / closedTasksWithDates.length
-      : 0;
-  const avgTurnaround =
-    avgTurnaroundMs > 0 ? (avgTurnaroundMs / 86400000).toFixed(1) + ' days' : '0 days';
+  const turnarounds = closedTasks.map(turnaroundDays).filter((d): d is number => d !== null);
+  const avgTurnaround = turnarounds.length
+    ? (turnarounds.reduce((sum, d) => sum + d, 0) / turnarounds.length).toFixed(1) + ' days'
+    : '—';
 
   const THIRTY_DAYS_MS = 30 * 86400000;
   const volume30d = closedTasks.filter(
@@ -262,7 +234,7 @@ export default function StaffDashboard() {
             </div>
             <div className="card-body">
               <div className="ring-wrap">
-                <Donut value={slaPct} label="SLA compliance" color="var(--status-closed)" />
+                <Donut value={null} label="SLA compliance" color="var(--status-closed)" />
                 <div style={{ flex: 1 }}>
                   <div className="metric-li">
                     <span>Avg turnaround</span>

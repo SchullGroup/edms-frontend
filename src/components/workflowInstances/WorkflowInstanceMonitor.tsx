@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/ui/Badges';
 import { WorkflowInstanceDetail } from './WorkflowInstanceDetail';
 import { fmtDate, dueLabel } from '@/utils/helpers';
 import type { WorkflowInstance, WorkflowInstanceStatus } from '@/types/models';
+import { instanceDueAt, instanceStages, instanceTitle } from '@/utils/workflowDocuments';
 
 const PAGE_SIZE = 20;
 
@@ -35,6 +36,7 @@ interface Row {
   id: string;
   instance: WorkflowInstance;
   document: string;
+  documentTitles: string;
   workflow: string;
   stage: string;
   status: string;
@@ -72,20 +74,27 @@ export function WorkflowInstanceMonitor() {
   const instances = data?.data || [];
   const pagination = data?.pagination;
 
-  // The list response carries stage *ids*, not names — resolve them through the
-  // definition that the workflows list already gives us.
+  // Each document moves through the stages on its own (edms-backend `919d0ef`),
+  // so a row shows every stage its documents sit at, and the nearest deadline.
+  // The list response doesn't return per-document positions yet (requested from
+  // the backend), so until it does these columns show "—"; the drawer rebuilds
+  // them from the workflow's history. Stage ids resolve to names through the
+  // definitions the workflows list already gives us.
   const definitionOf = (id: string) => workflows.find((w) => w.id === id);
   const stageNameOf = (instance: WorkflowInstance) => {
-    if (!instance.currentStage) return instance.status === 'closed' ? '—' : 'Not started';
+    if (instance.status === 'closed') return '—';
+    const ids = instanceStages(instance);
+    if (!ids.length) return instance.status === 'pending' ? 'Not started' : '—';
     const stages = definitionOf(instance.workflowDefinitionId)?.definition?.stages;
-    return stages?.find((s) => s.id === instance.currentStage)?.name || instance.currentStage;
+    return ids.map((id) => stages?.find((s) => s.id === id)?.name || id).join(', ');
   };
 
   const rows: Row[] = instances
     .map((instance) => ({
       id: instance.id,
       instance,
-      document: instance.document?.title || instance.documentId,
+      document: instanceTitle(instance),
+      documentTitles: (instance.documents ?? []).map((d) => d.document?.title ?? '').join(' '),
       workflow:
         instance.workflowDefinition?.name ||
         definitionOf(instance.workflowDefinitionId)?.name ||
@@ -93,14 +102,15 @@ export function WorkflowInstanceMonitor() {
       stage: stageNameOf(instance),
       status: STATUS_LABEL[instance.status],
       started: instance.startedAt || '',
-      due: instance.stageDueAt || '',
+      due: instanceDueAt(instance) || '',
       overdue:
         instance.status !== 'closed' &&
-        !!instance.stageDueAt &&
-        new Date(instance.stageDueAt).getTime() < Date.now(),
+        !!instanceDueAt(instance) &&
+        Date.parse(instanceDueAt(instance)!) < Date.now(),
     }))
     .filter((r) =>
-      query.trim() ? r.document.toLowerCase().includes(query.trim().toLowerCase()) : true,
+      // Matches any of the workflow's documents, not just the first.
+      query.trim() ? r.documentTitles.toLowerCase().includes(query.trim().toLowerCase()) : true,
     );
 
   const overdueCount = rows.filter((r) => r.overdue).length;
@@ -126,7 +136,7 @@ export function WorkflowInstanceMonitor() {
   const cols: Column<Row>[] = [
     {
       key: 'document',
-      label: 'Document',
+      label: 'Documents',
       sortable: true,
       render: (r) => <b>{r.document}</b>,
     },
@@ -145,7 +155,7 @@ export function WorkflowInstanceMonitor() {
     },
     {
       key: 'due',
-      label: 'Stage due',
+      label: 'Next due',
       sortable: true,
       render: (r) => {
         if (!r.due) return <span className="muted">—</span>;

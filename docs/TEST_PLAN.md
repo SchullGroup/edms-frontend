@@ -594,7 +594,6 @@ still worth knowing — but don't file "missing permission gate" as a new bug fo
 |---|---|
 | `/admin/audit` | Verify integrity, Export |
 | `/admin/branding` | Publish branding |
-| `/admin/circulars` | Compose / Publish / Save |
 | `/admin/policies` | Confidentiality / urgency / control toggles |
 | `/supervisor/exceptions` | Acknowledge (writes a real audit log entry; the exception row list itself is still mock data) |
 | `/staff/cabinets` | Move / Route bulk actions |

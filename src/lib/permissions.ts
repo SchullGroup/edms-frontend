@@ -102,13 +102,7 @@ export function derivePermissionsFromRoles(
 
 // --- Portals ------------------------------------------------------------------
 
-export type PortalKey =
-  | 'platform'
-  | 'admin'
-  | 'auditor'
-  | 'management'
-  | 'supervisor'
-  | 'staff';
+export type PortalKey = 'platform' | 'admin' | 'auditor' | 'management' | 'supervisor' | 'staff';
 
 export interface PortalEntry {
   /** Satisfied when the user holds AT LEAST ONE of these `"resource:action"` keys. */
@@ -263,10 +257,7 @@ const SYSTEM_ROLE_PORTAL: [string, PortalKey][] = [
  * custom role — the case this whole module exists for — is placed in the
  * highest-priority portal whose entry permission it actually holds.
  */
-export function resolvePortal(
-  perms: string[],
-  roleNames: string[] | undefined,
-): PortalKey {
+export function resolvePortal(perms: string[], roleNames: string[] | undefined): PortalKey {
   const known = SYSTEM_ROLE_PORTAL.find(([r]) => roleNames?.includes(r));
   if (known) return known[1];
 
@@ -292,7 +283,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   // `PERMISSION_RESOURCES` at all — see `workflows.router.ts`'s `requirePermission`
   // calls) — appended explicitly so internal button-gating on them (doc/[id]'s
   // approve/review actions, delegations' create/end) doesn't flicker disabled
-  // before live permissions arrive. Every seeded role holds all three.
+  // before live permissions arrive. Every seeded role holds all three. The
+  // `circular:*` grants mirror `prisma/seed-system.ts` (staff and the platform
+  // admin hold none; reading the inbox needs no permission).
   client_admin: [
     ...everything,
     'workflow:publish',
@@ -302,6 +295,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     'document_access_request:grant',
     'delegation:create',
     'delegation:end',
+    'circular:view',
+    'circular:create',
+    'circular:publish',
+    'circular:withdraw',
   ],
   schulltech_admin: [
     'workflow:view',
@@ -319,6 +316,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     'task:action',
     'delegation:create',
     'delegation:end',
+    'circular:view',
   ],
   management: [
     ...viewAll,
@@ -327,6 +325,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     'task:action',
     'delegation:create',
     'delegation:end',
+    'circular:view',
+    'circular:create',
+    'circular:publish',
+    'circular:withdraw',
   ],
   supervisor: [
     'document:view',
@@ -347,6 +349,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     'audit:view',
     'delegation:create',
     'delegation:end',
+    'circular:view',
+    'circular:create',
+    'circular:publish',
+    'circular:withdraw',
   ],
   staff: [
     'document:view',

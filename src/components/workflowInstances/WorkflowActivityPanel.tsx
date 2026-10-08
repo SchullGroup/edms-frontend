@@ -4,6 +4,7 @@ import React from 'react';
 import type { WorkflowInstance } from '@/types/models';
 import { WorkflowStageProgress } from './WorkflowStageProgress';
 import { WorkflowHistoryTimeline } from './WorkflowHistoryTimeline';
+import { useWorkflowDocumentPositions } from './useWorkflowDocumentPositions';
 
 export interface WorkflowActivityPanelProps {
   workflowInstance: WorkflowInstance | undefined;
@@ -18,6 +19,7 @@ export function WorkflowActivityPanel({
   onRoute,
 }: WorkflowActivityPanelProps) {
   const stages = workflowInstance?.workflowDefinition?.definition?.stages;
+  const { positions } = useWorkflowDocumentPositions(workflowInstance);
 
   return (
     <div className="card">
@@ -40,10 +42,9 @@ export function WorkflowActivityPanel({
           <>
             <WorkflowStageProgress
               stages={stages}
-              currentStage={workflowInstance.currentStage}
+              positions={positions}
               status={workflowInstance.status}
               currentActorName={currentStageActorName}
-              stageDueAt={workflowInstance.stageDueAt}
             />
 
             <div className="divider"></div>
