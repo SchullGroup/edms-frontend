@@ -131,19 +131,19 @@ export function WorkflowHistoryTimeline({
               {(r.comment || r.note) && (
                 <div className="wf-detail">{r.comment || r.note}</div>
               )}
-              {r.task?.signature?.fileUrl && (
+              {r.task?.signature && typeof r.task.signature === 'string' && (
                 <a
-                  href={r.task.signature.fileUrl}
+                  href={r.task.signature}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-2 mt-1"
+                  className="flex bg-white w-fit items-center gap-2 mt-1"
                   title="Signature"
                 >
                   <img
-                    src={r.task.signature.fileUrl}
+                    src={r.task.signature}
                     alt={`${r.actor?.name || 'Signer'}'s signature`}
-                    style={{ height: '22px', maxWidth: '76px', objectFit: 'contain' }}
-                  />
+                    className='object-contain w-16 h-10'                  
+                    />
                 </a>
               )}
             </div>

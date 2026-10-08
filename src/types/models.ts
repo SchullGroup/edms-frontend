@@ -647,8 +647,10 @@ export interface WorkflowHistoryRecord {
   } | null;
   /** Confirmed live 2026-09-18: carries `signature` (populated only for an
    *  `approve` action — the only action the backend allows one on) alongside
-   *  the completed task's own `comment`/`note`. */
-  task?: (Record<string, any> & { signature?: TaskActionSignature | null }) | null;
+   *  the completed task's own `comment`/`note`. The backend stores only the
+   *  approve request's `signature.fileUrl`, so here it is a plain URL string
+   *  (edms-backend `tasks.service.ts` `signature: input.signature.fileUrl`). */
+  task?: (Record<string, any> & { signature?: string | null }) | null;
   workflowInstance?: Record<string, any>;
   /** The document this event is about, when it is about one. */
   workflowInstanceDocumentId?: string | null;
