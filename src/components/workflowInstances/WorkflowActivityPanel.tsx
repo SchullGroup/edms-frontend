@@ -59,7 +59,7 @@ export function WorkflowActivityPanel({
               <WorkflowHistoryTimeline
                 workflowInstanceId={workflowInstance.id}
                 stages={stages}
-                limit={20}
+                limit={50}
                 emptyMessage="Nothing has been actioned on this workflow yet."
               />
             </div>
