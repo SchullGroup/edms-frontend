@@ -265,6 +265,38 @@ export function resolvePortal(perms: string[], roleNames: string[] | undefined):
   return hit?.key ?? 'staff';
 }
 
+/**
+ * The portals a user can switch between (Topbar role switcher). Someone holding
+ * built-in roles gets one portal per role — not every portal their permissions
+ * would technically open, which for a client_admin is all six. A custom-role-only
+ * user gets the one portal `resolvePortal` picks.
+ */
+export function availablePortals(perms: string[], roleNames: string[] | undefined): PortalKey[] {
+  const fromRoles = SYSTEM_ROLE_PORTAL.filter(([r]) => roleNames?.includes(r)).map(([, k]) => k);
+  return fromRoles.length ? fromRoles : [resolvePortal(perms, roleNames)];
+}
+
+/** A portal picked in the switcher, saved in `prefs` with the user it belongs to
+ *  so it doesn't follow the next person who signs in on this browser. */
+export interface PortalChoice {
+  userId: string;
+  portal: PortalKey;
+}
+
+/** The portal to render: the user's own pick while it's still one of theirs,
+ *  otherwise the default. */
+export function effectivePortal(
+  perms: string[],
+  roleNames: string[] | undefined,
+  userId: string | undefined,
+  choice: PortalChoice | null | undefined,
+): PortalKey {
+  if (choice && userId && choice.userId === userId) {
+    if (availablePortals(perms, roleNames).includes(choice.portal)) return choice.portal;
+  }
+  return resolvePortal(perms, roleNames);
+}
+
 // --- Offline / pre-hydration fallback ----------------------------------------
 // Approximate grants for the six seeded system roles (see docs/01 §DRIFT-04).
 // Only used before `GET /roles` resolves, or when the app is offline. The live

@@ -460,9 +460,9 @@ A user may hold several roles. Two things follow:
    `schulltech_admin > client_admin > management > internal_auditor > supervisor > staff`.
    That role alone determines the sidebar and the post-login landing page.
 
-So a user who is both `supervisor` and `internal_auditor` gets the **Audit & Compliance**
-sidebar and lands on `/auditor` — their supervisor duties become invisible even though the
-API would permit them. Worth knowing before assigning combined roles.
+So a user who is both `supervisor` and `internal_auditor` lands on `/auditor` with the
+**Audit & Compliance** sidebar. Since 2026-10-08 the Topbar's portal label becomes a switcher
+for such users, so they can move to the Supervisor Console (see doc 04, Multi-role users).
 
 ---
 

@@ -1032,7 +1032,7 @@ ageing indicator.*
 | 26 | Paginate cabinets, folders, roles, departments | Backend |
 | 27 | ✅ ~~Remove `@ts-nocheck`~~ — **done 2026-10-08**: `search` lost it in its 2026-09-30 rebuild, `admin/workflows` on 2026-10-08. No file carries it now | Frontend |
 | 28 | ✅ ~~Fix `/platform/flags` re-exporting the wrong page~~ — **done 2026-10-08** | Frontend |
-| 29 | Role switcher in the Topbar for multi-role users | Frontend |
+| 29 | ✅ ~~Role switcher in the Topbar for multi-role users~~ — **built 2026-10-08, 🟨 not verified live**: one portal per built-in role held, choice kept per user in `prefs` (doc 04, Multi-role users) | Frontend |
 | 30 | **Tests.** There are currently zero in either codebase. | Both |
 
 ### ⚪ P3 — Phase 2

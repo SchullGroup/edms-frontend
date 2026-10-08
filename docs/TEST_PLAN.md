@@ -816,6 +816,10 @@ Items whose backend already exists (or needs none). Worked through one at a time
       search
 - [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3)
 - [x] Permission gates on the P4 actions — see the P4 table (2026-10-08)
+- [x] Role switcher for multi-role users (doc 05 #29). **Built 2026-10-08.** To test: give a
+      supervisor the `internal_auditor` role too, sign in — they land on `/auditor` and the
+      Topbar label is a dropdown; pick Supervisor Console — sidebar and page switch; reload and
+      sign out/in — the choice holds; sign in as someone else — they get their own default
 - [x] Date picker is cutoff when user wants to schedule circular at a later date/time in the publish modal
       — **Fixed 2026-10-08** in the shared `DatePicker`: it assumed a 380 px popover (a six-week
       month plus the time row is taller) and, when neither side had that much room, always

@@ -921,13 +921,15 @@ That single role determines the **entire sidebar** and the **post-login landing 
 | `staff` + `supervisor` | Both | **Supervisor Console only** | No Upload link in the sidebar, though upload works if they navigate directly |
 | `management` + `client_admin` | Both | **Client Administration only** | No management dashboards in the nav |
 
-**There is no role switcher.** A dual-role user simply cannot reach half their
-functionality through navigation.
+~~**There is no role switcher.**~~ **Role switcher added 2026-10-08 (🟨 not verified live).**
+A user holding more than one built-in role sees a dropdown in place of the Topbar's portal
+label, listing one portal per role they hold (`availablePortals` in `src/lib/permissions.ts`).
+Picking one switches the sidebar and opens that portal's home. The pick is saved in `prefs`
+with the user's id, so it survives a reload and a fresh sign-in but never follows another
+user on the same browser. It defaults to the priority-list winner below. A user with only
+custom roles still gets the single portal their permissions resolve to.
 
-**Recommended fix:** a role switcher in the Topbar that lets the user choose which surface
-to view, defaulting to the priority-list winner. This is a small, high-value UI addition —
-and it becomes necessary the moment any real organisation assigns a combined role, which
-they will.
+The table above describes the default, before any switch.
 
 ---
 
