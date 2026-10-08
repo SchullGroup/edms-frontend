@@ -886,6 +886,7 @@ the document on its own: file, details, versions, custody, archive.
 | Load document | ✅ `GET /documents/:id` |
 | No access (confidentiality 403) | ✅ full-page "You don't have access" + **Request access** (`useRequestAccessPrompt`, shared with the workflow page) |
 | Metadata panel | ✅ `GET` + inline editor `PUT /documents/:id/metadata` (when `document:edit`) |
+| Change classification | 🟨 **new 2026-10-08, not verified live** — Details card → **Change** on the Classification row → dialog for confidentiality and urgency → `PATCH /documents/:id`. Shown with `document:edit` + Edit on the cabinet, not while the document is closed or checked out by someone else. Tiers above the user's clearance are disabled (they'd lose access); `top_secret` is never offered |
 | Version history | ✅ `GET /documents/:id/versions` · open · `POST /versions/:vid/restore` |
 | Version upload / restore gating | 🟨 **changed 2026-10-02** — "New version" is never offered here; revisions are uploaded on the workflow page in answer to a `request_changes`. Restore is blocked while a workflow is running, so the file can't be swapped mid-review. Not yet verified e2e |
 | Archive | ✅ `DELETE /documents/:id` (toolbar, when `document:delete`) |

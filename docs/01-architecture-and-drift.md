@@ -967,7 +967,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `POST /documents` | ✅ | ✅ |
 | `POST /documents/batch` (≤ 20, one transaction) | ✅ | 🟨 wired 2026-10-08 — `/upload`'s "File all", in chunks of 20; not verified live. *This row was missing from the matrix* |
 | `POST /documents/versions/batch` (≤ 20) | ✅ | ⚠️ backend only — nothing uploads several new versions at once |
-| `PATCH /documents/:id` | ✅ | ✅ |
+| `PATCH /documents/:id` | ✅ | ✅ — also, from 2026-10-08, the document page's "Change classification" dialog (`confidentiality`, `urgency`; 🟨 not verified live) |
 | `POST /documents/:id/checkout` | ✅ | ✅ |
 | `POST /documents/:id/checkin` | ✅ | ✅ — holder, **or** a `document_lock:delete` holder at `global` scope / `department` scope for the cabinet's department (`canReleaseLock`). Frontend offers that "Force check in" only once the lock is past `expectedReturnAt` (2026-10-02) |
 | `GET /documents/:id/metadata` | ✅ | ✅ |
@@ -1285,9 +1285,13 @@ itself somewhat stale by the time this was fixed. The actual broken set was four
 The backend's Zod schema accepts `top_secret`, but
 `TOP_SECRET_TIER_ROLES` in `access-control.constants.ts` is `[]` **by design**. A document
 uploaded at that tier becomes permanently unreadable by every role including
-`client_admin`. The frontend upload form (`upload/page.tsx` `CONF_LEVELS`) correctly omits
-it — but `PATCH /documents/:id` accepts it, and the doc-detail edit form is driven by
-`usePolicies()` → `SEED.policies.confidentiality`, which **does** include `Top Secret`.
+`client_admin`. The frontend never offers it: the upload form and the document page's
+"Change classification" dialog (2026-10-08) share `CONF_LEVELS` in
+`src/constants/documentLevels.ts`, which omits it, and the dialog also disables any tier
+above the user's own clearance (a copy of the backend's role lists). The API still accepts
+`top_secret` on `PATCH /documents/:id`, so the backend fix below stands. *(This paragraph
+used to describe a doc-detail edit form driven by `SEED.policies`; no such form existed.
+Corrected 2026-10-08.)*
 
 **Fix:** backend should reject `top_secret` on write until a role is cleared for it, and
 should verify the writer's clearance for whatever tier they assign.

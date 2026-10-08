@@ -89,19 +89,6 @@ const BATCH_LIMIT = 20;
 /** Files uploaded to storage at the same time during "File all". */
 const UPLOAD_CONCURRENCY = 3;
 
-const CONF_LEVELS = [
-  { label: 'Public', value: 'public' },
-  { label: 'Internal', value: 'internal' },
-  { label: 'Confidential', value: 'confidential' },
-  { label: 'Restricted', value: 'restricted' },
-];
-const URG_LEVELS = [
-  { label: 'Critical', value: 'critical' },
-  { label: 'High', value: 'high' },
-  { label: 'Normal', value: 'normal' },
-  { label: 'Low', value: 'low' },
-];
-
 /** Runs `worker` over `items`, at most `size` at a time. */
 async function runPool<T>(items: T[], size: number, worker: (item: T) => Promise<void>) {
   let next = 0;
@@ -384,6 +371,7 @@ import {
   isMetadataValueMissing,
 } from '@/components/documents/MetadataFieldInput';
 import { documentsService } from '@/apis/services/documents.service';
+import { CONF_LEVELS, URG_LEVELS } from '@/constants/documentLevels';
 import { calculateChecksum } from '@/apis/services/s3.service';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 

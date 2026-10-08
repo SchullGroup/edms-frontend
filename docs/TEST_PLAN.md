@@ -755,8 +755,13 @@ Items whose backend already exists (or needs none). Worked through one at a time
       saved searches per user, without the two seeded fakes (15.3, 15.4). While text is
       entered only the Cabinet filter applies — `GET /documents/search` accepts only `q` and
       `cabinetId` (backend request: add the other filters there).
-- [ ] Edit a document's confidentiality and urgency after upload — `PATCH /documents/:id`,
-      gated on `document:edit` (13.1/13.2; no UI exists today)
+- [x] Edit a document's confidentiality and urgency after upload — `PATCH /documents/:id`,
+      gated on `document:edit` (13.1/13.2). **Built 2026-10-08:** `/doc/[id]` → Details →
+      Classification → **Change**. Also needs Edit on the cabinet. Tiers above your clearance
+      are disabled. To test: as a supervisor, raise a document to Confidential (works) and
+      check Restricted is disabled; as staff, check Confidential and Restricted are both
+      disabled. Then route the document and check the next stage's deadline follows the new
+      urgency
 - [ ] SLA settings screen: business hours, working days, holidays, warning window, urgency
       multipliers, breach action — `GET/PATCH /sla/configuration`, `/sla/holidays` (6.7, 6.8,
       18.2, 18.5)

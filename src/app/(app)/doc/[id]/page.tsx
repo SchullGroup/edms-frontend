@@ -474,6 +474,14 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               !closed &&
               !lockedByOther
             }
+            confidentiality={doc.confidentiality}
+            urgency={doc.urgency}
+            canEditClassification={
+              can('document', 'edit') &&
+              cabinetAllows(myCabinetLevel, 'edit') &&
+              !closed &&
+              !lockedByOther
+            }
           />
 
           {/* New versions are only uploaded on the workflow page, in answer to

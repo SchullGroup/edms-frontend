@@ -1,12 +1,23 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useDocumentMetadata, useUpdateDocumentMetadata } from '@/apis/hooks/useDocuments';
+import {
+  useDocumentMetadata,
+  useUpdateDocument,
+  useUpdateDocumentMetadata,
+} from '@/apis/hooks/useDocuments';
+import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
+import { ConfBadge, UrgBadge } from '@/components/ui/Badges';
 import { Icon } from '@/components/ui/Icons';
 import { SkeletonText } from '@/components/common/Skeleton';
 import { fmtDate } from '@/utils/helpers';
-import type { DocumentMetadataField } from '@/types/models';
+import type {
+  DocumentConfidentiality,
+  DocumentMetadataField,
+  DocumentUrgency,
+} from '@/types/models';
+import { CONF_LEVELS, URG_LEVELS, canViewConfidentiality } from '@/constants/documentLevels';
 import { MetadataFieldInput, isMetadataValueMissing, toInputValue } from './MetadataFieldInput';
 
 export interface DocumentDetailsPanelProps {
@@ -22,6 +33,10 @@ export interface DocumentDetailsPanelProps {
   metadata: { fieldId: string; name: string; value?: string | null }[];
   /** Shows "Edit metadata", which opens the editor in a dialog. */
   canEditMetadata?: boolean;
+  confidentiality: string;
+  urgency: string;
+  /** Shows "Change" on the classification rows (`PATCH /documents/:id`). */
+  canEditClassification?: boolean;
 }
 
 /** A stored value as people read it: dates and numbers formatted, yes/no in words. */
@@ -50,12 +65,17 @@ export function DocumentDetailsPanel({
   createdAtLabel,
   metadata,
   canEditMetadata = false,
+  confidentiality,
+  urgency,
+  canEditClassification = false,
 }: DocumentDetailsPanelProps) {
   // Every field on the document's cabinet, set or not — the document itself
   // only embeds the ones that have a value.
   const { data: fields, isLoading, isError } = useDocumentMetadata(documentId);
   const { openModal } = useUIStore();
   const updateMetadata = useUpdateDocumentMetadata();
+  const updateDocument = useUpdateDocument();
+  const myRoles = useStore((s) => s.currentUser?.roles) ?? [];
 
   const sorted = (fields ?? []).slice().sort((a, b) => a.displayOrder - b.displayOrder);
   const canEdit = canEditMetadata && sorted.length > 0;
@@ -89,6 +109,44 @@ export function DocumentDetailsPanel({
             if (changed.length === 0) return;
             return updateMetadata
               .mutateAsync({ id: documentId, values: changed })
+              .then(() => undefined)
+              .catch(() => false);
+          },
+        },
+      ],
+    });
+  };
+
+  const openClassificationEditor = () => {
+    const form = {
+      confidentiality: confidentiality as DocumentConfidentiality,
+      urgency: urgency as DocumentUrgency,
+    };
+    openModal({
+      title: 'Change classification',
+      body: (
+        <ClassificationEditor
+          initial={form}
+          myRoles={myRoles}
+          onChange={(next) => Object.assign(form, next)}
+        />
+      ),
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save changes',
+          kind: 'btn-primary',
+          onClick: () => {
+            const updates: {
+              confidentiality?: DocumentConfidentiality;
+              urgency?: DocumentUrgency;
+            } = {};
+            if (form.confidentiality !== confidentiality)
+              updates.confidentiality = form.confidentiality;
+            if (form.urgency !== urgency) updates.urgency = form.urgency;
+            if (Object.keys(updates).length === 0) return;
+            return updateDocument
+              .mutateAsync({ id: documentId, updates })
               .then(() => undefined)
               .catch(() => false);
           },
@@ -134,6 +192,18 @@ export function DocumentDetailsPanel({
           <span className="k">Created</span>
           <span className="v">{createdAtLabel}</span>
         </div>
+        <div className="meta-row">
+          <span className="k">Classification</span>
+          <span className="v flex items-center gap-2">
+            <ConfBadge level={confidentiality} />
+            <UrgBadge level={urgency} />
+            {canEditClassification && (
+              <button className="btn btn-ghost btn-sm" onClick={openClassificationEditor}>
+                Change
+              </button>
+            )}
+          </span>
+        </div>
 
         {isLoading ? (
           <SkeletonText lines={2} />
@@ -152,6 +222,71 @@ export function DocumentDetailsPanel({
             </div>
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+/** The classification dialog body. A confidentiality level the user isn't cleared
+ *  to view is disabled: saving it would lock them out of the document. */
+function ClassificationEditor({
+  initial,
+  myRoles,
+  onChange,
+}: {
+  initial: { confidentiality: DocumentConfidentiality; urgency: DocumentUrgency };
+  myRoles: readonly string[];
+  onChange: (next: { confidentiality: DocumentConfidentiality; urgency: DocumentUrgency }) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const set = (patch: Partial<typeof value>) => {
+    const next = { ...value, ...patch };
+    setValue(next);
+    onChange(next);
+  };
+
+  return (
+    <div className="grid" style={{ gap: '12px' }}>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="doc-confidentiality">Confidentiality</label>
+        <select
+          id="doc-confidentiality"
+          className="input"
+          value={value.confidentiality}
+          onChange={(e) => set({ confidentiality: e.target.value as DocumentConfidentiality })}
+        >
+          {CONF_LEVELS.map((l) => {
+            const cleared = canViewConfidentiality(myRoles, l.value);
+            return (
+              <option key={l.value} value={l.value} disabled={!cleared}>
+                {l.label}
+                {cleared ? '' : ' (above your clearance)'}
+              </option>
+            );
+          })}
+        </select>
+        <div className="help">
+          Drives watermarking, download and print, and who can open the document.
+        </div>
+      </div>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="doc-urgency">Urgency</label>
+        <select
+          id="doc-urgency"
+          className="input"
+          value={value.urgency}
+          onChange={(e) => set({ urgency: e.target.value as DocumentUrgency })}
+        >
+          {URG_LEVELS.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+        <div className="help">
+          Sets the deadline of each workflow stage the document enters from now on. A stage already
+          under way keeps its deadline.
+        </div>
       </div>
     </div>
   );
