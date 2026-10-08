@@ -31,6 +31,7 @@ import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/component
 import type { WorkflowInstanceStatus } from '@/types/models';
 import { Skeleton, SkeletonText } from '@/components/common/Skeleton';
 import { DateTimeField, todayStr } from '@/components/ui/DatePicker';
+import { folderPathLabel } from '@/utils/folders';
 
 const WORKFLOW_STATUS_LABEL: Record<WorkflowInstanceStatus, string> = {
   pending: 'Pending',
@@ -103,8 +104,9 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const canRoute = !isLoadingInstances && !activeWorkflow;
 
   const { data: activeCabFoldersData } = useCabinetFolders(doc?.cabinetId);
-  const folderLabel =
-    (activeCabFoldersData?.data || []).find((f) => f.id === doc?.folderId)?.name || '';
+  const folderLabel = doc?.folderId
+    ? folderPathLabel(activeCabFoldersData?.data || [], doc.folderId)
+    : '';
 
   useEffect(() => {
     if (doc?.title) setPageTitle(doc.title);

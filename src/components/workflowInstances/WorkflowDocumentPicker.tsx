@@ -13,6 +13,7 @@ import { UPLOAD_ACCEPT, UPLOAD_TYPES_LABEL, resolveUploadMimeType } from '@/cons
 import { ConfBadge } from '@/components/ui/Badges';
 import { Icon } from '@/components/ui/Icons';
 import { useUIStore } from '@/store/useUIStore';
+import { foldersAsPaths } from '@/utils/folders';
 
 export interface PickedDocument {
   id: string;
@@ -424,9 +425,9 @@ function UploadNewDocument({
             disabled={busy || !cabinetId}
           >
             <option value="">{cabinetId ? 'Choose…' : 'Pick a cabinet first'}</option>
-            {folders.map((f) => (
+            {foldersAsPaths(folders).map((f) => (
               <option key={f.id} value={f.id}>
-                {f.name}
+                {f.path}
               </option>
             ))}
           </select>

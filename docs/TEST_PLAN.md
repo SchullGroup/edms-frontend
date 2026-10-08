@@ -774,7 +774,11 @@ Items whose backend already exists (or needs none). Worked through one at a time
       client_admin, turn on working hours (Mon–Fri 08:00–17:00), add a holiday, set Critical to
       0.5, save, reload — all kept. Then route a Critical document into a 24 h stage and check
       its deadline is 12 working hours away. Changes don't move deadlines already set
-- [ ] Sub-folders: create and browse nested folders — folder `parentId` (5.1)
+- [x] Sub-folders: create and browse nested folders — folder `parentId` (5.1). **Built
+      2026-10-08** on `/staff/cabinets`. To test: open a folder → **+ New sub-folder**; it nests
+      in the sidebar tree and shows as a chip above the documents; the breadcrumb is clickable;
+      upload into it (the picker shows "Parent / Child"); Delete on the parent is refused while it
+      has sub-folders. The API doesn't limit depth or stop moving a folder under its own child
 - [x] Typed signature: render the typed name to an image for approve (9.1). **Built
       2026-10-08:** Sign & approve → Signature → **Type**; the preview is the exact PNG sent.
       Uses system script fonts (Segoe Script, Brush Script MT, Apple Chancery, else the

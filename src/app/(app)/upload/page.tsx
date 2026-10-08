@@ -372,6 +372,7 @@ import {
 } from '@/components/documents/MetadataFieldInput';
 import { documentsService } from '@/apis/services/documents.service';
 import { CONF_LEVELS, URG_LEVELS } from '@/constants/documentLevels';
+import { foldersAsPaths } from '@/utils/folders';
 import { calculateChecksum } from '@/apis/services/s3.service';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 
@@ -446,9 +447,9 @@ function BatchBar({
                     ? 'Loading folders…'
                     : 'Choose per file'}
               </option>
-              {folders.map((f: any) => (
+              {foldersAsPaths(folders).map((f: any) => (
                 <option key={f.id} value={f.id}>
-                  {f.name}
+                  {f.path}
                 </option>
               ))}
             </select>
@@ -795,9 +796,9 @@ function IDUCard({
               <option value="">
                 {foldersLoading ? 'Loading folders…' : '-- Select a folder --'}
               </option>
-              {folders.map((f: any) => (
+              {foldersAsPaths(folders).map((f: any) => (
                 <option key={f.id} value={f.id}>
-                  {f.name}
+                  {f.path}
                 </option>
               ))}
             </select>
