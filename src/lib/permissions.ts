@@ -249,20 +249,57 @@ const SYSTEM_ROLE_PORTAL: [string, PortalKey][] = [
   ['staff', 'staff'],
 ];
 
+// Permissions that change how the tenant is set up, as opposed to only viewing it.
+const CONFIGURE_KEYS = [
+  'user:create',
+  'user:edit',
+  'role:create',
+  'role:edit',
+  'workflow:create',
+  'workflow:edit',
+  'department:create',
+  'department:edit',
+  'cabinet:create',
+  'cabinet:edit',
+];
+// Doing document work: acting on tasks, filing, routing.
+const WORK_KEYS = ['task:action', 'document:create', 'document:upload', 'workflow_instance:route'];
+
+/**
+ * Portals to try, best first, for a user whose roles are all custom — by what
+ * their permissions let them do rather than what they can see, since view
+ * permissions are near-universal (`workflow:view` alone used to put a "Budget
+ * Officer" who only approves tasks into Client Administration). Every portal
+ * is listed, so whatever comes first that the user can actually enter wins.
+ */
+function customRolePortalOrder(perms: string[]): PortalKey[] {
+  const order: PortalKey[] = [];
+  if (permsSatisfy(perms, CONFIGURE_KEYS)) order.push('admin');
+  if (permsSatisfy(perms, ['task:reassign'])) order.push('supervisor');
+  if (permsSatisfy(perms, WORK_KEYS)) order.push('staff');
+  if (permsSatisfy(perms, ['audit:view'])) order.push('auditor');
+  if (permsSatisfy(perms, ['department:view'])) order.push('management');
+  order.push('staff', 'management', 'admin', 'auditor', 'supervisor');
+  return order;
+}
+
 /**
  * Which portal shell to render for a user.
  *
  * System-role users keep their historical portal (permission sets overlap too
  * much between the six seeded roles to disambiguate by permission alone). A
- * custom role — the case this whole module exists for — is placed in the
- * highest-priority portal whose entry permission it actually holds.
+ * custom role — the case this whole module exists for — goes by what its
+ * permissions do (`customRolePortalOrder`), and only to a portal whose entry
+ * permission it holds, so the route guard always lets it in.
  */
 export function resolvePortal(perms: string[], roleNames: string[] | undefined): PortalKey {
   const known = SYSTEM_ROLE_PORTAL.find(([r]) => roleNames?.includes(r));
   if (known) return known[1];
 
-  const hit = PORTALS.find((p) => canEnterPortal(p, perms, roleNames));
-  return hit?.key ?? 'staff';
+  const hit = customRolePortalOrder(perms).find((key) =>
+    canEnterPortal(PORTAL_BY_KEY[key], perms, roleNames),
+  );
+  return hit ?? 'staff';
 }
 
 /**

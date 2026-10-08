@@ -938,7 +938,13 @@ takes the first portal whose entry permissions the user holds: `admin` (`user:vi
 (`document:view`, `workflow_instance:view`, `task:view` or `department:view`), then
 `supervisor`, then `staff`. Because `workflow:view` and `document:view` are near-universal,
 custom roles almost never reach the Staff Workspace or Supervisor Console: the tenant's
-"Budget Officer" lands in Client Administration. Not yet fixed.
+"Budget Officer" lands in Client Administration.
+
+**Fixed the same day.** Custom-role users are now placed by what their permissions let them
+do (`customRolePortalOrder` in `src/lib/permissions.ts`): configuring the tenant → Client
+Administration, reassigning tasks → Supervisor Console, acting on tasks / filing / routing →
+Staff Workspace, reading the audit trail → Audit, `department:view` → Management, then any
+portal they can enter. Built-in roles are unchanged. Budget Officer now lands in Staff.
 
 The table above describes the default, before any switch.
 
