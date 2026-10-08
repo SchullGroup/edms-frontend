@@ -766,7 +766,11 @@ Items whose backend already exists (or needs none). Worked through one at a time
       multipliers, breach action — `GET/PATCH /sla/configuration`, `/sla/holidays` (6.7, 6.8,
       18.2, 18.5)
 - [ ] Sub-folders: create and browse nested folders — folder `parentId` (5.1)
-- [ ] Typed signature: render the typed name to an image for approve (9.1)
+- [x] Typed signature: render the typed name to an image for approve (9.1). **Built
+      2026-10-08:** Sign & approve → Signature → **Type**; the preview is the exact PNG sent.
+      Uses system script fonts (Segoe Script, Brush Script MT, Apple Chancery, else the
+      browser's cursive), so the look varies by device. To test: approve with a typed name, then
+      check the workflow trail shows that image
 - [ ] ~~My Performance from `GET /tasks/stats?assigneeId=` (16.4)~~ — **not frontend-only**
       (checked 2026-10-08): `GET /tasks/stats` groups by department only, its query schema is
       `.strict()` (no `assigneeId`), and it returns 403 without oversight, so staff can't call

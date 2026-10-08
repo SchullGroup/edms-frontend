@@ -917,7 +917,7 @@ end against a live backend.**
 | Revision uploads | 🟨 `pendingDocumentRevisions` from `GET /tasks/:id`: banner + per-document "Changes requested" card + `DocumentVersionsPanel` upload, only for the active task's holder **with `document_version:create`** — what the backend route checks. Was gated on `document:edit`, which the seeded `staff` role doesn't hold, so staff never saw the button (found in testing 2026-10-02; the old `/doc/[id]` had the same bug). Restore is likewise gated on `document_version:restore` now. Uploading resolves the revision (backend) and refetches the task |
 | Activity trail / stage progress | ✅ `WorkflowActivityPanel` (moved from `/doc/[id]`). Trail is a fixed 340px scroll area and the viewer column is sticky on wide screens, so a long trail no longer pushes the page far below the document |
 | **Attach an additional document** | 🟨 only as part of "Mark reviewed" (above). No standalone attach button yet — multi-document *start* is being added on the backend |
-| **Comments / signatures** | ✅ unchanged — `comment` on any action, signature image on `approve` only (BE-16) |
+| **Comments / signatures** | ✅ unchanged — `comment` on any action, signature image on `approve` only (BE-16). **2026-10-08 (🟨 not verified live):** the signature can be drawn, **typed** (the name is rendered in a script face onto a canvas, which becomes the same PNG) or uploaded |
 
 ### `/notifications` — note the detail
 
