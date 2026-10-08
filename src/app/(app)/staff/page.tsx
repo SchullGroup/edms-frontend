@@ -19,7 +19,12 @@ import { TaskRow } from '@/components/ui/TaskRow';
 import { SkeletonNotifRows, SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { timeAgo, fmtDate } from '@/utils/helpers';
-import { byUrgencyThenDue, isOverdue, turnaroundDays } from '@/utils/supervisor';
+import {
+  byUrgencyThenDue,
+  changesRequestedRate,
+  isOverdue,
+  turnaroundDays,
+} from '@/utils/supervisor';
 
 // Simple pure SVG donut. A null value draws an empty ring with a dash: no data,
 // not a score of zero.
@@ -245,8 +250,8 @@ export default function StaffDashboard() {
                     <b>{volume30d}</b>
                   </div>
                   <div className="metric-li">
-                    <span>Rework rate</span>
-                    <b>4.2%</b>
+                    <span>Changes requested</span>
+                    <b>{changesRequestedRate(closedTasks)}</b>
                   </div>
                 </div>
               </div>

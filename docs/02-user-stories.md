@@ -677,7 +677,7 @@ lifecycle.
       `WORKFLOW_DEFINITION_VIEW_ROLES` aliases `MANAGE_ROLES`, so `management` and
       `internal_auditor` are refused despite holding a seeded `workflow:view:global`
       grant — and `staff`/`supervisor` cannot list definitions to route into.
-- [ ] ⚠️ `// @ts-nocheck` on the page
+- [x] ✅ `// @ts-nocheck` removed 2026-10-08 — the page type-checks
 - [ ] Parallel and conditional branches — Phase 1 is explicitly sequential-only
 - [ ] Visual graph editor; today it is a form
 
@@ -802,7 +802,7 @@ outstanding problem is the one that always mattered:
   `requireCabinetAccess('view')`. Document listing, document detail and search were not
   re-checked and may still ignore grants. Backend fix if so.
 
-**Delegated cabinet management (2026-10-06, 🟨 not verified live).** The same access panel
+**Delegated cabinet management (2026-10-06, ✅ tested by the user 2026-10-08).** The same access panel
 now also appears as an **Access** tab on `/staff/cabinets` for anyone holding
 `cabinet_access:create` and `edit` on that cabinet, so a client admin can hand a cabinet to
 a records officer. The picker leaves out the user themselves, roles they hold, client admins
@@ -1365,10 +1365,9 @@ nothing aggregates it.
 > **As** Adaeze, **I want to** enable a feature for one tenant before all,
 > **so that** a bad release is a toggle, not a rollback.
 
-**Current state:** ⚠️ **`/platform/flags` renders the wrong page entirely** — it is a
-7-line re-export of `/platform/sysconfig` (Platform Health). Clicking "Feature Flags" in
-the sidebar shows the health screen. `updateFeatureFlag` exists in the store and writes to
-`SEED`, but no screen calls it. No model, no endpoint, no evaluation anywhere.
+**Current state:** 🟥 `/platform/flags` is its own page since 2026-10-08 (it used to
+re-export `/platform/sysconfig`): rollout slider, promote and kill-switch, all writing to
+`SEED` through `updateFeatureFlag`. No model, no endpoint, no evaluation anywhere.
 
 ---
 
@@ -1405,8 +1404,8 @@ error paths and workers).
 - [x] Commitlint + Husky pre-commit hooks
 - [x] Strict TypeScript, ESM, path aliases
 - [ ] 🔴 **Zero tests in either codebase.** `npm test` is the default error stub.
-- [ ] Three frontend files are `@ts-nocheck`, including the two most complex pages
-      (`doc/[id]`, `admin/workflows`) and `search`
+- [x] No frontend file is `@ts-nocheck` — `doc/[id]` and `search` lost it in September,
+      `admin/workflows` on 2026-10-08
 - [ ] No E2E tests, no API contract tests, no seeded test database
 
 ### N4 — The system stays fast as data grows · 🟨 Partial

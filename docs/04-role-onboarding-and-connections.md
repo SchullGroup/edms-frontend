@@ -171,7 +171,7 @@ records, that is a serious and correct architectural decision.
 | 3 | Review platform health | `/platform/sysconfig` | 🟥 `SEED` |
 | 4 | Check plans and entitlements | `/platform/plans` | 🟥 `SEED.plans` |
 | 5 | Review billing and usage | `/platform/billing` | 🟥 `SEED` |
-| 6 | Check feature flags | `/platform/flags` | 🟥 ⚠️ **re-exports `/platform/sysconfig` — wrong page** |
+| 6 | Check feature flags | `/platform/flags` | 🟥 `SEED.featureFlags` — its own page since 2026-10-08 |
 | 7 | Review the platform audit log | `/platform/audit` | 🟥 `SEED.audit` |
 
 ### First week — what they would try to do
@@ -337,7 +337,7 @@ workflow:route:global
 |---|---|---|---|
 | 1 | Log in with the password the admin gave them | `/` | ✅ ⚠️ no forced change |
 | 2 | Land on the Staff Dashboard | `/staff` | 🟨 tasks from API, notifications ⛔ 404 |
-| 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (🟨 added 2026-10-06, not verified live; each action needs the role permission **and** the cabinet level — see doc 05) |
+| 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (added 2026-10-06, ✅ tested by the user 2026-10-08; each action needs the role permission **and** the cabinet level — see doc 05) |
 | 4 | Upload their first document | `/upload` | ✅ |
 | 5 | Watch it appear in the cabinet | `/staff/cabinets` | ✅ |
 | 6 | Open it and check the details | `/doc/[id]` | ✅ |

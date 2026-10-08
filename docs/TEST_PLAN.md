@@ -762,9 +762,15 @@ Items whose backend already exists (or needs none). Worked through one at a time
       18.2, 18.5)
 - [ ] Sub-folders: create and browse nested folders — folder `parentId` (5.1)
 - [ ] Typed signature: render the typed name to an image for approve (9.1)
-- [ ] My Performance from `GET /tasks/stats?assigneeId=` (16.4)
+- [ ] ~~My Performance from `GET /tasks/stats?assigneeId=` (16.4)~~ — **not frontend-only**
+      (checked 2026-10-08): `GET /tasks/stats` groups by department only, its query schema is
+      `.strict()` (no `assigneeId`), and it returns 403 without oversight, so staff can't call
+      it. Needs a backend change. Meanwhile the fake "Rework rate 4.2%" was replaced by a real
+      "Changes requested" rate from the user's own tasks
 - [ ] Staff dashboard: status tiles click through; finish SLA/ageing highlighting (19.1, 19.4)
-- [ ] My Tasks: keep the backend's urgency → due-date order instead of re-sorting (19.2)
+- [x] ~~My Tasks: keep the backend's urgency → due-date order instead of re-sorting (19.2)~~
+      — **superseded:** since `919d0ef` `GET /tasks` carries no deadlines, so there is no
+      server-side due-date order to keep
 - [ ] Quick-actions strip; recent and pinned documents/searches (19.3, 19.5)
 - [ ] Admin home setup checklist (18.1)
 - [ ] Chart drill-downs to filtered record lists (21.6, 22.3)

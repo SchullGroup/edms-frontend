@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -18,10 +17,16 @@ import { Icon } from '@/components/ui/Icons';
 import { WorkflowToolbar } from '@/components/workflows/WorkflowToolbar';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
 import { useAllMetadataFields } from '@/apis/hooks/useMetadataFields';
-import { StagePanel } from '@/components/workflows/StagePanel';
+import { StagePanel, type StageTab } from '@/components/workflows/StagePanel';
 import { WorkflowDesignerGuide } from '@/components/workflows/WorkflowDesignerGuide';
 import { DEFAULT_WORKFLOW_DEFINITION, reconcileTransitions } from '@/components/workflows/constants';
 import { SkeletonPage } from '@/components/common/Skeleton';
+import type {
+  WorkflowDefinition,
+  WorkflowStage,
+  WorkflowStageAction,
+  WorkflowTransition,
+} from '@/types/models';
 
 export default function WorkflowDesignerPage() {
   const { auditAction } = useStore();
@@ -43,12 +48,12 @@ export default function WorkflowDesignerPage() {
   const publishWfMutation = usePublishWorkflow();
   const archiveWfMutation = useArchiveWorkflow();
 
-  const [wfId, setWfId] = useState(null);
-  const [selectedStageId, setSelectedStageId] = useState(null);
+  const [wfId, setWfId] = useState<string | null>(null);
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   // Names metadata fields in the canvas's branch labels (same cached query
   // the Transitions tab's rule picker uses).
   const { data: metadataFields } = useAllMetadataFields();
-  const [stagePanelTab, setStagePanelTab] = useState('properties');
+  const [stagePanelTab, setStagePanelTab] = useState<StageTab>('properties');
   // There's no real delete-workflow endpoint on the backend — only archive.
   // Archived workflows drop out of the switcher by default so archiving
   // reads as "gone" day-to-day, without pretending it's actually deleted.
@@ -60,11 +65,11 @@ export default function WorkflowDesignerPage() {
   // changes or a save actually lands, never on every keystroke.
   const [nameDraft, setNameDraft] = useState('');
   const [stageNameDraft, setStageNameDraft] = useState('');
-  const [assigneeMode, setAssigneeMode] = useState('role');
+  const [assigneeMode, setAssigneeMode] = useState<'role' | 'person'>('role');
   const [roleDraft, setRoleDraft] = useState('');
   const [userDraft, setUserDraft] = useState('');
   const [slaDraft, setSlaDraft] = useState(48);
-  const [actionsDraft, setActionsDraft] = useState([]);
+  const [actionsDraft, setActionsDraft] = useState<WorkflowStageAction[]>([]);
 
   useEffect(() => {
     if (workflows.length > 0 && !wfId) {
@@ -81,9 +86,9 @@ export default function WorkflowDesignerPage() {
     setNameDraft(wf?.name || '');
   }, [wf?.id, wf?.name]);
 
-  const selectedStage = stages.find((s) => s.id === selectedStageId);
+  const selectedStage = stages.find((s) => s.id === selectedStageId) ?? null;
 
-  const resetStageDrafts = (stage) => {
+  const resetStageDrafts = (stage: WorkflowStage | null) => {
     setStageNameDraft(stage?.name || '');
     setAssigneeMode(stage?.user_id ? 'person' : 'role');
     setRoleDraft(stage?.role || '');
@@ -96,7 +101,7 @@ export default function WorkflowDesignerPage() {
     resetStageDrafts(selectedStage);
   }, [selectedStageId]);
 
-  const updateWorkflow = (id, updates) => {
+  const updateWorkflow = (id: string, updates: Partial<WorkflowDefinition>) => {
     updateWfMutation.mutate({ id, updates });
   };
 
@@ -200,7 +205,7 @@ export default function WorkflowDesignerPage() {
 
   const handleAddStage = () => {
     if (updateWfMutation.isPending) return;
-    const newStage = {
+    const newStage: WorkflowStage = {
       id: `stage_${Date.now()}`,
       name: 'New stage',
       role: roles?.[0]?.name || 'staff',
@@ -215,7 +220,7 @@ export default function WorkflowDesignerPage() {
     addToast('Stage added — configure it on the right', 'success');
   };
 
-  const handleDeleteStage = (stage) => {
+  const handleDeleteStage = (stage: WorkflowStage) => {
     openConfirm({
       title: `Delete stage "${stage.name}"?`,
       message: 'This stage will be removed. The remaining sequence will be reconnected.',
@@ -246,7 +251,7 @@ export default function WorkflowDesignerPage() {
 
   // Selecting a different stage discards whatever's still sitting unsaved
   // in the properties panel — confirm first so that isn't a silent loss.
-  const selectStage = (id) => {
+  const selectStage = (id: string) => {
     if (id === selectedStageId) return;
     if (stageDirty) {
       openConfirm({
@@ -265,17 +270,17 @@ export default function WorkflowDesignerPage() {
   // card — unambiguous intent to look at that stage's routing, so jump
   // straight to the Transitions tab instead of leaving it on whichever tab
   // happened to be open.
-  const handleEditBranch = (id) => {
+  const handleEditBranch = (id: string) => {
     selectStage(id);
     setStagePanelTab('transitions');
   };
 
-  const toggleAction = (action) => {
+  const toggleAction = (action: WorkflowStageAction) => {
     if (!selectedStage) return;
     setActionsDraft((prev) => (prev.includes(action) ? prev.filter((a) => a !== action) : [...prev, action]));
   };
 
-  const handleAssigneeModeChange = (mode) => {
+  const handleAssigneeModeChange = (mode: 'role' | 'person') => {
     if (!selectedStage) return;
     setAssigneeMode(mode);
     if (mode === 'role') {
@@ -311,12 +316,12 @@ export default function WorkflowDesignerPage() {
 
   // Replaces just this stage's own outgoing transitions, leaving every other
   // stage's transitions (including any of its own branches) untouched.
-  const handleSaveTransitions = (stageId, outgoing) => {
+  const handleSaveTransitions = (stageId: string, outgoing: WorkflowTransition[]) => {
     const otherTransitions = (wf.definition.transitions || []).filter((t) => t.from !== stageId);
     updateWorkflow(wf.id, { definition: { ...wf.definition, transitions: [...otherTransitions, ...outgoing] } });
   };
 
-  const assigneeSummary = (s) => {
+  const assigneeSummary = (s: WorkflowStage) => {
     if (s.user_id) {
       const u = users.find((u) => u.id === s.user_id);
       return u ? u.name : 'Assigned person';
@@ -426,7 +431,7 @@ export default function WorkflowDesignerPage() {
             onSlaChange: setSlaDraft,
             onSave: handleSaveStage,
             onDiscard: handleDiscardStage,
-            onDelete: () => handleDeleteStage(selectedStage),
+            onDelete: () => selectedStage && handleDeleteStage(selectedStage),
             canEdit: canEditWorkflow,
             isFirstStage: !!selectedStage && stages[0]?.id === selectedStage.id,
           }}

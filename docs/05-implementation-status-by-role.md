@@ -79,14 +79,11 @@ on 2026-10-02 were the notification-link landing pages `/tasks/[id]` (redirect-o
 `/workflow-instances/[id]` (DRIFT-17) — the latter became the full workflow page later the
 same day. All are listed under Shared pages below.
 
-> ⚠️ **Count updated, classification not yet caught up.** Of the +9 pages, this document
-> classifies one (`/admin/access-requests`, below). The other eight —
-> `admin/workflows/instances`, `staff/performance`, `staff/tasks`, `supervisor/instances`,
-> `user-stories`, and others — have **not** been individually classified (data source,
-> API hooks, mock vs. live). That's a full doc 05 re-audit, not yet done. Every count and
-> percentage below this line that's derived from "42 pages" (portfolio ratios, the "20 of
-> 42" mock-page tally, etc.) is a **known undercount** until that re-audit happens —
-> flagged rather than guessed at.
+> ✅ **Every page has a row (2026-10-08).** The last seven without one were classified:
+> `/admin/departments`, `/admin/workflows/instances`, `/supervisor/instances`,
+> `/delegations`, `/forgot-password`, `/set-password` and `/user-stories`. The table below
+> was re-tallied from the page rows, not carried forward. The "By data source" bars further
+> down are still from the 42-page pass.
 
 Every classification below was verified by inspecting what each page destructures from
 `useStore` versus which API hooks it calls.
@@ -96,23 +93,22 @@ Every classification below was verified by inspecting what each page destructure
 > renders `SEED` **domain** data (documents, users, findings, audit, tenants…) alongside
 > live API data, or depends on one of the four mock service modules.
 
-| Dashboard | Pages | ✅ Live | 🟨 Hybrid | 🟥 Mock | Verdict |
-|---|---:|---:|---:|---:|---|
-| Staff Workspace | 4 | 3 | 1 | — | **Strongest.** Real data throughout. |
-| Supervisor Console | 6 | 3 | 1 | 2 | Approvals and ageing real; exceptions/performance fixture. |
-| Management Portal | 7 | 4 | 1 | 2 | The only fully API-driven pages — and the ones that don't scale. |
-| Client Administration | 8 | 2 | 2 | 3 | Structure real; policy/branding mock. `/admin/circulars` is now a redirect to `/circulars/manage` (2026-10-05). |
-| Audit & Compliance | 4 | — | — | 4 | **Weakest. Zero API calls.** |
-| Platform Admin | 6 | — | — | 6 | Mock by design (Phase 2). |
-| Shared | 11 | 2 | 7 | 1 | Login and upload real; circulars wired to the API (5 pages, 🟨 not verified live); notifications fixture. |
-| **Total** | **46** | **14** | **12** | **18** | |
+| Dashboard | Pages | ✅ Live | 🟨 Partial / Hybrid | 🟥 Mock | ↪️ / static | Verdict |
+|---|---:|---:|---:|---:|---:|---|
+| Staff Workspace | 4 | 4 | — | — | — | **Strongest.** Real data throughout. |
+| Supervisor Console | 7 | 3 | 2 | 2 | — | Approvals, ageing and the Workflow Monitor real; exceptions/performance fixture. |
+| Management Portal | 7 | 4 | 1 | 2 | — | The only fully API-driven pages — and the ones that don't scale. |
+| Client Administration | 12 | 7 | 1 | 2 | 2 | Structure real; policy/branding mock. `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
+| Audit & Compliance | 4 | 1 | 1 | 2 | — | Trail real; dashboard and findings fixture. |
+| Platform Admin | 6 | — | — | 6 | — | Mock by design (Phase 2). |
+| Shared | 17 | 2 | 11 | 1 | 3 | Login and upload real; circulars, delegations and the workflow page wired but 🟨 not verified live; notifications fixture. |
+| **Total** | **57** | **21** | **16** | **15** | **5** | |
 
-*(44 classified + `/unauthorized`, which is static markup, + the `/admin/circulars`
-redirect. The 🟨 column counts 6 Hybrid pages and 5 circulars pages that are API-only but
-not yet verified end to end — 🟨 Partial, not ✅, per house rule 1. Re-derived 2026-10-05
-for the circulars rows only; the other rows carry their earlier counts. 2026-10-06:
-`/admin/cabinets` moved ✅ → 🟨 after its rework, pending a re-check; Staff's one 🟨 is
-now `/staff/cabinets` as Partial rather than Hybrid — see its row.)*
+*(Re-tallied 2026-10-08 from each page's row in this doc: all 57 `page.tsx` files. 🟨
+counts Hybrid pages and API-only pages not yet verified end to end — Partial, not ✅, per
+house rule 1. ↪️ / static: `/admin/circulars`, `/admin/workflows/instances`, `/tasks/[id]`,
+`/unauthorized`, `/user-stories`. `/admin/cabinets` and `/staff/cabinets` moved 🟨 → ✅
+after the user tested cabinet management end to end.)*
 
 ### By data source
 
@@ -212,8 +208,8 @@ shared — see [Shared pages](#shared-pages-used-by-multiple-roles).*
 |---|---:|---|---|---|
 | `/staff` | 283 | `currentUser` | `useTasks` ✅ · `useNotifications` ⛔ | ✅ Live (notification panel dead) |
 | `/staff/tasks` | 162 | `currentUser` | `useTasks` ✅ | ✅ Live |
-| `/staff/cabinets` | 821 | `auditAction` only | `useCabinets`, `useCabinet`, `useCabinetFolders`, `useDocuments`, `useUsers` ✅ · folder create/rename/delete, `documentsService.update` (move), metadata-field + access-grant hooks via the shared `components/cabinets/` cards | 🟨 Partial — cabinet management added 2026-10-06 (see below), not yet verified live. *Uploader names come from `useUsers`, not `SEED.USERS` as this row used to say — corrected 2026-10-06* |
-| `/staff/performance` | 212 | `currentUser` | `useDocuments`, `useTasks` ✅ | ✅ Live |
+| `/staff/cabinets` | 821 | `auditAction` only | `useCabinets`, `useCabinet`, `useCabinetFolders`, `useDocuments`, `useUsers` ✅ · folder create/rename/delete, `documentsService.update` (move), metadata-field + access-grant hooks via the shared `components/cabinets/` cards | ✅ Live — cabinet management added 2026-10-06 (see below), tested end to end by the user 2026-10-08. *Uploader names come from `useUsers`, not `SEED.USERS` as this row used to say — corrected 2026-10-06* |
+| `/staff/performance` | 215 | `currentUser` | `useTasks`, `useSlaBreaches` ✅ | ✅ Live — **2026-10-08:** the hard-coded "Rework rate 4.2%" and "-0.4 d vs last period" are gone; it shows **Changes requested** (share of the user's completed tasks closed with `request_changes`, from `Task.action`). SLA compliance stays "—" (DRIFT-19) |
 
 ### APIs wired ✅
 
@@ -272,7 +268,7 @@ role you hold, or above your own level) are enforced by the UI only.
 |---|---|---|
 | Sidebar badges | `SEED.documents`, `SEED.notifications` | Counts don't match the real task queue |
 | `/upload` IDU card | `IDU_GUESSES` inline | Fake classification with a fake confidence score |
-| `/staff/performance` | partly `SEED.documents` | Personal stats blend real and fabricated |
+| ~~`/staff/performance`, `/staff`~~ | ~~hard-coded "Rework rate 4.2%" and a turnaround delta~~ | **Removed 2026-10-08** — replaced by a real "Changes requested" rate (`changesRequestedRate`, `utils/supervisor.ts`) |
 
 ### Flows
 
@@ -284,7 +280,7 @@ role you hold, or above your own level) are enforced by the UI only.
 | Open a document, view metadata + versions | ✅ | |
 | Check out → edit → check in | ✅ | ⚠️ only the holder can release the lock |
 | Upload a new version | ✅ | Auto-increments |
-| **Route for approval** | ⛔ | **404 — the single biggest blocker for this role** |
+| **Route for approval** | 🟨 | Two-call create-then-start; several documents per workflow since 2026-10-07 (DRIFT-19). Not verified live — the live API still runs pre-`919d0ef` code |
 | Search by content | ⛔ | Index never built (OCR always fails) |
 | Work the task queue | ✅ | Prioritised by urgency then due date |
 | Act on a task | ✅ | |
@@ -294,7 +290,7 @@ role you hold, or above your own level) are enforced by the UI only.
 
 ### What's left, in order
 
-1. **Fix routing** — two-call `POST /workflow-instances` then `/:id/start`. *~1 hour. Unblocks the entire approval half of the product.*
+1. ~~**Fix routing** — two-call `POST /workflow-instances` then `/:id/start`.~~ **Done** (`workflowInstancesService.createAndStart`); this line was stale until 2026-10-08.
 2. **Fix the upload→OCR bucket** so search works at all.
 3. **Build notifications** (backend module + wire the bell).
 4. ~~Add `POST /documents/:id/comments`~~ — **done differently (2026-09-10):** comments are the `comment` field on `POST /tasks/:id/action`; the stage-action modals now send it.
@@ -321,6 +317,7 @@ role you hold, or above your own level) are enforced by the UI only.
 | `/supervisor/workload` | 191 | `currentUser` | `useDocuments`, `useUsers` ✅ | ✅ Live |
 | `/supervisor/exceptions` | 73 | — | **inline `useState` array** | 🟥 Mock |
 | `/supervisor/performance` | 86 | — | **none** | 🟥 Mock |
+| `/supervisor/instances` | 15 | — | `WorkflowInstanceMonitor` → `useWorkflowInstances`, `useWorkflows`, `useWorkflowInstanceLifecycle` ✅ | 🟨 Partial — the Workflow Monitor (hold / resume / close). Stage, due and SLA % columns show "—" until `GET /workflow-instances` carries executions (DRIFT-19). *Classified 2026-10-08* |
 
 ### APIs wired ✅
 
@@ -561,8 +558,10 @@ approximation, not a silent one.
 | `/admin` | 114 | `currentUser` | `useUsers`, `useCabinets` ✅ | ✅ Live |
 | `/admin/users` | ~320 | `auditAction` only | `useUsers` + mutations, `useRoles` (picker), `useAssign/RemoveUserRole`, `useResendInvitation` ✅ | ✅ Live — users only since 2026-09-10 (roles split out); "Resend invite" added 2026-09-18 |
 | `/admin/roles` | ~470 | `auditAction` only | `useRoles`, `useCreate/Update/DeleteRole`, `useSetRolePermissions` ✅ | ✅ Live — rail + data-driven permission matrix; catalog derived from the `GET /roles` union (no `GET /permissions` exists); built-in roles read-only |
-| `/admin/cabinets` | 448 | `auditAction` only | `useCabinets`, `useDepartments`, `useCreateFolder` (seeds "General") ✅ · metadata-field + access-grant hooks via the shared `components/cabinets/` cards | 🟨 Partial — reworked 2026-10-06: folder tools and the document browser moved to `/staff/cabinets`; schema and access cards extracted into shared components. Pending end-to-end re-check |
-| `/admin/workflows` | 493 | `auditAction` only | `useWorkflows` + mutations ✅ · `@ts-nocheck` | ✅ Live ⚠️ **no authorization on the endpoints** |
+| `/admin/cabinets` | 448 | `auditAction` only | `useCabinets`, `useDepartments`, `useCreateFolder` (seeds "General") ✅ · metadata-field + access-grant hooks via the shared `components/cabinets/` cards | ✅ Live — reworked 2026-10-06: folder tools and the document browser moved to `/staff/cabinets`; schema and access cards extracted into shared components. Tested end to end by the user 2026-10-08 |
+| `/admin/workflows` | 442 | `auditAction` only | `useWorkflows` + mutations ✅ | ✅ Live ⚠️ **no authorization on the endpoints** — `@ts-nocheck` removed 2026-10-08; the page now type-checks |
+| `/admin/workflows/instances` | 7 | — | — | ↪️ re-exports `/supervisor/instances` (the Workflow Monitor) — intentional, so client admins reach it from their own portal. *Classified 2026-10-08* |
+| `/admin/departments` | 460 | `auditAction` only | `useDepartments`, `useCreate/Update/DeleteDepartment` ✅ | 🟨 Partial — API-only, no `SEED`: create, edit, delete, one level of sub-departments (TEST_PLAN "Things to check"). *Classified 2026-10-08*, not verified end to end in that pass |
 | `/admin/policies` | 244 | `auditAction` | `usePolicies` 🟥 | 🟥 Mock |
 | `/admin/branding` | 397 | `auditAction` | `useBranding` 🟥 | 🟥 Mock |
 | `/admin/circulars` | 20 | — | — | ↪️ redirect to `/circulars/manage` (2026-10-05) — management moved to a shared area because supervisors and management author and publish circulars too, and can't enter this portal |
@@ -634,8 +633,8 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 | Create departments | ✅ | ⚠️ 200 cap, no cycle detection |
 | Create cabinets, assign to departments | ✅ | ⚠️ 100 cap |
 | Build folder trees | 🟨 | Moved 2026-10-06 from `/admin/cabinets` to `/staff/cabinets`, for whoever the cabinet is delegated to; not yet verified live. ⚠️ `folderId` not validated against `cabinetId` |
-| Define cabinet metadata fields | ✅ | Wired in `admin/cabinets/page.tsx` — row was stale, caught 2026-09-18. Also on `/staff/cabinets` since 2026-10-06 (🟨 not verified live there) |
-| Grant cabinet access | ✅ | Wired in `admin/cabinets/page.tsx` — row was stale, caught 2026-09-18. Also on `/staff/cabinets` since 2026-10-06 (🟨 not verified live there) |
+| Define cabinet metadata fields | ✅ | Wired in `admin/cabinets/page.tsx` — row was stale, caught 2026-09-18. Also on `/staff/cabinets` since 2026-10-06 (tested by the user 2026-10-08) |
+| Grant cabinet access | ✅ | Wired in `admin/cabinets/page.tsx` — row was stale, caught 2026-09-18. Also on `/staff/cabinets` since 2026-10-06 (tested by the user 2026-10-08) |
 | Create users with dept + roles | ✅ | ⚠️ new users get a default password (`password`), not an emailed invite — see backlog |
 | Resend a user's invitation email | ✅ | Added 2026-09-18; shown for active users with no `lastLoginAt` |
 | Assign / remove roles | ✅ | |
@@ -668,7 +667,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 8. **Build retention**: endpoints + an enforcement job.
 9. ~~Build the audit module and point `/admin/audit` at it.~~ **Done 2026-09-18**
    (DRIFT-11 revised).
-10. **Remove `@ts-nocheck`** from `/admin/workflows`.
+10. ~~**Remove `@ts-nocheck`** from `/admin/workflows`.~~ **Done 2026-10-08.**
 
 ---
 
@@ -799,18 +798,14 @@ claims above were re-checked against live API behavior 2026-09-18, not by re-rea
 | `/platform` | 347 | `tenants`, `plans`, `addTenant`, `updateTenant` | **none** | 🟥 Mock |
 | `/platform/plans` | 116 | `plans`, `tenants`, `updateTenant` | **none** | 🟥 Mock |
 | `/platform/billing` | 133 | `tenants` | **none** | 🟥 Mock |
-| `/platform/sysconfig` | 203 | `featureFlags`, `updateFeatureFlag` | **none** | 🟥 Mock |
+| `/platform/sysconfig` | 120 | `auditAction` | **none** | 🟥 Mock — health, services and jobs only since 2026-10-08 |
 | `/platform/audit` | 89 | `audit`, `tenants`, `users` | **none** | 🟥 Mock — intentional, not a gap: no cross-tenant `GET /audit` exists, nor any platform-level multi-tenant API |
-| `/platform/flags` | 7 | — | ↪️ **re-exports `/platform/sysconfig`** | 🟥 ⚠️ **wrong page** |
+| `/platform/flags` | 130 | `featureFlags`, `updateFeatureFlag`, `auditAction` | **none** | 🟥 Mock — its own page since 2026-10-08 (was a re-export of `/platform/sysconfig`) |
 
-> ⚠️ Note the inversion: `updateFeatureFlag` is destructured by **`/platform/sysconfig`**,
-> not by `/platform/flags`. The flags route re-exports sysconfig, so the feature-flag
-> controls live under "Platform Health" and the "Feature Flags" nav item shows the same
-> screen. Either finish the split or drop the duplicate nav entry.
-
-> ⚠️ **`/platform/flags` renders the Platform Health screen.** Clicking "Feature Flags" in
-> the sidebar shows system configuration. `updateFeatureFlag` exists in the store and no
-> screen calls it. Either build the flags page or remove the nav entry.
+> ✅ **Fixed 2026-10-08.** `/platform/flags` used to re-export `/platform/sysconfig`, so the
+> "Feature Flags" nav item showed Platform Health with the flag table at the bottom. The flag
+> table (rollout slider, promote, kill-switch) now lives only on `/platform/flags`, and
+> sysconfig keeps health, services and jobs. Both stay 🟥 Mock: no flag model exists (#34).
 
 ### APIs wired
 
@@ -852,7 +847,7 @@ This is a **phase**, not a backlog item:
 4. Automated per-tenant database provisioning + migration
 5. Plan/entitlement model with actual enforcement
 6. Usage metering (`DocumentVersion.fileSize` is the only ingredient that exists)
-7. Feature-flag model and evaluation — **and fix the `/platform/flags` re-export**
+7. Feature-flag model and evaluation (the `/platform/flags` re-export was fixed 2026-10-08)
 8. Real health checks: DB probe, Redis probe, queue depth, worker heartbeat
 9. Audited, time-boxed impersonation for support access
 10. Align the frontend permission model with the backend's 3 grants
@@ -863,7 +858,7 @@ This is a **phase**, not a backlog item:
 
 | Page | LOC | Roles | Store reads | API | Status |
 |---|---:|---|---|---|---|
-| `/` (login) | 316 | all | `currentUser`, `setCurrentUser` | `authService` ✅ | ✅ Live ⚠️ **all 12 test accounts are wrong** |
+| `/` (login) | 316 | all | `currentUser`, `setCurrentUser` | `authService` ✅ | ✅ Live — the 7 autofill accounts match the backend's `tjoel+…` fixtures (re-checked 2026-10-08; the "12 wrong accounts" note was stale) |
 | `/doc/[id]` | 570 | all | `currentUser` | `useDocument`, versions, checkout, `useWorkflowInstances` ✅ · `usePolicies` 🟥 mock | 🟨 Hybrid (policies) — **made view-only 2026-10-02**: workflow actions, signing and the activity trail moved to `/workflow-instances/[id]` |
 | `/search` | 536 | all | `currentUser`, `savedSearches` (per-user, user-created — not `SEED`) | `useDocuments` (server-side filters + pagination), `useDocumentSearch` (text + cabinet), `useCabinets` ✅ | 🟨 Pending check — rebuilt 2026-09-30: no `SEED` reads, no `@ts-nocheck`; types from `constants/documentTypes.ts`. Not yet verified end to end, so not marked ✅ **2026-10-08:** results can be ticked (for anyone with `workflow_instance:create`); the selection survives paging, new searches and filter changes, and **Route to workflow** sends it all into one workflow — the only way to route documents from different folders or cabinets together (🟨 not yet verified live). |
 | `/upload` | 926 | staff, supervisor, management, client_admin | `docTypes`, `session`, `users` | `useCabinets`, `useCabinet`, `useCabinetFolders`, `documentsService` (incl. `PUT /documents/:id/metadata`), `s3` ✅ | ✅ Live — **2026-10-07:** the chosen cabinet's metadata fields render on the card and save after filing, for users with `document_metadata:edit` + `edit` on the cabinet; everyone else sees the field list only (🟨 not yet verified live). **2026-10-08: batch filing** — with two or more files waiting, an "Apply to all" bar sets cabinet/folder/confidentiality/urgency on every card, and **File all (N)** checks every card first, uploads three at a time, then files them through `POST /documents/batch` in chunks of 20 (one transaction each; a failed chunk's cards return to editable and reuse their upload on retry). Metadata still saves per document afterwards; when it's done, a banner offers to route everything that run filed into **one** workflow. Progress now shows inside the card, which stays mounted — previously it was unmounted mid-upload, so the bar didn't move (🟨 not yet verified live).  **2026-10-02:** accepted types unified in `src/constants/uploadTypes.ts` — PDF, DOCX, XLSX, TIFF, JPG, PNG up to 100 MB (was PDF ≤50 MB + images ≤10 MB, despite the page text claiming DOCX/XLSX/TIFF). DOCX/XLSX/TIFF upload but **don't preview** in the viewer and **aren't OCR'd** (Textract can't read DOCX/XLSX), so they're not text-searchable |
@@ -874,6 +869,10 @@ This is a **phase**, not a backlog item:
 | `/circulars/manage/new` | 41 | `circular:create` | — | `useCreateCircular` → `POST /circulars` · `useDepartments`, `useRoles` (only with `role:view`), `useAllUsers`, `useDocuments`, multipart upload | 🟨 **new 2026-10-05** — compose a draft: audience (all staff / department+role groups / named people), acknowledgement + deadline + reminders, expiry, file and linked-document attachments. built and type/build-checked 2026-10-05, not yet verified end to end against a live backend |
 | `/circulars/manage/[id]` | 712 | `circular:view` | — | `useCircular`, `useCircularRecipients`, update / delete / publish / cancel-schedule / withdraw / revise / reminders mutations | 🟨 **new 2026-10-05** — detail, inline draft editing, lifecycle actions gated per permission, stats + per-department breakdown + recipients report. built and type/build-checked 2026-10-05, not yet verified end to end against a live backend |
 | `/unauthorized` | 58 | all | — | — | static |
+| `/forgot-password` | 96 | signed out | — | `authService.forgotPassword` → `POST /auth/forgot-password` | 🟨 API-only, no `SEED`. Doc 04 records the reset flow as working; not re-verified in the 2026-10-08 classification pass |
+| `/set-password` | 145 | signed out | — | `authService.resetPassword` → `POST /auth/reset-password` (invitation and reset tokens) | 🟨 API-only, no `SEED`; DRIFT-15 fixed its payload 2026-09-18. Not re-verified in the 2026-10-08 pass |
+| `/user-stories` | 413 | all | — | — | static — in-app guide built from a local data module (the stories in doc 02), outside the app shell |
+| `/delegations` | 364 | `delegation:view` | `currentUser` | `useDelegations`, `useCreateDelegation`, `useEndDelegation`, `useUsers`, `useCabinets` ✅ | 🟨 API-only, no `SEED`. *Row added 2026-10-08* — the page was wired by 2026-09-18 (backlog #13) but never had an inventory row; not re-verified end to end |
 | `/tasks/[id]` | 33 | all | — | `useTask` → `GET /tasks/:id` | ↪️ redirect to `/workflow-instances/{instanceId}?task={id}` — landing page for backend `/tasks/:id` notification links (DRIFT-17). Not yet verified live |
 | `/workflow-instances/[id]` | 351 | all | `currentUser` | `useWorkflowInstance`, `useTask`, `useDocument`, `useTaskAction`, versions ✅ | 🟨 **new 2026-10-02** — the workflow page (see below). Was a 33-line redirect earlier the same day. Not yet verified e2e |
 
@@ -987,12 +986,12 @@ for as long as it did.
 | # | Item | Owner | Effort | Why |
 |---|---|---|---|---|
 | 1 | `npx prisma generate` | Backend | 2 min | Unblocks the build; stops every user being silently narrowed to `department` scope |
-| 2 | Two-call create-then-start in `workflowInstancesService.start()` | Frontend | 1 hr | **Unblocks the entire approval half of the product** |
+| 2 | ✅ ~~Two-call create-then-start in `workflowInstancesService.start()`~~ — **done**: `createAndStart` posts the instance then `/:id/start` (ticked 2026-10-08; the row was stale) | Frontend | — | Was: unblocks the approval half of the product |
 | 3 | ~~Authorization on the workflow routes~~ — ✅ **done 2026-09-04**, enforced in all five workflow services. **New:** split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES` so `staff`/`supervisor` can read definitions (DRIFT-14) | Backend | 1 day | **Routing is blocked for the roles that hold `workflow:route`** |
-| 4 | Fix the 12 login test-account emails to the `tjoel+…` set | Frontend | 10 min | Every autofill button fails today |
+| 4 | ✅ ~~Fix the 12 login test-account emails to the `tjoel+…` set~~ — **done**: 7 autofill buttons, all matching the backend seed (ticked 2026-10-08) | Frontend | — | Was: every autofill button failed |
 | 5 | JSON 404 handler in `app.ts` | Backend | 5 min | Makes 8 broken calls fail legibly |
 | 6 | ✅ ~~Make `usePermissions` parse three-segment strings~~ — **done 2026-09-10, backend caught up 2026-09-15.** `src/lib/permissions.ts` normalises/matches on `resource:action`, parses scope separately; role-name heuristics removed; gating now permission-key based (`routes.config` `anyPermissions`). Login + `GET /auth/me` now return a live, scoped `permissions` array — that's the source of truth; `useHydratePermissions` (from `GET /roles`) only tops up keys it's missing | Frontend + Backend | — | Was: every `<Guard>` would go dark the moment `/auth/me` returned `permissions`; that day has arrived and it didn't |
-| 7 | Fix `effStatus()` — one copy, derive overdue from `dueAt`/`stageDueAt`, normalise status casing | Frontend | 2 hr | Every overdue badge, count and ageing bucket in the product currently reads zero (DRIFT-13) |
+| 7 | ✅ ~~Fix `effStatus()`~~ — **done 2026-09-21** (DRIFT-13): `effStatus` deleted for `taskStatusLabel`/`isOverdue` in `utils/supervisor.ts`. Since `919d0ef` list responses lack deadlines again, so list overdue counts come from open SLA breach events (DRIFT-19) (ticked 2026-10-08) | Frontend | — | Was: every overdue badge read zero |
 
 *Items 1, 2, 4, 5 and 6 total under two hours and move the product from "demo with a broken
 core loop" to "working document workflow". Item 7 adds two more and restores every SLA and
@@ -1029,8 +1028,8 @@ ageing indicator.*
 | 24 | ✅ ~~Version-restore and archive buttons~~ — **done 2026-09-10.** `/doc/[id]` right column has a `DocumentVersionsPanel` (list · open · restore · upload new version) and an "Archive document" item in the More menu; `DocumentDetailsPanel` gains an inline metadata editor when the user holds `document:edit` | Frontend |
 | 25 | ✅ ~~`GET /workflow-history` tab on `/doc/[id]`~~ — **already done**, this row was inconsistent with the page's own feature table above (which correctly marked it ✅) | — |
 | 26 | Paginate cabinets, folders, roles, departments | Backend |
-| 27 | Remove `@ts-nocheck` from the two files that still carry it (`admin/workflows`, `search`) — `doc/[id]` lost it already, count corrected 2026-09-18 | Frontend |
-| 28 | Fix `/platform/flags` re-exporting the wrong page | Frontend |
+| 27 | ✅ ~~Remove `@ts-nocheck`~~ — **done 2026-10-08**: `search` lost it in its 2026-09-30 rebuild, `admin/workflows` on 2026-10-08. No file carries it now | Frontend |
+| 28 | ✅ ~~Fix `/platform/flags` re-exporting the wrong page~~ — **done 2026-10-08** | Frontend |
 | 29 | Role switcher in the Topbar for multi-role users | Frontend |
 | 30 | **Tests.** There are currently zero in either codebase. | Both |
 
