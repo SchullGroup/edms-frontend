@@ -160,11 +160,14 @@ export function useDeleteMetadataField() {
 
 // --- Access grants ---
 
-export function useCabinetAccessGrants(cabinetId: string | undefined) {
+export function useCabinetAccessGrants(
+  cabinetId: string | undefined,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: cabinetKeys.access(cabinetId || ''),
     queryFn: () => cabinetsService.getAccessGrants(cabinetId as string),
-    enabled: !!cabinetId,
+    enabled: !!cabinetId && (options?.enabled ?? true),
   });
 }
 

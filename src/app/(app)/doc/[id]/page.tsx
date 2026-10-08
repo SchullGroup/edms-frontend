@@ -11,6 +11,7 @@ import {
   useArchiveDocument,
 } from '@/apis/hooks/useDocuments';
 import { usePermissions } from '@/hooks/usePermissions';
+import { cabinetAllows, useMyCabinetAccess } from '@/components/cabinets/cabinetAccess';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
 import { useConfidentialityPolicy } from '@/hooks/useConfidentialityPolicy';
 import { useCabinets } from '@/apis/hooks/useCabinets';
@@ -62,12 +63,15 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const createAuditLog = useCreateAuditLog();
   const checkoutDocument = useCheckoutDocument();
   const checkinDocument = useCheckinDocument();
-  const { routeDocuments } = useRouteToWorkflow();
+  const { routeDocuments, canRoute: hasRoutePermission } = useRouteToWorkflow();
   const { promptRequestAccess, isRequesting } = useRequestAccessPrompt();
 
   const [zoom, setZoom] = useState(1);
 
   const { data: rawDoc, isLoading, error: docError } = useDocument(docId);
+  // Saving metadata (`PUT /documents/:id/metadata`) needs the metadata permission
+  // AND `edit` on the document's cabinet — the same two checks the API makes.
+  const myCabinetLevel = useMyCabinetAccess(rawDoc?.cabinetId);
   // A document outside the caller's confidentiality clearance 403s (code
   // `FORBIDDEN`) rather than 404ing — its own state below, not "not found".
   const accessDenied = (docError as any)?.response?.status === 403;
@@ -394,7 +398,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             <Icon name="flow" size={14} /> Open workflow
           </button>
         )}
-        {canRoute && !closed && (
+        {canRoute && hasRoutePermission && !closed && (
           <button className="btn btn-primary" onClick={routeThisDocument}>
             <Icon name="flow" size={14} /> Route to workflow
           </button>
@@ -464,7 +468,12 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             ownerName={userById(users, doc.createdBy)?.name || 'System'}
             createdAtLabel={fmtDateTime(doc.createdAt)}
             metadata={doc.metadata || []}
-            canEditMetadata={can('document', 'edit') && !closed && !lockedByOther}
+            canEditMetadata={
+              can('document_metadata', 'edit') &&
+              cabinetAllows(myCabinetLevel, 'edit') &&
+              !closed &&
+              !lockedByOther
+            }
           />
 
           {/* New versions are only uploaded on the workflow page, in answer to

@@ -12,6 +12,7 @@ import { TaskRow } from '@/components/ui/TaskRow';
 import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
 import { Task } from '@/types/models';
+import { taskPrimaryDocument, taskTitle } from '@/utils/workflowDocuments';
 
 const PAGE_SIZE = 20;
 
@@ -54,7 +55,7 @@ export default function ApprovalsQueuePage() {
   const handleReassign = (t: Task) => {
     let newAssignee = '';
     let note = '';
-    const title = t.workflowInstance?.document?.title || 'this document';
+    const title = taskTitle(t);
     openModal({
       title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
       body: (
@@ -103,7 +104,7 @@ export default function ApprovalsQueuePage() {
               .then(() => {
                 createAuditLog.mutate({
                   action: 'REASSIGN',
-                  target: t.workflowInstance?.documentId || t.id,
+                  target: taskPrimaryDocument(t)?.id || t.id,
                   detail: `Reassigned from ${prevName} to ${newName}`,
                 });
                 addToast(`Reassigned to ${newName}`, 'success');

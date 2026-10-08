@@ -26,6 +26,26 @@ const toDateStr = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pa
 /** Today as a local "YYYY-MM-DD" — handy for `min`. */
 export const todayStr = () => toDateStr(new Date());
 
+/** How far either side of today the month/year dropdowns reach. */
+const YEARS_BACK = 100;
+const YEARS_AHEAD = 10;
+
+/**
+ * Month + year dropdowns in the caption, so a distant date is two clicks rather
+ * than paging month by month. react-day-picker's default range ends with the
+ * current year, which would block deadlines, expiries and scheduled publishing,
+ * so the range is set explicitly — from `min` when there is one, and stretched
+ * to include an already-selected date outside the usual window.
+ */
+function calendarProps(minDate: Date | undefined, selected: Date | undefined) {
+  const year = new Date().getFullYear();
+  const startMonth = minDate
+    ? new Date(minDate.getFullYear(), minDate.getMonth())
+    : new Date(Math.min(year - YEARS_BACK, selected?.getFullYear() ?? year), 0);
+  const endYear = Math.max(year + YEARS_AHEAD, selected?.getFullYear() ?? year);
+  return { captionLayout: 'dropdown' as const, startMonth, endMonth: new Date(endYear, 11) };
+}
+
 /** Parses the date part of "YYYY-MM-DD[THH:mm]" as a local date. */
 function parseDate(s: string | undefined): Date | undefined {
   const m = s?.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -192,6 +212,7 @@ export function DateField(props: BaseProps) {
       {(close) => (
         <DayPicker
           mode="single"
+          {...calendarProps(minDate, selected)}
           selected={selected}
           defaultMonth={selected ?? minDate}
           disabled={minDate ? { before: minDate } : undefined}
@@ -241,6 +262,7 @@ export function DateTimeField(props: BaseProps) {
         <>
           <DayPicker
             mode="single"
+            {...calendarProps(minDate, selected)}
             selected={selected}
             defaultMonth={selected ?? minDate}
             disabled={minDate ? { before: minDate } : undefined}
