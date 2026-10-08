@@ -932,6 +932,14 @@ with the user's id, so it survives a reload and a fresh sign-in but never follow
 user on the same browser. It defaults to the priority-list winner below. A user with only
 custom roles still gets the single portal their permissions resolve to.
 
+**Where a custom-role user lands (checked 2026-10-08, doc 05 backlog 29a).** That resolution
+takes the first portal whose entry permissions the user holds: `admin` (`user:view`,
+`role:view` or `workflow:view`), then `auditor` (`audit:view`), then `management`
+(`document:view`, `workflow_instance:view`, `task:view` or `department:view`), then
+`supervisor`, then `staff`. Because `workflow:view` and `document:view` are near-universal,
+custom roles almost never reach the Staff Workspace or Supervisor Console: the tenant's
+"Budget Officer" lands in Client Administration. Not yet fixed.
+
 The table above describes the default, before any switch.
 
 ---

@@ -525,6 +525,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           canDownload={canDownload}
           onDownload={actDownload}
           canPrint={canPrint}
+          ocrText={doc.currentVersion?.ocrText}
+          ocrStatus={doc.currentVersion?.ocrStatus}
           onBeforePrint={() =>
             printDocument
               .mutateAsync(doc.id)

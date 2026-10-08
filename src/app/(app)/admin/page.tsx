@@ -10,6 +10,7 @@ import { useWorkflows } from '@/apis/hooks/useWorkflows';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { useAccessRequestsInbox } from '@/apis/hooks/useDocuments';
 import { Icon } from '@/components/ui/Icons';
+import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -158,6 +159,9 @@ export default function AdminDashboard() {
             ))}
           </div>
         </div>
+      </div>
+      <div className="mt-4">
+        <QuickAccessCard showActions={false} />
       </div>
     </div>
   );

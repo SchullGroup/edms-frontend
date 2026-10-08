@@ -24,11 +24,14 @@ function savedSearchHref(s: SavedSearch): string {
 }
 
 /**
- * Staff dashboard shortcuts: common actions, pinned and recently opened
- * documents, and saved searches. The lists live in the browser, per user —
- * the API has no favourites or view-history endpoint.
+ * Dashboard shortcuts: pinned and recently opened documents and saved
+ * searches, plus (on the staff dashboard) common actions. The lists live in
+ * the browser, per user — the API has no favourites or view-history endpoint.
+ *
+ * `showActions` is for the staff dashboard only: its buttons go to staff pages
+ * (`/staff/tasks`, `/staff/cabinets`), and other portals have their own nav.
  */
-export function QuickAccessCard() {
+export function QuickAccessCard({ showActions = true }: { showActions?: boolean }) {
   const router = useRouter();
   const { can } = usePermissions();
   const me = useStore((s) => s.currentUser);
@@ -36,13 +39,15 @@ export function QuickAccessCard() {
   const recent = useStore((s) => (me ? s.recentDocuments[me.id] : undefined)) ?? EMPTY_DOCS;
   const searches = useStore((s) => (me ? s.savedSearches[me.id] : undefined)) ?? EMPTY_SEARCHES;
 
-  const actions = [
-    can('document', 'create') && { label: 'Upload', icon: 'upload', to: '/upload' },
-    { label: 'Search', icon: 'search', to: '/search' },
-    { label: 'My tasks', icon: 'inbox', to: '/staff/tasks' },
-    { label: 'Cabinets', icon: 'cabinet', to: '/staff/cabinets' },
-    { label: 'Circulars', icon: 'speaker', to: '/circulars' },
-  ].filter(Boolean) as { label: string; icon: string; to: string }[];
+  const actions = !showActions
+    ? []
+    : ([
+        can('document', 'create') && { label: 'Upload', icon: 'upload', to: '/upload' },
+        { label: 'Search', icon: 'search', to: '/search' },
+        { label: 'My tasks', icon: 'inbox', to: '/staff/tasks' },
+        { label: 'Cabinets', icon: 'cabinet', to: '/staff/cabinets' },
+        { label: 'Circulars', icon: 'speaker', to: '/circulars' },
+      ].filter(Boolean) as { label: string; icon: string; to: string }[]);
 
   const recentNotPinned = recent.filter((r) => !pinned.some((p) => p.id === r.id)).slice(0, 5);
 

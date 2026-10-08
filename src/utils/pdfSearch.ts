@@ -42,6 +42,13 @@ export function buildPageText(items: { str: string; hasEOL?: boolean }[]): PageT
   return { items: strs, starts, text };
 }
 
+/** A block of plain text (a scan's OCR output) as one searchable item. Every
+ *  whitespace character, line breaks included, matches a space, one for one,
+ *  so offsets still point into the original text. */
+export function buildPlainText(text: string): PageText {
+  return { items: [text], starts: [0], text: fold(text.replace(/\s/g, ' ')) };
+}
+
 /** Every non-overlapping, case-insensitive occurrence of `query`, in reading order. */
 export function findMatches(pages: (PageText | undefined)[], query: string): PdfMatch[] {
   const needle = fold(query.trim().replace(/\s+/g, ' '));

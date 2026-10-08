@@ -833,7 +833,9 @@ Items whose backend already exists (or needs none). Worked through one at a time
       permission). To test: open a DOCX on `/doc/[id]` and on its workflow page.
       **In-PDF search done 2026-10-08** with the pdf.js viewer (`PdfViewer`): find with
       highlights and match count, page box, zoom, Print (audited, watermark burned in) and
-      Download in the viewer's toolbar, Export on `/doc/[id]`. To test: open a PDF, type a
+      Download in the viewer's toolbar, Export on `/doc/[id]`. Scanned PDFs: find searches the
+      OCR text and shows it as a "Scanned text" view with highlights (2026-10-08) — test on
+      "DN 2026 0921 delivery note scanned", search "Ridgeline". To test: open a PDF, type a
       word into "Find in document", press Enter to step through matches; Ctrl+F inside the
       viewer focuses the box; Print on a Confidential document — the printout carries the
       watermark. Left: Office/email previews (backend)

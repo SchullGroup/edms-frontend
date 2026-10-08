@@ -548,6 +548,14 @@ input[type="checkbox"] { accent-color: var(--focus); }
 .pdf-page canvas { display: block; }
 .pdf-page .watermark { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: hidden; }
 .pdf-page .watermark span { transform: rotate(-32deg); font-weight: 800; color: rgba(222,91,109,.14); letter-spacing: .1em; white-space: nowrap; text-transform: uppercase; font-family: Inter, Arial, sans-serif; }
+.pdf-view-toggle { height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,.18); background: transparent; color: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.pdf-view-toggle:hover, .pdf-view-toggle[aria-pressed="true"] { background: rgba(255,255,255,.12); }
+.pdf-view-toggle:focus-visible { outline: 2px solid #8FB3FF; outline-offset: 1px; }
+.ocr-sheet { background-color: #fff; color: #1d2433; max-width: 900px; margin: 0 auto; padding: 28px 32px; border-radius: 2px; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+.ocr-note { font-size: 12px; color: #5b6478; background: #f3f5f9; border-radius: 6px; padding: 8px 10px; margin: 0 0 16px; }
+.ocr-text { white-space: pre-wrap; line-height: 1.6; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.ocr-hl { background: rgba(255,196,0,.45); color: inherit; border-radius: 2px; }
+.ocr-hl.active { background: rgba(255,120,0,.65); box-shadow: 0 0 0 1px rgba(200,80,0,.8); }
 .pdf-status { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 320px; color: #C9CEDC; text-align: center; padding: 24px; font-size: 13px; }
 .pdf-page .textLayer { color-scheme: only light; position: absolute; text-align: initial; inset: 0; overflow: clip; opacity: 1; line-height: 1; letter-spacing: normal; word-spacing: normal; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; caret-color: CanvasText; z-index: 0;
   --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }

@@ -32,6 +32,9 @@ export interface DocumentViewerPanelProps {
   canPrint: boolean;
   /** The audited permission check run before printing; false cancels. */
   onBeforePrint?: () => Promise<boolean>;
+  /** The version's OCR text, searched and shown when a PDF is a scan. */
+  ocrText?: string | null;
+  ocrStatus?: string;
 }
 
 /**
@@ -62,6 +65,8 @@ export function DocumentViewerPanel({
   onDownload,
   canPrint,
   onBeforePrint,
+  ocrText,
+  ocrStatus,
 }: DocumentViewerPanelProps) {
   const isPdf = fileMimeType === 'application/pdf';
   // TIFF is an `image/*` type but only Safari can draw it in an <img> — in
@@ -84,6 +89,8 @@ export function DocumentViewerPanel({
           allowCopy={canDownload}
           canPrint={canPrint}
           onBeforePrint={onBeforePrint}
+          ocrText={ocrText}
+          ocrStatus={ocrStatus}
           actions={
             canDownload &&
             (onDownload ? (

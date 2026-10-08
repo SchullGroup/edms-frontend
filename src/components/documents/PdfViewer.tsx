@@ -5,7 +5,13 @@ import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import type { TextContent, TextItem } from 'pdfjs-dist/types/src/display/api';
 import { Icon } from '@/components/ui/Icons';
 import { useUIStore } from '@/store/useUIStore';
-import { buildPageText, findMatches, itemRanges, type PageText } from '@/utils/pdfSearch';
+import {
+  buildPageText,
+  buildPlainText,
+  findMatches,
+  itemRanges,
+  type PageText,
+} from '@/utils/pdfSearch';
 import { printPdf } from '@/utils/printPdf';
 
 type PdfJs = typeof import('pdfjs-dist');
@@ -67,6 +73,10 @@ export interface PdfViewerProps {
   onBeforePrint?: () => Promise<boolean>;
   /** Extra toolbar buttons, shown at the right end. */
   actions?: React.ReactNode;
+  /** The backend's OCR of this version. A scan has no text of its own, so
+   *  find searches this instead and shows it as text. */
+  ocrText?: string | null;
+  ocrStatus?: string;
 }
 
 /**
@@ -86,6 +96,8 @@ export function PdfViewer({
   canPrint,
   onBeforePrint,
   actions,
+  ocrText,
+  ocrStatus,
 }: PdfViewerProps) {
   const { addToast } = useUIStore();
 
@@ -114,9 +126,9 @@ export function PdfViewer({
         const task = lib.getDocument({
           url: latestUrl.current,
           ...PDFJS_ASSETS,
-          // No scripting: JavaScript inside a PDF only runs through pdf.js's
-          // full viewer, which this doesn't use.
           // S3 doesn't expose Content-Range to scripts, so fetch the file whole.
+          // (No scripting option is needed: JavaScript inside a PDF only runs
+          // through pdf.js's full viewer, which this doesn't use.)
           disableRange: true,
           disableStream: true,
         });
@@ -169,6 +181,28 @@ export function PdfViewer({
     },
     [doc],
   );
+
+  // --- Scanned documents ---------------------------------------------------
+  // A scan is pictures of pages with no text of its own. If page 1 has no text
+  // and the backend has OCR'd the file, offer that text as a second view.
+  const hasOcr = !!ocrText?.trim();
+  const [scanned, setScanned] = useState(false);
+  const [view, setView] = useState<'pages' | 'text'>('pages');
+  useEffect(() => {
+    setScanned(false);
+    setView('pages');
+    if (!doc) return;
+    let cancelled = false;
+    getPageText(1)
+      .then((e) => {
+        if (!cancelled) setScanned(!e.text.text.trim());
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [doc, getPageText]);
+  const showTextView = scanned && hasOcr && view === 'text';
 
   // --- Layout --------------------------------------------------------------
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -228,6 +262,8 @@ export function PdfViewer({
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<{ page: number; start: number; end: number }[]>([]);
   const [active, setActive] = useState(0);
+  // `ocr` when the last search ran over the scan's OCR text instead of the PDF's own.
+  const [mode, setMode] = useState<'pdf' | 'ocr'>('pdf');
   const [searching, setSearching] = useState(false);
   const searchSeq = useRef(0);
   const scrollToActive = useRef(false);
@@ -246,7 +282,20 @@ export function PdfViewer({
           Array.from({ length: doc.numPages }, (_, i) => getPageText(i + 1).then((e) => e.text)),
         );
         if (seq !== searchSeq.current) return;
+        if (pages.every((p) => !p.text.trim())) {
+          // No text in the PDF itself: search what OCR read instead.
+          const found = ocrText?.trim() ? findMatches([buildPlainText(ocrText)], query) : [];
+          setMode('ocr');
+          setMatches(found);
+          setActive(0);
+          if (found.length) {
+            scrollToActive.current = true;
+            setView('text');
+          }
+          return;
+        }
         const found = findMatches(pages, query);
+        setMode('pdf');
         setMatches(found);
         setActive(0);
         if (found.length) {
@@ -260,14 +309,15 @@ export function PdfViewer({
       }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [doc, query, getPageText, scrollToPage]);
+  }, [doc, query, getPageText, scrollToPage, ocrText]);
 
   const step = (delta: number) => {
     if (!matches.length) return;
     const next = (active + delta + matches.length) % matches.length;
     setActive(next);
     scrollToActive.current = true;
-    scrollToPage(matches[next].page);
+    if (mode === 'ocr') setView('text');
+    else scrollToPage(matches[next].page);
   };
 
   const matchesByPage = useMemo(() => {
@@ -329,11 +379,15 @@ export function PdfViewer({
   const ready = !!doc && !!pdfjs && scale > 0;
   const matchLabel = searching
     ? 'Searching…'
-    : query.trim()
-      ? matches.length
-        ? `${active + 1} of ${matches.length}`
-        : 'No matches'
-      : '';
+    : !query.trim()
+      ? ''
+      : mode === 'ocr' && !hasOcr
+        ? ocrStatus === 'pending' || ocrStatus === 'processing'
+          ? 'Scan not read yet'
+          : 'No text in this scan'
+        : matches.length
+          ? `${active + 1} of ${matches.length}`
+          : 'No matches';
 
   return (
     <div onKeyDown={onKeyDown}>
@@ -382,7 +436,17 @@ export function PdfViewer({
           </button>
         </div>
         <span style={{ flex: 1 }} />
-        {numPages > 0 && (
+        {scanned && hasOcr && (
+          <button
+            className="pdf-view-toggle"
+            aria-pressed={view === 'text'}
+            onClick={() => setView(view === 'text' ? 'pages' : 'text')}
+            title="This is a scan. Switch between the page images and the text read from them"
+          >
+            {view === 'text' ? 'Show pages' : 'Scanned text'}
+          </button>
+        )}
+        {numPages > 0 && !showTextView && (
           <form
             className="flex items-center gap-1"
             onSubmit={(e) => {
@@ -466,6 +530,16 @@ export function PdfViewer({
           </div>
         ) : !ready ? (
           <div className="pdf-status">Loading document…</div>
+        ) : showTextView ? (
+          <OcrTextView
+            text={ocrText ?? ''}
+            matches={mode === 'ocr' ? matches : []}
+            active={active}
+            zoom={zoom}
+            allowCopy={allowCopy}
+            watermarkText={showWatermark ? watermarkText : undefined}
+            onActiveHighlight={onActiveHighlight}
+          />
         ) : (
           <div className="pdf-pages">
             {Array.from({ length: numPages }, (_, i) => (
@@ -491,6 +565,81 @@ export function PdfViewer({
       </div>
     </div>
   );
+}
+
+/**
+ * A scan's OCR text on a sheet, with find matches highlighted. Line breaks are
+ * kept as OCR returned them.
+ */
+function OcrTextView({
+  text,
+  matches,
+  active,
+  zoom,
+  allowCopy,
+  watermarkText,
+  onActiveHighlight,
+}: {
+  text: string;
+  matches: { start: number; end: number }[];
+  active: number;
+  zoom: number;
+  allowCopy: boolean;
+  watermarkText?: string;
+  onActiveHighlight: (el: HTMLElement) => void;
+}) {
+  const activeRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (activeRef.current) onActiveHighlight(activeRef.current);
+  }, [matches, active, onActiveHighlight]);
+
+  const parts: React.ReactNode[] = [];
+  let pos = 0;
+  matches.forEach((m, i) => {
+    if (m.start > pos) parts.push(text.slice(pos, m.start));
+    parts.push(
+      <mark
+        key={i}
+        ref={i === active ? activeRef : undefined}
+        className={i === active ? 'ocr-hl active' : 'ocr-hl'}
+      >
+        {text.slice(m.start, m.end)}
+      </mark>,
+    );
+    pos = m.end;
+  });
+  if (pos < text.length) parts.push(text.slice(pos));
+
+  return (
+    <div
+      className="ocr-sheet"
+      style={watermarkText ? { backgroundImage: watermarkTile(watermarkText) } : undefined}
+    >
+      <p className="ocr-note">
+        This is a scanned document. Below is the text read from it by OCR, which can contain
+        mistakes. Matches can&rsquo;t be highlighted on the page images.
+      </p>
+      <div
+        className="ocr-text"
+        style={{ fontSize: 14 * zoom, userSelect: allowCopy ? 'text' : 'none' }}
+      >
+        {parts}
+      </div>
+    </div>
+  );
+}
+
+/** The diagonal watermark as a repeating tile, so it covers a sheet of any length.
+ *  The tile is sized to the label (about 20px per character at 22px with its
+ *  letter spacing), so a long name isn't cut off at the tile's edges. */
+function watermarkTile(text: string): string {
+  const esc = text.toUpperCase().replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  const angle = (32 * Math.PI) / 180;
+  const length = Math.max(text.length, 10) * 20;
+  const w = Math.round(length * Math.cos(angle) + 140);
+  const h = Math.round(length * Math.sin(angle) + 180);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><text x="${w / 2}" y="${h / 2}" transform="rotate(-32 ${w / 2} ${h / 2})" text-anchor="middle" dominant-baseline="middle" font-family="Inter, Arial, sans-serif" font-weight="800" font-size="22" letter-spacing="2" fill="rgba(222,91,109,0.14)">${esc}</text></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
 /** 42px at 100%, shrunk so the diagonal label fits across the page. Each

@@ -14,6 +14,7 @@ import { exportCsv } from '@/utils/exportCsv';
 import { HBarChart, LineChart } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
 import { SkeletonPage } from '@/components/common/Skeleton';
+import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
 import {
   buildDepartmentIndex,
   departmentName,
@@ -294,6 +295,9 @@ export default function ManagementDashboard() {
           </button>
         </div>
         <Table cols={cols} rows={rows} onRow={() => router.push('/management/departments')} />
+      </div>
+      <div className="mt-4">
+        <QuickAccessCard showActions={false} />
       </div>
     </div>
   );

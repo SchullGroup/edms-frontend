@@ -136,6 +136,8 @@ export function WorkflowDocumentViewer({
           : undefined
       }
       canPrint={allows(doc, 'print')}
+      ocrText={doc.currentVersion?.ocrText}
+      ocrStatus={doc.currentVersion?.ocrStatus}
       onBeforePrint={() =>
         printDocument
           .mutateAsync(doc.id)

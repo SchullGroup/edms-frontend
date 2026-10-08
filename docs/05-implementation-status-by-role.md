@@ -313,7 +313,7 @@ role you hold, or above your own level) are enforced by the UI only.
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
-| `/supervisor` | 320 | `currentUser` | `useDocuments`, `useUsers`, `useCabinets` ✅ · `useCreateAuditLog` 🟥 | 🟨 Hybrid — audit hook is a no-op |
+| `/supervisor` | 360 | `currentUser` | `useDocuments`, `useUsers`, `useCabinets` ✅ · `useCreateAuditLog` 🟥 | 🟨 Hybrid — audit hook is a no-op · Quick access card (pinned / recent / saved searches, browser-only) added 2026-10-08 |
 | `/supervisor/approvals` | 205 | `currentUser` | `useTasks`, `useDocuments` ✅ | ✅ Live — **2026-10-02:** the per-row "Approve" button was removed (approving from a list meant signing without reading the documents); rows keep Reassign and Open, and Open goes to the workflow page |
 | `/supervisor/bottlenecks` | 164 | `currentUser` | `useDocuments`, `useUsers` ✅ | ✅ Live — ⚠️ **but "Overdue" is always 0** |
 | `/supervisor/workload` | 191 | `currentUser` | `useDocuments`, `useUsers` ✅ | ✅ Live |
@@ -450,7 +450,7 @@ already holds warning and escalation rows written by the SLA worker.
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
-| `/management` | 297 | **none** | `useDepartments`, `useDocumentStats`, `useTaskStats`, `useOpenItemsByCabinet`, `useWorkflowInstanceStats` ✅ | ✅ Live — server-aggregated |
+| `/management` | 304 | **none** | `useDepartments`, `useDocumentStats`, `useTaskStats`, `useOpenItemsByCabinet`, `useWorkflowInstanceStats` ✅ | ✅ Live — server-aggregated · Quick access card (pinned / recent / saved searches, browser-only) added 2026-10-08 |
 | `/management/departments` | 169 | **none** | `useDepartments`, `useDocumentStats`, `useTaskStats`, `useQueries`-over-`workflowInstancesService.getStats` (one per department shown) ✅ | ✅ Live — server-aggregated |
 | `/management/trends` | 171 | **none** | `useDepartments`, `useDocumentStats`, `useWorkflowInstanceStats` ✅ | ✅ Live — server-aggregated (the forecast/backlog math is still client-side, but it's arithmetic on two already-aggregated series, not a full-list walk) |
 | `/management/performance` | 85 | **none** | `useTaskStats` ✅ | ✅ Live — server-aggregated |
@@ -557,7 +557,7 @@ approximation, not a silent one.
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
-| `/admin` | 164 | — | `useUsers`, `useCabinets`, `useWorkflows` (published + drafts), `useDepartments`, `useAccessRequestsInbox` ✅ | ✅ Live — **2026-10-08 (🟨 not verified live):** the setup checklist and pending tasks were hard-coded ("SSO enrolment (2 users outstanding)", "812 GB", "+2 this month", three invented tasks) despite this row saying Live. Now the checklist follows doc 03's setup chain against live data (departments, cabinets, a folder in every cabinet, users beyond the first, a published workflow), and pending tasks are real: access requests waiting, unpublished workflow drafts, cabinets with no folder. The storage tile became a departments count |
+| `/admin` | 168 | — | `useUsers`, `useCabinets`, `useWorkflows` (published + drafts), `useDepartments`, `useAccessRequestsInbox` ✅ | ✅ Live — **2026-10-08 (🟨 not verified live):** the setup checklist and pending tasks were hard-coded ("SSO enrolment (2 users outstanding)", "812 GB", "+2 this month", three invented tasks) despite this row saying Live. Now the checklist follows doc 03's setup chain against live data (departments, cabinets, a folder in every cabinet, users beyond the first, a published workflow), and pending tasks are real: access requests waiting, unpublished workflow drafts, cabinets with no folder. The storage tile became a departments count |
 | `/admin/users` | ~320 | `auditAction` only | `useUsers` + mutations, `useRoles` (picker), `useAssign/RemoveUserRole`, `useResendInvitation` ✅ | ✅ Live — users only since 2026-09-10 (roles split out); "Resend invite" added 2026-09-18 |
 | `/admin/roles` | ~470 | `auditAction` only | `useRoles`, `useCreate/Update/DeleteRole`, `useSetRolePermissions` ✅ | ✅ Live — rail + data-driven permission matrix; catalog derived from the `GET /roles` union (no `GET /permissions` exists); built-in roles read-only |
 | `/admin/cabinets` | 448 | `auditAction` only | `useCabinets`, `useDepartments`, `useCreateFolder` (seeds "General") ✅ · metadata-field + access-grant hooks via the shared `components/cabinets/` cards | ✅ Live — reworked 2026-10-06: folder tools and the document browser moved to `/staff/cabinets`; schema and access cards extracted into shared components. Tested end to end by the user 2026-10-08 |
@@ -696,7 +696,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
-| `/auditor` | 128 | `findings`, `audit`, `users` | **none** | 🟥 Mock |
+| `/auditor` | 132 | `findings`, `audit`, `users` | **none** | 🟥 Mock · Quick access card (pinned / recent / saved searches, browser-only) added 2026-10-08 |
 | `/auditor/trail` | 295 | `auditAction` (finding-raise only) | `useAuditEntries`, `useExportAuditCsv` ✅ | ✅ Live — migrated 2026-09-18. **2026-10-08 (🟨 not verified live):** same record-type/action dropdowns as `/admin/audit` (`AuditTypeActionFilters`), fixing the same free-text 400 |
 | `/auditor/findings` | 367 | `findings`, `users`, `addFinding`, `updateFinding` | **none** | 🟥 Mock — no backend model regardless |
 | `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟨 Hybrid — inherits the now-real sensitive-activity panel |
@@ -888,7 +888,7 @@ the document on its own: file, details, versions, custody, archive.
 | Load document | ✅ `GET /documents/:id` |
 | No access (confidentiality 403) | ✅ full-page "You don't have access" + **Request access** (`useRequestAccessPrompt`, shared with the workflow page) |
 | Metadata panel | ✅ `GET` + inline editor `PUT /documents/:id/metadata` (when `document:edit`) |
-| Pin | 🟨 **new 2026-10-08** — toolbar **Pin** keeps the document in the staff dashboard's Quick access; opening the page also records it under Recently opened. Browser-only, per user |
+| Pin | 🟨 **new 2026-10-08** — toolbar **Pin** keeps the document in the Quick access card, which is on the staff, supervisor, management, auditor and admin homes (not platform: that role can't open documents). Opening the page also records it under Recently opened. Browser-only, per user: pins don't follow you to another browser or device. Verified in a browser for admin and management |
 | Change classification | 🟨 **new 2026-10-08, not verified live** — Details card → **Change** on the Classification row → dialog for confidentiality and urgency → `PATCH /documents/:id`. Shown with `document:edit` + Edit on the cabinet, not while the document is closed or checked out by someone else. Tiers the user couldn't open the document at are disabled (they'd lose access), by the backend's own rule: the tier's `document:view_*` permission and its scope (`useConfidentialityClearance`, 2026-10-08). Top Secret is listed only for someone holding `view_top_secret` |
 | Version history | ✅ `GET /documents/:id/versions` · `POST /versions/:vid/restore` · 🟨 **Open (2026-10-08)** goes through `GET /versions/:vid` (needs `document:download`, audited as a download) and is hidden without download permission; it used to open the list's own signed URL, skipping both |
 | Version upload / restore gating | 🟨 **changed 2026-10-02** — "New version" is never offered here; revisions are uploaded on the workflow page in answer to a `request_changes`. Restore is blocked while a workflow is running, so the file can't be swapped mid-review. Not yet verified e2e |
@@ -900,6 +900,7 @@ the document on its own: file, details, versions, custody, archive.
 | **Policies (watermark)** | 🟥 `SEED.policies` — only its Watermark flag is still read. Download no longer follows it (2026-10-08) |
 | **Preview fallback** | 🟨 **2026-10-08, not verified live** — a file the viewer can't show (DOCX, XLSX, TIFF) reads "Word documents can't be previewed yet" instead of the raw MIME type. Its button is the page's **Download**, hidden without download permission (the old "Open file" link ignored it). Same on the workflow page's viewer |
 | **File preview** | ✅ **PDFs: pdf.js viewer (`PdfViewer`), 2026-10-08, verified in a browser against the live API** — pages drawn as they scroll into view, "Find in document" with highlights and match count (Enter / Shift+Enter, Ctrl+F inside the viewer), page box, zoom, watermark on every page. Text can be selected only by someone with download permission. Replaces an `<iframe>` of the browser's PDF viewer with its toolbar hidden, which had no search. Images: 🟨 `<img>` of the pre-signed `currentVersion.fileUrl`, not re-verified |
+| **Find in a scanned PDF** | ✅ **2026-10-08, verified in a browser on the tenant's scanned delivery note** — a scan has no text of its own, so find searches the version's `ocrText` (returned on `GET /documents/:id`) and switches to a **Scanned text** view: the OCR text on a sheet with matches highlighted, a note that it was read by OCR, and the watermark. A toolbar toggle switches between page images and text. Highlighting on the page images themselves needs the backend to keep Textract's word positions (it stores plain text only) |
 | **Print** | ✅ **2026-10-08, verified against the live API** — viewer toolbar, shown with `document:print` + clearance. Calls `GET /documents/:id/print` (audited `document.printed`), then prints page images from a hidden frame with the watermark drawn into them, so it survives "Save as PDF". Ctrl+P inside the viewer does the same |
 | **Export** | 🟨 **2026-10-08, not clicked through** — toolbar button, shown with `document:export` + clearance. `GET /documents/:id/export` (audited `document.exported`), then opens the fresh signed URL |
 | **Download** | 🟨 **changed 2026-10-08, not clicked through** — enabled only with `document:download` and clearance for the tier (`useConfidentialityClearance`, a copy of the backend's `isConfidentialityActionAllowed`). Fetches the current version through `GET /documents/:id/versions/:vid`, which re-checks both and audits `document.downloaded`, then opens its signed URL. Replaces the mock policy's download flag and a mock `auditService.logAction` call. The live permissions were confirmed on `/auth/me` (client_admin `global`, Finance supervisor `department`). Print and Export: rows below |
@@ -1042,6 +1043,7 @@ ageing indicator.*
 | 27 | ✅ ~~Remove `@ts-nocheck`~~ — **done 2026-10-08**: `search` lost it in its 2026-09-30 rebuild, `admin/workflows` on 2026-10-08. No file carries it now | Frontend |
 | 28 | ✅ ~~Fix `/platform/flags` re-exporting the wrong page~~ — **done 2026-10-08** | Frontend |
 | 29 | ✅ ~~Role switcher in the Topbar for multi-role users~~ — **built 2026-10-08, 🟨 not verified live**: one portal per built-in role held, choice kept per user in `prefs` (doc 04, Multi-role users) | Frontend |
+| 29a | **Where custom roles land** (found 2026-10-08). A user whose roles are all custom gets the first portal in `PORTALS` (`src/lib/permissions.ts`) whose entry permissions they hold, in the order admin → auditor → management → supervisor → staff. Admin's entry includes `workflow:view`, which most document roles need, and management's includes `document:view`. So the tenant's "Budget Officer" (16 grants, including `workflow:view`) lands in **Client Administration**; a role without `workflow:view` but with `document:view` lands in **Management**; and the Staff Workspace and Supervisor Console are in practice unreachable for custom roles. Needs a decision: a better rule on the frontend, or a home-portal setting per role (backend field) | Frontend / Both |
 | 30 | **Tests.** There are currently zero in either codebase. | Both |
 
 ### ⚪ P3 — Phase 2
