@@ -403,26 +403,87 @@ export interface WorkflowDefinitionSummary {
   definition?: WorkflowDefinitionJson;
 }
 
+/**
+ * Where one document stands in its workflow (edms-backend `919d0ef`). Each
+ * document routed into a workflow moves through the stages on its own; a
+ * parallel branch splits an execution into children (`parentExecutionId`).
+ * `waiting` = a parent paused while its children run.
+ */
+export type WorkflowExecutionStatus =
+  'pending' | 'in_progress' | 'on_hold' | 'waiting' | 'completed' | 'cancelled';
+
+export interface WorkflowDocumentExecution {
+  id: string;
+  workflowInstanceDocumentId?: string;
+  parentExecutionId?: string | null;
+  currentStage: string;
+  status: WorkflowExecutionStatus;
+  /** The SLA deadline for `currentStage`. Deadlines live here now — neither the
+   *  workflow nor a task carries one. */
+  stageDueAt?: string | null;
+  slaCycle?: number;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  createdAt?: string;
+}
+
+/** A document's membership of a workflow. */
+export interface WorkflowInstanceDocument {
+  id: string;
+  workflowInstanceId?: string;
+  /** On the list response; on `GET /workflow-instances/{id}` read `document.id`. */
+  documentId?: string;
+  status: WorkflowInstanceStatus;
+  addedAtStage?: string | null;
+  startedAt?: string | null;
+  closedAt?: string | null;
+  comment?: string | null;
+  addedBy?: string | null;
+  addedAt?: string;
+  document: {
+    id: string;
+    title: string;
+    status: string;
+    confidentiality: string;
+    urgency: string;
+    documentType?: string | null;
+    currentVersionId?: string | null;
+    cabinetId?: string;
+    archivedAt?: string | null;
+    createdBy?: string;
+    currentVersion?: {
+      id: string;
+      versionNumber: number;
+      mimeType: string;
+      uploadedBy: string;
+      createdAt: string;
+    } | null;
+  };
+  /** Not returned yet — requested from the backend on the instance list. */
+  executions?: WorkflowDocumentExecution[];
+}
+
+/**
+ * A workflow carries one or more documents (edms-backend `919d0ef`). It has no
+ * single current stage or deadline any more: each document's position is its
+ * execution — see `WorkflowDocumentExecution`.
+ */
 export interface WorkflowInstance {
   id: string;
   workflowDefinitionId: string;
-  documentId: string;
-  document?: Document;
   status: WorkflowInstanceStatus;
-  currentStage?: string | null;
-  stageDueAt?: string | null;
   startedAt: string;
   closedAt?: string | null;
+  documents: WorkflowInstanceDocument[];
   tasks?: Task[];
-  /** Present on `GET /workflow-instances/{id}` (confirmed live) — not
-   *  documented on this schema, and not present on the list response. */
   workflowDefinition?: WorkflowDefinitionSummary;
 }
 
-/** Body for `POST /workflow-instances` — creates a pending instance. */
+/** Body for `POST /workflow-instances` (edms-backend `919d0ef`): one workflow
+ *  carries every document routed together. At least one; no duplicates. */
 export interface CreateWorkflowInstanceRequest {
-  documentId: string;
   workflowDefinitionId: string;
+  documents: { documentId: string; comment?: string }[];
 }
 
 /** `data` shape of `GET /workflow-instances/stats`. */
@@ -581,6 +642,14 @@ export interface WorkflowHistoryRecord {
    *  the completed task's own `comment`/`note`. */
   task?: (Record<string, any> & { signature?: TaskActionSignature | null }) | null;
   workflowInstance?: Record<string, any>;
+  /** The document this event is about, when it is about one. */
+  workflowInstanceDocumentId?: string | null;
+  workflowInstanceDocument?: WorkflowInstanceDocument | null;
+  /** That document's execution as it stands NOW (not at the event) — the live
+   *  stage and deadline. `stageDueAt` above is the deadline at the event. */
+  workflowDocumentExecutionId?: string | null;
+  workflowDocumentExecution?: WorkflowDocumentExecution | null;
+  stageDueAt?: string | null;
 }
 
 /**
@@ -596,16 +665,14 @@ export interface TaskDocumentSummary {
   cabinetId: string;
 }
 
+/** The workflow a task belongs to. Its documents come on the task itself
+ *  (`Task.documents`), not here. */
 export interface TaskWorkflowInstance {
   id: string;
-  documentId: string;
   workflowDefinitionId: string;
-  currentStage: string;
   status: WorkflowInstanceStatus;
-  stageDueAt?: string | null;
   startedAt?: string | null;
   closedAt?: string | null;
-  document: TaskDocumentSummary;
   workflowDefinition: WorkflowDefinitionSummary;
 }
 
@@ -626,7 +693,6 @@ export interface Task {
   assignedRoleId?: string | null;
   action?: string | null;
   status: TaskStatus;
-  dueAt?: string | null;
   completedAt?: string | null;
   completedBy?: string | null;
   note?: string | null;
@@ -635,37 +701,46 @@ export interface Task {
   assignedRole?: { id: string; name: string } | null;
   completer?: TaskUserSummary | null;
   workflowInstance: TaskWorkflowInstance;
-  /** `GET /tasks/:id` only — the documents this task covers, each pinned to
-   *  the version the task was raised against. */
+  comment?: string | null;
+  /** The documents this task covers. On `GET /tasks` each carries only the
+   *  document summary; `GET /tasks/:id` adds the execution's stage, status and
+   *  deadline and the version the task was raised against. */
   documents?: TaskDocumentSnapshot[];
   /** `GET /tasks/:id` only — revisions an earlier stage asked for on this
    *  task's documents that are still waiting on a new version. */
   pendingDocumentRevisions?: PendingDocumentRevision[];
 }
 
-/** One `TaskDocument` row: a workflow document as this task saw it. */
+/** One `TaskDocument` row: a document's execution as this task saw it. */
 export interface TaskDocumentSnapshot {
   id: string;
-  workflowInstanceDocumentId: string;
-  documentVersionId: string;
+  workflowDocumentExecutionId: string;
+  /** `GET /tasks/:id` only. */
+  documentVersionId?: string;
   createdAt: string;
-  workflowInstanceDocument: {
+  /** Stage, status and deadline: `GET /tasks/:id` only (requested on the list). */
+  workflowDocumentExecution: Partial<WorkflowDocumentExecution> & {
     id: string;
-    documentId: string;
-    addedAtStage?: string | null;
-    comment?: string | null;
-    addedAt: string;
-    document: {
+    workflowInstanceDocument: {
       id: string;
-      title: string;
-      documentType?: string | null;
-      status: string;
-      confidentiality: string;
-      urgency: string;
-      currentVersionId?: string | null;
+      documentId: string;
+      addedAtStage?: string | null;
+      comment?: string | null;
+      addedAt?: string;
+      document: {
+        id: string;
+        title: string;
+        documentType?: string | null;
+        status: string;
+        confidentiality: string;
+        urgency: string;
+        currentVersionId?: string | null;
+        cabinetId?: string;
+      };
     };
   };
-  documentVersion: {
+  /** `GET /tasks/:id` only. */
+  documentVersion?: {
     id: string;
     versionNumber: number;
     mimeType: string;
@@ -679,6 +754,7 @@ export interface TaskDocumentSnapshot {
 export interface PendingDocumentRevision {
   id: string;
   workflowInstanceDocumentId: string;
+  workflowDocumentExecutionId?: string;
   requestedFromTaskId: string;
   sourceVersionId: string;
   comment?: string | null;
@@ -705,8 +781,18 @@ export type TaskActionRequest =
       signature: TaskActionSignature;
       comment?: string;
       note?: string;
+      /** Which of the task's documents this covers (edms-backend `919d0ef`).
+       *  Omitted = all of them. The rest stay at this stage in a new task for
+       *  the same assignee. Same on `review` and `reject`. */
+      documents?: { documentId: string }[];
     }
-  | { action: 'review' | 'reject' | 'close'; comment?: string; note?: string }
+  | {
+      action: 'review' | 'reject';
+      comment?: string;
+      note?: string;
+      documents?: { documentId: string }[];
+    }
+  | { action: 'close'; comment?: string; note?: string }
   | {
       /** Sends the work back one stage. Since `edms-backend` `5144fc7` the
        *  backend requires at least one entry in `documents` — each must be one
@@ -1012,6 +1098,9 @@ export interface Cabinet {
    *  schema, and never on the `GET /cabinets` list, but confirmed embedded on the
    *  live single-cabinet response. */
   metadataFields?: CabinetMetadataField[];
+  /** Only on `GET /cabinets/{id}`: every access grant on the cabinet, each with
+   *  its `role`/`user` embedded. `useMyCabinetAccess` reads the caller's level from it. */
+  access?: CabinetAccessGrant[];
   _count?: {
     documents: number;
     folders?: number;
@@ -1019,19 +1108,219 @@ export interface Cabinet {
 }
 
 // --- Circulars ---
+// Mirrors edms-backend `src/modules/circulars`. Lifecycle:
+// draft → scheduled → published → expired | withdrawn | superseded. Only a draft
+// is editable; anything that has gone out changes by revision (a new version
+// with the same reference number).
 
-export interface Circular {
+export type CircularStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'published'
+  | 'expired'
+  | 'withdrawn'
+  | 'superseded';
+
+export type CircularInboxFilter = 'all' | 'unread' | 'unacknowledged' | 'acknowledged';
+
+export type CircularRecipientFilter = 'all' | 'read' | 'unread' | 'acknowledged' | 'outstanding';
+
+/** A department alone, a role alone, or both (role-holders within the department). */
+export interface CircularAudienceGroup {
+  departmentId?: string;
+  roleId?: string;
+  includeSubDepartments?: boolean;
+}
+
+/** Recipients are the union of everything selected. At least one must be set. */
+export interface CircularAudience {
+  allStaff: boolean;
+  groups: CircularAudienceGroup[];
+  userIds: string[];
+}
+
+/** An uploaded file (`fileUrl` + metadata) or a link to an existing document — never both. */
+export interface CircularAttachmentInput {
+  documentId?: string;
+  fileUrl?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
+  checksum?: string;
+}
+
+export interface CircularAttachment {
   id: string;
+  kind: 'file' | 'document';
+  fileName: string | null;
+  mimeType: string | null;
+  fileSize: number | string | null;
+  checksum?: string | null;
+  /** Short-lived signed download URL, for uploaded files only. */
+  fileUrl: string | null;
+  document: {
+    id: string;
+    title: string;
+    referenceNumber: string | null;
+    confidentiality: string;
+  } | null;
+  createdAt?: string;
+}
+
+export interface CircularPersonSummary {
+  id: string;
+  name: string;
+}
+
+export interface CircularVersionSummary {
+  id: string;
+  versionNumber: number;
+  status?: CircularStatus;
+}
+
+/** Null until the circular has gone out. */
+export interface CircularStats {
+  recipients: number;
+  delivered: number;
+  read: number;
+  acknowledged: number;
+  outstanding: number;
+  /** Percentage, one decimal place. Null when acknowledgement is not required. */
+  acknowledgementRate: number | null;
+  byDepartment: {
+    departmentId: string | null;
+    departmentName: string | null;
+    recipients: number;
+    read: number;
+    acknowledged: number;
+  }[];
+}
+
+/** A row of `GET /circulars` — the authoring/oversight archive. */
+export interface CircularListItem {
+  id: string;
+  seriesId: string;
+  versionNumber: number;
+  supersedesId: string | null;
+  /** Assigned when first scheduled or published, e.g. `CIR-2026-0014`. */
+  referenceNumber: string | null;
+  title: string;
+  category: string | null;
+  confidentiality: DocumentConfidentiality;
+  urgency: DocumentUrgency;
+  status: CircularStatus;
+  requiresAcknowledgement: boolean;
+  acknowledgementDueAt: string | null;
+  publishAt: string | null;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  withdrawnAt: string | null;
+  departmentId: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  creator?: CircularPersonSummary | null;
+  department?: CircularPersonSummary | null;
+  recipientCount: number;
+}
+
+/** `GET /circulars/:id` — full detail for someone managing the circular. */
+export interface Circular extends Omit<CircularListItem, 'recipientCount'> {
+  body: string;
+  audience: CircularAudience;
+  reminderIntervalHours: number | null;
+  maxReminders: number;
+  withdrawalReason: string | null;
+  publisher?: CircularPersonSummary | null;
+  withdrawer?: CircularPersonSummary | null;
+  supersedes?: CircularVersionSummary | null;
+  supersededBy?: CircularVersionSummary | null;
+  attachments: CircularAttachment[];
+  stats: CircularStats | null;
+}
+
+export interface CircularReceipt {
+  readAt: string | null;
+  acknowledgedAt: string | null;
+}
+
+/** A row of `GET /circulars/inbox` — what a recipient is shown. */
+export interface CircularInboxItem {
+  id: string;
+  seriesId: string;
+  referenceNumber: string;
+  versionNumber: number;
+  title: string;
+  category: string | null;
+  confidentiality: DocumentConfidentiality;
+  urgency: DocumentUrgency;
+  status: Extract<CircularStatus, 'published' | 'expired' | 'superseded'>;
+  requiresAcknowledgement: boolean;
+  acknowledgementDueAt: string | null;
+  publishedAt: string;
+  expiresAt: string | null;
+  publisher?: CircularPersonSummary | null;
+  department?: CircularPersonSummary | null;
+  /** The newer version to read instead, once it has been published. */
+  supersededBy: CircularVersionSummary | null;
+  receipt: CircularReceipt;
+}
+
+/** `GET /circulars/inbox/:id` — opening it records the read receipt. */
+export interface CircularInboxDetail extends CircularInboxItem {
+  body: string;
+  attachments: CircularAttachment[];
+}
+
+export interface CircularInboxSummary {
+  unread: number;
+  unacknowledged: number;
+}
+
+export interface CircularRecipient {
+  id: string;
+  deliveredAt: string | null;
+  readAt: string | null;
+  acknowledgedAt: string | null;
+  reminderCount: number;
+  lastRemindedAt: string | null;
+  user: { id: string; name: string; email: string; status: string };
+  department: CircularPersonSummary | null;
+}
+
+export interface CircularAcknowledgement {
+  circularId: string;
+  referenceNumber: string | null;
+  versionNumber: number;
+  readAt: string;
+  acknowledgedAt: string;
+}
+
+/** Body for `POST /circulars` (creates a draft). */
+export interface CreateCircularRequest {
   title: string;
   body: string;
-  published: number;
-  by: string;
-  requiresAck: boolean;
-  ackBy: string[];
-  audience: string;
-  type?: string;
-  urgent?: boolean;
+  category?: string;
+  confidentiality?: DocumentConfidentiality;
+  urgency?: DocumentUrgency;
+  audience: CircularAudience;
+  requiresAcknowledgement?: boolean;
+  acknowledgementDueAt?: string;
+  /** Omitted → backend default (24h) when acknowledgement is required; null → no automatic reminders. */
+  reminderIntervalHours?: number | null;
+  maxReminders?: number;
+  expiresAt?: string;
+  attachments?: CircularAttachmentInput[];
 }
+
+/** Body for `PATCH /circulars/:id` — drafts only. `attachments`, when sent, replaces the list. */
+export type UpdateCircularRequest = Partial<
+  Omit<CreateCircularRequest, 'category' | 'acknowledgementDueAt' | 'expiresAt'>
+> & {
+  category?: string | null;
+  acknowledgementDueAt?: string | null;
+  expiresAt?: string | null;
+};
 
 // --- Policies ---
 

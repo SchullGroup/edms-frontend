@@ -3,9 +3,10 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { PORTAL_BY_KEY, scopeAtLeast } from '@/lib/permissions';
 import { useUnreadNotificationCount } from '@/apis/hooks/useNotifications';
 import { useApprovalTasks } from '@/apis/hooks/useTasks';
+import { useCircularInboxSummary } from '@/apis/hooks/useCirculars';
 
 export const useNavigation = () => {
-  const { currentUser, documents, circulars, findings } = useStore();
+  const { currentUser, documents, findings } = useStore();
   const { hasPermission, scopeFor, portal } = usePermissions();
   // Reused for "home"/resource-less items below so they can never drift out of sync
   // with the portal-entry criteria in permissions.ts, and so every portal's sidebar
@@ -25,6 +26,9 @@ export const useNavigation = () => {
     { scope: 'all', status: 'pending', page: 1, limit: 1 },
     { enabled: canSeeApprovals },
   );
+  // Circulars waiting on the user's acknowledgement — every user can be a
+  // recipient, so this needs no permission.
+  const { data: circularSummary } = useCircularInboxSummary({ enabled: !!currentUser });
   const me = currentUser;
 
   if (!me) return null;
@@ -32,8 +36,7 @@ export const useNavigation = () => {
   const myOpenTasks = () =>
     documents.filter((dc) => dc.assignee === me.id && dc.status !== 'Closed').length;
   const unreadCount = () => unreadNotifications;
-  const circularsPendingAck = () =>
-    circulars.filter((c) => c.requiresAck && !c.ackBy.includes(me.id)).length;
+  const circularsPendingAck = () => circularSummary?.unacknowledged ?? 0;
   const approvalsCount = () => approvalsData?.pagination?.total ?? 0;
 
   const NAV: Record<string, any> = {
@@ -79,9 +82,7 @@ export const useNavigation = () => {
               route: '/staff/cabinets',
               label: 'Cabinets',
               icon: 'cabinet',
-              anyPermissions: [
-                { resource: 'cabinet', action: 'view', minScope: 'department' },
-              ],
+              anyPermissions: [{ resource: 'cabinet', action: 'view', minScope: 'department' }],
             },
             {
               route: '/upload',
@@ -211,12 +212,21 @@ export const useNavigation = () => {
               route: '/staff/cabinets',
               label: 'Cabinets',
               icon: 'cabinet',
-              anyPermissions: [
-                { resource: 'cabinet', action: 'view', minScope: 'department' },
-              ],
+              anyPermissions: [{ resource: 'cabinet', action: 'view', minScope: 'department' }],
             },
             { route: '/search', label: 'Search', icon: 'search' },
-            { route: '/circulars', label: 'Circulars', icon: 'speaker' },
+            {
+              route: '/circulars',
+              label: 'Circulars',
+              icon: 'speaker',
+              badge: circularsPendingAck,
+            },
+            {
+              route: '/circulars/manage',
+              label: 'Manage circulars',
+              icon: 'edit',
+              anyPermissions: ['circular:view'],
+            },
           ],
         },
       ],
@@ -294,11 +304,26 @@ export const useNavigation = () => {
               route: '/staff/cabinets',
               label: 'Cabinets',
               icon: 'cabinet',
-              anyPermissions: [
-                { resource: 'cabinet', action: 'view', minScope: 'department' },
-              ],
+              anyPermissions: [{ resource: 'cabinet', action: 'view', minScope: 'department' }],
             },
             { route: '/search', label: 'Search', icon: 'search' },
+          ],
+        },
+        {
+          label: 'Communication',
+          items: [
+            {
+              route: '/circulars',
+              label: 'Circulars',
+              icon: 'speaker',
+              badge: circularsPendingAck,
+            },
+            {
+              route: '/circulars/manage',
+              label: 'Manage circulars',
+              icon: 'edit',
+              anyPermissions: ['circular:view'],
+            },
           ],
         },
       ],
@@ -344,22 +369,16 @@ export const useNavigation = () => {
         {
           label: 'Configuration',
           items: [
-            {
-              route: '/staff/cabinets',
-              label: 'Cabinets',
-              icon: 'cabinet',
-              anyPermissions: [
-                { resource: 'cabinet', action: 'view', minScope: 'department' },
-              ],
-            },
+            // No "Cabinets" item here: an administrator works on cabinets through
+            // Cabinet Designer. Folder structure and document moves live on the
+            // Cabinets page for the staff a cabinet is delegated to.
             {
               route: '/admin/cabinets',
               label: 'Cabinet Designer',
               icon: 'cabinet',
               // Requires BOTH global-scoped `cabinet:view` and `cabinet:create` — a
               // department-scoped or read-only viewer gets the plain Cabinets browser
-              // instead. The page's New/Edit/Delete buttons are still unguarded
-              // internally, so this link is the only gate in front of them.
+              // instead. Inside, each action is also gated on its own permission.
               permissions: [
                 { resource: 'cabinet', action: 'view', minScope: 'global' },
                 'cabinet:create',
@@ -409,16 +428,18 @@ export const useNavigation = () => {
           label: 'Communication',
           items: [
             {
-              route: '/admin/circulars',
-              label: 'Circulars Admin',
+              route: '/circulars',
+              label: 'Circulars',
               icon: 'speaker',
-              // No dedicated `circular` resource exists, so — per your call —
-              // gated on one specific admin-peculiar key rather than the generic
-              // entry OR-set (which would show this to anyone who entered the
-              // portal for an unrelated reason, e.g. workflow:edit alone). Picked
-              // `user:view` as the closest "this is clearly a tenant admin" signal;
-              // flag if you'd rather it be `role:view` or `workflow:view` instead.
-              anyPermissions: ['user:view'],
+              badge: circularsPendingAck,
+            },
+            // Shared with the supervisor and management portals; /admin/circulars
+            // redirects here.
+            {
+              route: '/circulars/manage',
+              label: 'Manage circulars',
+              icon: 'edit',
+              anyPermissions: ['circular:view'],
             },
           ],
         },
@@ -497,9 +518,7 @@ export const useNavigation = () => {
               route: '/staff/cabinets',
               label: 'Document Sampling',
               icon: 'cabinet',
-              anyPermissions: [
-                { resource: 'cabinet', action: 'view', minScope: 'department' },
-              ],
+              anyPermissions: [{ resource: 'cabinet', action: 'view', minScope: 'department' }],
             },
             { route: '/search', label: 'Search', icon: 'search' },
           ],
@@ -524,6 +543,25 @@ export const useNavigation = () => {
               label: 'Compliance Posture',
               icon: 'shield',
               anyPermissions: ['audit:view'],
+            },
+          ],
+        },
+        {
+          label: 'Communication',
+          items: [
+            {
+              route: '/circulars',
+              label: 'Circulars',
+              icon: 'speaker',
+              badge: circularsPendingAck,
+            },
+            // Read-only for auditors (global circular:view) — the archive and
+            // acknowledgement reports, no authoring buttons.
+            {
+              route: '/circulars/manage',
+              label: 'Manage circulars',
+              icon: 'edit',
+              anyPermissions: ['circular:view'],
             },
           ],
         },

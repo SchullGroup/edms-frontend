@@ -93,8 +93,9 @@ export const routeConfig: RouteRule[] = [
   // radius for Workflow Designer, an explicit call for Departments). Branding is
   // role-gated outright (see its own rule below) rather than folded into the
   // catch-all. The final `/admin` prefix rule is the catch-all for the rest of
-  // the pages with no dedicated resource — Admin Home, Policies, Circulars
-  // Admin — gated on the same 3-key set as the `admin` portal entry itself.
+  // the pages with no dedicated resource — Admin Home, Policies — gated on the
+  // same 3-key set as the `admin` portal entry itself. (`/admin/circulars` is
+  // only a redirect to `/circulars/manage` now; see the circulars rules below.)
   // The sidebar's Users item additionally requires *global* scope (see
   // useNavigation.ts) — this route rule stays resource:action-only since
   // `RouteRule`/`evaluateRouteAccess` isn't scope-aware. A department-scoped
@@ -163,6 +164,13 @@ export const routeConfig: RouteRule[] = [
     matchType: 'prefix',
     roles: ['client_admin'],
   },
+  // Redirects to /circulars/manage — gated like its target, so the redirect still
+  // works for a non-admin circular manager following an old link.
+  {
+    path: '/admin/circulars',
+    matchType: 'prefix',
+    anyPermissions: ['circular:view'],
+  },
   {
     path: '/admin',
     matchType: 'prefix',
@@ -229,8 +237,25 @@ export const routeConfig: RouteRule[] = [
     anyPermissions: ['task:view', 'workflow_instance:view'],
   },
 
+  // Circular authoring and oversight. Shared across portals rather than living
+  // under /admin, because supervisors (department scope) and management (global)
+  // write and publish circulars too. Composing needs `circular:create`; the rest
+  // of the area needs `circular:view`, and each action button inside checks its
+  // own permission. Must precede the open `/circulars` inbox rule below.
+  {
+    path: '/circulars/manage/new',
+    matchType: 'prefix',
+    anyPermissions: ['circular:create'],
+  },
+  {
+    path: '/circulars/manage',
+    matchType: 'prefix',
+    anyPermissions: ['circular:view'],
+  },
+
   // 4. Global authenticated paths (no gate = any authenticated user)
   { path: '/search', matchType: 'prefix' },
+  // The recipient inbox: being sent a circular is the grant, so no permission.
   { path: '/circulars', matchType: 'prefix' },
   { path: '/notifications', matchType: 'prefix' },
   { path: '/delegations', matchType: 'prefix' },

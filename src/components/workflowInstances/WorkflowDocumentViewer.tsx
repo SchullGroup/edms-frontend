@@ -20,11 +20,13 @@ export interface WorkflowDocumentViewerProps {
 }
 
 /**
- * One workflow document in the viewer. A workflow can hold documents at
- * different confidentiality tiers, so a reviewer may be cleared for some and
- * not others: `GET /documents/:id` 403s for those, and the viewer is replaced
- * by an overlay explaining why with a "Request access" button — the rest of
- * the workflow stays usable.
+ * One workflow document in the viewer. A reviewer can be refused a document
+ * for two reasons: its confidentiality tier is above their role's clearance,
+ * or it belongs to another department and they hold no access grant for it
+ * (a workflow can mix documents from several departments). `GET /documents/:id`
+ * 403s either way without saying which, so the overlay doesn't guess — it
+ * offers "Request access", which the document's owner and its department's
+ * supervisors review. The rest of the workflow stays usable.
  */
 export function WorkflowDocumentViewer({
   documentId,
@@ -47,7 +49,7 @@ export function WorkflowDocumentViewer({
     return (
       <div className="viewer doc-viewer-col" style={{ position: 'relative' }}>
         <div className="viewer-bar">
-          <span style={{ flex: 1 }}>Restricted</span>
+          <span style={{ flex: 1 }}>{denied ? 'No access' : 'Unavailable'}</span>
         </div>
         <div className="viewer-page-wrap" aria-hidden="true">
           <div className="doc-page" style={{ filter: 'blur(6px)', opacity: 0.35 }} />
@@ -75,7 +77,7 @@ export function WorkflowDocumentViewer({
               </div>
               <p className="caption mb-4">
                 {denied
-                  ? 'Its confidentiality level is above what your role is cleared for. Request access to view it — the rest of this workflow is still available to you.'
+                  ? "You haven't been given access to this document yet, either because of its confidentiality level or because it belongs to another department. Request access and the document's owner or its department's supervisor can approve it. The rest of this workflow is still available to you."
                   : 'It may have been archived or removed. Try again later, or contact the document owner.'}
               </p>
               {denied && (

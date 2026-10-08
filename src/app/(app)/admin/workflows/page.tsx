@@ -17,6 +17,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
 import { WorkflowToolbar } from '@/components/workflows/WorkflowToolbar';
 import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
+import { useAllMetadataFields } from '@/apis/hooks/useMetadataFields';
 import { StagePanel } from '@/components/workflows/StagePanel';
 import { WorkflowDesignerGuide } from '@/components/workflows/WorkflowDesignerGuide';
 import { DEFAULT_WORKFLOW_DEFINITION, reconcileTransitions } from '@/components/workflows/constants';
@@ -44,6 +45,9 @@ export default function WorkflowDesignerPage() {
 
   const [wfId, setWfId] = useState(null);
   const [selectedStageId, setSelectedStageId] = useState(null);
+  // Names metadata fields in the canvas's branch labels (same cached query
+  // the Transitions tab's rule picker uses).
+  const { data: metadataFields } = useAllMetadataFields();
   const [stagePanelTab, setStagePanelTab] = useState('properties');
   // There's no real delete-workflow endpoint on the backend — only archive.
   // Archived workflows drop out of the switcher by default so archiving
@@ -386,6 +390,7 @@ export default function WorkflowDesignerPage() {
               onSelect={selectStage}
               onEditBranch={handleEditBranch}
               assigneeSummary={assigneeSummary}
+              metadataFieldName={(id) => metadataFields?.find((f) => f.id === id)?.name}
             />
           </div>
         </div>

@@ -1,8 +1,11 @@
 import type {
+  CabinetMetadataField,
+  CabinetMetadataFieldType,
   WorkflowCondition,
   WorkflowConditionField,
   WorkflowConditionOperator,
   WorkflowConditionRule,
+  WorkflowConditionValue,
   WorkflowStage,
   WorkflowTransition,
 } from '@/types/models';
@@ -56,12 +59,107 @@ const OPERATOR_LABELS: Record<WorkflowConditionOperator, string> = {
   less_than_or_equal: 'is at most',
 };
 
-/** Comparison operators are metadata-only — the backend rejects them on
- *  `urgency`/`confidentiality` rules. */
-export function operatorsForField(field: WorkflowConditionField) {
+/** The operators a rule may use. Comparisons need a number or date metadata
+ *  field: the backend refuses them on `urgency`/`confidentiality` when the
+ *  workflow is saved, and on any other metadata type when a document reaches
+ *  the stage (a 422 mid-workflow). A yes/no field only makes sense as
+ *  equals / does not equal. Without a known field type, metadata gets the
+ *  full list, as before. */
+export function operatorsForField(
+  field: WorkflowConditionField,
+  metadataFieldType?: CabinetMetadataFieldType,
+) {
   const base: WorkflowConditionOperator[] = ['equals', 'not_equals', 'in', 'not_in'];
-  const values = field === 'metadata' ? [...base, ...COMPARISON_OPERATORS] : base;
+  let values = base;
+  if (field === 'metadata') {
+    if (metadataFieldType === 'boolean') values = ['equals', 'not_equals'];
+    else if (metadataFieldType === 'text' || metadataFieldType === 'select') values = base;
+    else values = [...base, ...COMPARISON_OPERATORS];
+  }
   return values.map((value) => ({ value, label: OPERATOR_LABELS[value] }));
+}
+
+/** `in` / `not_in` take a list of values; every other operator takes one. */
+export const isListOperator = (operator: WorkflowConditionOperator) =>
+  operator === 'in' || operator === 'not_in';
+
+/** A sensible starting value for a rule — a list for list operators. Free-form
+ *  types start empty, so the author has to type a real value before saving. */
+export function defaultRuleValue(
+  field: WorkflowConditionField,
+  operator: WorkflowConditionOperator,
+  metadataField?: Pick<CabinetMetadataField, 'fieldType' | 'options'>,
+): WorkflowConditionRule['value'] {
+  const fixed = valueOptionsForField(field);
+  let single: WorkflowConditionValue = '';
+  if (fixed) single = fixed[0].value;
+  else if (metadataField?.fieldType === 'boolean') single = true;
+  else if (metadataField?.fieldType === 'select') single = metadataField.options?.[0] ?? '';
+  if (!isListOperator(operator)) return single;
+  return single === '' ? [] : [single];
+}
+
+/** Carries a rule's value across an operator change: one value becomes a
+ *  one-item list and a list keeps its first item. */
+export function coerceRuleValue(
+  value: WorkflowConditionRule['value'],
+  operator: WorkflowConditionOperator,
+): WorkflowConditionRule['value'] {
+  if (isListOperator(operator)) {
+    if (Array.isArray(value)) return value;
+    return value === '' ? [] : [value];
+  }
+  return Array.isArray(value) ? (value[0] ?? '') : value;
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * What's wrong with a rule's value for its field, or null — checked before
+ * save, against the same rules the backend applies to that field type:
+ * numbers must be numbers, dates real dates, a dropdown one of its options,
+ * yes/no a yes or no, and a list operator at least one value.
+ */
+export function ruleValueIssue(
+  rule: WorkflowConditionRule,
+  metadataField?: Pick<CabinetMetadataField, 'name' | 'fieldType' | 'options'>,
+): string | null {
+  if (rule.field === 'metadata' && !rule.metadata_field_id) return 'Choose a metadata field.';
+  const list = isListOperator(rule.operator);
+  if (list && (!Array.isArray(rule.value) || rule.value.length === 0)) {
+    return 'Add at least one value.';
+  }
+  const values = Array.isArray(rule.value) ? rule.value : [rule.value];
+
+  const fixed = valueOptionsForField(rule.field);
+  if (fixed) {
+    return values.every((v) => fixed.some((o) => o.value === v)) ? null : 'Pick a value.';
+  }
+  if (!metadataField) return values.every((v) => String(v).trim()) ? null : 'Enter a value.';
+
+  const name = metadataField.name;
+  switch (metadataField.fieldType) {
+    case 'number':
+      return values.every((v) => String(v).trim() !== '' && Number.isFinite(Number(v)))
+        ? null
+        : `${name} is a number field — enter a number.`;
+    case 'date':
+      return values.every(
+        (v) => typeof v === 'string' && DATE_RE.test(v) && !Number.isNaN(Date.parse(v)),
+      )
+        ? null
+        : `${name} is a date field — pick a date.`;
+    case 'boolean':
+      return values.every((v) => v === true || v === false || v === 'true' || v === 'false')
+        ? null
+        : `${name} is a yes/no field — choose Yes or No.`;
+    case 'select':
+      return values.every((v) => metadataField.options?.includes(String(v)))
+        ? null
+        : `Choose from ${name}'s options.`;
+    default:
+      return values.every((v) => String(v).trim()) ? null : 'Enter a value.';
+  }
 }
 
 export const URGENCY_VALUES = [
@@ -92,15 +190,34 @@ export function defaultRule(): WorkflowConditionRule {
 }
 
 /** Short, human-readable summary for a branch's pill label on the canvas —
- *  e.g. "urgency = critical" or "2 rules (any)". Not sent to the backend. */
-export function describeCondition(condition: WorkflowCondition | undefined): string {
+ *  e.g. "urgency = critical", "Invoice Amount is greater than 5000000" or
+ *  "2 rules (any)". A metadata rule shows its field's name when `fieldName`
+ *  can resolve it, else just "metadata". Not sent to the backend. */
+export function describeCondition(
+  condition: WorkflowCondition | undefined,
+  fieldName?: (metadataFieldId: string) => string | undefined,
+): string {
   if (!condition) return 'Fallback';
   if (condition.rules.length === 1) {
     const rule = condition.rules[0];
     const label = OPERATOR_LABELS[rule.operator];
-    const value = Array.isArray(rule.value) ? rule.value.join(', ') : String(rule.value);
-    const fieldLabel = rule.field === 'metadata' ? 'metadata' : rule.field;
-    return `${fieldLabel} ${rule.operator === 'equals' ? '=' : label} ${value}`;
+    const shown = (v: WorkflowConditionValue) =>
+      v === true ? 'Yes' : v === false ? 'No' : String(v);
+    const value = Array.isArray(rule.value) ? rule.value.map(shown).join(', ') : shown(rule.value);
+    const fieldLabel =
+      rule.field === 'metadata'
+        ? (rule.metadata_field_id && fieldName?.(rule.metadata_field_id)) || 'metadata'
+        : rule.field;
+    // Symbols keep the canvas pill short enough to read without truncating.
+    const symbol: Partial<Record<WorkflowConditionOperator, string>> = {
+      equals: '=',
+      not_equals: '≠',
+      greater_than: '>',
+      greater_than_or_equal: '≥',
+      less_than: '<',
+      less_than_or_equal: '≤',
+    };
+    return `${fieldLabel} ${symbol[rule.operator] ?? label} ${value}`;
   }
   return `${condition.rules.length} rules (${condition.mode})`;
 }
@@ -204,36 +321,26 @@ export interface StageLayoutPosition {
 }
 
 /**
- * A simple layered graph layout for the canvas: column = *shortest*-path
- * distance from the first stage (breadth-first, not longest-path — see
- * below), row = position among stages that share a column, centered around
- * 0. This is what stops a branch's connector line from being drawn across
- * an unrelated stage card — the previous flat layout placed every stage in
- * one row at its array index, so a transition skipping over a stage (a
- * branch and its required fallback rarely land on adjacent array entries)
- * had no way to avoid visually crossing whatever sat between them.
+ * A layered graph layout for the canvas: column = the LONGEST path from the
+ * first stage, row = position among stages that share a column, centered
+ * around 0.
  *
- * Shortest-path, not longest-path: a stage that's directly branched to from
- * an earlier one, but *also* reachable the "long way" through another stage
- * (the common shape here — appending a new stage always auto-chains it
- * after the previous last stage, so a fresh conditional branch aimed at it
- * is nearly always also reachable the long way around), needs to land right
- * next to its direct sibling for the fork to actually read as a fork.
- * Longest-path layering (the usual default for drawing a DAG) would instead
- * push it out to the column dictated by the longer path, landing it after
- * everything else — which is what "the canvas still looks linear" was: a
- * real branch existed, but nothing about the layout showed it as one.
+ * Longest-path, so every stage sits to the right of everything that leads
+ * into it. A fork that reconverges — the usual shape: a stage branches to
+ * two approvals and a fallback, and all three lead on to one final stage —
+ * then reads left to right: source, the branch targets, the shared target.
+ * The earlier shortest-path layering put that shared target in the SAME
+ * column as the branch targets whenever the fallback pointed straight at it,
+ * so the lines into it ran backwards behind the cards and disappeared.
  *
- * Row order within a column is each stage's original array order, not
- * transition priority — simpler and deterministic, and in practice the
- * order a workflow author builds stages in already reads sensibly
- * top-to-bottom. The trade-off shortest-path introduces: an edge whose
- * target lands in the same column as its source (or earlier) — the
- * "long way around" edge in the scenario above — draws as a small
- * loop-back curve rather than a clean left-to-right line. That's an
- * artifact of an auto-generated default edge, not a hand-authored one; it's
- * usually worth revisiting that stage's own transitions once a branch is
- * added past it.
+ * A line that skips a column (a fallback straight to the final stage) is
+ * routed around any card in between by `WorkflowCanvas`. Transitions that
+ * point back to an earlier stage (a loop) are left out of the layering, or it
+ * would never settle; they still draw.
+ *
+ * Row order within a column is each stage's original array order — simple,
+ * deterministic, and the order an author builds stages in usually reads
+ * sensibly top to bottom.
  */
 export function computeStageLayout(
   stages: WorkflowStage[],
@@ -252,20 +359,38 @@ export function computeStageLayout(
 
   const column = new Map<string, number>();
   if (stageIds.length > 0) {
-    // Breadth-first: each stage gets the column of the *first* time it's
-    // reached, which — processing level by level — is necessarily its
-    // shortest path from the first stage.
     const start = stageIds[0];
+
+    // Depth-first from the first stage to find the stages it reaches and the
+    // back edges (into a stage still on the current path) that close loops.
+    const visitState = new Map<string, 'visiting' | 'done'>();
+    const backEdges = new Set<WorkflowTransition>();
+    const visit = (id: string) => {
+      visitState.set(id, 'visiting');
+      for (const t of outgoingByFrom.get(id) ?? []) {
+        const state = visitState.get(t.to);
+        if (state === 'visiting') backEdges.add(t);
+        else if (!state) visit(t.to);
+      }
+      visitState.set(id, 'done');
+    };
+    visit(start);
+
+    // Longest path over the remaining (acyclic) edges, in topological order.
+    const forward = validTransitions.filter(
+      (t) => !backEdges.has(t) && visitState.has(t.from) && visitState.has(t.to),
+    );
+    const indegree = new Map<string, number>();
+    forward.forEach((t) => indegree.set(t.to, (indegree.get(t.to) ?? 0) + 1));
     column.set(start, 0);
     const queue = [start];
     while (queue.length > 0) {
       const current = queue.shift()!;
-      const currentColumn = column.get(current)!;
-      for (const t of outgoingByFrom.get(current) ?? []) {
-        if (!column.has(t.to)) {
-          column.set(t.to, currentColumn + 1);
-          queue.push(t.to);
-        }
+      for (const t of forward.filter((f) => f.from === current)) {
+        column.set(t.to, Math.max(column.get(t.to) ?? 0, column.get(current)! + 1));
+        const remaining = (indegree.get(t.to) ?? 1) - 1;
+        indegree.set(t.to, remaining);
+        if (remaining === 0) queue.push(t.to);
       }
     }
   }

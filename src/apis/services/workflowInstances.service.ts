@@ -141,12 +141,16 @@ export const workflowInstancesService = {
     return response.data.data;
   },
 
-  /** Convenience: `POST /workflow-instances` then `POST /workflow-instances/{id}/start`. */
+  /** Convenience: `POST /workflow-instances` then `POST /workflow-instances/{id}/start`.
+   *  Every document goes into the one workflow. */
   createAndStart: async (
     workflowDefinitionId: string,
-    documentId: string,
+    documentIds: string[],
   ): Promise<WorkflowInstance> => {
-    const instance = await workflowInstancesService.create({ workflowDefinitionId, documentId });
+    const instance = await workflowInstancesService.create({
+      workflowDefinitionId,
+      documents: documentIds.map((documentId) => ({ documentId })),
+    });
     return workflowInstancesService.start(instance.id);
   },
 
