@@ -853,6 +853,25 @@ revision checked this against:
 | g | **Stale index on edit** | Unchanged — `updateDocument` (title), `updateDocumentMetadata`, and `restoreVersion` never re-enqueue indexing. `search_vector` drifts from the row. Entirely backend-side, independent of the uploader. |
 | h | **New — the dropzone advertises capabilities the validator doesn't have** | `upload/page.tsx`'s dropzone text reads *"PDF, DOCX, XLSX, TIFF, JPG up to 100 MB."* `validateUpload()` accepts none of DOCX/XLSX/TIFF (not in either allowlist — TIFF isn't even in the image one) and caps out at 50 MB for PDF / 10 MB for images, both well under the advertised 100 MB. A user follows the on-screen instructions, picks a 60 MB PDF or any `.docx`, and gets rejected with no indication beforehand that the dropzone's own text was wrong. |
 
+### Viewing a file (2026-10-08)
+
+PDFs are drawn in the browser by pdf.js (`src/components/documents/PdfViewer.tsx`,
+`pdfjs-dist` 6.3.289), which fetches the pre-signed `currentVersion.fileUrl` straight from
+S3. That works because the bucket's CORS answers `Access-Control-Allow-Origin: *` for `GET`
+(and allows a `range` preflight), checked live 2026-10-08. It doesn't expose `Content-Range`,
+so the viewer fetches each file whole (`disableRange`). The viewer reloads only when the
+file's path changes, not when a refetch re-signs the same URL.
+
+pdf.js's worker and the files it loads at runtime (WebAssembly decoders for JBIG2 and
+JPEG 2000 images, standard fonts, character maps, colour profiles) are served from
+`/pdfjs/`. `scripts/copy-pdfjs-assets.mjs` copies them out of `node_modules` at the start of
+`npm run dev` and `npm run build`; `public/pdfjs/` is git-ignored. `proxy.ts`'s matcher
+excludes `/pdfjs/` so those requests don't trigger a backend session check.
+
+Printing renders each page to an image with the watermark drawn in and prints those from a
+hidden frame, after `GET /documents/:id/print` succeeds. Images still render as a plain
+`<img>`; other types show "can't be previewed yet" with Download.
+
 ---
 
 ## 6. State architecture on the frontend
@@ -975,7 +994,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents/:id/versions` | ✅ | ✅ |
 | `GET /documents/:id/versions/:versionId` | ✅ — since `edms-backend` `0dab81a` (2026-10-08) needs `document:download` on top of confidentiality clearance, and is audited as `document.downloaded` | 🟨 **wired 2026-10-08** as the only download path (`useDownloadDocumentVersion`): `/doc/[id]`'s Download, the workflow viewer's Download, and each version's Open in `DocumentVersionsPanel`. Permissions confirmed live on `/auth/me`; not yet clicked through in the UI. *Was marked ✅ before, but nothing called it: the versions panel opened the list's own signed `fileUrl`. Corrected 2026-10-08* |
 | `POST /documents/:id/versions` | ✅ | ✅ |
-| `GET /documents/:id/export`, `GET /documents/:id/print` | ✅ new in `0dab81a` — `document:export` / `document:print` plus clearance; audited as `document.exported` / `document.printed`; return the document like `GET /documents/:id` | ⚠️ backend only — no Export or Print button yet (planned with the pdf.js viewer) |
+| `GET /documents/:id/export`, `GET /documents/:id/print` | ✅ new in `0dab81a` — `document:export` / `document:print` plus clearance; audited as `document.exported` / `document.printed`; return the document like `GET /documents/:id` | ✅ `/print` — wired 2026-10-08 (`usePrintDocument`): the PDF viewer's Print calls it first and only prints if it succeeds; verified in a browser against the live API · 🟨 `/export` — wired 2026-10-08 (`useExportDocument`), `/doc/[id]`'s Export button, not clicked through |
 | `GET/POST /documents/:id/comments`, `/signatures` | ✅ both exist, real endpoints | 🟥 **deliberately unused (reverted 2026-09-18, same day)** — briefly wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel` earlier the same day, then removed: product decision to keep every comment/signature scoped to the workflow trail (`POST /tasks/:id/action`'s `comment`/`approve`'s `signature`) rather than split across a second, task-independent thread. See DRIFT-08's note below and BE-16/BE-17 in `BACKEND_REQUESTS.md` |
 | `GET/POST /documents/:id/access-requests`, `/grant`, `/deny`, admin inbox `GET /documents/access-requests` | ✅ | ✅ wired 2026-09-18 — "Request access" on `/doc/[id]` is real now (was audit-log-only, see BE-1); grant/deny at `/admin/access-requests` (client_admin-only, new page) |
 | `DELETE /documents/:id` (archive) | ✅ | ✅ wired — "Archive document" in `/doc/[id]`'s overflow menu (`useArchiveDocument`) |

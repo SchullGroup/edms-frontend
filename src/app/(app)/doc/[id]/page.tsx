@@ -16,7 +16,11 @@ import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
 import { useConfidentialityPolicy } from '@/hooks/useConfidentialityPolicy';
 import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useCabinets } from '@/apis/hooks/useCabinets';
-import { useDownloadDocumentVersion } from '@/apis/hooks/useDocuments';
+import {
+  useDownloadDocumentVersion,
+  useExportDocument,
+  usePrintDocument,
+} from '@/apis/hooks/useDocuments';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
@@ -66,6 +70,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const createAuditLog = useCreateAuditLog();
   const { allows } = useConfidentialityClearance();
   const downloadVersion = useDownloadDocumentVersion();
+  const exportDocument = useExportDocument();
+  const printDocument = usePrintDocument();
   const checkoutDocument = useCheckoutDocument();
   const checkinDocument = useCheckinDocument();
   const { routeDocuments, canRoute: hasRoutePermission } = useRouteToWorkflow();
@@ -174,6 +180,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   // caller's `document:download` permission and clearance, as the API does.
   const confPolicy = policyFor(doc.confidentiality);
   const canDownload = allows(doc, 'download');
+  const canExport = allows(doc, 'export');
+  const canPrint = allows(doc, 'print');
 
   const lockedByOther = doc.isCheckedOut && doc.checkoutLock?.lockedBy !== me.id;
   const lockedByMe = doc.isCheckedOut && doc.checkoutLock?.lockedBy === me.id;
@@ -238,6 +246,14 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     document.body.appendChild(a);
     a.click();
     a.remove();
+  };
+
+  // `GET /documents/:id/export`: checks `document:export` and records the export
+  // in the audit trail, then hands back a fresh link to the file.
+  const actExport = () => {
+    const tab = window.open('', '_blank');
+    if (tab) tab.opener = null;
+    exportDocument.mutate({ id: doc.id, tab });
   };
 
   const actCheckout = () => {
@@ -390,6 +406,16 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         >
           <Icon name="download" size={14} /> Download
         </button>
+        {canExport && (
+          <button
+            className="btn btn-secondary"
+            onClick={actExport}
+            disabled={exportDocument.isPending}
+            title="Export a copy (recorded in the audit trail)"
+          >
+            <Icon name="share" size={14} /> Export
+          </button>
+        )}
         {lockedByMe ? (
           <button
             className="btn btn-secondary"
@@ -498,6 +524,13 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           getSignerName={(userId) => userById(users, userId)?.name || 'User'}
           canDownload={canDownload}
           onDownload={actDownload}
+          canPrint={canPrint}
+          onBeforePrint={() =>
+            printDocument
+              .mutateAsync(doc.id)
+              .then(() => true)
+              .catch(() => false)
+          }
         />
 
         <div className="flex flex-col gap-4">

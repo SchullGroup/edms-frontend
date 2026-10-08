@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useDocument, useDownloadDocumentVersion } from '@/apis/hooks/useDocuments';
+import {
+  useDocument,
+  useDownloadDocumentVersion,
+  usePrintDocument,
+} from '@/apis/hooks/useDocuments';
 import { useConfidentialityPolicy } from '@/hooks/useConfidentialityPolicy';
 import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
@@ -41,6 +45,7 @@ export function WorkflowDocumentViewer({
   const { policyFor } = useConfidentialityPolicy();
   const { allows } = useConfidentialityClearance();
   const downloadVersion = useDownloadDocumentVersion();
+  const printDocument = usePrintDocument();
   const { promptRequestAccess, isRequesting } = useRequestAccessPrompt();
   const denied = (error as any)?.response?.status === 403;
 
@@ -129,6 +134,13 @@ export function WorkflowDocumentViewer({
               downloadVersion.mutate({ id: doc.id, versionId: currentVersionId, tab });
             }
           : undefined
+      }
+      canPrint={allows(doc, 'print')}
+      onBeforePrint={() =>
+        printDocument
+          .mutateAsync(doc.id)
+          .then(() => true)
+          .catch(() => false)
       }
     />
   );

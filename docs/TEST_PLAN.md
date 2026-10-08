@@ -829,9 +829,14 @@ Items whose backend already exists (or needs none). Worked through one at a time
       gives the same rows
 - [ ] PDF/image preview and in-PDF search (4.3, 5.9 — partial; Office/email/OCR need backend).
       **Done 2026-10-08:** readable fallback for files that can't be previewed ("Word
-      documents can't be previewed yet" + the audited Download, hidden when the policy turns
-      download off). To test: open a DOCX on `/doc/[id]` and on its workflow page. Left: in-PDF
-      search
+      documents can't be previewed yet" + the audited Download, hidden without download
+      permission). To test: open a DOCX on `/doc/[id]` and on its workflow page.
+      **In-PDF search done 2026-10-08** with the pdf.js viewer (`PdfViewer`): find with
+      highlights and match count, page box, zoom, Print (audited, watermark burned in) and
+      Download in the viewer's toolbar, Export on `/doc/[id]`. To test: open a PDF, type a
+      word into "Find in document", press Enter to step through matches; Ctrl+F inside the
+      viewer focuses the box; Print on a Confidential document — the printout carries the
+      watermark. Left: Office/email previews (backend)
 - [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3)
 - [x] Permission gates on the P4 actions — see the P4 table (2026-10-08)
 - [x] Role switcher for multi-role users (doc 05 #29). **Built 2026-10-08.** To test: give a

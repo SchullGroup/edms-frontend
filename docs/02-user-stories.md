@@ -524,19 +524,22 @@ downloads, and `GET /documents/:id/export` and `/print` are new. Seeded: `staff`
 
 The frontend's Download (document page, workflow viewer, each version's Open) now checks
 the same rule and fetches through the version endpoint, so each download is audited.
-Export and Print have no buttons yet.
+Print (in the PDF viewer's toolbar) calls `GET /documents/:id/print` first and prints page
+images with the watermark burned in; Export (document page) goes through
+`GET /documents/:id/export`. Both shown only with the permission (2026-10-08).
 
 **Acceptance criteria**
 - [x] A short-lived presigned URL — via `GET /documents/:id/versions/:versionId` rather
       than a dedicated `/download` route
 - [x] Gated by `requireConfidentiality('download')` and `document:download`
 - [x] Writes a `document.downloaded` audit entry
-- [x] Print and export paths gated by their own actions (backend; no UI yet)
+- [x] Print and export paths gated by their own actions
 - [ ] 🔴 **Download permission can be bypassed:** `GET /documents/:id`, the document list
       and the version list all return a signed URL to anyone who can view. Raised with the
       backend 2026-10-08
-- [ ] Export and Print buttons (planned with the pdf.js viewer)
-- [ ] Not yet clicked through end to end in the UI
+- [x] Print and Export buttons (2026-10-08). Print verified in the browser against the
+      live API (audited call made, watermarked print frame built); Export not yet clicked
+- [ ] Download and Export not yet clicked through end to end in the UI
 
 ---
 

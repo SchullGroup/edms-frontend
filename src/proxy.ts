@@ -157,7 +157,8 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   // Everything except the BFF's own /api/auth/* routes, Next internals, and
-  // static assets. Public app pages are excluded inside the function itself
+  // static assets (including the pdf.js worker, fonts and decoders under
+  // /pdfjs/). Public app pages are excluded inside the function itself
   // (isPublicPath), not here, so this stays a single source of truth.
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|pdfjs/).*)'],
 };
