@@ -799,7 +799,10 @@ Items whose backend already exists (or needs none). Worked through one at a time
       — **superseded:** since `919d0ef` `GET /tasks` carries no deadlines, so there is no
       server-side due-date order to keep
 - [ ] Quick-actions strip; recent and pinned documents/searches (19.3, 19.5)
-- [ ] Admin home setup checklist (18.1)
+- [x] Admin home setup checklist (18.1). **Built 2026-10-08** from live data. To test: on a
+      fresh tenant every step shows pending; create a department, a cabinet (it gets "General"),
+      a second user and publish a workflow — each ticks off and the % reaches 100. Add a cabinet
+      with no folders → "Folders in every cabinet (1 without one)" and a pending task appear
 - [ ] Chart drill-downs to filtered record lists (21.6, 22.3)
 - [ ] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6)
 - [x] Configuration history: audit log filtered to config actions (18.7). **Built 2026-10-08**
