@@ -116,6 +116,7 @@ export function WorkflowDocumentViewer({
       lockedByOther={lockedByOther}
       onSignatureFieldClick={() => {}}
       getSignerName={() => 'User'}
+      canDownload={policy.download}
     />
   );
 }

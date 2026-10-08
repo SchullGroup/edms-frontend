@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Icon } from '@/components/ui/Icons';
 import type { DocumentSignatureFieldUI } from '@/components/documents/types';
+import { fileKindLabel } from '@/constants/uploadTypes';
 
 export interface DocumentViewerPanelProps {
   documentTitle: string;
@@ -22,6 +23,10 @@ export interface DocumentViewerPanelProps {
   lockedByOther: boolean;
   onSignatureFieldClick: (index: number) => void;
   getSignerName: (userId: string) => string;
+  /** The confidentiality policy's download rule for this document. */
+  canDownload: boolean;
+  /** The page's own (audited) download; without one the button opens the file. */
+  onDownload?: () => void;
 }
 
 // Open-parameters honoured by Chromium's and Firefox's (pdf.js) built-in PDF
@@ -62,6 +67,8 @@ export function DocumentViewerPanel({
   lockedByOther,
   onSignatureFieldClick,
   getSignerName,
+  canDownload,
+  onDownload,
 }: DocumentViewerPanelProps) {
   const isPdf = fileMimeType === 'application/pdf';
   // TIFF is an `image/*` type but only Safari can draw it in an <img> — in
@@ -168,10 +175,27 @@ export function DocumentViewerPanel({
             <div className="empty" style={{ padding: '48px 16px' }}>
               <Icon name="doc" size={32} />
               <div className="h3 mt-4 mb-2">Preview not available</div>
-              <p className="caption mb-4">{fileMimeType || 'This file type'} can't be previewed inline.</p>
-              <a className="btn btn-secondary btn-sm" href={fileUrl} target="_blank" rel="noreferrer">
-                Open file
-              </a>
+              <p className="caption mb-4">
+                {fileKindLabel(fileMimeType)} can&rsquo;t be previewed yet.
+                {canDownload
+                  ? ' Download it to read it.'
+                  : ` Download is turned off for ${confidentiality} documents.`}
+              </p>
+              {canDownload &&
+                (onDownload ? (
+                  <button className="btn btn-secondary btn-sm" onClick={onDownload}>
+                    <Icon name="download" size={13} /> Download
+                  </button>
+                ) : (
+                  <a
+                    className="btn btn-secondary btn-sm"
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Icon name="download" size={13} /> Download
+                  </a>
+                ))}
             </div>
           )}
 

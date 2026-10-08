@@ -206,7 +206,7 @@ shared — see [Shared pages](#shared-pages-used-by-multiple-roles).*
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
-| `/staff` | 283 | `currentUser` | `useTasks` ✅ · `useNotifications` ⛔ | ✅ Live (notification panel dead) |
+| `/staff` | 414 | `currentUser` | `useTasks`, `useWorkflowInstanceStatusCounts`, `useWorkflowInstances`, `useSlaBreaches`, `useNotifications` ✅ | ✅ Live — **2026-10-08 (🟨 not verified live):** the Pending / In Progress / Closed tiles count workflows, and clicking one now lists those workflows (`GET /workflow-instances?status=`, `mine` scope; In Progress adds `on_hold`), each opening its workflow page. Before, a click filtered the *task* list, so Closed was always empty. Overdue still filters tasks by open SLA breach. "Closed (30d)" relabelled "Closed": the count isn't limited to 30 days. "View all" goes to My Tasks, not Search. *(The "notification panel dead" note was stale: notifications are wired.)* |
 | `/staff/tasks` | 162 | `currentUser` | `useTasks` ✅ | ✅ Live |
 | `/staff/cabinets` | 821 | `auditAction` only | `useCabinets`, `useCabinet`, `useCabinetFolders`, `useDocuments`, `useUsers` ✅ · folder create/rename/delete, `documentsService.update` (move), metadata-field + access-grant hooks via the shared `components/cabinets/` cards | ✅ Live — cabinet management added 2026-10-06 (see below), tested end to end by the user 2026-10-08. *Uploader names come from `useUsers`, not `SEED.USERS` as this row used to say — corrected 2026-10-06* |
 | `/staff/performance` | 215 | `currentUser` | `useTasks`, `useSlaBreaches` ✅ | ✅ Live — **2026-10-08:** the hard-coded "Rework rate 4.2%" and "-0.4 d vs last period" are gone; it shows **Changes requested** (share of the user's completed tasks closed with `request_changes`, from `Task.action`). SLA compliance stays "—" (DRIFT-19) |
@@ -895,6 +895,7 @@ the document on its own: file, details, versions, custody, archive.
 | Workflows card | 🟨 **new 2026-10-02** — `GET /workflow-instances?documentId=` → every workflow the document is in, each linking to its workflow page; "Open workflow" in the toolbar for the live one, "Route to workflow" when none. **Unverified:** whether that filter matches a document that was *attached* rather than primary |
 | Cabinet + folder context | ✅ |
 | **Policies (confidentiality options)** | 🟥 `SEED.policies` — offers `Top Secret`, which the upload form correctly omits |
+| **Preview fallback** | 🟨 **2026-10-08, not verified live** — a file the viewer can't show (DOCX, XLSX, TIFF) reads "Word documents can't be previewed yet" instead of the raw MIME type. Its button is the page's audited **Download**, hidden when the confidentiality policy turns download off (the old "Open file" link ignored it). Same on the workflow page's viewer |
 | **File preview / download** | 🟨 the code renders and downloads the pre-signed `currentVersion.fileUrl` that `GET /documents/:id` returns, so the old "no endpoint" claim looks stale — **not re-verified live** |
 
 ### `/workflow-instances/[id]` — the workflow page *(new 2026-10-02)*

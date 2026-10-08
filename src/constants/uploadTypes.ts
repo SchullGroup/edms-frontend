@@ -19,6 +19,20 @@ export const UPLOAD_TYPES = [
   { mime: 'image/png', extensions: ['png'] },
 ] as const;
 
+/** What to call a file of this MIME type in a sentence: "Word documents". */
+export function fileKindLabel(mime: string): string {
+  switch (mime) {
+    case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+      return 'Word documents';
+    case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+      return 'Excel spreadsheets';
+    case 'image/tiff':
+      return 'TIFF images';
+    default:
+      return 'Files of this type';
+  }
+}
+
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 export const UPLOAD_TYPES_LABEL = 'PDF, DOCX, XLSX, TIFF, JPG or PNG up to 100 MB';

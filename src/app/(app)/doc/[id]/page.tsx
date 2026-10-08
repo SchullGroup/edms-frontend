@@ -458,6 +458,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           lockedByOther={lockedByOther}
           onSignatureFieldClick={() => {}}
           getSignerName={(userId) => userById(users, userId)?.name || 'User'}
+          canDownload={confPolicy.download}
+          onDownload={actDownload}
         />
 
         <div className="flex flex-col gap-4">
