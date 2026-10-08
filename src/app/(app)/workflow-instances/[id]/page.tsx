@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useTask } from '@/apis/hooks/useTasks';
 import { useDocument } from '@/apis/hooks/useDocuments';
@@ -56,6 +57,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   const { currentUser: me } = useStore();
   const { setPageTitle } = useUIStore();
   const { can } = usePermissions();
+  const { allows } = useConfidentialityClearance();
   const { data: usersData } = useUsers();
   const users = usersData?.data || [];
 
@@ -361,6 +363,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               documentId={selected.id}
               currentVersionId={selectedDoc.currentVersionId}
               canView={can('document_version', 'view')}
+              canDownload={allows(selectedDoc, 'download')}
               canEdit={false}
               canUploadVersion={canUploadRevision}
               getUploaderName={(userId) => users.find((u) => u.id === userId)?.name || 'User'}

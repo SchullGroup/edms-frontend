@@ -6,7 +6,7 @@ import {
   useUpdateDocument,
   useUpdateDocumentMetadata,
 } from '@/apis/hooks/useDocuments';
-import { useStore } from '@/store/useStore';
+import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useUIStore } from '@/store/useUIStore';
 import { ConfBadge, UrgBadge } from '@/components/ui/Badges';
 import { Icon } from '@/components/ui/Icons';
@@ -17,13 +17,15 @@ import type {
   DocumentMetadataField,
   DocumentUrgency,
 } from '@/types/models';
-import { CONF_LEVELS, URG_LEVELS, canViewConfidentiality } from '@/constants/documentLevels';
+import { CONF_LEVELS, TOP_SECRET_LEVEL, URG_LEVELS } from '@/constants/documentLevels';
 import { MetadataFieldInput, isMetadataValueMissing, toInputValue } from './MetadataFieldInput';
 
 export interface DocumentDetailsPanelProps {
   documentId: string;
   documentType?: string | null;
   cabinetId: string;
+  /** The uploader; an `own`-scoped clearance covers only their documents. */
+  createdBy?: string | null;
   ownerName: string;
   /** Omitted on the view-only document page, which has no task context. */
   assigneeName?: string;
@@ -60,6 +62,7 @@ export function DocumentDetailsPanel({
   documentId,
   documentType,
   cabinetId,
+  createdBy,
   ownerName,
   assigneeName,
   createdAtLabel,
@@ -75,7 +78,7 @@ export function DocumentDetailsPanel({
   const { openModal } = useUIStore();
   const updateMetadata = useUpdateDocumentMetadata();
   const updateDocument = useUpdateDocument();
-  const myRoles = useStore((s) => s.currentUser?.roles) ?? [];
+  const { allows } = useConfidentialityClearance();
 
   const sorted = (fields ?? []).slice().sort((a, b) => a.displayOrder - b.displayOrder);
   const canEdit = canEditMetadata && sorted.length > 0;
@@ -122,12 +125,20 @@ export function DocumentDetailsPanel({
       confidentiality: confidentiality as DocumentConfidentiality,
       urgency: urgency as DocumentUrgency,
     };
+    // A level the caller couldn't open the document at is offered but disabled:
+    // saving it would lock them out. Top Secret is listed only for someone cleared.
+    const levels = [...CONF_LEVELS, TOP_SECRET_LEVEL]
+      .map((l) => ({
+        ...l,
+        cleared: allows({ confidentiality: l.value, createdBy, cabinetId }, 'view'),
+      }))
+      .filter((l) => l.value !== 'top_secret' || l.cleared || confidentiality === 'top_secret');
     openModal({
       title: 'Change classification',
       body: (
         <ClassificationEditor
           initial={form}
-          myRoles={myRoles}
+          levels={levels}
           onChange={(next) => Object.assign(form, next)}
         />
       ),
@@ -231,11 +242,11 @@ export function DocumentDetailsPanel({
  *  to view is disabled: saving it would lock them out of the document. */
 function ClassificationEditor({
   initial,
-  myRoles,
+  levels,
   onChange,
 }: {
   initial: { confidentiality: DocumentConfidentiality; urgency: DocumentUrgency };
-  myRoles: readonly string[];
+  levels: { label: string; value: DocumentConfidentiality; cleared: boolean }[];
   onChange: (next: { confidentiality: DocumentConfidentiality; urgency: DocumentUrgency }) => void;
 }) {
   const [value, setValue] = useState(initial);
@@ -255,15 +266,12 @@ function ClassificationEditor({
           value={value.confidentiality}
           onChange={(e) => set({ confidentiality: e.target.value as DocumentConfidentiality })}
         >
-          {CONF_LEVELS.map((l) => {
-            const cleared = canViewConfidentiality(myRoles, l.value);
-            return (
-              <option key={l.value} value={l.value} disabled={!cleared}>
-                {l.label}
-                {cleared ? '' : ' (above your clearance)'}
-              </option>
-            );
-          })}
+          {levels.map((l) => (
+            <option key={l.value} value={l.value} disabled={!l.cleared}>
+              {l.label}
+              {l.cleared ? '' : ' (above your clearance)'}
+            </option>
+          ))}
         </select>
         <div className="help">
           Drives watermarking, download and print, and who can open the document.

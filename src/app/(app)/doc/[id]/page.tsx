@@ -14,7 +14,9 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { cabinetAllows, useMyCabinetAccess } from '@/components/cabinets/cabinetAccess';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
 import { useConfidentialityPolicy } from '@/hooks/useConfidentialityPolicy';
+import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useDownloadDocumentVersion } from '@/apis/hooks/useDocuments';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
@@ -62,6 +64,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const { can, scopeFor } = usePermissions();
   const archiveDocument = useArchiveDocument();
   const createAuditLog = useCreateAuditLog();
+  const { allows } = useConfidentialityClearance();
+  const downloadVersion = useDownloadDocumentVersion();
   const checkoutDocument = useCheckoutDocument();
   const checkinDocument = useCheckinDocument();
   const { routeDocuments, canRoute: hasRoutePermission } = useRouteToWorkflow();
@@ -166,7 +170,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   }
 
   const { rawFileKey, fileUrl, fileMimeType } = documentFile(doc);
+  // Watermarking still comes from the (mock) policy table. Download follows the
+  // caller's `document:download` permission and clearance, as the API does.
   const confPolicy = policyFor(doc.confidentiality);
+  const canDownload = allows(doc, 'download');
 
   const lockedByOther = doc.isCheckedOut && doc.checkoutLock?.lockedBy !== me.id;
   const lockedByMe = doc.isCheckedOut && doc.checkoutLock?.lockedBy === me.id;
@@ -198,8 +205,16 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const routeThisDocument = () => routeDocuments([{ id: doc.id, title: doc.title }]);
 
   const actDownload = () => {
-    if (!confPolicy.download) {
-      addToast(`Download is disabled for ${doc.confidentiality} documents`, 'error');
+    if (!canDownload) {
+      addToast("You don't have permission to download this document", 'error');
+      return;
+    }
+    if (fileUrl && doc.currentVersionId) {
+      // Through the version endpoint, which checks permission and logs the
+      // download. The tab opens now; a later one would be blocked as a popup.
+      const tab = window.open('', '_blank');
+      if (tab) tab.opener = null;
+      downloadVersion.mutate({ id: doc.id, versionId: doc.currentVersionId, tab });
       return;
     }
     const a = document.createElement('a');
@@ -223,8 +238,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     document.body.appendChild(a);
     a.click();
     a.remove();
-    createAuditLog.mutate({ action: 'DOWNLOAD', target: doc.id, detail: 'Downloaded a copy' });
-    addToast('Download started (audited)', 'success');
   };
 
   const actCheckout = () => {
@@ -370,7 +383,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         <button
           className="btn btn-secondary"
           onClick={actDownload}
-          title={confPolicy.download ? 'Download a copy' : 'Disabled'}
+          disabled={!canDownload || downloadVersion.isPending}
+          title={
+            canDownload ? 'Download a copy' : "You don't have permission to download this document"
+          }
         >
           <Icon name="download" size={14} /> Download
         </button>
@@ -480,7 +496,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           lockedByOther={lockedByOther}
           onSignatureFieldClick={() => {}}
           getSignerName={(userId) => userById(users, userId)?.name || 'User'}
-          canDownload={confPolicy.download}
+          canDownload={canDownload}
           onDownload={actDownload}
         />
 
@@ -489,6 +505,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             documentId={doc.id}
             documentType={doc.documentType}
             cabinetId={doc.cabinetId}
+            createdBy={doc.createdBy}
             ownerName={userById(users, doc.createdBy)?.name || 'System'}
             createdAtLabel={fmtDateTime(doc.createdAt)}
             metadata={doc.metadata || []}
@@ -516,6 +533,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             documentId={doc.id}
             currentVersionId={doc.currentVersionId}
             canView={can('document_version', 'view')}
+            canDownload={canDownload}
             canEdit={
               can('document_version', 'restore') && !closed && !lockedByOther && !activeWorkflow
             }

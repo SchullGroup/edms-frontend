@@ -973,8 +973,9 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents/:id/metadata` | ✅ | ✅ |
 | `PUT /documents/:id/metadata` | ✅ | ✅ (cannot clear values — see backend analysis) |
 | `GET /documents/:id/versions` | ✅ | ✅ |
-| `GET /documents/:id/versions/:versionId` | ✅ | ✅ |
+| `GET /documents/:id/versions/:versionId` | ✅ — since `edms-backend` `0dab81a` (2026-10-08) needs `document:download` on top of confidentiality clearance, and is audited as `document.downloaded` | 🟨 **wired 2026-10-08** as the only download path (`useDownloadDocumentVersion`): `/doc/[id]`'s Download, the workflow viewer's Download, and each version's Open in `DocumentVersionsPanel`. Permissions confirmed live on `/auth/me`; not yet clicked through in the UI. *Was marked ✅ before, but nothing called it: the versions panel opened the list's own signed `fileUrl`. Corrected 2026-10-08* |
 | `POST /documents/:id/versions` | ✅ | ✅ |
+| `GET /documents/:id/export`, `GET /documents/:id/print` | ✅ new in `0dab81a` — `document:export` / `document:print` plus clearance; audited as `document.exported` / `document.printed`; return the document like `GET /documents/:id` | ⚠️ backend only — no Export or Print button yet (planned with the pdf.js viewer) |
 | `GET/POST /documents/:id/comments`, `/signatures` | ✅ both exist, real endpoints | 🟥 **deliberately unused (reverted 2026-09-18, same day)** — briefly wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel` earlier the same day, then removed: product decision to keep every comment/signature scoped to the workflow trail (`POST /tasks/:id/action`'s `comment`/`approve`'s `signature`) rather than split across a second, task-independent thread. See DRIFT-08's note below and BE-16/BE-17 in `BACKEND_REQUESTS.md` |
 | `GET/POST /documents/:id/access-requests`, `/grant`, `/deny`, admin inbox `GET /documents/access-requests` | ✅ | ✅ wired 2026-09-18 — "Request access" on `/doc/[id]` is real now (was audit-log-only, see BE-1); grant/deny at `/admin/access-requests` (client_admin-only, new page) |
 | `DELETE /documents/:id` (archive) | ✅ | ✅ wired — "Archive document" in `/doc/[id]`'s overflow menu (`useArchiveDocument`) |
@@ -1078,7 +1079,7 @@ named people but not role groups. Circular notifications carry `actionUrl: /circ
 
 | Frontend service | Endpoints called | Backend | Status |
 |---|---|---|---|
-| `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 |
+| `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 — since 2026-10-08 only its `watermark` flag is read. Download now follows the `document:download` permission and clearance, so `/admin/policies`' Download and Print toggles change nothing |
 | `branding.service.ts` | none — returns `SEED.branding` | no module, no schema | 🔴 |
 
 **DRIFT-10 (notifications) — ✅ RESOLVED (verified 2026-09-21).**
@@ -1285,19 +1286,24 @@ itself somewhat stale by the time this was fixed. The actual broken set was four
 
 ### 8.3 `top_secret` is settable but unreadable
 
-The backend's Zod schema accepts `top_secret`, but
-`TOP_SECRET_TIER_ROLES` in `access-control.constants.ts` is `[]` **by design**. A document
-uploaded at that tier becomes permanently unreadable by every role including
-`client_admin`. The frontend never offers it: the upload form and the document page's
-"Change classification" dialog (2026-10-08) share `CONF_LEVELS` in
-`src/constants/documentLevels.ts`, which omits it, and the dialog also disables any tier
-above the user's own clearance (a copy of the backend's role lists). The API still accepts
-`top_secret` on `PATCH /documents/:id`, so the backend fix below stands. *(This paragraph
-used to describe a doc-detail edit form driven by `SEED.policies`; no such form existed.
-Corrected 2026-10-08.)*
+The backend's Zod schema accepts `top_secret`. Since `edms-backend` `0dab81a` (2026-10-08),
+reading a tier above `internal` needs a permission rather than membership of a role list:
+`document:view_confidential`, `document:view_restricted` or `document:view_top_secret`,
+whose scope narrows it (`department` = documents in the caller's department's cabinets,
+`own` = documents they uploaded). No seeded role holds `view_top_secret`, so a document
+filed at that tier is unreadable until an admin ticks it on some role in `/admin/roles`.
+That is now recoverable, but still a trap.
 
-**Fix:** backend should reject `top_secret` on write until a role is cleared for it, and
-should verify the writer's clearance for whatever tier they assign.
+The frontend copies the backend's check as `isConfidentialityActionAllowed` in
+`src/constants/documentLevels.ts`, fed by `useConfidentialityClearance` (permissions from
+`/auth/me`, department from `GET /users/:id`). The upload form never offers `top_secret`
+(`CONF_LEVELS` omits it). The document page's "Change classification" dialog disables any
+tier the caller couldn't open the document at, and lists Top Secret only for a caller
+cleared for it. The API still accepts any tier on `PATCH /documents/:id`, so the backend
+fix below stands. *(This paragraph used to describe a doc-detail edit form driven by
+`SEED.policies`; no such form existed. Corrected 2026-10-08.)*
+
+**Fix:** backend should verify the writer's clearance for whatever tier they assign.
 
 ### ✅ 8.4 DRIFT-17 — Notification `actionUrl`s used the backend's path vocabulary — **Resolved (frontend, 2026-10-02)**
 

@@ -288,6 +288,42 @@ export function useAddDocumentVersion() {
   });
 }
 
+/**
+ * Opens a version's file through `GET /documents/:id/versions/:versionId`, which
+ * checks `document:download` plus confidentiality clearance and is audited as
+ * `document.downloaded`. The signed `fileUrl` on the document and version list
+ * would skip both, so downloads go through here.
+ *
+ * `tab` is opened by the caller inside the click handler: a tab opened after
+ * the request returns would be blocked as a popup.
+ */
+export function useDownloadDocumentVersion() {
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, versionId }: { id: string; versionId: string; tab: Window | null }) =>
+      documentsService.getVersion(id, versionId),
+    onSuccess: (version, { tab }) => {
+      if (!version.fileUrl) {
+        tab?.close();
+        addToast('This version has no file attached', 'error');
+        return;
+      }
+      if (tab) tab.location.href = version.fileUrl;
+      else window.location.assign(version.fileUrl);
+    },
+    onError: (err: any, { tab }) => {
+      tab?.close();
+      addToast(
+        err.response?.status === 403
+          ? "You don't have permission to download this document"
+          : err.response?.data?.message || 'Failed to download the file',
+        'error',
+      );
+    },
+  });
+}
+
 export function useRestoreDocumentVersion() {
   const queryClient = useQueryClient();
   const { addToast } = useUIStore.getState();

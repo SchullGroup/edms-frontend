@@ -448,6 +448,18 @@ requested" rate. `GET /tasks/stats` can't serve per-user stats: it is department
 rejects `assigneeId`, and refuses staff. So the work-queue item that assumed it could was
 moved to the backend list.
 
+**Correction (2026-10-08, later the same day).** While adopting the backend's new
+confidentiality permissions (`0dab81a`), three doc claims turned out wrong. Doc 01 marked
+`GET /documents/:id/versions/:versionId` wired, but nothing called it: the versions panel
+opened the list's own signed URL, which skipped the download check and audit. Doc 02 B3 said
+there was no preview or download endpoint, though `GET /documents/:id` has returned a signed
+`fileUrl` for some time. And doc 02 E1 described a doc-detail edit form offering Top Secret
+that never existed. All corrected in place. **Known stale, not yet fixed:** the per-role
+grant counts in docs 02, 03 and 04 (e.g. supervisor "18", client_admin "45, all global",
+Phase 1's "45 permissions, 100 grants"). The seed now has 73 permissions and 212 grants:
+client_admin 72 (one `own`), supervisor 40, staff 29, management 27, internal_auditor 26,
+schulltech_admin 18. Those counts were already behind before this change.
+
 ---
 
 ## Relationship to the older docs

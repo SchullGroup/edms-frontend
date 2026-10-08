@@ -320,6 +320,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   // admin hold none; reading the inbox needs no permission).
   client_admin: [
     ...everything,
+    'document:view_confidential',
+    'document:view_restricted',
     'workflow:publish',
     'workflow:archive',
     'task:reassign',
@@ -342,8 +344,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   internal_auditor: [
     ...viewAll,
+    'document:view_confidential',
     'document:download',
     'document:export',
+    'document:print',
     'audit:export',
     'task:action',
     'delegation:create',
@@ -352,7 +356,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   management: [
     ...viewAll,
+    'document:view_confidential',
+    'document:download',
     'document:export',
+    'document:print',
     'workflow_instance:route',
     'task:action',
     'delegation:create',
@@ -364,6 +371,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   supervisor: [
     'document:view',
+    'document:view_confidential',
     'document:create',
     'document:edit',
     'document:export',

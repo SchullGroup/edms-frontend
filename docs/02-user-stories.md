@@ -194,8 +194,8 @@ findings that quietly die.
 
 **Backend rights (10 grants):** read-only and `global` — including `audit:view`
 (**for which no endpoint exists**), `cabinet_access:view`, and `document:view` across the
-whole tenant. Membership of `CONFIDENTIAL_TIER_ROLES` lets them read confidential-tier
-documents. Deliberately **cannot mutate anything** — that independence is the point.
+whole tenant. `document:view_confidential:global` lets them read confidential-tier
+documents (a permission since `edms-backend` `0dab81a`; it was a role list before). Deliberately **cannot mutate anything** — that independence is the point.
 
 ---
 
@@ -216,7 +216,7 @@ silently stalling every document in a cabinet.
 
 **Backend rights (45 grants, all `global`):** effectively full control of the tenant.
 They are the **only** role in `CABINET_ACCESS_BYPASS_ROLES` (they see every cabinet
-regardless of grants) and the only role in `RESTRICTED_TIER_ROLES`.
+regardless of grants) and the only seeded role holding `document:view_restricted`.
 
 ---
 
@@ -496,14 +496,15 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
       and doesn't render anything from the real trail. Only the *workflow* history above
       is real on this page; whether document views/edits/downloads land in the real
       trail as backend-side actions is unverified.
-- [ ] ⚠️ **There is no download or preview endpoint.** The backend has no route that
-      serves file bytes or issues a presigned GET. The preview pane renders a placeholder.
+- [x] Preview and download: `GET /documents/:id` returns a presigned `fileUrl` the viewer
+      renders, and downloads go through the version endpoint (B4). *(This item said there
+      was no such endpoint; stale, corrected 2026-10-08.)*
 - [x] ✅ `@ts-nocheck` is gone — the file type-checks cleanly now (confirmed 2026-09-18,
       stale here; not dated when it was actually removed)
 
 ---
 
-### B4 — Download, print or export a document · ⬜ **Not built**
+### B4 — Download, print or export a document · 🟨 **Partial** *(was ⬜ Not built)*
 
 > **As** David (Supervisor),
 > **I want to** download a contract to read offline, subject to my clearance,
@@ -512,19 +513,30 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
 **Why this matters:** download is where confidentiality controls earn their keep, and it
 is the most audit-sensitive action in the product.
 
-**Current state:** the backend has an unusually well-designed permission model for exactly
-this — `CONFIDENTIALITY_ACCESS` defines per-tier, per-action allowlists for `view`,
-`export`, `print` and `download`, with `restricted` and `top_secret` denied for all three
-non-view actions. **All of it is dead code.** All twelve call sites use
-`requireConfidentiality('view')`; there is no download, print or export route; and no
-`document:download` / `export` / `print` permissions are seeded.
+**Current state (2026-10-08):** `edms-backend` `0dab81a` replaced the old per-tier role
+allowlists (which no route used) with permissions. Viewing a tier above `internal` needs
+`document:view_confidential` / `view_restricted` / `view_top_secret`, scoped like any other
+grant; download, export and print each need `document:download` / `export` / `print` as
+well. Old-version reads (`GET /documents/:id/versions/:versionId`) are gated and audited as
+downloads, and `GET /documents/:id/export` and `/print` are new. Seeded: `staff` and
+`supervisor` hold all three at `department` scope; `management`, `internal_auditor` and
+`client_admin` at `global`.
+
+The frontend's Download (document page, workflow viewer, each version's Open) now checks
+the same rule and fetches through the version endpoint, so each download is audited.
+Export and Print have no buttons yet.
 
 **Acceptance criteria**
-- [ ] `GET /documents/:id/download` returning a short-lived presigned URL
-- [ ] Gated by `requireConfidentiality('download')`
-- [ ] Writes a `document.downloaded` audit entry with actor, IP and user agent
-- [ ] Print and export paths gated by their own actions
-- [ ] `restricted`-tier documents are view-only, per the existing policy table
+- [x] A short-lived presigned URL — via `GET /documents/:id/versions/:versionId` rather
+      than a dedicated `/download` route
+- [x] Gated by `requireConfidentiality('download')` and `document:download`
+- [x] Writes a `document.downloaded` audit entry
+- [x] Print and export paths gated by their own actions (backend; no UI yet)
+- [ ] 🔴 **Download permission can be bypassed:** `GET /documents/:id`, the document list
+      and the version list all return a signed URL to anyone who can view. Raised with the
+      backend 2026-10-08
+- [ ] Export and Print buttons (planned with the pdf.js viewer)
+- [ ] Not yet clicked through end to end in the UI
 
 ---
 
@@ -768,14 +780,17 @@ and search. The design is sound.
 **Acceptance criteria**
 - [x] Tier settable at upload and editable later
 - [x] Enforced on read via middleware and in list/search SQL
-- [x] `confidential` readable by supervisor, management, client_admin, internal_auditor
-- [x] `restricted` readable by client_admin only
+- [x] Clearance is a permission per tier (`document:view_confidential` / `view_restricted` /
+      `view_top_secret`, `edms-backend` `0dab81a`), so a custom role can be cleared from
+      `/admin/roles`. Seeded: `confidential` → supervisor (`department`), management,
+      internal_auditor, client_admin; `restricted` → client_admin; `top_secret` → nobody
 - [ ] 🔴 **Anyone can set any tier.** No check that the writer is cleared for the tier they
-      are assigning. A `staff` user can upload at `top_secret` — and since
-      `TOP_SECRET_TIER_ROLES` is empty by design, that document becomes permanently
-      unreadable **by everyone, including `client_admin`**. There is no recovery path.
-- [ ] ⚠️ The doc-detail edit form offers `Top Secret` because it is driven by
-      `SEED.policies.confidentiality`; the upload form correctly omits it. Inconsistent.
+      are assigning. A `staff` user can upload at `top_secret`, which no seeded role can
+      read; it stays unreadable until an admin grants `view_top_secret` to some role.
+- [x] The UI never offers a tier the user isn't cleared for: the upload form omits
+      `top_secret`, and the document page's "Change classification" dialog (2026-10-08)
+      disables uncleared tiers using the backend's rule. *(This item used to say the
+      doc-detail edit form offered Top Secret from `SEED.policies`; no such form existed.)*
 
 ---
 
@@ -1435,7 +1450,7 @@ error paths and workers).
 | Epic | ✅ Done | 🟨 Partial | 🟥 Mock | ⬜ Not built | Verdict |
 |---|---|---|---|---|---|
 | A — Capture & Filing | 2 | 1 | 0 | 1 | Core works; enrichment missing |
-| B — Retrieval & Search | 1 | 2 | 0 | 1 | Search built but returns nothing |
+| B — Retrieval & Search | 1 | 3 | 0 | 0 | Search built but returns nothing; download gated and audited (2026-10-08) |
 | C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; routing **fixed**; still **unauthorized** |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
@@ -1445,7 +1460,7 @@ error paths and workers).
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 0 | 3 | 0 | 0 | Circulars wired 2026-10-05, not verified live; notifications **plumbed but silent** |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **13** | **17** | **9** | **3** | 42 functional stories |
+| **Total** | **13** | **18** | **9** | **2** | 42 functional stories |
 
 **The honest one-paragraph summary:** the *document* half of this EDMS — capture, filing,
 versioning, checkout, classification, task execution and approval — is genuinely built and

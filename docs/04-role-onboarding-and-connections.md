@@ -149,9 +149,10 @@ That is the complete list. This role **cannot** call `GET /users`, `GET /documen
 `GET /cabinets`, or `GET /departments` — all return 403.
 
 **And that is correct.** `access-control.constants.ts` documents the reasoning explicitly:
-`schulltech_admin` is **deliberately excluded** from `CABINET_ACCESS_BYPASS_ROLES` and from
-every confidentiality tier list, including `TOP_SECRET_TIER_ROLES` (which is empty by
-design). The comment states that any future support access should be a *time-boxed, audited
+`schulltech_admin` is **deliberately excluded** from `CABINET_ACCESS_BYPASS_ROLES`, and the
+seed gives it none of the `document:view_confidential` / `view_restricted` /
+`view_top_secret` clearance permissions (which replaced the tier role lists in
+`edms-backend` `0dab81a`, 2026-10-08). The comment states that any future support access should be a *time-boxed, audited
 impersonation flow* — its own mechanism, not a standing role grant.
 
 **The vendor cannot read customer documents.** For a multi-tenant SaaS handling regulated
@@ -223,7 +224,7 @@ metadata fields, cabinet access, folders, departments, users, roles, workflows, 
 
 Two unique properties:
 - The **only** role in `CABINET_ACCESS_BYPASS_ROLES` — sees every cabinet regardless of grants
-- The **only** role in `RESTRICTED_TIER_ROLES` — the sole reader of `restricted` documents
+- The **only** seeded role holding `document:view_restricted` — the sole reader of `restricted` documents (an admin can now grant it to another role in `/admin/roles`)
 
 This is the most powerful role in the tenant, and appropriately so.
 
@@ -408,13 +409,15 @@ end       → /staff/tasks  clear the queue   ✅
 ### Identity and rights
 
 **18 grants**, mostly `department`-scoped, plus two memberships that matter more than the
-grants:
+grants, and one grant worth naming:
 
 - `TASK_VIEW_ALL_ROLES` → may request `GET /tasks?scope=all` and see the whole team's queue
 - `TASK_REASSIGN_ROLES` → may `PATCH /tasks/:id/reassign`
-- `CONFIDENTIAL_TIER_ROLES` → may read `confidential`-tier documents
+- `document:view_confidential:department` → may read `confidential`-tier documents in their
+  own department's cabinets (a permission since `edms-backend` `0dab81a`, 2026-10-08; it was
+  membership of `CONFIDENTIAL_TIER_ROLES` before, with no department limit)
 
-Those three constants — not the permission table — are what actually make supervision work.
+The two task constants — not the permission table — are what actually make supervision work.
 
 ### Day one
 
@@ -590,8 +593,8 @@ folder:view:global            department:view:global
 workflow:view:global          audit:view:global
 ```
 
-Plus membership of `CONFIDENTIAL_TIER_ROLES`, so they can read `confidential`-tier
-documents. **Deliberately cannot mutate anything** — that independence is the point of the
+Plus `document:view_confidential:global`, so they can read `confidential`-tier documents
+(a permission since `edms-backend` `0dab81a`; it was a role list before). **Deliberately cannot mutate anything** — that independence is the point of the
 role.
 
 One of these grants now has a real screen behind it, and one still doesn't:
