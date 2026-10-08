@@ -1,5 +1,9 @@
 # Backend Requests — from the Frontend Team
 
+> **2026-10-08: the open asks are now one implementable spec,
+> [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
+> against `edms-backend` `dev` at `2db7e19`. This file stays as the history of earlier requests.
+
 **Raised:** 2026-08-29 · **Updated:** 2026-09-21
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `dev` (`b1b0b68`) — **106 routes**
