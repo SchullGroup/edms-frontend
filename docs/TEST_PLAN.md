@@ -592,14 +592,19 @@ still worth knowing — but don't file "missing permission gate" as a new bug fo
 
 | Page | Ungated action(s) |
 |---|---|
-| `/admin/audit` | Verify integrity, Export |
-| `/admin/branding` | Publish branding |
-| `/admin/policies` | Confidentiality / urgency / control toggles |
-| `/supervisor/exceptions` | Acknowledge (writes a real audit log entry; the exception row list itself is still mock data) |
-| `/staff/cabinets` | Move / Route bulk actions |
+| ~~`/admin/audit`~~ | ~~Verify integrity, Export~~ — **gated (2026-10-08):** Export on `audit:export`, Verify on `audit:view`, matching the backend routes |
+| `/admin/branding` | Publish branding — page is client_admin-only; no branding backend or permission exists to gate the action on |
+| `/admin/policies` | Confidentiality / urgency / control toggles — page gate only; no policy backend or permission exists |
+| `/supervisor/exceptions` | Acknowledge — page gate (`workflow:edit`) only; the row list is still mock data |
+| ~~`/staff/cabinets`~~ | ~~Move / Route bulk actions~~ — **gated** (checked 2026-10-08): Move needs `document:edit` + Edit on the cabinet; Route needs `workflow_instance:create` + `:route` |
 
-- [ ] **TP-P10 (the one genuine bug in this group — do report it, it's logic-wrong not
-      just unfinished).** On `/auditor/findings` (also reachable at
+*(2026-10-08: the three remaining rows are mock pages. Their action gates wait for the
+backends, and the permission keys, they'd be checked against — inventing keys now would
+just have to be undone.)*
+
+- [x] **Fixed 2026-10-08:** "Add response" and "Close finding" now have the same
+      `audit:view` gate as "Raise finding". *Original note:* **TP-P10 (the one genuine bug in
+      this group — do report it, it's logic-wrong not just unfinished).** On `/auditor/findings` (also reachable at
       `/management/findings` — it's the same component) as any role: "Raise finding" is
       gated on `audit:view`, but **"Add response" and "Close finding" have zero guard at
       all**, not even the same (wrong) `audit:view` check the create action uses. Confirm
@@ -802,6 +807,7 @@ Items whose backend already exists (or needs none). Worked through one at a time
       download off). To test: open a DOCX on `/doc/[id]` and on its workflow page. Left: in-PDF
       search
 - [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3)
+- [x] Permission gates on the P4 actions — see the P4 table (2026-10-08)
 - [x] Date picker is cutoff when user wants to schedule circular at a later date/time in the publish modal
       — **Fixed 2026-10-08** in the shared `DatePicker`: it assumed a 380 px popover (a six-week
       month plus the time row is taller) and, when neither side had that much room, always

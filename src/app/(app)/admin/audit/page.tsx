@@ -196,7 +196,10 @@ export default function TenantAuditPage() {
             <button
               className="btn btn-secondary btn-sm"
               onClick={handleVerify}
-              disabled={verifyChain.isPending}
+              disabled={verifyChain.isPending || !can('audit', 'view')}
+              title={
+                !can('audit', 'view') ? "You don't have permission to verify the audit trail" : undefined
+              }
             >
               {verifyChain.isPending ? 'Verifying…' : 'Verify integrity'}
             </button>
