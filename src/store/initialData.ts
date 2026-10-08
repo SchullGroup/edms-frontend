@@ -1,5 +1,5 @@
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
-import type { SavedSearch } from '@/types/models';
+import type { DocumentShortcut, SavedSearch } from '@/types/models';
 import type { PortalChoice } from '@/lib/permissions';
 
 export const CONF_LEVELS = ['Public', 'Internal', 'Confidential', 'Restricted', 'Top Secret'];
@@ -1451,6 +1451,8 @@ export const SEED = {
   plans: PLANS,
   // Keyed by user id, so people sharing a browser don't see each other's.
   savedSearches: {} as Record<string, SavedSearch[]>,
+  recentDocuments: {} as Record<string, DocumentShortcut[]>,
+  pinnedDocuments: {} as Record<string, DocumentShortcut[]>,
   branding: {
     appName: 'SchullTech EDMS',
     tenantName: 'First Atlantic Bank',

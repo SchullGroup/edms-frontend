@@ -112,6 +112,18 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     if (doc?.title) setPageTitle(doc.title);
   }, [doc?.title, setPageTitle]);
 
+  // Feeds the staff dashboard's Recent list.
+  const recordDocumentView = useStore((s) => s.recordDocumentView);
+  const togglePinnedDocument = useStore((s) => s.togglePinnedDocument);
+  const isPinned = useStore(
+    (s) => !!me && !!doc && (s.pinnedDocuments[me.id] ?? []).some((d) => d.id === doc.id),
+  );
+  useEffect(() => {
+    if (me?.id && doc?.id && doc.title) {
+      recordDocumentView(me.id, { id: doc.id, title: doc.title });
+    }
+  }, [me?.id, doc?.id, doc?.title, recordDocumentView]);
+
   if (isLoading || isLoadingCabs || isLoadingUsers || isLoadingPolicies) {
     return <DocumentDetailSkeleton />;
   }
@@ -347,6 +359,14 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap mb-4">
+        <button
+          className="btn btn-secondary"
+          aria-pressed={isPinned}
+          title={isPinned ? 'Remove from your dashboard' : 'Keep this on your dashboard'}
+          onClick={() => togglePinnedDocument(me.id, { id: doc.id, title: doc.title })}
+        >
+          <Icon name="save" size={14} /> {isPinned ? 'Pinned' : 'Pin'}
+        </button>
         <button
           className="btn btn-secondary"
           onClick={actDownload}

@@ -170,6 +170,14 @@ export interface DocumentVersion {
 /** A search the user saved on `/search`: the query text plus at most one
  *  value per filter, in the backend's own enum values. Kept in the persisted
  *  store per user — see `savedSearches` in `initialData.ts`. */
+/** A document in someone's Recent or Pinned list (staff dashboard). Kept in the
+ *  browser per user — the API has no favourites or view-history endpoint. */
+export interface DocumentShortcut {
+  id: string;
+  title: string;
+  at: number;
+}
+
 export interface SavedSearch {
   id: string;
   name: string;

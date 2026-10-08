@@ -798,7 +798,12 @@ Items whose backend already exists (or needs none). Worked through one at a time
 - [x] ~~My Tasks: keep the backend's urgency → due-date order instead of re-sorting (19.2)~~
       — **superseded:** since `919d0ef` `GET /tasks` carries no deadlines, so there is no
       server-side due-date order to keep
-- [ ] Quick-actions strip; recent and pinned documents/searches (19.3, 19.5)
+- [x] Quick-actions strip; recent and pinned documents/searches (19.3, 19.5). **Built
+      2026-10-08:** a Quick access card on `/staff` (actions, Pinned documents, Recently
+      opened, Saved searches) and a **Pin** button on `/doc/[id]`. Stored per user in the
+      browser (no favourites API), so it doesn't follow you to another device. To test: open
+      two documents, pin one, save a search — all three lists fill; a saved search reruns with
+      its filters; sign in as someone else — their lists are empty
 - [x] Admin home setup checklist (18.1). **Built 2026-10-08** from live data. To test: on a
       fresh tenant every step shows pending; create a department, a cabinet (it gets "General"),
       a second user and publish a workflow — each ticks off and the % reaches 100. Add a cabinet

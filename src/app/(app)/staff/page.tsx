@@ -19,6 +19,7 @@ import {
 import { Icon } from '@/components/ui/Icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TaskRow } from '@/components/ui/TaskRow';
+import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
 import { StatusBadge } from '@/components/ui/Badges';
 import { instanceTitle } from '@/utils/workflowDocuments';
 import type { WorkflowInstance } from '@/types/models';
@@ -210,6 +211,8 @@ export default function StaffDashboard() {
       </div>
 
       <div className="grid gap-4">
+        <QuickAccessCard />
+
         <div className="grid grid-cols-2 gap-4">
           <div className="card">
             <div className="card-head">
