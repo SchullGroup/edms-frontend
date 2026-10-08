@@ -772,7 +772,12 @@ Items whose backend already exists (or needs none). Worked through one at a time
       `.strict()` (no `assigneeId`), and it returns 403 without oversight, so staff can't call
       it. Needs a backend change. Meanwhile the fake "Rework rate 4.2%" was replaced by a real
       "Changes requested" rate from the user's own tasks
-- [ ] Staff dashboard: status tiles click through; finish SLA/ageing highlighting (19.1, 19.4)
+- [x] Staff dashboard: status tiles click through (19.1). **Built 2026-10-08:** Pending / In
+      Progress / Closed list your workflows in that state (In Progress includes on hold), each
+      row opens the workflow page; Overdue still filters tasks. To test: click each tile and
+      check the rows match the tile's count (up to 8 shown).
+- [ ] Staff dashboard: SLA/ageing highlighting (19.4) — **needs backend:** `GET /tasks` has
+      no deadlines since `919d0ef` (requested)
 - [x] ~~My Tasks: keep the backend's urgency → due-date order instead of re-sorting (19.2)~~
       — **superseded:** since `919d0ef` `GET /tasks` carries no deadlines, so there is no
       server-side due-date order to keep
@@ -781,5 +786,15 @@ Items whose backend already exists (or needs none). Worked through one at a time
 - [ ] Chart drill-downs to filtered record lists (21.6, 22.3)
 - [ ] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6)
 - [ ] Configuration history: audit log filtered to config actions (18.7)
-- [ ] PDF/image preview and in-PDF search (4.3, 5.9 — partial; Office/email/OCR need backend)
+- [ ] PDF/image preview and in-PDF search (4.3, 5.9 — partial; Office/email/OCR need backend).
+      **Done 2026-10-08:** readable fallback for files that can't be previewed ("Word
+      documents can't be previewed yet" + the audited Download, hidden when the policy turns
+      download off). To test: open a DOCX on `/doc/[id]` and on its workflow page. Left: in-PDF
+      search
 - [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3)
+- [x] Date picker is cutoff when user wants to schedule circular at a later date/time in the publish modal
+      — **Fixed 2026-10-08** in the shared `DatePicker`: it assumed a 380 px popover (a six-week
+      month plus the time row is taller) and, when neither side had that much room, always
+      opened downward off the screen. It now measures itself, opens on whichever side fits, and
+      otherwise stays inside the viewport and scrolls. Covers every date picker in a modal. To
+      test: on a short window (or zoomed in), Publish… → Schedule for later → open the picker
