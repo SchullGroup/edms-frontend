@@ -87,7 +87,7 @@ The DOCUMENT half is real
 The GOVERNANCE half is a UI over fixtures
   notifications · policies          (circulars: wired 2026-10-05, 🟨 unverified)
   findings · retention · platform operations
-                                                    🟥 15 of 57 pages
+                                                    🟥 13 of 57 pages
 ```
 
 ### The four defects that matter most

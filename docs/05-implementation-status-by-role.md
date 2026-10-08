@@ -97,14 +97,16 @@ Every classification below was verified by inspecting what each page destructure
 |---|---:|---:|---:|---:|---:|---|
 | Staff Workspace | 4 | 4 | — | — | — | **Strongest.** Real data throughout. |
 | Supervisor Console | 7 | 3 | 2 | 2 | — | Approvals, ageing and the Workflow Monitor real; exceptions/performance fixture. |
-| Management Portal | 7 | 4 | 1 | 2 | — | The only fully API-driven pages — and the ones that don't scale. |
-| Client Administration | 12 | 7 | 1 | 2 | 2 | Structure real; policy/branding mock. `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
+| Management Portal | 7 | 4 | 2 | 1 | — | The only fully API-driven pages — and the ones that don't scale. |
+| Client Administration | 12 | 7 | 2 | 1 | 2 | Structure real; branding mock, policies Hybrid (SLA tab real). `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
 | Audit & Compliance | 4 | 1 | 1 | 2 | — | Trail real; dashboard and findings fixture. |
 | Platform Admin | 6 | — | — | 6 | — | Mock by design (Phase 2). |
 | Shared | 17 | 2 | 11 | 1 | 3 | Login and upload real; circulars, delegations and the workflow page wired but 🟨 not verified live; notifications fixture. |
-| **Total** | **57** | **21** | **16** | **15** | **5** | |
+| **Total** | **57** | **21** | **18** | **13** | **5** | |
 
-*(Re-tallied 2026-10-08 from each page's row in this doc: all 57 `page.tsx` files. 🟨
+*(Re-tallied 2026-10-08 from each page's row in this doc: all 57 `page.tsx` files. Later the
+same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → 🟨.)*
+*(🟨
 counts Hybrid pages and API-only pages not yet verified end to end — Partial, not ✅, per
 house rule 1. ↪️ / static: `/admin/circulars`, `/admin/workflows/instances`, `/tasks/[id]`,
 `/unauthorized`, `/user-stories`. `/admin/cabinets` and `/staff/cabinets` moved 🟨 → ✅
@@ -186,7 +188,7 @@ Fixtures declared directly inside a component, invisible to any `SEED` audit:
 |---|---|---|
 | `upload/page.tsx` | `IDU_GUESSES` (4 entries) | The entire "Intelligent Document Understanding" classification, including confidence percentages |
 | `supervisor/exceptions/page.tsx` | `useState([...])` (4 rows) | SoD conflicts, control failures, access anomalies |
-| `management/reports/page.tsx` | `DEPTS` | The department list in the report builder |
+| ~~`management/reports/page.tsx`~~ | ~~`DEPTS`~~ | **Removed 2026-10-08** — departments come from `useDepartments` |
 
 **Why it's the sneakiest kind:** `IDU_GUESSES` presents fabricated ML output with a
 confidence badge, in the product's most prominent flow. Nothing about the UI signals that
@@ -453,7 +455,7 @@ already holds warning and escalation rows written by the SLA worker.
 | `/management/trends` | 171 | **none** | `useDepartments`, `useDocumentStats`, `useWorkflowInstanceStats` ✅ | ✅ Live — server-aggregated (the forecast/backlog math is still client-side, but it's arithmetic on two already-aggregated series, not a full-list walk) |
 | `/management/performance` | 85 | **none** | `useTaskStats` ✅ | ✅ Live — server-aggregated |
 | `/management/compliance` | 169 | **`findings`** | `useUsers` ✅ · `useAuditEntries` ✅ (migrated 2026-09-18) | 🟨 Hybrid — `findings`/hbar chart still `SEED` |
-| `/management/reports` | 161 | — | **inline `DEPTS`** · `useCreateAuditLog` 🟥 | 🟥 Mock |
+| `/management/reports` | 322 | — | `useDepartments` ✅ · `getOpenItemsByCabinet`, `getBottlenecksAgeing` (paged, up to 2,000 rows), `tasksService.getStats`, `getTeamStatusMatrix` ✅ | 🟨 Partial — **rebuilt 2026-10-08, not verified live:** four real reports (open items by cabinet, ageing register, SLA compliance by department, workload by member), each filterable by department, previewed in a table and downloaded as CSV (with a BOM so Excel reads it as UTF-8). Scheduled reports were fake and are now a "not available yet" note: there's no report-job backend |
 | `/management/findings` | 7 | — | ↪️ re-exports `/auditor/findings` | 🟥 Mock |
 
 > **Management is the only dashboard with fully API-driven pages** — four of its seven
@@ -515,7 +517,7 @@ approximation, not a silent one.
 | Where | Fixture |
 |---|---|
 | `/management/compliance` | `findings`/hbar chart still `SEED.findings` — the sensitive-activity panel is real now (migrated 2026-09-18) |
-| `/management/reports` | inline `DEPTS`; the report builder produces nothing real |
+| ~~`/management/reports`~~ | ~~inline `DEPTS`; the report builder produces nothing real~~ — real reports since 2026-10-08 |
 | `/management/findings` | ↪️ auditor's page → `SEED.findings` |
 
 ### Flows
@@ -539,7 +541,7 @@ approximation, not a silent one.
    (`admin/cabinets`, `staff/cabinets`: listing every document in one cabinet for a
    folder-assignment UI, which no aggregate endpoint answers).
 2. **Build `Finding`** — model, endpoints, and a management-oriented view (owner, ageing, department rollup) rather than a re-export. *Now the largest single gap for this role.*
-3. **Make `/management/reports` generate real reports.**
+3. ~~**Make `/management/reports` generate real reports.**~~ **Done 2026-10-08** (browser-built CSV; scheduling still needs a backend job).
 4. **Correct the frontend permission heuristic** — `usePermissions` grants management
    approve/reject rights the backend never issued. Fix this *with* DRIFT-05, or management's
    buttons will start 403-ing and look like a regression.

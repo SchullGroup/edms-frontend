@@ -809,7 +809,12 @@ Items whose backend already exists (or needs none). Worked through one at a time
       list needs backend:** the charts are per department, and neither `GET /documents` nor
       `GET /workflow-instances` takes a `departmentId` filter, so there's no list to open.
       To test: click a department bar on each page
-- [ ] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6)
+- [x] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6).
+      **Built 2026-10-08** on `/management/reports`: open items by cabinet, ageing register, SLA
+      compliance by department (date range), workload by member; department filter; preview
+      table; CSV download that Excel opens. Not built: true .xlsx/PDF and scheduled reports
+      (needs a backend job). To test: run each report for All and for one department and
+      compare totals with `/management` and `/supervisor/bottlenecks`
 - [x] Configuration history: audit log filtered to config actions (18.7). **Built 2026-10-08**
       on `/admin/audit` (and `/auditor/trail`): a record-type dropdown whose Configuration group
       is roles, departments, cabinets (incl. access and metadata fields), folders, workflow
