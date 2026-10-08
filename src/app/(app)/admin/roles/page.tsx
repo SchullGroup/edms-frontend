@@ -21,13 +21,23 @@ import { Role, RolePermission, RolePermissionScope } from '@/types/models';
 const MODULE_MAP: { label: string; resources: string[] }[] = [
   {
     label: 'Documents',
-    resources: ['document', 'document_version', 'document_lock', 'document_metadata'],
+    resources: [
+      'document',
+      'document_version',
+      'document_lock',
+      'document_metadata',
+      'document_comment',
+      'document_signature',
+      'document_access_request',
+    ],
   },
   {
     label: 'Filing',
     resources: ['cabinet', 'cabinet_metadata_field', 'cabinet_access', 'folder'],
   },
-  { label: 'Workflow', resources: ['workflow'] },
+  // Designing workflows and running them are separate grants — routing a
+  // document lives on `workflow_instance`, not `workflow`.
+  { label: 'Workflow', resources: ['workflow', 'workflow_instance', 'task', 'delegation'] },
   { label: 'Administration', resources: ['user', 'role', 'department'] },
   { label: 'Communication', resources: ['circular'] },
   { label: 'Audit & Compliance', resources: ['audit'] },
@@ -51,6 +61,25 @@ const ACTION_ORDER = [
 ];
 
 const titleize = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+/** What a resource row controls, where its raw name doesn't say. Anything not
+ *  listed falls back to its title-cased name. */
+const RESOURCE_LABELS: Record<string, string> = {
+  workflow: 'Workflow designs',
+  workflow_instance: 'Running workflows (routing)',
+  task: 'Workflow tasks',
+  document_metadata: 'Document metadata',
+  document_access_request: 'Document access requests',
+  cabinet_metadata_field: 'Cabinet metadata fields',
+  cabinet_access: 'Cabinet access grants',
+};
+const resourceLabel = (r: string) => RESOURCE_LABELS[r] ?? titleize(r);
+
+/** Action names that read oddly as a column heading. */
+const ACTION_LABELS: Record<string, string> = {
+  action: 'Act on',
+};
+const actionLabel = (a: string) => ACTION_LABELS[a] ?? titleize(a);
 const permKey = (p: { resource: string; action: string }) => `${p.resource}:${p.action}`;
 const SCOPES: RolePermissionScope[] = ['own', 'department', 'global'];
 const DEFAULT_SCOPE: RolePermissionScope = 'global';
@@ -677,7 +706,7 @@ export default function RolesPermissionsPage() {
                                     }}
                                   >
                                     <span style={{ fontSize: 13, fontWeight: 700 }}>
-                                      {titleize(res)}
+                                      {resourceLabel(res)}
                                     </span>
                                     <span className="caption">
                                       {resGrantedCount}/{resActions.length}
@@ -720,13 +749,13 @@ export default function RolesPermissionsPage() {
                                               color: granted ? 'var(--ink)' : 'var(--text-soft)',
                                             }}
                                           >
-                                            {titleize(a)}
+                                            {actionLabel(a)}
                                           </span>
                                           {granted && (
                                             <div
                                               className="seg"
                                               role="group"
-                                              aria-label={`Scope for ${titleize(res)} ${titleize(a)}`}
+                                              aria-label={`Scope for ${resourceLabel(res)} ${actionLabel(a)}`}
                                             >
                                               {SCOPES.map((s) => (
                                                 <button

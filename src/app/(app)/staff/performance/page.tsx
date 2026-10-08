@@ -4,6 +4,8 @@ import React, { useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
+import { useSlaBreaches } from '@/apis/hooks/useSla';
+import { turnaroundDays } from '@/utils/supervisor';
 import { exportCsv } from '@/utils/exportCsv';
 import { LineChart, DonutChart } from '@/components/ui/Charts';
 import { TaskRow } from '@/components/ui/TaskRow';
@@ -19,32 +21,27 @@ export default function MyPerformancePage() {
   }, [setPageTitle]);
 
   const { data: tasksData, isLoading: tasksLoading } = useTasks({ scope: 'mine' });
+  const { data: openBreaches } = useSlaBreaches({ scope: 'mine', status: 'open', limit: 1 });
 
   if (!currentUser) return null;
 
   const tasks = tasksData?.data || [];
 
-  // Dynamic SLA calculations
+  // On-time figures have no source since tasks lost their due date (edms-backend
+  // `919d0ef`): the backend records each result in `workflow_sla_outcomes`, and
+  // an endpoint over it is requested. Until then they show "—", not a made-up 100%.
   const closedTasks = tasks.filter((t: any) => t.status === 'completed');
-  let onTime = 0;
-  let breached = 0;
-  
-  closedTasks.forEach((t: any) => {
-    if (t.dueAt && t.completedAt && new Date(t.completedAt) > new Date(t.dueAt)) {
-      breached++;
-    } else {
-      onTime++;
-    }
-  });
-  
-  const totalSla = onTime + breached;
-  const slaCompliance = totalSla === 0 ? 100 : Math.round((onTime / totalSla) * 100);
+  const slaCompliance: number | null = null;
+  const onTime: number | null = null;
+  const breached: number | null = null;
+  // Open SLA breach events — the one live "late" signal per task.
+  const atRiskNow = openBreaches?.pagination.total ?? 0;
 
-  const closedTasksWithDates = closedTasks.filter((t: any) => t.dueAt && t.completedAt);
-  const avgTurnaroundMs = closedTasksWithDates.length > 0
-    ? closedTasksWithDates.reduce((sum: number, t: any) => sum + (new Date(t.completedAt).getTime() - new Date(t.dueAt).getTime()), 0) / closedTasksWithDates.length
-    : 0;
-  const avgTurnaround = avgTurnaroundMs > 0 ? (avgTurnaroundMs / 86400000).toFixed(1) + ' d' : '0 d';
+  // Raised → completed, the same measure as the dashboard.
+  const turnarounds = closedTasks.map(turnaroundDays).filter((d): d is number => d !== null);
+  const avgTurnaround = turnarounds.length
+    ? (turnarounds.reduce((sum, d) => sum + d, 0) / turnarounds.length).toFixed(1) + ' d'
+    : '—';
   
   // Dynamic throughput calculation (last 6 weeks)
   const getWeekLabel = (d: Date) => {
@@ -78,7 +75,12 @@ export default function MyPerformancePage() {
   });
 
   const metrics = [
-    { value: `${slaCompliance}%`, label: 'SLA compliance', delta: 'vs last period', dir: 'up' },
+    {
+      value: slaCompliance === null ? '—' : `${slaCompliance}%`,
+      label: 'SLA compliance',
+      delta: slaCompliance === null ? 'not reported yet' : 'vs last period',
+      dir: 'up',
+    },
     { value: avgTurnaround, label: 'Avg turnaround', delta: '-0.4 d vs last period', dir: 'up' },
     {
       value: String(closedTasks.length),
@@ -144,31 +146,32 @@ export default function MyPerformancePage() {
               </div>
               <div className="card-body">
                 <div className="ring-wrap">
-                  <DonutChart
-                    value={slaCompliance}
-                    label="This period"
-                    color="var(--status-closed)"
-                    size={130}
-                  />
+                  {slaCompliance === null ? (
+                    <div className="caption" style={{ width: '130px', textAlign: 'center' }}>
+                      On-time rate isn&rsquo;t reported yet
+                    </div>
+                  ) : (
+                    <DonutChart
+                      value={slaCompliance}
+                      label="This period"
+                      color="var(--status-closed)"
+                      size={130}
+                    />
+                  )}
                   <div style={{ flex: 1 }}>
                     <div className="metric-li">
                       <span>On time</span>
-                      <b>{onTime} items</b>
+                      <b>{onTime === null ? '—' : `${onTime} items`}</b>
                     </div>
                     <div className="metric-li">
                       <span>Breached</span>
-                      <b style={{ color: 'var(--status-overdue)' }}>{breached} items</b>
+                      <b style={{ color: 'var(--status-overdue)' }}>
+                        {breached === null ? '—' : `${breached} items`}
+                      </b>
                     </div>
                     <div className="metric-li">
                       <span>At risk now</span>
-                      <b style={{ color: 'var(--status-pending)' }}>
-                        {
-                          tasks.filter(
-                            (t: any) => t.status === 'pending' && t.dueAt && new Date(t.dueAt) < new Date(),
-                          ).length
-                        }{' '}
-                        items
-                      </b>
+                      <b style={{ color: 'var(--status-pending)' }}>{atRiskNow} items</b>
                     </div>
                   </div>
                 </div>

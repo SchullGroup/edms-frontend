@@ -1,7 +1,20 @@
 import { useEffect, useState } from 'react';
-import { defaultRule, validateStageTransitions, valueOptionsForField } from '@/components/workflows/constants';
+import {
+  coerceRuleValue,
+  defaultRule,
+  defaultRuleValue,
+  operatorsForField,
+  ruleValueIssue,
+  validateStageTransitions,
+} from '@/components/workflows/constants';
 import { useAllMetadataFields } from '@/apis/hooks/useMetadataFields';
-import type { WorkflowConditionField, WorkflowConditionRule, WorkflowStage, WorkflowTransition } from '@/types/models';
+import type {
+  WorkflowConditionField,
+  WorkflowConditionOperator,
+  WorkflowConditionRule,
+  WorkflowStage,
+  WorkflowTransition,
+} from '@/types/models';
 
 let draftKeySeq = 0;
 const nextDraftKey = () => `draft_${Date.now()}_${draftKeySeq++}`;
@@ -43,7 +56,29 @@ export function useBranchDraft(
   const isTerminal = !!stage && stages[stages.length - 1]?.id === stage.id && drafts.length === 0;
 
   const dirty = JSON.stringify(drafts.map(({ _key, ...t }) => t)) !== JSON.stringify(outgoing);
-  const issues = stage ? validateStageTransitions(stage.id, drafts) : [];
+  const fieldById = (id?: string) => metadataFields?.find((f) => f.id === id);
+  // A value that doesn't fit its field (a word in a number field, a date that
+  // isn't one) blocks the save here rather than failing later — for metadata,
+  // possibly only when a document reaches the stage.
+  const ruleIssue = (rule: WorkflowConditionRule) =>
+    ruleValueIssue(rule, rule.field === 'metadata' ? fieldById(rule.metadata_field_id) : undefined);
+  const ruleIssueCount = drafts.reduce(
+    (n, d) => n + (d.condition?.rules.filter((r) => ruleIssue(r) !== null).length ?? 0),
+    0,
+  );
+  const issues = stage
+    ? [
+        ...validateStageTransitions(stage.id, drafts),
+        ...(ruleIssueCount > 0
+          ? [
+              {
+                stageId: stage.id,
+                message: `${ruleIssueCount} rule${ruleIssueCount === 1 ? ' has a value that doesn’t fit its field' : 's have values that don’t fit their fields'} — fix ${ruleIssueCount === 1 ? 'it' : 'them'} above.`,
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   // The backend rejects a second transition to a stage another one of this
   // stage's branches already targets, so there's no point offering "+ Add
@@ -114,13 +149,41 @@ export function useBranchDraft(
   };
 
   const handleFieldChange = (key: string, idx: number, field: WorkflowConditionField) => {
-    const values = valueOptionsForField(field);
+    const metadataField = field === 'metadata' ? metadataFields?.[0] : undefined;
     updateRule(key, idx, {
       field,
       operator: 'equals',
-      value: values ? values[0].value : '',
-      metadata_field_id: field === 'metadata' ? metadataFields?.[0]?.id : undefined,
+      value: defaultRuleValue(field, 'equals', metadataField),
+      metadata_field_id: metadataField?.id,
     });
+  };
+
+  /** A different metadata field can mean a different type: keep the operator
+   *  only if the new type allows it, and start the value afresh. */
+  const handleMetadataFieldChange = (
+    key: string,
+    idx: number,
+    rule: WorkflowConditionRule,
+    fieldId: string,
+  ) => {
+    const field = fieldById(fieldId);
+    const allowed = operatorsForField('metadata', field?.fieldType).map((o) => o.value);
+    const operator = allowed.includes(rule.operator) ? rule.operator : 'equals';
+    updateRule(key, idx, {
+      metadata_field_id: fieldId,
+      operator,
+      value: defaultRuleValue('metadata', operator, field),
+    });
+  };
+
+  /** Switching between a one-value and a list operator reshapes the value. */
+  const handleOperatorChange = (
+    key: string,
+    idx: number,
+    rule: WorkflowConditionRule,
+    operator: WorkflowConditionOperator,
+  ) => {
+    updateRule(key, idx, { operator, value: coerceRuleValue(rule.value, operator) });
   };
 
   const handleSave = () => {
@@ -151,6 +214,10 @@ export function useBranchDraft(
     updateRule,
     setMode,
     handleFieldChange,
+    handleMetadataFieldChange,
+    handleOperatorChange,
+    fieldById,
+    ruleIssue,
     handleSave,
     handleDiscard,
   };

@@ -1,15 +1,20 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { actionLabel, computeStageLayout, describeCondition } from './constants';
 import type { WorkflowStage, WorkflowTransition } from '@/types/models';
 
 const NODE_WIDTH = 176;
-const NODE_HEIGHT = 92;
-const COL_GAP = 230;
-const ROW_GAP = 112;
+/** Fixed, so a card with two rows of action tags never grows into its neighbour. */
+const NODE_HEIGHT = 116;
+/** Leaves ~144px between columns — room for a branch label on the line. */
+const COL_GAP = 320;
+/** Leaves ~54px between stacked cards, so a line can pass between them. */
+const ROW_GAP = 170;
 const ORIGIN_X = 24;
 const ORIGIN_Y = 200;
+/** How far a line routed around a card clears it. */
+const DETOUR = 28;
 
 interface PositionedNode {
   stage: WorkflowStage;
@@ -19,10 +24,10 @@ interface PositionedNode {
 
 interface Edge {
   transition: WorkflowTransition;
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
+  d: string;
+  /** Where the branch label sits — the curve's midpoint. */
+  labelX: number;
+  labelY: number;
   kind: 'plain' | 'conditional' | 'fallback';
 }
 
@@ -37,31 +42,36 @@ export interface WorkflowCanvasProps {
    *  click on a routing line means. */
   onEditBranch: (id: string) => void;
   assigneeSummary: (stage: WorkflowStage) => string;
+  /** Names a metadata field in branch labels ("Invoice Amount > 5000000"). */
+  metadataFieldName?: (metadataFieldId: string) => string | undefined;
 }
 
+/** The point halfway along a cubic Bézier. */
+const bezierMid = (p0: number, c1: number, c2: number, p1: number) =>
+  (p0 + 3 * c1 + 3 * c2 + p1) / 8;
+
 /**
- * Stages laid out by their actual position in the routing graph — column is
- * how many hops from the first stage, row separates branch siblings that
- * share a source — instead of a flat left-to-right row keyed to array order.
- * The flat layout is what caused a real, reported problem: a branch and its
- * required fallback rarely land on adjacent array entries, so a transition
- * connecting them had to visually cross whatever stage card sat between them
- * in the row. A layered graph layout has nowhere for that to happen in the
- * common case (a stage fans out, its branches soon reconverge).
+ * Stages laid out by their position in the routing graph (`computeStageLayout`:
+ * column = longest path from the first stage, row = siblings in a column), so
+ * a fork and the stage it reconverges on read left to right. A line that skips
+ * a column is routed above or below any card in its way, never through it.
  *
- * This is purely the visual/selection surface — editing a stage's routing
- * happens in the side panel's Transitions tab (`StagePanel`), not here.
- * Clicking a branch line still selects its stage and jumps the panel to that
- * tab (`onEditBranch`), so the line is a real shortcut, not just a picture.
- *
- * Trade-off: stages are no longer drag-to-reorder. Position is now derived
- * from the graph, so manually dragging a card would only be cosmetic for an
- * unbranched stage and actively misleading for a branched one (it can't
- * change where a line points). Reordering support, if it's still wanted,
- * belongs on the underlying stage list (e.g. move up/down in Properties),
- * not as a drag on this canvas.
+ * The canvas is a fixed-height viewport that scrolls on its own — adding stages
+ * grows the graph inside it, not the page — and dragging its empty background
+ * pans it. Cards themselves don't drag: their position comes from the routing,
+ * so moving one by hand couldn't change where its lines go and would only
+ * mislead. Editing happens in the side panel (`StagePanel`); clicking a branch
+ * label jumps straight to that stage's Transitions tab.
  */
-export function WorkflowCanvas({ stages, transitions, selectedStageId, onSelect, onEditBranch, assigneeSummary }: WorkflowCanvasProps) {
+export function WorkflowCanvas({
+  stages,
+  transitions,
+  selectedStageId,
+  onSelect,
+  onEditBranch,
+  assigneeSummary,
+  metadataFieldName,
+}: WorkflowCanvasProps) {
   const nodes: PositionedNode[] = useMemo(() => {
     const layout = computeStageLayout(stages, transitions);
     const rowOffset = new Map(layout.map((l) => [l.id, l.row]));
@@ -77,7 +87,9 @@ export function WorkflowCanvas({ stages, transitions, selectedStageId, onSelect,
 
   const edges: Edge[] = useMemo(() => {
     const outgoingCountByStage = new Map<string, number>();
-    transitions.forEach((t) => outgoingCountByStage.set(t.from, (outgoingCountByStage.get(t.from) || 0) + 1));
+    transitions.forEach((t) =>
+      outgoingCountByStage.set(t.from, (outgoingCountByStage.get(t.from) || 0) + 1),
+    );
 
     return transitions
       .map((t): Edge | null => {
@@ -85,24 +97,92 @@ export function WorkflowCanvas({ stages, transitions, selectedStageId, onSelect,
         const to = nodeById.get(t.to);
         if (!from || !to) return null;
         const isBranch = (outgoingCountByStage.get(t.from) || 0) > 1;
+        const kind: Edge['kind'] = t.condition ? 'conditional' : isBranch ? 'fallback' : 'plain';
+
+        const x1 = from.x + NODE_WIDTH;
+        const y1 = from.y + NODE_HEIGHT / 2;
+        const x2 = to.x;
+        const y2 = to.y + NODE_HEIGHT / 2;
+
+        // Cards strictly between the two ends horizontally that the straight
+        // curve would pass through.
+        const inTheWay = nodes.filter((n) => {
+          if (n === from || n === to || n.x <= from.x || n.x + NODE_WIDTH >= to.x) return false;
+          const yAtCard = y1 + ((n.x + NODE_WIDTH / 2 - x1) / (x2 - x1 || 1)) * (y2 - y1);
+          return yAtCard > n.y - DETOUR / 2 && yAtCard < n.y + NODE_HEIGHT + DETOUR / 2;
+        });
+
+        let c1x: number, c1y: number, c2x: number, c2y: number;
+        if (inTheWay.length > 0) {
+          // Go around: over the top of the blocking cards, or under them when
+          // the line starts below their middle.
+          const top = Math.min(...inTheWay.map((n) => n.y)) - DETOUR;
+          const bottom = Math.max(...inTheWay.map((n) => n.y + NODE_HEIGHT)) + DETOUR;
+          const midOfBlockers = (top + bottom) / 2;
+          const detourY = y1 <= midOfBlockers ? top : bottom;
+          // A cubic's peak reaches 3/4 of the way to its control points.
+          const ctrlY = detourY + (detourY - (y1 + y2) / 2) / 3;
+          c1x = x1 + (x2 - x1) * 0.25;
+          c2x = x2 - (x2 - x1) * 0.25;
+          c1y = ctrlY;
+          c2y = ctrlY;
+        } else {
+          const midX = (x1 + x2) / 2;
+          c1x = midX;
+          c1y = y1;
+          c2x = midX;
+          c2y = y2;
+        }
+
         return {
           transition: t,
-          x1: from.x + NODE_WIDTH,
-          y1: from.y + NODE_HEIGHT / 2,
-          x2: to.x,
-          y2: to.y + NODE_HEIGHT / 2,
-          kind: t.condition ? 'conditional' : isBranch ? 'fallback' : 'plain',
+          d: `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`,
+          labelX: bezierMid(x1, c1x, c2x, x2),
+          labelY: bezierMid(y1, c1y, c2y, y2),
+          kind,
         };
       })
       .filter((e): e is Edge => e !== null);
-  }, [transitions, nodeById]);
+  }, [transitions, nodeById, nodes]);
 
   const bounds = useMemo(() => {
     const maxX = Math.max(NODE_WIDTH, ...nodes.map((n) => n.x + NODE_WIDTH));
-    const minY = Math.min(0, ...nodes.map((n) => n.y));
-    const maxY = Math.max(0, ...nodes.map((n) => n.y + NODE_HEIGHT));
+    const minY = Math.min(0, ...nodes.map((n) => n.y), ...edges.map((e) => e.labelY)) - DETOUR;
+    const maxY =
+      Math.max(0, ...nodes.map((n) => n.y + NODE_HEIGHT), ...edges.map((e) => e.labelY)) + DETOUR;
     return { width: maxX + 40, height: maxY - minY + 40, offsetY: -minY + 20 };
-  }, [nodes]);
+  }, [nodes, edges]);
+
+  // Drag the empty background to pan. Cards and branch labels keep their own
+  // clicks — a drag only starts on the canvas itself.
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const panStart = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !scrollerRef.current) return;
+    if ((e.target as HTMLElement).closest('.wf-node, .wfd-branch-label')) return;
+    panStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      left: scrollerRef.current.scrollLeft,
+      top: scrollerRef.current.scrollTop,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setPanning(true);
+  };
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const start = panStart.current;
+    if (!start || !scrollerRef.current) return;
+    scrollerRef.current.scrollLeft = start.left - (e.clientX - start.x);
+    scrollerRef.current.scrollTop = start.top - (e.clientY - start.y);
+  };
+  const endPan = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!panStart.current) return;
+    panStart.current = null;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    setPanning(false);
+  };
 
   if (stages.length === 0) {
     return (
@@ -113,66 +193,94 @@ export function WorkflowCanvas({ stages, transitions, selectedStageId, onSelect,
   }
 
   return (
-    <div className="wfd-canvas">
-      <div className="wfd-canvas-graph" style={{ width: bounds.width, height: bounds.height }}>
-        {nodes.map(({ stage, x, y }) => (
-          <div
-            key={stage.id}
-            className={`wf-node ${selectedStageId === stage.id ? 'selected' : ''}`}
-            style={{ left: x, top: y + bounds.offsetY, width: NODE_WIDTH }}
-            onClick={() => onSelect(stage.id)}
-          >
-            <div className="wf-node-name">{stage.name || stage.id}</div>
-            <div className="wf-node-meta">
-              {assigneeSummary(stage)} · {stage.sla_hours || 48}h
-            </div>
-            <div className="wf-node-tags">
-              {(stage.actions || []).map((a) => (
-                <span key={a} className="wf-node-tag">
-                  {actionLabel(a)}
-                </span>
+    <div>
+      <div
+        ref={scrollerRef}
+        className={`wfd-canvas ${panning ? 'panning' : ''}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endPan}
+        onPointerCancel={endPan}
+      >
+        <div className="wfd-canvas-graph" style={{ width: bounds.width, height: bounds.height }}>
+          <svg className="wfd-connectors" style={{ width: bounds.width, height: bounds.height }}>
+            <defs>
+              {(['plain', 'conditional', 'fallback'] as const).map((kind) => (
+                <marker
+                  key={kind}
+                  id={`wfd-arrow-${kind}`}
+                  viewBox="0 0 10 10"
+                  refX="9"
+                  refY="5"
+                  markerWidth="7"
+                  markerHeight="7"
+                  orient="auto-start-reverse"
+                >
+                  <path d="M 0 0 L 10 5 L 0 10 z" className={`wfd-arrow-${kind}`} />
+                </marker>
               ))}
-            </div>
-          </div>
-        ))}
+            </defs>
+            <g transform={`translate(0 ${bounds.offsetY})`}>
+              {edges.map((edge, i) => (
+                <path
+                  key={i}
+                  d={edge.d}
+                  fill="none"
+                  className={`wfd-connector-${edge.kind}`}
+                  markerEnd={`url(#wfd-arrow-${edge.kind})`}
+                />
+              ))}
+            </g>
+          </svg>
 
-        <svg className="wfd-connectors" style={{ width: bounds.width, height: bounds.height }}>
-          {edges.map((edge, i) => {
-            const y1 = edge.y1 + bounds.offsetY;
-            const y2 = edge.y2 + bounds.offsetY;
-            const midX = (edge.x1 + edge.x2) / 2;
-            return (
-              <path
-                key={i}
-                d={`M ${edge.x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${edge.x2} ${y2}`}
-                fill="none"
-                strokeWidth={2}
-                className={`wfd-connector-${edge.kind}`}
-              />
-            );
-          })}
-        </svg>
-
-        {edges
-          .filter((e) => e.kind !== 'plain')
-          .map((edge, i) => (
-            <button
-              key={i}
-              type="button"
-              className={`wfd-branch-label ${edge.kind === 'conditional' ? 'conditional' : 'fallback'}`}
-              style={{ left: (edge.x1 + edge.x2) / 2, top: (edge.y1 + edge.y2) / 2 + bounds.offsetY }}
-              onClick={() => onEditBranch(edge.transition.from)}
-              title={edge.kind === 'conditional' ? 'Edit this branch' : 'Edit the fallback target'}
+          {nodes.map(({ stage, x, y }) => (
+            <div
+              key={stage.id}
+              className={`wf-node ${selectedStageId === stage.id ? 'selected' : ''}`}
+              style={{ left: x, top: y + bounds.offsetY, width: NODE_WIDTH, height: NODE_HEIGHT }}
+              onClick={() => onSelect(stage.id)}
             >
-              {edge.kind === 'conditional' ? describeCondition(edge.transition.condition) : 'else'}
-            </button>
+              <div className="wf-node-name">{stage.name || stage.id}</div>
+              <div className="wf-node-meta">
+                {assigneeSummary(stage)} · {stage.sla_hours || 48}h
+              </div>
+              <div className="wf-node-tags">
+                {(stage.actions || []).map((a) => (
+                  <span key={a} className="wf-node-tag">
+                    {actionLabel(a)}
+                  </span>
+                ))}
+              </div>
+            </div>
           ))}
+
+          {edges
+            .filter((e) => e.kind !== 'plain')
+            .map((edge, i) => {
+              const text =
+                edge.kind === 'conditional'
+                  ? describeCondition(edge.transition.condition, metadataFieldName)
+                  : 'Fallback';
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={`wfd-branch-label ${edge.kind === 'conditional' ? 'conditional' : 'fallback'}`}
+                  style={{ left: edge.labelX, top: edge.labelY + bounds.offsetY }}
+                  onClick={() => onEditBranch(edge.transition.from)}
+                  title={`${text} — click to edit this stage's transitions`}
+                >
+                  {text}
+                </button>
+              );
+            })}
+        </div>
       </div>
 
-      <div className="caption" style={{ marginTop: '12px' }}>
-        Click a stage to configure it on the right. A stage with more than one outgoing line is
-        branching: amber for a condition, green for the required fallback — click either to jump
-        straight to its Transitions tab.
+      <div className="caption" style={{ padding: '10px 20px 14px' }}>
+        Click a stage to configure it on the right; drag the background to move around. Where a
+        stage branches, amber lines are conditions and the dashed green line is the fallback — click
+        a label to jump to that stage&rsquo;s Transitions tab.
       </div>
     </div>
   );

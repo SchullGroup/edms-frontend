@@ -606,7 +606,7 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
 .metric-li b { font-variant-numeric: tabular-nums; }
 
 /* ---------- Workflow designer ---------- */
-.wfd-layout { display: grid; grid-template-columns: 1fr 300px; gap: 14px; align-items: start; }
+.wfd-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
 .wfd-props { overflow-y: auto; position: sticky; top: 0; }
 
 .wfd-toolbar { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
@@ -617,12 +617,29 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
 .wfd-saved-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--status-closed); opacity: 0; transform: translateY(2px); transition: opacity .2s cubic-bezier(.2,0,0,1), transform .2s cubic-bezier(.2,0,0,1); pointer-events: none; }
 .wfd-saved-pill.show { opacity: 1; transform: translateY(0); }
 
-.wfd-canvas { position: relative; background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px); background-size: 22px 22px; border-radius: var(--radius); padding: 20px; overflow: auto; }
+/* A fixed-height viewport that scrolls on its own, so more stages grow the
+   graph inside it rather than widening the page (the grid column above is
+   `minmax(0, 1fr)` for the same reason). Dragging the background pans it. */
+.wfd-canvas { position: relative; background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px); background-size: 22px 22px; border-radius: var(--radius); padding: 20px; overflow: auto; height: clamp(340px, 62vh, 600px); cursor: grab; touch-action: none; }
+.wfd-canvas.panning { cursor: grabbing; user-select: none; }
+/* Slim scrollbars, same 4px thumb as the sidebar, shown only while the pointer
+   is over the canvas — dragging the background already pans it. */
+/* Firefox only: Chrome ignores the ::-webkit-scrollbar rules below whenever
+   these standard properties are set, and would draw a wider bar. */
+@supports not selector(::-webkit-scrollbar) {
+  .wfd-canvas { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  .wfd-canvas:hover { scrollbar-color: var(--border-strong) transparent; }
+}
+.wfd-canvas::-webkit-scrollbar { width: 4px; height: 4px; }
+.wfd-canvas::-webkit-scrollbar-track { background: transparent; }
+.wfd-canvas::-webkit-scrollbar-thumb { background: transparent; border-radius: 4px; }
+.wfd-canvas:hover::-webkit-scrollbar-thumb { background: var(--border-strong); }
+.wfd-canvas::-webkit-scrollbar-corner { background: transparent; }
 /* Stages sit at an absolute (column, row) position computed from the routing
    graph (see `computeStageLayout`), not from array order in a flex row — see
    WorkflowCanvas's own comment for why. */
 .wfd-canvas-graph { position: relative; }
-.wf-node { position: absolute; background: var(--panel); border: 1.5px solid var(--border-strong); border-radius: 13px; padding: 11px 14px; box-shadow: var(--shadow); cursor: pointer; user-select: none; transition: border-color .12s ease, box-shadow .12s ease; }
+.wf-node { position: absolute; z-index: 1; overflow: hidden; background: var(--panel); border: 1.5px solid var(--border-strong); border-radius: 13px; padding: 11px 14px; box-shadow: var(--shadow); cursor: pointer; user-select: none; transition: border-color .12s ease, box-shadow .12s ease; }
 .wf-node:hover { border-color: var(--muted); }
 .wf-node.selected { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 16%, transparent); }
 .wf-node-name { font-size: 13px; font-weight: 700; line-height: 1.3; }
@@ -634,12 +651,17 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
    overlay) — conditional reuses the pending/amber status color, the required
    fallback reuses the closed/green one, both already themed for dark mode. */
 .wfd-connectors { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
-.wfd-connector-plain { stroke: var(--border-strong); }
-.wfd-connector-conditional { stroke: var(--status-pending); }
-.wfd-connector-fallback { stroke: var(--status-closed); }
-.wfd-branch-label { position: absolute; transform: translate(-50%, -50%); font-size: 9.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; pointer-events: auto; border: 0; cursor: pointer; }
+.wfd-connector-plain { stroke: var(--muted); stroke-width: 2; }
+.wfd-connector-conditional { stroke: var(--status-pending); stroke-width: 2.5; }
+/* Dashed as well as green, so the fallback stands out from a plain line
+   without relying on colour alone. */
+.wfd-connector-fallback { stroke: var(--status-closed); stroke-width: 2.5; stroke-dasharray: 7 5; }
+.wfd-arrow-plain { fill: var(--muted); }
+.wfd-arrow-conditional { fill: var(--status-pending); }
+.wfd-arrow-fallback { fill: var(--status-closed); }
+.wfd-branch-label { position: absolute; z-index: 2; transform: translate(-50%, -50%); max-width: 136px; overflow: hidden; text-overflow: ellipsis; font-size: 9.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; pointer-events: auto; border: 0; cursor: pointer; }
 .wfd-branch-label.conditional { color: var(--status-pending); background: color-mix(in srgb, var(--status-pending) 16%, var(--panel)); }
-.wfd-branch-label.fallback { color: var(--status-closed); background: color-mix(in srgb, var(--status-closed) 16%, var(--panel)); cursor: default; }
+.wfd-branch-label.fallback { color: var(--status-closed); background: color-mix(in srgb, var(--status-closed) 16%, var(--panel)); }
 
 /* Transitions panel (side panel, next to Stage properties) */
 .wfd-transition-card { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }

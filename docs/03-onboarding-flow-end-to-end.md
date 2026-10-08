@@ -624,8 +624,9 @@ it succeeds and where it stops.
                                     │
 ┌─ STEP 3 · Chika routes it to a workflow ──────────────────── ✅ FIXED 09-04 ┐
 │ /staff/cabinets → useStartWorkflowInstance()                                │
-│   • workflowInstancesService.createAndStart(workflowId, documentId)          │
-│     1. POST /workflow-instances { documentId, workflowDefinitionId }         │
+│   • workflowInstancesService.createAndStart(workflowId, documentIds)        │
+│     1. POST /workflow-instances { workflowDefinitionId, documents: [...] }   │
+│        (since 919d0ef: documents routed together = ONE workflow)             │
 │     2. POST /workflow-instances/:instanceId/start                            │
 │                                                                             │
 │   Was: a single-segment POST /workflow-instances/start that matched no       │
@@ -639,9 +640,9 @@ it succeeds and where it stops.
 ┌─ STEP 4 · Backend starts the instance ────────────────────────── ✅ WORKS ──┐
 │ instances.service.start()                                                   │
 │   • validates the definition is 'published'                                 │
-│   • currentStage = first stage; status = 'in_progress'                      │
-│   • stageDueAt = now + stage.slaHours                                       │
-│   • creates Task(s): assigneeId or assignedRoleId, dueAt                    │
+│   • per DOCUMENT (since 919d0ef): an execution at the first stage,          │
+│     stageDueAt = now + stage.slaHours; status = 'in_progress'               │
+│   • creates Task(s): assigneeId or assignedRoleId (no dueAt any more)       │
 │   • writes WorkflowHistory { fromStage:null, toStage:'review' }             │
 │   ⛔ No notification to the assignee — the module now EXISTS, but nothing   │
 │      calls notifyUser(), so no row is ever written (DRIFT-10)               │

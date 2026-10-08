@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
-import { taskStatusLabel } from '@/utils/supervisor';
+import { useSlaBreaches } from '@/apis/hooks/useSla';
+import { byUrgencyThenDue, taskStatusLabel } from '@/utils/supervisor';
+import { taskDocuments, taskDueAt } from '@/utils/workflowDocuments';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
-
-const URG_ORDER: Record<string, number> = { Critical: 1, High: 2, Normal: 3, Low: 4 };
 
 export default function MyTasksPage() {
   const router = useRouter();
@@ -48,40 +48,40 @@ export default function MyTasksPage() {
     refetch,
   } = useTasks(backendFilters);
   const tasks = tasksData?.data || [];
+  // `GET /tasks` carries no deadlines (edms-backend `919d0ef`), so Overdue also
+  // counts tasks with an open SLA breach — the same source as the dashboard tile.
+  const { data: slaBreaches } = useSlaBreaches({ scope: 'mine', status: 'open', limit: 100 });
+  const breachedTaskIds = new Set((slaBreaches?.data ?? []).map((b) => b.taskId));
 
   if (!currentUser) return null;
 
   let list = tasks;
-  // Backend 'pending' covers both — refine the Pending/Overdue split client-side
-  // using the real `dueAt` field (see `taskStatusLabel`, `@/utils/supervisor`).
+  // Backend 'pending' covers both — refine the Pending/Overdue split client-side.
   if (statusF !== 'All') {
-    list = list.filter((t: any) => {
-      const eff = taskStatusLabel(t);
-      if (statusF === 'Overdue') return eff === 'Overdue';
-      if (statusF === 'Pending') return eff === 'Pending';
+    list = list.filter((t) => {
+      const overdue = breachedTaskIds.has(t.id) || taskStatusLabel(t) === 'Overdue';
+      if (statusF === 'Overdue') return overdue;
+      if (statusF === 'Pending') return !overdue && taskStatusLabel(t) === 'Pending';
       return true; // Already filtered by backend for other exact matches
     });
   }
-  
+
+  // A task matches when any of its documents has that urgency.
   if (urgF !== 'All') {
-    list = list.filter((t) => t.workflowInstance?.document?.urgency === urgF.toLowerCase());
+    list = list.filter((t) => taskDocuments(t).some((d) => d.urgency === urgF.toLowerCase()));
   }
 
+  const dueMs = (t: (typeof list)[number]) => {
+    const due = taskDueAt(t);
+    return due ? Date.parse(due) : Number.MAX_SAFE_INTEGER;
+  };
   if (sortBy === 'urgency') {
-    list.sort(
-      (a, b) =>
-        (URG_ORDER[a.workflowInstance?.document?.urgency ? a.workflowInstance.document.urgency.charAt(0).toUpperCase() + a.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) - 
-        (URG_ORDER[b.workflowInstance?.document?.urgency ? b.workflowInstance.document.urgency.charAt(0).toUpperCase() + b.workflowInstance.document.urgency.slice(1) : 'Normal'] || 3) ||
-        (a.dueAt ? Date.parse(a.dueAt) : 9e15) - (b.dueAt ? Date.parse(b.dueAt) : 9e15),
-    );
+    list.sort(byUrgencyThenDue);
   } else if (sortBy === 'due') {
-    list.sort(
-      (a, b) =>
-        (a.dueAt ? Date.parse(a.dueAt) : 9e15) - (b.dueAt ? Date.parse(b.dueAt) : 9e15),
-    );
+    // Tasks whose deadline isn't returned sort last.
+    list.sort((a, b) => dueMs(a) - dueMs(b));
   } else {
-    // There is no createdAt on Task, so we fallback to dueAt for now or document createdAt.
-    list.sort((a, b) => (b.dueAt ? Date.parse(b.dueAt) : 0) - (a.dueAt ? Date.parse(a.dueAt) : 0));
+    list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }
 
   const URG_LEVELS = ['Critical', 'High', 'Normal', 'Low'];

@@ -743,8 +743,9 @@ queue with a deadline.
 ```
 Chika routes from /staff/cabinets
   → useStartWorkflowInstance()
-  → workflowInstancesService.createAndStart(workflowId, documentId)
-  → 1. POST /workflow-instances        { documentId, workflowDefinitionId }
+  → workflowInstancesService.createAndStart(workflowId, documentIds)
+  → 1. POST /workflow-instances        { workflowDefinitionId, documents: [{ documentId }] }
+       (since edms-backend 919d0ef; documents routed together go into one workflow)
     2. POST /workflow-instances/:id/start
   → ✅ instance created, first stage computed, task assigned
 ```

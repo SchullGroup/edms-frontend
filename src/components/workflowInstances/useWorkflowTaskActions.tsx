@@ -11,13 +11,14 @@ import {
 } from './WorkflowDocumentPicker';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useSignAndApprove } from '@/hooks/useSignAndApprove';
+import { DocumentScopeField, scopedDocuments } from './DocumentScopeField';
 import type { TaskActionRequest, User } from '@/types/models';
 
 export interface WorkflowTaskActionsArgs {
   /** The task being actioned — must be the caller's active, current-stage task. */
   taskId: string | undefined;
   stageLabel: string;
-  /** The task's documents, for choosing which ones a "Request changes" covers. */
+  /** The task's documents — for choosing which ones an action covers. */
   documents: { id: string; title: string }[];
   /** Pre-ticked in the "Request changes" picker — the one being viewed. */
   selectedDocumentId?: string;
@@ -88,6 +89,7 @@ export function useWorkflowTaskActions({
     if (!taskId) return;
     let picked: PickedDocument[] = [];
     let commentText = '';
+    const reviewed = new Set(documents.map((d) => d.id));
     // Survives a retry after a partial failure, so nothing is attached twice.
     const attached = new Set<string>();
     const title = `Mark reviewed — ${stageLabel}`;
@@ -106,8 +108,13 @@ export function useWorkflowTaskActions({
           return false;
         }
       }
+      const scope = scopedDocuments(documents, reviewed);
       return runAction(
-        { action: 'review', ...(commentText.trim() ? { comment: commentText.trim() } : {}) },
+        {
+          action: 'review',
+          ...(commentText.trim() ? { comment: commentText.trim() } : {}),
+          ...(scope ? { documents: scope } : {}),
+        },
         {
           action: 'REVIEW',
           detail: `Reviewed stage “${stageLabel}”, attaching ${picked.map((d) => d.title).join(', ')}`,
@@ -172,6 +179,11 @@ export function useWorkflowTaskActions({
                 ))}
               </ul>
             </div>
+            <DocumentScopeField
+              documents={documents}
+              chosen={reviewed}
+              label="Mark which documents reviewed?"
+            />
             <div className="field">
               <label>Comment (optional)</label>
               <textarea
@@ -195,7 +207,17 @@ export function useWorkflowTaskActions({
               return false;
             },
           },
-          { label: 'Attach & mark reviewed', kind: 'btn-primary', onClick: submit },
+          {
+            label: 'Attach & mark reviewed',
+            kind: 'btn-primary',
+            onClick: () => {
+              if (reviewed.size === 0) {
+                addToast('Pick at least one document to mark reviewed', 'error');
+                return false;
+              }
+              return submit();
+            },
+          },
         ],
       });
 
@@ -208,6 +230,7 @@ export function useWorkflowTaskActions({
     promptSignAndApprove({
       taskId,
       title: stageLabel,
+      documents,
       onSuccess: () =>
         createAuditLog.mutate({
           action: 'APPROVE',
@@ -305,14 +328,30 @@ export function useWorkflowTaskActions({
   const actReject = () => {
     if (!taskId) return;
     let reasonText = '';
+    const rejected = new Set(documents.map((d) => d.id));
+    const multi = documents.length > 1;
     openModal({
-      title: 'Reject and end this workflow',
+      title: multi ? 'Reject documents' : 'Reject and end this workflow',
       body: (
         <div>
           <div className="banner error">
-            Rejecting <b>ends the workflow outright</b> — the remaining stages are never raised. To
-            send it back for edits instead, use “Request changes”.
+            {multi ? (
+              <>
+                Rejecting <b>ends the workflow for the documents you pick</b> — their remaining
+                stages are never raised.
+              </>
+            ) : (
+              <>
+                Rejecting <b>ends the workflow outright</b> — the remaining stages are never raised.
+              </>
+            )}{' '}
+            To send it back for edits instead, use “Request changes”.
           </div>
+          <DocumentScopeField
+            documents={documents}
+            chosen={rejected}
+            label="Reject which documents?"
+          />
           <div className="field">
             <label>
               Reason <span className="req">*</span>
@@ -328,17 +367,35 @@ export function useWorkflowTaskActions({
       actions: [
         { label: 'Cancel' },
         {
-          label: 'Reject & end workflow',
+          label: multi ? 'Reject' : 'Reject & end workflow',
           kind: 'btn-danger',
           onClick: () => {
+            if (multi && rejected.size === 0) {
+              addToast('Pick at least one document to reject', 'error');
+              return false;
+            }
             if (!reasonText.trim()) {
               addToast('A reason is required', 'error');
               return false;
             }
+            const scope = scopedDocuments(documents, rejected);
+            const titles = documents.filter((d) => rejected.has(d.id)).map((d) => d.title);
             return runAction(
-              { action: 'reject', comment: reasonText.trim() },
-              { action: 'REJECT', detail: 'Rejected: ' + reasonText.trim() },
-              { message: 'Rejected — workflow ended', kind: 'warning' },
+              {
+                action: 'reject',
+                comment: reasonText.trim(),
+                ...(scope ? { documents: scope } : {}),
+              },
+              {
+                action: 'REJECT',
+                detail: `Rejected${multi ? ` ${titles.join(', ')}` : ''}: ${reasonText.trim()}`,
+              },
+              {
+                message: scope
+                  ? `Rejected ${titles.length} of ${documents.length} documents`
+                  : 'Rejected — workflow ended',
+                kind: 'warning',
+              },
             );
           },
         },

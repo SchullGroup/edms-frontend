@@ -80,6 +80,15 @@ export const documentsService = {
     return response.data.data;
   },
 
+  /** `POST /documents/batch` — files up to 20 documents in one transaction: all
+   *  of them are created, or none are. Returns them in the order sent. */
+  createBatch: async (documents: UploadDocumentRequest[]): Promise<Document[]> => {
+    const response = await apiClient.post<ApiResponse<Document[]>>('/documents/batch', {
+      documents,
+    });
+    return response.data.data;
+  },
+
   // Documented fields: `title`, `documentType`, `folderId`, `confidentiality`, `urgency`,
   // `status` (see `UpdateDocumentRequest`). Kept as `Partial<Document>` for existing callers.
   update: async (id: string, updates: Partial<Document>): Promise<Document> => {
