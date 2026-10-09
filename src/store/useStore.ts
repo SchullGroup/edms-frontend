@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AuthUser, SavedSearch } from '@/types/models';
+import { AuthUser, DocumentShortcut, SavedSearch } from '@/types/models';
 import { SEED, FINDINGS } from './initialData';
+
+const RECENT_DOCUMENTS_MAX = 8;
 
 export { FINDINGS };
 
@@ -46,6 +48,8 @@ export interface AppStore extends AppState {
   addFinding: (f: any) => void;
   addSavedSearch: (userId: string, search: SavedSearch) => void;
   removeSavedSearch: (userId: string, id: string) => void;
+  recordDocumentView: (userId: string, doc: Omit<DocumentShortcut, 'at'>) => void;
+  togglePinnedDocument: (userId: string, doc: Omit<DocumentShortcut, 'at'>) => void;
 
   // --- Async API Actions (New Pattern) ---
   fetchDocuments: () => Promise<void>;
@@ -221,6 +225,31 @@ export const useStore = create<AppStore>()(
           savedSearches: {
             ...savedSearches,
             [userId]: (savedSearches[userId] ?? []).filter((s) => s.id !== id),
+          },
+        });
+      },
+
+      // Most recent first, one entry per document, capped.
+      recordDocumentView: (userId, doc) => {
+        const { recentDocuments } = get();
+        const list = (recentDocuments[userId] ?? []).filter((d) => d.id !== doc.id);
+        set({
+          recentDocuments: {
+            ...recentDocuments,
+            [userId]: [{ ...doc, at: Date.now() }, ...list].slice(0, RECENT_DOCUMENTS_MAX),
+          },
+        });
+      },
+      togglePinnedDocument: (userId, doc) => {
+        const { pinnedDocuments } = get();
+        const list = pinnedDocuments[userId] ?? [];
+        const pinned = list.some((d) => d.id === doc.id);
+        set({
+          pinnedDocuments: {
+            ...pinnedDocuments,
+            [userId]: pinned
+              ? list.filter((d) => d.id !== doc.id)
+              : [{ ...doc, at: Date.now() }, ...list],
           },
         });
       },

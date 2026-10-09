@@ -194,8 +194,8 @@ findings that quietly die.
 
 **Backend rights (10 grants):** read-only and `global` — including `audit:view`
 (**for which no endpoint exists**), `cabinet_access:view`, and `document:view` across the
-whole tenant. Membership of `CONFIDENTIAL_TIER_ROLES` lets them read confidential-tier
-documents. Deliberately **cannot mutate anything** — that independence is the point.
+whole tenant. `document:view_confidential:global` lets them read confidential-tier
+documents (a permission since `edms-backend` `0dab81a`; it was a role list before). Deliberately **cannot mutate anything** — that independence is the point.
 
 ---
 
@@ -216,7 +216,7 @@ silently stalling every document in a cabinet.
 
 **Backend rights (45 grants, all `global`):** effectively full control of the tenant.
 They are the **only** role in `CABINET_ACCESS_BYPASS_ROLES` (they see every cabinet
-regardless of grants) and the only role in `RESTRICTED_TIER_ROLES`.
+regardless of grants) and the only seeded role holding `document:view_restricted`.
 
 ---
 
@@ -289,9 +289,10 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
       The confidence badge is decoration.
 - [ ] ⚠️ **The due date is collected and discarded.** The form has a `due` field; it is
       never sent to the API, and the backend `Document` model has no due-date column.
-- [ ] ⚠️ **Custom metadata is not captured.** `PUT /documents/:id/metadata` exists and
-      cabinets can define required fields, but the upload form never asks for them —
-      so a cabinet with required metadata is filed incomplete every time.
+- [x] Custom metadata is captured at upload — **2026-10-09, verified live**: the card shows
+      the cabinet's fields and sends them with `POST /documents` (`metadata`, edms-backend
+      `dd10017`), which refuses an upload missing a required field. *This box said the form
+      never asked for them; it has rendered them since 2026-10-07, saved by a second call.*
 - [ ] ⚠️ **2 MB ceiling** (`s3.service.ts` `maxFileSize`), and only PDF and image types
       actually upload despite a broader allowlist in `validateFile`.
 
@@ -363,7 +364,9 @@ the live `POST /cabinets/:id/metadata-fields` and
 **editing/reordering an existing field** (`PATCH .../metadata-fields/:fieldId` exists but
 no screen calls it) and, more importantly, **anything that captures the values**: neither
 the upload form nor the document-detail screen renders a cabinet's fields, so a cabinet
-with required metadata is still filed incomplete every time.
+with required metadata is still filed incomplete every time. *(Outdated: the upload form
+captures them since 2026-10-07, sent with the upload since 2026-10-09 — see the criteria
+below.)*
 
 **Acceptance criteria**
 - [x] Backend: fields definable per cabinet with all five types
@@ -376,15 +379,16 @@ with required metadata is still filed incomplete every time.
       — *this box said the PATCH endpoint was unused; the Designer's "Edit" button has called it
       since at least 2026-09-21. Corrected 2026-10-06*
 - [ ] Reorder fields (`displayOrder` is only set on create)
-- [ ] 🟨 Upload form renders the target cabinet's fields — built 2026-10-07, not yet verified
-      live. Values are saved by a second call after the upload (`POST /documents` takes no
-      metadata), and that call needs `document_metadata:edit` **and** `edit` on the cabinet —
-      which seeded `staff` don't have — so for most uploaders the form only *lists* the fields.
-      Backend ask: accept metadata on `POST /documents` under the upload permission
+- [x] Upload form renders the target cabinet's fields and files them with the document —
+      **2026-10-09, verified live as `staff`**: values go in `POST /documents` / `/batch`
+      (`metadata`, edms-backend `dd10017`) under the upload permission alone. Required fields
+      are enforced in the form and by the API (400). *Until then they were saved by a second
+      `PUT`, which seeded `staff` couldn't make, so most uploaders only saw the field list*
 - [ ] ⚠️ Metadata now drives **workflow routing** (backend conditional routing, merged
       2026-10-06): a branch condition on an empty field evaluates to "no match" without an
       error, so a document filed without its metadata silently skips that branch. Search also
-      indexes metadata values, but only once, when OCR finishes — later edits aren't re-indexed
+      indexes metadata values; since `dd10017` it re-indexes after a metadata save or an upload
+      with metadata, but still not after a title/type change, a restore, or failed OCR
 - [ ] Document detail renders and edits them
 - [ ] ⚠️ Backend bug: sending all-null values to clear metadata silently no-ops
       (`normalized.length === 0` short-circuits the write)
@@ -496,14 +500,15 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
       and doesn't render anything from the real trail. Only the *workflow* history above
       is real on this page; whether document views/edits/downloads land in the real
       trail as backend-side actions is unverified.
-- [ ] ⚠️ **There is no download or preview endpoint.** The backend has no route that
-      serves file bytes or issues a presigned GET. The preview pane renders a placeholder.
+- [x] Preview and download: `GET /documents/:id` returns a presigned `fileUrl` the viewer
+      renders, and downloads go through the version endpoint (B4). *(This item said there
+      was no such endpoint; stale, corrected 2026-10-08.)*
 - [x] ✅ `@ts-nocheck` is gone — the file type-checks cleanly now (confirmed 2026-09-18,
       stale here; not dated when it was actually removed)
 
 ---
 
-### B4 — Download, print or export a document · ⬜ **Not built**
+### B4 — Download, print or export a document · 🟨 **Partial** *(was ⬜ Not built)*
 
 > **As** David (Supervisor),
 > **I want to** download a contract to read offline, subject to my clearance,
@@ -512,19 +517,33 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
 **Why this matters:** download is where confidentiality controls earn their keep, and it
 is the most audit-sensitive action in the product.
 
-**Current state:** the backend has an unusually well-designed permission model for exactly
-this — `CONFIDENTIALITY_ACCESS` defines per-tier, per-action allowlists for `view`,
-`export`, `print` and `download`, with `restricted` and `top_secret` denied for all three
-non-view actions. **All of it is dead code.** All twelve call sites use
-`requireConfidentiality('view')`; there is no download, print or export route; and no
-`document:download` / `export` / `print` permissions are seeded.
+**Current state (2026-10-08):** `edms-backend` `0dab81a` replaced the old per-tier role
+allowlists (which no route used) with permissions. Viewing a tier above `internal` needs
+`document:view_confidential` / `view_restricted` / `view_top_secret`, scoped like any other
+grant; download, export and print each need `document:download` / `export` / `print` as
+well. Old-version reads (`GET /documents/:id/versions/:versionId`) are gated and audited as
+downloads, and `GET /documents/:id/export` and `/print` are new. Seeded: `staff` and
+`supervisor` hold all three at `department` scope; `management`, `internal_auditor` and
+`client_admin` at `global`.
+
+The frontend's Download (document page, workflow viewer, each version's Open) now checks
+the same rule and fetches through the version endpoint, so each download is audited.
+Print (in the PDF viewer's toolbar) calls `GET /documents/:id/print` first and prints page
+images with the watermark burned in; Export (document page) goes through
+`GET /documents/:id/export`. Both shown only with the permission (2026-10-08).
 
 **Acceptance criteria**
-- [ ] `GET /documents/:id/download` returning a short-lived presigned URL
-- [ ] Gated by `requireConfidentiality('download')`
-- [ ] Writes a `document.downloaded` audit entry with actor, IP and user agent
-- [ ] Print and export paths gated by their own actions
-- [ ] `restricted`-tier documents are view-only, per the existing policy table
+- [x] A short-lived presigned URL — via `GET /documents/:id/versions/:versionId` rather
+      than a dedicated `/download` route
+- [x] Gated by `requireConfidentiality('download')` and `document:download`
+- [x] Writes a `document.downloaded` audit entry
+- [x] Print and export paths gated by their own actions
+- [ ] 🔴 **Download permission can be bypassed:** `GET /documents/:id`, the document list
+      and the version list all return a signed URL to anyone who can view. Raised with the
+      backend 2026-10-08
+- [x] Print and Export buttons (2026-10-08). Print verified in the browser against the
+      live API (audited call made, watermarked print frame built); Export not yet clicked
+- [ ] Download and Export not yet clicked through end to end in the UI
 
 ---
 
@@ -677,7 +696,7 @@ lifecycle.
       `WORKFLOW_DEFINITION_VIEW_ROLES` aliases `MANAGE_ROLES`, so `management` and
       `internal_auditor` are refused despite holding a seeded `workflow:view:global`
       grant — and `staff`/`supervisor` cannot list definitions to route into.
-- [ ] ⚠️ `// @ts-nocheck` on the page
+- [x] ✅ `// @ts-nocheck` removed 2026-10-08 — the page type-checks
 - [ ] Parallel and conditional branches — Phase 1 is explicitly sequential-only
 - [ ] Visual graph editor; today it is a form
 
@@ -768,14 +787,17 @@ and search. The design is sound.
 **Acceptance criteria**
 - [x] Tier settable at upload and editable later
 - [x] Enforced on read via middleware and in list/search SQL
-- [x] `confidential` readable by supervisor, management, client_admin, internal_auditor
-- [x] `restricted` readable by client_admin only
+- [x] Clearance is a permission per tier (`document:view_confidential` / `view_restricted` /
+      `view_top_secret`, `edms-backend` `0dab81a`), so a custom role can be cleared from
+      `/admin/roles`. Seeded: `confidential` → supervisor (`department`), management,
+      internal_auditor, client_admin; `restricted` → client_admin; `top_secret` → nobody
 - [ ] 🔴 **Anyone can set any tier.** No check that the writer is cleared for the tier they
-      are assigning. A `staff` user can upload at `top_secret` — and since
-      `TOP_SECRET_TIER_ROLES` is empty by design, that document becomes permanently
-      unreadable **by everyone, including `client_admin`**. There is no recovery path.
-- [ ] ⚠️ The doc-detail edit form offers `Top Secret` because it is driven by
-      `SEED.policies.confidentiality`; the upload form correctly omits it. Inconsistent.
+      are assigning. A `staff` user can upload at `top_secret`, which no seeded role can
+      read; it stays unreadable until an admin grants `view_top_secret` to some role.
+- [x] The UI never offers a tier the user isn't cleared for: the upload form omits
+      `top_secret`, and the document page's "Change classification" dialog (2026-10-08)
+      disables uncleared tiers using the backend's rule. *(This item used to say the
+      doc-detail edit form offered Top Secret from `SEED.policies`; no such form existed.)*
 
 ---
 
@@ -802,12 +824,12 @@ outstanding problem is the one that always mattered:
   `requireCabinetAccess('view')`. Document listing, document detail and search were not
   re-checked and may still ignore grants. Backend fix if so.
 
-**Delegated cabinet management (2026-10-06, 🟨 not verified live).** The same access panel
+**Delegated cabinet management (2026-10-06, ✅ tested by the user 2026-10-08).** The same access panel
 now also appears as an **Access** tab on `/staff/cabinets` for anyone holding
 `cabinet_access:create` and `edit` on that cabinet, so a client admin can hand a cabinet to
 a records officer. The picker leaves out the user themselves, roles they hold, client admins
-(who already reach every cabinet) and levels above their own — **UI-only**: the API doesn't
-refuse any of these yet.
+(who already reach every cabinet) and levels above their own. Since edms-backend `dd10017`
+(2026-10-09) the API refuses the same three (403), so the rule no longer rests on the UI.
 
 **Acceptance criteria**
 - [x] Backend: role and user grants with a permission hierarchy
@@ -815,7 +837,7 @@ refuse any of these yet.
 - [x] Backend: enforced on document upload, edit, delete and routing
 - [x] Admin UI to view, grant and revoke (`/admin/cabinets` access panel)
 - [ ] 🟨 Delegated managers grant and revoke from `/staff/cabinets` (built 2026-10-06, not
-      verified live); self-grant / escalation blocked in the UI only — needs a backend rule
+      verified live); self-grant / escalation blocked in the UI and, since `dd10017`, by the API
 - [ ] 🔴 Enforced on **read** paths — cabinet list/detail and folders now are (code-read
       2026-10-06); document list/detail/search unverified
 - [ ] "Who can see this cabinet?" view for auditors (`cabinet_access:view` is already
@@ -1365,10 +1387,9 @@ nothing aggregates it.
 > **As** Adaeze, **I want to** enable a feature for one tenant before all,
 > **so that** a bad release is a toggle, not a rollback.
 
-**Current state:** ⚠️ **`/platform/flags` renders the wrong page entirely** — it is a
-7-line re-export of `/platform/sysconfig` (Platform Health). Clicking "Feature Flags" in
-the sidebar shows the health screen. `updateFeatureFlag` exists in the store and writes to
-`SEED`, but no screen calls it. No model, no endpoint, no evaluation anywhere.
+**Current state:** 🟥 `/platform/flags` is its own page since 2026-10-08 (it used to
+re-export `/platform/sysconfig`): rollout slider, promote and kill-switch, all writing to
+`SEED` through `updateFeatureFlag`. No model, no endpoint, no evaluation anywhere.
 
 ---
 
@@ -1405,8 +1426,8 @@ error paths and workers).
 - [x] Commitlint + Husky pre-commit hooks
 - [x] Strict TypeScript, ESM, path aliases
 - [ ] 🔴 **Zero tests in either codebase.** `npm test` is the default error stub.
-- [ ] Three frontend files are `@ts-nocheck`, including the two most complex pages
-      (`doc/[id]`, `admin/workflows`) and `search`
+- [x] No frontend file is `@ts-nocheck` — `doc/[id]` and `search` lost it in September,
+      `admin/workflows` on 2026-10-08
 - [ ] No E2E tests, no API contract tests, no seeded test database
 
 ### N4 — The system stays fast as data grows · 🟨 Partial
@@ -1436,7 +1457,7 @@ error paths and workers).
 | Epic | ✅ Done | 🟨 Partial | 🟥 Mock | ⬜ Not built | Verdict |
 |---|---|---|---|---|---|
 | A — Capture & Filing | 2 | 1 | 0 | 1 | Core works; enrichment missing |
-| B — Retrieval & Search | 1 | 2 | 0 | 1 | Search built but returns nothing |
+| B — Retrieval & Search | 1 | 3 | 0 | 0 | Search built but returns nothing; download gated and audited (2026-10-08) |
 | C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; routing **fixed**; still **unauthorized** |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
@@ -1446,7 +1467,7 @@ error paths and workers).
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 0 | 3 | 0 | 0 | Circulars wired 2026-10-05, not verified live; notifications **plumbed but silent** |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **13** | **17** | **9** | **3** | 42 functional stories |
+| **Total** | **13** | **18** | **9** | **2** | 42 functional stories |
 
 **The honest one-paragraph summary:** the *document* half of this EDMS — capture, filing,
 versioning, checkout, classification, task execution and approval — is genuinely built and

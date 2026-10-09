@@ -7,6 +7,7 @@ import { useStore, userById } from '@/store/useStore';
 import { Icon } from '@/components/ui/Icons';
 import { HBarChart } from '@/components/ui/Charts';
 import { timeAgo, fmtDate } from '@/utils/helpers';
+import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
 
 export default function AuditorDashboard() {
   const router = useRouter();
@@ -122,6 +123,9 @@ export default function AuditorDashboard() {
             </div>
           </div>
         </div>
+      </div>
+      <div className="mt-4">
+        <QuickAccessCard showActions={false} />
       </div>
     </div>
   );

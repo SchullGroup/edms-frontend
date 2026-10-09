@@ -592,14 +592,19 @@ still worth knowing — but don't file "missing permission gate" as a new bug fo
 
 | Page | Ungated action(s) |
 |---|---|
-| `/admin/audit` | Verify integrity, Export |
-| `/admin/branding` | Publish branding |
-| `/admin/policies` | Confidentiality / urgency / control toggles |
-| `/supervisor/exceptions` | Acknowledge (writes a real audit log entry; the exception row list itself is still mock data) |
-| `/staff/cabinets` | Move / Route bulk actions |
+| ~~`/admin/audit`~~ | ~~Verify integrity, Export~~ — **gated (2026-10-08):** Export on `audit:export`, Verify on `audit:view`, matching the backend routes |
+| `/admin/branding` | Publish branding — page is client_admin-only; no branding backend or permission exists to gate the action on |
+| `/admin/policies` | Confidentiality / urgency / control toggles — page gate only; no policy backend or permission exists |
+| `/supervisor/exceptions` | Acknowledge — page gate (`workflow:edit`) only; the row list is still mock data |
+| ~~`/staff/cabinets`~~ | ~~Move / Route bulk actions~~ — **gated** (checked 2026-10-08): Move needs `document:edit` + Edit on the cabinet; Route needs `workflow_instance:create` + `:route` |
 
-- [ ] **TP-P10 (the one genuine bug in this group — do report it, it's logic-wrong not
-      just unfinished).** On `/auditor/findings` (also reachable at
+*(2026-10-08: the three remaining rows are mock pages. Their action gates wait for the
+backends, and the permission keys, they'd be checked against — inventing keys now would
+just have to be undone.)*
+
+- [x] **Fixed 2026-10-08:** "Add response" and "Close finding" now have the same
+      `audit:view` gate as "Raise finding". *Original note:* **TP-P10 (the one genuine bug in
+      this group — do report it, it's logic-wrong not just unfinished).** On `/auditor/findings` (also reachable at
       `/management/findings` — it's the same component) as any role: "Raise finding" is
       gated on `audit:view`, but **"Add response" and "Close finding" have zero guard at
       all**, not even the same (wrong) `audit:view` check the create action uses. Confirm
@@ -755,20 +760,99 @@ Items whose backend already exists (or needs none). Worked through one at a time
       saved searches per user, without the two seeded fakes (15.3, 15.4). While text is
       entered only the Cabinet filter applies — `GET /documents/search` accepts only `q` and
       `cabinetId` (backend request: add the other filters there).
-- [ ] Edit a document's confidentiality and urgency after upload — `PATCH /documents/:id`,
-      gated on `document:edit` (13.1/13.2; no UI exists today)
-- [ ] SLA settings screen: business hours, working days, holidays, warning window, urgency
+- [x] Edit a document's confidentiality and urgency after upload — `PATCH /documents/:id`,
+      gated on `document:edit` (13.1/13.2). **Built 2026-10-08:** `/doc/[id]` → Details →
+      Classification → **Change**. Also needs Edit on the cabinet. Tiers above your clearance
+      are disabled. To test: as a supervisor, raise a document to Confidential (works) and
+      check Restricted is disabled; as staff, check Confidential and Restricted are both
+      disabled. Then route the document and check the next stage's deadline follows the new
+      urgency
+- [x] SLA settings screen: business hours, working days, holidays, warning window, urgency
       multipliers, breach action — `GET/PATCH /sla/configuration`, `/sla/holidays` (6.7, 6.8,
-      18.2, 18.5)
-- [ ] Sub-folders: create and browse nested folders — folder `parentId` (5.1)
-- [ ] Typed signature: render the typed name to an image for approve (9.1)
-- [ ] My Performance from `GET /tasks/stats?assigneeId=` (16.4)
-- [ ] Staff dashboard: status tiles click through; finish SLA/ageing highlighting (19.1, 19.4)
-- [ ] My Tasks: keep the backend's urgency → due-date order instead of re-sorting (19.2)
-- [ ] Quick-actions strip; recent and pinned documents/searches (19.3, 19.5)
-- [ ] Admin home setup checklist (18.1)
-- [ ] Chart drill-downs to filtered record lists (21.6, 22.3)
-- [ ] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6)
-- [ ] Configuration history: audit log filtered to config actions (18.7)
-- [ ] PDF/image preview and in-PDF search (4.3, 5.9 — partial; Office/email/OCR need backend)
-- [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3)
+      18.2, 18.5). **Built 2026-10-08** as `/admin/policies` → **Urgency & SLA** (replacing a
+      mock table). Saving needs `workflow:edit`; without it the form is read-only. To test: as
+      client_admin, turn on working hours (Mon–Fri 08:00–17:00), add a holiday, set Critical to
+      0.5, save, reload — all kept. Then route a Critical document into a 24 h stage and check
+      its deadline is 12 working hours away. Changes don't move deadlines already set
+- [x] Sub-folders: create and browse nested folders — folder `parentId` (5.1). **Built
+      2026-10-08** on `/staff/cabinets`. To test: open a folder → **+ New sub-folder**; it nests
+      in the sidebar tree and shows as a chip above the documents; the breadcrumb is clickable;
+      upload into it (the picker shows "Parent / Child"); Delete on the parent is refused while it
+      has sub-folders. The API doesn't limit depth or stop moving a folder under its own child
+- [x] Typed signature: render the typed name to an image for approve (9.1). **Built
+      2026-10-08:** Sign & approve → Signature → **Type**; the preview is the exact PNG sent.
+      Uses system script fonts (Segoe Script, Brush Script MT, Apple Chancery, else the
+      browser's cursive), so the look varies by device. To test: approve with a typed name, then
+      check the workflow trail shows that image
+- [ ] ~~My Performance from `GET /tasks/stats?assigneeId=` (16.4)~~ — **not frontend-only**
+      (checked 2026-10-08): `GET /tasks/stats` groups by department only, its query schema is
+      `.strict()` (no `assigneeId`), and it returns 403 without oversight, so staff can't call
+      it. Needs a backend change. Meanwhile the fake "Rework rate 4.2%" was replaced by a real
+      "Changes requested" rate from the user's own tasks
+- [x] Staff dashboard: status tiles click through (19.1). **Built 2026-10-08:** Pending / In
+      Progress / Closed list your workflows in that state (In Progress includes on hold), each
+      row opens the workflow page; Overdue still filters tasks. To test: click each tile and
+      check the rows match the tile's count (up to 8 shown).
+- [ ] Staff dashboard: SLA/ageing highlighting (19.4) — **needs backend:** `GET /tasks` has
+      no deadlines since `919d0ef` (requested)
+- [x] ~~My Tasks: keep the backend's urgency → due-date order instead of re-sorting (19.2)~~
+      — **superseded:** since `919d0ef` `GET /tasks` carries no deadlines, so there is no
+      server-side due-date order to keep
+- [x] Quick-actions strip; recent and pinned documents/searches (19.3, 19.5). **Built
+      2026-10-08:** a Quick access card on `/staff` (actions, Pinned documents, Recently
+      opened, Saved searches) and a **Pin** button on `/doc/[id]`. Stored per user in the
+      browser (no favourites API), so it doesn't follow you to another device. To test: open
+      two documents, pin one, save a search — all three lists fill; a saved search reruns with
+      its filters; sign in as someone else — their lists are empty
+- [x] Admin home setup checklist (18.1). **Built 2026-10-08** from live data. To test: on a
+      fresh tenant every step shows pending; create a department, a cabinet (it gets "General"),
+      a second user and publish a workflow — each ticks off and the % reaches 100. Add a cabinet
+      with no folders → "Folders in every cabinet (1 without one)" and a pending task appear
+- [ ] Chart drill-downs to filtered record lists (21.6, 22.3). **Partly done 2026-10-08:** on
+      `/management` and `/management/departments`, clicking a department's bar scopes the
+      dashboard to that department (clicking it again on Departments widens back). **The record
+      list needs backend:** the charts are per department, and neither `GET /documents` nor
+      `GET /workflow-instances` takes a `departmentId` filter, so there's no list to open.
+      To test: click a department bar on each page
+- [x] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6).
+      **Built 2026-10-08** on `/management/reports`: open items by cabinet, ageing register, SLA
+      compliance by department (date range), workload by member; department filter; preview
+      table; CSV download that Excel opens. Not built: true .xlsx/PDF and scheduled reports
+      (needs a backend job). To test: run each report for All and for one department and
+      compare totals with `/management` and `/supervisor/bottlenecks`
+- [x] Configuration history: audit log filtered to config actions (18.7). **Built 2026-10-08**
+      on `/admin/audit` (and `/auditor/trail`): a record-type dropdown whose Configuration group
+      is roles, departments, cabinets (incl. access and metadata fields), folders, workflow
+      designs and users, and an action dropdown narrowed to that type. Only one type at a time,
+      since `GET /audit` takes a single `objectType`. SLA settings aren't audited server-side.
+      To test: rename a role, then pick Roles & permissions — the rename is listed; Export
+      gives the same rows
+- [ ] PDF/image preview and in-PDF search (4.3, 5.9 — partial; Office/email/OCR need backend).
+      **Done 2026-10-08:** readable fallback for files that can't be previewed ("Word
+      documents can't be previewed yet" + the audited Download, hidden without download
+      permission). To test: open a DOCX on `/doc/[id]` and on its workflow page.
+      **In-PDF search done 2026-10-08** with the pdf.js viewer (`PdfViewer`): find with
+      highlights and match count, page box, zoom, Print (audited, watermark burned in) and
+      Download in the viewer's toolbar, Export on `/doc/[id]`. Scanned PDFs: find searches the
+      OCR text and shows it as a "Scanned text" view with highlights (2026-10-08) — test on
+      "DN 2026 0921 delivery note scanned", search "Ridgeline". To test: open a PDF, type a
+      word into "Find in document", press Enter to step through matches; Ctrl+F inside the
+      viewer focuses the box; Print on a Confidential document — the printout carries the
+      watermark. Left: Office/email previews (backend)
+- [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3).
+      **Help done 2026-10-08:** `/help` (topics for your role, search, a topic per area), the
+      Topbar's "?" opens the topic for the page you're on, the sidebar's Help & support goes
+      there, and "/" now focuses search as its hint says. To test: press "?" on Upload, a
+      workflow page and Policies — each opens its own topic. **Deferred by product decision
+      (2026-10-08):** responsive layout, accessibility, i18n and frontend tests
+- [x] Permission gates on the P4 actions — see the P4 table (2026-10-08)
+- [x] Role switcher for multi-role users (doc 05 #29). **Built 2026-10-08.** To test: give a
+      supervisor the `internal_auditor` role too, sign in — they land on `/auditor` and the
+      Topbar label is a dropdown; pick Supervisor Console — sidebar and page switch; reload and
+      sign out/in — the choice holds; sign in as someone else — they get their own default
+- [x] Date picker is cutoff when user wants to schedule circular at a later date/time in the publish modal
+      — **Fixed 2026-10-08** in the shared `DatePicker`: it assumed a 380 px popover (a six-week
+      month plus the time row is taller) and, when neither side had that much room, always
+      opened downward off the screen. It now measures itself, opens on whichever side fits, and
+      otherwise stays inside the viewport and scrolls. Covers every date picker in a modal. To
+      test: on a short window (or zoomed in), Publish… → Schedule for later → open the picker

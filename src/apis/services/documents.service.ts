@@ -134,6 +134,19 @@ export const documentsService = {
     return response.data.data;
   },
 
+  // Same document as `GET /documents/:id`, through routes that also check
+  // `document:export` / `document:print` and are audited as `document.exported` /
+  // `document.printed` (edms-backend `0dab81a`). Call before exporting or printing.
+  exportDocument: async (id: string): Promise<Document> => {
+    const response = await apiClient.get<ApiResponse<Document>>(`/documents/${id}/export`);
+    return response.data.data;
+  },
+
+  printDocument: async (id: string): Promise<Document> => {
+    const response = await apiClient.get<ApiResponse<Document>>(`/documents/${id}/print`);
+    return response.data.data;
+  },
+
   // Version Control
   getVersions: async (id: string): Promise<DocumentVersion[]> => {
     const response = await apiClient.get<ApiResponse<DocumentVersion[]>>(

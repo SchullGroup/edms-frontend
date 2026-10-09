@@ -14,7 +14,13 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { cabinetAllows, useMyCabinetAccess } from '@/components/cabinets/cabinetAccess';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
 import { useConfidentialityPolicy } from '@/hooks/useConfidentialityPolicy';
+import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useCabinets } from '@/apis/hooks/useCabinets';
+import {
+  useDownloadDocumentVersion,
+  useExportDocument,
+  usePrintDocument,
+} from '@/apis/hooks/useDocuments';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
@@ -31,6 +37,7 @@ import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/component
 import type { WorkflowInstanceStatus } from '@/types/models';
 import { Skeleton, SkeletonText } from '@/components/common/Skeleton';
 import { DateTimeField, todayStr } from '@/components/ui/DatePicker';
+import { folderPathLabel } from '@/utils/folders';
 
 const WORKFLOW_STATUS_LABEL: Record<WorkflowInstanceStatus, string> = {
   pending: 'Pending',
@@ -61,6 +68,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const { can, scopeFor } = usePermissions();
   const archiveDocument = useArchiveDocument();
   const createAuditLog = useCreateAuditLog();
+  const { allows } = useConfidentialityClearance();
+  const downloadVersion = useDownloadDocumentVersion();
+  const exportDocument = useExportDocument();
+  const printDocument = usePrintDocument();
   const checkoutDocument = useCheckoutDocument();
   const checkinDocument = useCheckinDocument();
   const { routeDocuments, canRoute: hasRoutePermission } = useRouteToWorkflow();
@@ -103,12 +114,25 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const canRoute = !isLoadingInstances && !activeWorkflow;
 
   const { data: activeCabFoldersData } = useCabinetFolders(doc?.cabinetId);
-  const folderLabel =
-    (activeCabFoldersData?.data || []).find((f) => f.id === doc?.folderId)?.name || '';
+  const folderLabel = doc?.folderId
+    ? folderPathLabel(activeCabFoldersData?.data || [], doc.folderId)
+    : '';
 
   useEffect(() => {
     if (doc?.title) setPageTitle(doc.title);
   }, [doc?.title, setPageTitle]);
+
+  // Feeds the staff dashboard's Recent list.
+  const recordDocumentView = useStore((s) => s.recordDocumentView);
+  const togglePinnedDocument = useStore((s) => s.togglePinnedDocument);
+  const isPinned = useStore(
+    (s) => !!me && !!doc && (s.pinnedDocuments[me.id] ?? []).some((d) => d.id === doc.id),
+  );
+  useEffect(() => {
+    if (me?.id && doc?.id && doc.title) {
+      recordDocumentView(me.id, { id: doc.id, title: doc.title });
+    }
+  }, [me?.id, doc?.id, doc?.title, recordDocumentView]);
 
   if (isLoading || isLoadingCabs || isLoadingUsers || isLoadingPolicies) {
     return <DocumentDetailSkeleton />;
@@ -152,7 +176,12 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   }
 
   const { rawFileKey, fileUrl, fileMimeType } = documentFile(doc);
+  // Watermarking still comes from the (mock) policy table. Download follows the
+  // caller's `document:download` permission and clearance, as the API does.
   const confPolicy = policyFor(doc.confidentiality);
+  const canDownload = allows(doc, 'download');
+  const canExport = allows(doc, 'export');
+  const canPrint = allows(doc, 'print');
 
   const lockedByOther = doc.isCheckedOut && doc.checkoutLock?.lockedBy !== me.id;
   const lockedByMe = doc.isCheckedOut && doc.checkoutLock?.lockedBy === me.id;
@@ -184,8 +213,16 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const routeThisDocument = () => routeDocuments([{ id: doc.id, title: doc.title }]);
 
   const actDownload = () => {
-    if (!confPolicy.download) {
-      addToast(`Download is disabled for ${doc.confidentiality} documents`, 'error');
+    if (!canDownload) {
+      addToast("You don't have permission to download this document", 'error');
+      return;
+    }
+    if (fileUrl && doc.currentVersionId) {
+      // Through the version endpoint, which checks permission and logs the
+      // download. The tab opens now; a later one would be blocked as a popup.
+      const tab = window.open('', '_blank');
+      if (tab) tab.opener = null;
+      downloadVersion.mutate({ id: doc.id, versionId: doc.currentVersionId, tab });
       return;
     }
     const a = document.createElement('a');
@@ -209,8 +246,14 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     document.body.appendChild(a);
     a.click();
     a.remove();
-    createAuditLog.mutate({ action: 'DOWNLOAD', target: doc.id, detail: 'Downloaded a copy' });
-    addToast('Download started (audited)', 'success');
+  };
+
+  // `GET /documents/:id/export`: checks `document:export` and records the export
+  // in the audit trail, then hands back a fresh link to the file.
+  const actExport = () => {
+    const tab = window.open('', '_blank');
+    if (tab) tab.opener = null;
+    exportDocument.mutate({ id: doc.id, tab });
   };
 
   const actCheckout = () => {
@@ -347,11 +390,32 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       <div className="flex items-center gap-2 flex-wrap mb-4">
         <button
           className="btn btn-secondary"
+          aria-pressed={isPinned}
+          title={isPinned ? 'Remove from your dashboard' : 'Keep this on your dashboard'}
+          onClick={() => togglePinnedDocument(me.id, { id: doc.id, title: doc.title })}
+        >
+          <Icon name="save" size={14} /> {isPinned ? 'Pinned' : 'Pin'}
+        </button>
+        <button
+          className="btn btn-secondary"
           onClick={actDownload}
-          title={confPolicy.download ? 'Download a copy' : 'Disabled'}
+          disabled={!canDownload || downloadVersion.isPending}
+          title={
+            canDownload ? 'Download a copy' : "You don't have permission to download this document"
+          }
         >
           <Icon name="download" size={14} /> Download
         </button>
+        {canExport && (
+          <button
+            className="btn btn-secondary"
+            onClick={actExport}
+            disabled={exportDocument.isPending}
+            title="Export a copy (recorded in the audit trail)"
+          >
+            <Icon name="share" size={14} /> Export
+          </button>
+        )}
         {lockedByMe ? (
           <button
             className="btn btn-secondary"
@@ -458,6 +522,17 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           lockedByOther={lockedByOther}
           onSignatureFieldClick={() => {}}
           getSignerName={(userId) => userById(users, userId)?.name || 'User'}
+          canDownload={canDownload}
+          onDownload={actDownload}
+          canPrint={canPrint}
+          ocrText={doc.currentVersion?.ocrText}
+          ocrStatus={doc.currentVersion?.ocrStatus}
+          onBeforePrint={() =>
+            printDocument
+              .mutateAsync(doc.id)
+              .then(() => true)
+              .catch(() => false)
+          }
         />
 
         <div className="flex flex-col gap-4">
@@ -465,11 +540,20 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             documentId={doc.id}
             documentType={doc.documentType}
             cabinetId={doc.cabinetId}
+            createdBy={doc.createdBy}
             ownerName={userById(users, doc.createdBy)?.name || 'System'}
             createdAtLabel={fmtDateTime(doc.createdAt)}
             metadata={doc.metadata || []}
             canEditMetadata={
               can('document_metadata', 'edit') &&
+              cabinetAllows(myCabinetLevel, 'edit') &&
+              !closed &&
+              !lockedByOther
+            }
+            confidentiality={doc.confidentiality}
+            urgency={doc.urgency}
+            canEditClassification={
+              can('document', 'edit') &&
               cabinetAllows(myCabinetLevel, 'edit') &&
               !closed &&
               !lockedByOther
@@ -484,6 +568,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             documentId={doc.id}
             currentVersionId={doc.currentVersionId}
             canView={can('document_version', 'view')}
+            canDownload={canDownload}
             canEdit={
               can('document_version', 'restore') && !closed && !lockedByOther && !activeWorkflow
             }

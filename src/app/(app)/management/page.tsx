@@ -14,6 +14,7 @@ import { exportCsv } from '@/utils/exportCsv';
 import { HBarChart, LineChart } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
 import { SkeletonPage } from '@/components/common/Skeleton';
+import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
 import {
   buildDepartmentIndex,
   departmentName,
@@ -268,7 +269,10 @@ export default function ManagementDashboard() {
                       : r.sla >= 80
                         ? 'var(--status-pending)'
                         : 'var(--status-overdue)',
-                  onClick: () => router.push('/management/departments'),
+                  // Drill into that department: the whole dashboard scopes to it.
+                  // (A record list per department needs a `departmentId` filter
+                  // on `GET /documents`, which the API doesn't have.)
+                  onClick: () => setSt({ ...st, dept: r.deptId }),
                 }))}
                 max={100}
                 unit="%"
@@ -291,6 +295,9 @@ export default function ManagementDashboard() {
           </button>
         </div>
         <Table cols={cols} rows={rows} onRow={() => router.push('/management/departments')} />
+      </div>
+      <div className="mt-4">
+        <QuickAccessCard showActions={false} />
       </div>
     </div>
   );

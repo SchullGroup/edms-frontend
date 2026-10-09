@@ -149,9 +149,10 @@ That is the complete list. This role **cannot** call `GET /users`, `GET /documen
 `GET /cabinets`, or `GET /departments` — all return 403.
 
 **And that is correct.** `access-control.constants.ts` documents the reasoning explicitly:
-`schulltech_admin` is **deliberately excluded** from `CABINET_ACCESS_BYPASS_ROLES` and from
-every confidentiality tier list, including `TOP_SECRET_TIER_ROLES` (which is empty by
-design). The comment states that any future support access should be a *time-boxed, audited
+`schulltech_admin` is **deliberately excluded** from `CABINET_ACCESS_BYPASS_ROLES`, and the
+seed gives it none of the `document:view_confidential` / `view_restricted` /
+`view_top_secret` clearance permissions (which replaced the tier role lists in
+`edms-backend` `0dab81a`, 2026-10-08). The comment states that any future support access should be a *time-boxed, audited
 impersonation flow* — its own mechanism, not a standing role grant.
 
 **The vendor cannot read customer documents.** For a multi-tenant SaaS handling regulated
@@ -171,7 +172,7 @@ records, that is a serious and correct architectural decision.
 | 3 | Review platform health | `/platform/sysconfig` | 🟥 `SEED` |
 | 4 | Check plans and entitlements | `/platform/plans` | 🟥 `SEED.plans` |
 | 5 | Review billing and usage | `/platform/billing` | 🟥 `SEED` |
-| 6 | Check feature flags | `/platform/flags` | 🟥 ⚠️ **re-exports `/platform/sysconfig` — wrong page** |
+| 6 | Check feature flags | `/platform/flags` | 🟥 `SEED.featureFlags` — its own page since 2026-10-08 |
 | 7 | Review the platform audit log | `/platform/audit` | 🟥 `SEED.audit` |
 
 ### First week — what they would try to do
@@ -223,7 +224,7 @@ metadata fields, cabinet access, folders, departments, users, roles, workflows, 
 
 Two unique properties:
 - The **only** role in `CABINET_ACCESS_BYPASS_ROLES` — sees every cabinet regardless of grants
-- The **only** role in `RESTRICTED_TIER_ROLES` — the sole reader of `restricted` documents
+- The **only** seeded role holding `document:view_restricted` — the sole reader of `restricted` documents (an admin can now grant it to another role in `/admin/roles`)
 
 This is the most powerful role in the tenant, and appropriately so.
 
@@ -337,7 +338,7 @@ workflow:route:global
 |---|---|---|---|
 | 1 | Log in with the password the admin gave them | `/` | ✅ ⚠️ no forced change |
 | 2 | Land on the Staff Dashboard | `/staff` | 🟨 tasks from API, notifications ⛔ 404 |
-| 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (🟨 added 2026-10-06, not verified live; each action needs the role permission **and** the cabinet level — see doc 05) |
+| 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (added 2026-10-06, ✅ tested by the user 2026-10-08; each action needs the role permission **and** the cabinet level — see doc 05) |
 | 4 | Upload their first document | `/upload` | ✅ |
 | 5 | Watch it appear in the cabinet | `/staff/cabinets` | ✅ |
 | 6 | Open it and check the details | `/doc/[id]` | ✅ |
@@ -408,13 +409,15 @@ end       → /staff/tasks  clear the queue   ✅
 ### Identity and rights
 
 **18 grants**, mostly `department`-scoped, plus two memberships that matter more than the
-grants:
+grants, and one grant worth naming:
 
 - `TASK_VIEW_ALL_ROLES` → may request `GET /tasks?scope=all` and see the whole team's queue
 - `TASK_REASSIGN_ROLES` → may `PATCH /tasks/:id/reassign`
-- `CONFIDENTIAL_TIER_ROLES` → may read `confidential`-tier documents
+- `document:view_confidential:department` → may read `confidential`-tier documents in their
+  own department's cabinets (a permission since `edms-backend` `0dab81a`, 2026-10-08; it was
+  membership of `CONFIDENTIAL_TIER_ROLES` before, with no department limit)
 
-Those three constants — not the permission table — are what actually make supervision work.
+The two task constants — not the permission table — are what actually make supervision work.
 
 ### Day one
 
@@ -590,8 +593,8 @@ folder:view:global            department:view:global
 workflow:view:global          audit:view:global
 ```
 
-Plus membership of `CONFIDENTIAL_TIER_ROLES`, so they can read `confidential`-tier
-documents. **Deliberately cannot mutate anything** — that independence is the point of the
+Plus `document:view_confidential:global`, so they can read `confidential`-tier documents
+(a permission since `edms-backend` `0dab81a`; it was a role list before). **Deliberately cannot mutate anything** — that independence is the point of the
 role.
 
 One of these grants now has a real screen behind it, and one still doesn't:
@@ -921,13 +924,31 @@ That single role determines the **entire sidebar** and the **post-login landing 
 | `staff` + `supervisor` | Both | **Supervisor Console only** | No Upload link in the sidebar, though upload works if they navigate directly |
 | `management` + `client_admin` | Both | **Client Administration only** | No management dashboards in the nav |
 
-**There is no role switcher.** A dual-role user simply cannot reach half their
-functionality through navigation.
+~~**There is no role switcher.**~~ **Role switcher added 2026-10-08, verified live 2026-10-09**
+(a `staff` user temporarily given `supervisor`: both portals listed, switching moved the
+sidebar and home both ways, and the choice survived a reload).
+A user holding more than one built-in role sees a dropdown in place of the Topbar's portal
+label, listing one portal per role they hold (`availablePortals` in `src/lib/permissions.ts`).
+Picking one switches the sidebar and opens that portal's home. The pick is saved in `prefs`
+with the user's id, so it survives a reload and a fresh sign-in but never follows another
+user on the same browser. It defaults to the priority-list winner below. A user with only
+custom roles still gets the single portal their permissions resolve to.
 
-**Recommended fix:** a role switcher in the Topbar that lets the user choose which surface
-to view, defaulting to the priority-list winner. This is a small, high-value UI addition —
-and it becomes necessary the moment any real organisation assigns a combined role, which
-they will.
+**Where a custom-role user lands (checked 2026-10-08, doc 05 backlog 29a).** That resolution
+takes the first portal whose entry permissions the user holds: `admin` (`user:view`,
+`role:view` or `workflow:view`), then `auditor` (`audit:view`), then `management`
+(`document:view`, `workflow_instance:view`, `task:view` or `department:view`), then
+`supervisor`, then `staff`. Because `workflow:view` and `document:view` are near-universal,
+custom roles almost never reach the Staff Workspace or Supervisor Console: the tenant's
+"Budget Officer" lands in Client Administration.
+
+**Fixed the same day.** Custom-role users are now placed by what their permissions let them
+do (`customRolePortalOrder` in `src/lib/permissions.ts`): configuring the tenant → Client
+Administration, reassigning tasks → Supervisor Console, acting on tasks / filing / routing →
+Staff Workspace, reading the audit trail → Audit, `department:view` → Management, then any
+portal they can enter. Built-in roles are unchanged. Budget Officer now lands in Staff.
+
+The table above describes the default, before any switch.
 
 ---
 

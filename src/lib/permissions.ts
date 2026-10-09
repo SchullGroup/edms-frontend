@@ -249,20 +249,89 @@ const SYSTEM_ROLE_PORTAL: [string, PortalKey][] = [
   ['staff', 'staff'],
 ];
 
+// Permissions that change how the tenant is set up, as opposed to only viewing it.
+const CONFIGURE_KEYS = [
+  'user:create',
+  'user:edit',
+  'role:create',
+  'role:edit',
+  'workflow:create',
+  'workflow:edit',
+  'department:create',
+  'department:edit',
+  'cabinet:create',
+  'cabinet:edit',
+];
+// Doing document work: acting on tasks, filing, routing.
+const WORK_KEYS = ['task:action', 'document:create', 'document:upload', 'workflow_instance:route'];
+
+/**
+ * Portals to try, best first, for a user whose roles are all custom — by what
+ * their permissions let them do rather than what they can see, since view
+ * permissions are near-universal (`workflow:view` alone used to put a "Budget
+ * Officer" who only approves tasks into Client Administration). Every portal
+ * is listed, so whatever comes first that the user can actually enter wins.
+ */
+function customRolePortalOrder(perms: string[]): PortalKey[] {
+  const order: PortalKey[] = [];
+  if (permsSatisfy(perms, CONFIGURE_KEYS)) order.push('admin');
+  if (permsSatisfy(perms, ['task:reassign'])) order.push('supervisor');
+  if (permsSatisfy(perms, WORK_KEYS)) order.push('staff');
+  if (permsSatisfy(perms, ['audit:view'])) order.push('auditor');
+  if (permsSatisfy(perms, ['department:view'])) order.push('management');
+  order.push('staff', 'management', 'admin', 'auditor', 'supervisor');
+  return order;
+}
+
 /**
  * Which portal shell to render for a user.
  *
  * System-role users keep their historical portal (permission sets overlap too
  * much between the six seeded roles to disambiguate by permission alone). A
- * custom role — the case this whole module exists for — is placed in the
- * highest-priority portal whose entry permission it actually holds.
+ * custom role — the case this whole module exists for — goes by what its
+ * permissions do (`customRolePortalOrder`), and only to a portal whose entry
+ * permission it holds, so the route guard always lets it in.
  */
 export function resolvePortal(perms: string[], roleNames: string[] | undefined): PortalKey {
   const known = SYSTEM_ROLE_PORTAL.find(([r]) => roleNames?.includes(r));
   if (known) return known[1];
 
-  const hit = PORTALS.find((p) => canEnterPortal(p, perms, roleNames));
-  return hit?.key ?? 'staff';
+  const hit = customRolePortalOrder(perms).find((key) =>
+    canEnterPortal(PORTAL_BY_KEY[key], perms, roleNames),
+  );
+  return hit ?? 'staff';
+}
+
+/**
+ * The portals a user can switch between (Topbar role switcher). Someone holding
+ * built-in roles gets one portal per role — not every portal their permissions
+ * would technically open, which for a client_admin is all six. A custom-role-only
+ * user gets the one portal `resolvePortal` picks.
+ */
+export function availablePortals(perms: string[], roleNames: string[] | undefined): PortalKey[] {
+  const fromRoles = SYSTEM_ROLE_PORTAL.filter(([r]) => roleNames?.includes(r)).map(([, k]) => k);
+  return fromRoles.length ? fromRoles : [resolvePortal(perms, roleNames)];
+}
+
+/** A portal picked in the switcher, saved in `prefs` with the user it belongs to
+ *  so it doesn't follow the next person who signs in on this browser. */
+export interface PortalChoice {
+  userId: string;
+  portal: PortalKey;
+}
+
+/** The portal to render: the user's own pick while it's still one of theirs,
+ *  otherwise the default. */
+export function effectivePortal(
+  perms: string[],
+  roleNames: string[] | undefined,
+  userId: string | undefined,
+  choice: PortalChoice | null | undefined,
+): PortalKey {
+  if (choice && userId && choice.userId === userId) {
+    if (availablePortals(perms, roleNames).includes(choice.portal)) return choice.portal;
+  }
+  return resolvePortal(perms, roleNames);
 }
 
 // --- Offline / pre-hydration fallback ----------------------------------------
@@ -288,6 +357,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   // admin hold none; reading the inbox needs no permission).
   client_admin: [
     ...everything,
+    'document:view_confidential',
+    'document:view_restricted',
     'workflow:publish',
     'workflow:archive',
     'task:reassign',
@@ -310,8 +381,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   internal_auditor: [
     ...viewAll,
+    'document:view_confidential',
     'document:download',
     'document:export',
+    'document:print',
     'audit:export',
     'task:action',
     'delegation:create',
@@ -320,7 +393,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   management: [
     ...viewAll,
+    'document:view_confidential',
+    'document:download',
     'document:export',
+    'document:print',
     'workflow_instance:route',
     'task:action',
     'delegation:create',
@@ -332,6 +408,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   supervisor: [
     'document:view',
+    'document:view_confidential',
     'document:create',
     'document:edit',
     'document:export',

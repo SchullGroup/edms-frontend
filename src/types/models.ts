@@ -170,6 +170,14 @@ export interface DocumentVersion {
 /** A search the user saved on `/search`: the query text plus at most one
  *  value per filter, in the backend's own enum values. Kept in the persisted
  *  store per user — see `savedSearches` in `initialData.ts`. */
+/** A document in someone's Recent or Pinned list (staff dashboard). Kept in the
+ *  browser per user — the API has no favourites or view-history endpoint. */
+export interface DocumentShortcut {
+  id: string;
+  title: string;
+  at: number;
+}
+
 export interface SavedSearch {
   id: string;
   name: string;
@@ -266,13 +274,20 @@ export interface UploadDocumentRequest {
   fileSize?: number;
   documentType?: string;
   folderId?: string;
+  /** Cabinet metadata, saved in the same transaction (edms-backend `dd10017`). The
+   *  backend rejects the upload (400) if a required field is missing or a value
+   *  doesn't fit its field type. */
+  metadata?: DocumentMetadataValueInput[];
 }
 
 /** Body for `PATCH /documents/{id}`. At least one field required. */
 export interface UpdateDocumentRequest {
   title?: string;
   documentType?: string;
-  folderId?: string;
+  /** Moves the document; a folder left out is cleared (edms-backend `dd10017`). */
+  cabinetId?: string;
+  /** `null` takes the document out of its folder, to the cabinet root. */
+  folderId?: string | null;
   confidentiality?: DocumentConfidentiality;
   urgency?: DocumentUrgency;
   status?: DocumentStatus;
@@ -639,8 +654,10 @@ export interface WorkflowHistoryRecord {
   } | null;
   /** Confirmed live 2026-09-18: carries `signature` (populated only for an
    *  `approve` action — the only action the backend allows one on) alongside
-   *  the completed task's own `comment`/`note`. */
-  task?: (Record<string, any> & { signature?: TaskActionSignature | null }) | null;
+   *  the completed task's own `comment`/`note`. The backend stores only the
+   *  approve request's `signature.fileUrl`, so here it is a plain URL string
+   *  (edms-backend `tasks.service.ts` `signature: input.signature.fileUrl`). */
+  task?: (Record<string, any> & { signature?: string | null }) | null;
   workflowInstance?: Record<string, any>;
   /** The document this event is about, when it is about one. */
   workflowInstanceDocumentId?: string | null;
@@ -867,6 +884,44 @@ export interface TaskWorkloadSummary {
 export interface TaskWorkloadData {
   members: TaskWorkloadMember[];
   summary: TaskWorkloadSummary;
+}
+
+/** What happens when a stage deadline passes (`SLA_BREACH_ACTIONS`). `flag` only
+ *  records the breach; `notify_supervisor` also tells the department's
+ *  supervisors; `escalate` does that and escalates the task. */
+export type SlaBreachAction = 'flag' | 'notify_supervisor' | 'escalate';
+
+/**
+ * `GET/PATCH /sla/configuration` — the tenant's one SLA policy. A stage's
+ * deadline is its `sla_hours` × the document's urgency multiplier, counted in
+ * wall-clock hours or, with `businessHoursEnabled`, working hours only.
+ * `workingDays` are ISO weekdays (1 = Monday … 7 = Sunday); times are "HH:mm"
+ * in `timezone`. Changes apply to deadlines set afterwards, not existing ones.
+ */
+export interface SlaConfiguration {
+  id: string;
+  timezone: string;
+  businessHoursEnabled: boolean;
+  workingDays: number[];
+  workStart: string;
+  workEnd: string;
+  excludeHolidays: boolean;
+  warningHours: number;
+  breachAction: SlaBreachAction;
+  lowUrgencyMultiplier: number;
+  normalUrgencyMultiplier: number;
+  highUrgencyMultiplier: number;
+  criticalUrgencyMultiplier: number;
+}
+
+export type SlaConfigurationUpdate = Partial<Omit<SlaConfiguration, 'id'>>;
+
+/** One row of `GET /sla/holidays`. `date` is a date-only value sent as an ISO
+ *  timestamp at UTC midnight — read its first 10 characters. */
+export interface SlaHoliday {
+  id: string;
+  date: string;
+  name: string;
 }
 
 /** One row of `GET /sla/breaches` — a persisted SLA warning/escalation event. */

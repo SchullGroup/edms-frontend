@@ -61,6 +61,14 @@ export function turnaroundDays(task: Task): number | null {
   return Math.max(0, (Date.parse(task.completedAt) - Date.parse(task.createdAt)) / 86400000);
 }
 
+/** Share of completed tasks closed by sending the documents back
+ *  (`request_changes`), as "12%"; "—" with nothing completed. */
+export function changesRequestedRate(completed: Task[]): string {
+  if (!completed.length) return '—';
+  const sentBack = completed.filter((t) => t.action === 'request_changes').length;
+  return `${Math.round((sentBack / completed.length) * 100)}%`;
+}
+
 /** Whether a completed task met its SLA — always null now. Tasks lost `dueAt`
  *  in edms-backend `919d0ef`, and a completed task's documents have moved on to
  *  the next stage's deadline, so this can't be worked out client-side. The

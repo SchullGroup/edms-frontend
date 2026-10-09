@@ -1,8 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useDocument } from '@/apis/hooks/useDocuments';
+import {
+  useDocument,
+  useDownloadDocumentVersion,
+  usePrintDocument,
+} from '@/apis/hooks/useDocuments';
 import { useConfidentialityPolicy } from '@/hooks/useConfidentialityPolicy';
+import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
 import { DocumentViewerPanel } from '@/components/documents/DocumentViewerPanel';
 import { ConfBadge } from '@/components/ui/Badges';
@@ -38,6 +43,9 @@ export function WorkflowDocumentViewer({
   const [zoom, setZoom] = useState(1);
   const { data: doc, isLoading, error } = useDocument(documentId);
   const { policyFor } = useConfidentialityPolicy();
+  const { allows } = useConfidentialityClearance();
+  const downloadVersion = useDownloadDocumentVersion();
+  const printDocument = usePrintDocument();
   const { promptRequestAccess, isRequesting } = useRequestAccessPrompt();
   const denied = (error as any)?.response?.status === 403;
 
@@ -98,6 +106,7 @@ export function WorkflowDocumentViewer({
 
   const { rawFileKey, fileUrl, fileMimeType } = documentFile(doc);
   const policy = policyFor(doc.confidentiality);
+  const currentVersionId = doc.currentVersionId;
   const lockedByOther = !!doc.isCheckedOut && doc.checkoutLock?.lockedBy !== viewerId;
 
   return (
@@ -116,6 +125,25 @@ export function WorkflowDocumentViewer({
       lockedByOther={lockedByOther}
       onSignatureFieldClick={() => {}}
       getSignerName={() => 'User'}
+      canDownload={allows(doc, 'download')}
+      onDownload={
+        currentVersionId
+          ? () => {
+              const tab = window.open('', '_blank');
+              if (tab) tab.opener = null;
+              downloadVersion.mutate({ id: doc.id, versionId: currentVersionId, tab });
+            }
+          : undefined
+      }
+      canPrint={allows(doc, 'print')}
+      ocrText={doc.currentVersion?.ocrText}
+      ocrStatus={doc.currentVersion?.ocrStatus}
+      onBeforePrint={() =>
+        printDocument
+          .mutateAsync(doc.id)
+          .then(() => true)
+          .catch(() => false)
+      }
     />
   );
 }

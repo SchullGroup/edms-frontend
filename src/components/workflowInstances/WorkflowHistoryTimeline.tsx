@@ -5,6 +5,7 @@ import { useWorkflowHistory } from '@/apis/hooks/useWorkflowHistory';
 import { fmtDateTime } from '@/utils/helpers';
 import type { WorkflowStage } from '@/types/models';
 import { SkeletonText } from '@/components/common/Skeleton';
+import { groupWorkflowHistory, trailDocumentCount } from '@/utils/workflowTrail';
 
 /**
  * `action` on a history row is a free-form string — the engine emits both
@@ -14,6 +15,7 @@ import { SkeletonText } from '@/components/common/Skeleton';
  */
 const ACTION_LABEL: Record<string, string> = {
   workflow_started: 'Workflow started',
+  document_started: 'Document added',
   workflow_closed: 'Workflow closed',
   workflow_held: 'Put on hold',
   workflow_resumed: 'Resumed',
@@ -28,6 +30,8 @@ const ACTION_LABEL: Record<string, string> = {
   request_changes: 'Changes requested',
   delegate: 'Delegated',
   close: 'Closed',
+  sla_warning: 'SLA warning',
+  sla_breach: 'SLA breached',
 };
 
 const ACTION_TONE: Record<string, string> = {
@@ -36,6 +40,8 @@ const ACTION_TONE: Record<string, string> = {
   workflow_closed: 'var(--status-closed)',
   workflow_completed: 'var(--status-closed)',
   reject: 'var(--status-overdue)',
+  sla_breach: 'var(--status-overdue)',
+  sla_warning: 'var(--status-pending)',
   task_escalated: 'var(--status-overdue)',
   request_changes: 'var(--status-pending)',
   workflow_held: 'var(--status-pending)',
@@ -102,15 +108,21 @@ export function WorkflowHistoryTimeline({
   const records = data?.data || [];
   if (records.length === 0) return <div className="caption">{emptyMessage}</div>;
 
+  // Name the documents an entry covered only when the workflow has more than one.
+  const nameDocuments = trailDocumentCount(records) > 1;
+
   return (
     <div>
-      {records.map((r) => {
-        const tone = ACTION_TONE[r.action] || 'var(--border-strong)';
+      {groupWorkflowHistory(records).map(({ record: r, action, documents, comment, signature }) => {
+        const tone = ACTION_TONE[action] || 'var(--border-strong)';
         const from = stageName(r.fromStage);
         const to = stageName(r.toStage);
         const elapsed = fmtElapsed(r.elapsedSeconds);
-        const move =
-          from && to && from !== to ? `${from} → ${to}` : to || from || null;
+        const move = from && to && from !== to ? `${from} → ${to}` : to || from || null;
+        const label =
+          action === 'document_started' && documents.length > 1
+            ? 'Documents added'
+            : ACTION_LABEL[action] || humanise(action);
 
         return (
           <div key={r.id} className="wf-stage" style={{ cursor: 'default' }}>
@@ -121,28 +133,38 @@ export function WorkflowHistoryTimeline({
             />
             <div className="wf-info" style={{ flex: 1, minWidth: 0 }}>
               <div className="nm">
-                {ACTION_LABEL[r.action] || humanise(r.action)}
-                {move && <span className="muted" style={{ fontWeight: 500 }}> · {move}</span>}
+                {label}
+                {move && (
+                  <span className="muted" style={{ fontWeight: 500 }}>
+                    {' '}
+                    · {move}
+                  </span>
+                )}
               </div>
               <div className="who">
                 {r.actor?.name || 'System'} · {fmtDateTime(r.occurredAt)}
                 {elapsed ? ` · ${elapsed}` : ''}
               </div>
-              {(r.comment || r.note) && (
-                <div className="wf-detail">{r.comment || r.note}</div>
+              {nameDocuments && documents.length > 0 && (
+                <div className="caption" title={documents.join(', ')}>
+                  {documents.length === 1
+                    ? documents[0]
+                    : `${documents.length} documents: ${documents.join(', ')}`}
+                </div>
               )}
-              {r.task?.signature?.fileUrl && (
+              {comment && <div className="wf-detail">{comment}</div>}
+              {signature && (
                 <a
-                  href={r.task.signature.fileUrl}
+                  href={signature}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-2 mt-1"
+                  className="flex bg-white w-fit items-center gap-2 mt-1"
                   title="Signature"
                 >
                   <img
-                    src={r.task.signature.fileUrl}
+                    src={signature}
                     alt={`${r.actor?.name || 'Signer'}'s signature`}
-                    style={{ height: '22px', maxWidth: '76px', objectFit: 'contain' }}
+                    className="object-contain w-16 h-10"
                   />
                 </a>
               )}

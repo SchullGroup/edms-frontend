@@ -313,7 +313,7 @@ fields" until 2026-10-06 — stale since the field editor shipped (2026-09-18).*
 | 3.2 | Attach to a department | same payload | ✅ — **this is what makes department-scoped document access work** |
 | 3.3 | Delegate the cabinet: grant its manager (role or user) `upload` / `edit` / `delete` | `POST /cabinets/:id/access` | ✅ Access card |
 | 3.4 | Define custom metadata fields | `POST /cabinets/:id/metadata-fields` | ✅ Metadata schema card (*was "⛔ backend only", stale — corrected 2026-10-06*) |
-| 3.5 | Build the folder tree — normally the cabinet's manager, on `/staff/cabinets` | `POST /cabinets/:cabinetId/folders` `{name, parentId?}` | 🟨 needs `folder:create` **and** `upload` on the cabinet; not verified live |
+| 3.5 | Build the folder tree — normally the cabinet's manager, on `/staff/cabinets` | `POST /cabinets/:cabinetId/folders` `{name, parentId?}` | ✅ needs `folder:create` **and** `upload` on the cabinet; sub-folders confirmed in testing 2026-10-08 |
 | 3.6 | Attach a retention policy | — | ⛔ no endpoint, no UI, no enforcement job |
 
 ### The metadata gap in practice
@@ -460,9 +460,9 @@ A user may hold several roles. Two things follow:
    `schulltech_admin > client_admin > management > internal_auditor > supervisor > staff`.
    That role alone determines the sidebar and the post-login landing page.
 
-So a user who is both `supervisor` and `internal_auditor` gets the **Audit & Compliance**
-sidebar and lands on `/auditor` — their supervisor duties become invisible even though the
-API would permit them. Worth knowing before assigning combined roles.
+So a user who is both `supervisor` and `internal_auditor` lands on `/auditor` with the
+**Audit & Compliance** sidebar. Since 2026-10-08 the Topbar's portal label becomes a switcher
+for such users, so they can move to the Supervisor Console (see doc 04, Multi-role users).
 
 ---
 

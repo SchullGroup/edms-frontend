@@ -5,7 +5,7 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
 import { useSlaBreaches } from '@/apis/hooks/useSla';
-import { turnaroundDays } from '@/utils/supervisor';
+import { changesRequestedRate, turnaroundDays } from '@/utils/supervisor';
 import { exportCsv } from '@/utils/exportCsv';
 import { LineChart, DonutChart } from '@/components/ui/Charts';
 import { TaskRow } from '@/components/ui/TaskRow';
@@ -81,14 +81,19 @@ export default function MyPerformancePage() {
       delta: slaCompliance === null ? 'not reported yet' : 'vs last period',
       dir: 'up',
     },
-    { value: avgTurnaround, label: 'Avg turnaround', delta: '-0.4 d vs last period', dir: 'up' },
+    { value: avgTurnaround, label: 'Avg turnaround', delta: 'Raised to completed', dir: 'up' },
     {
       value: String(closedTasks.length),
       label: 'Items closed',
       delta: 'Lifetime',
       dir: 'up',
     },
-    { value: '4.2%', label: 'Rework rate', delta: '+0.8% vs last period', dir: 'down' },
+    {
+      value: changesRequestedRate(closedTasks),
+      label: 'Changes requested',
+      delta: 'Of items closed',
+      dir: 'up',
+    },
   ];
 
   return (

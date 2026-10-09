@@ -68,7 +68,7 @@ setting up an environment.
 
 ## The short version
 
-**57 frontend pages · 130 backend routes · 6 roles · 0 tests.**
+**58 frontend pages · 130 backend routes · 6 roles · 0 tests.**
 *(Re-derived 2026-10-05 with the commands in `AGENTS.md`, backend @ `dev` `c353105`: pages
 +4 for the circulars area; routes 106 → 130, of which 15 are the new `circulars` module —
 the rest accumulated since the 2026-09-18 count and weren't attributed individually.)*
@@ -87,7 +87,7 @@ The DOCUMENT half is real
 The GOVERNANCE half is a UI over fixtures
   notifications · policies          (circulars: wired 2026-10-05, 🟨 unverified)
   findings · retention · platform operations
-                                                    🟥 at least 17 of 57 pages
+                                                    🟥 13 of 58 pages
 ```
 
 ### The four defects that matter most
@@ -435,6 +435,38 @@ in doc 01's drift matrix turned out stale: `POST /workflow-instances/:id/documen
 marked "no UI yet" (the "Mark reviewed" flow has attached documents through it since
 2026-10-02), and `GET /workflow-history` was marked "no UI at all" (the activity trail
 reads it). Both corrected in place.
+
+**Correction (2026-10-08).** Doc 05 said eight pages had never been classified. The
+real number was seven, and not the ones it named: `/staff/performance` and `/staff/tasks`
+already had rows, while `/delegations` (wired since 2026-09-18) had none. All seven now
+have rows, and the portfolio table was re-tallied from the page rows (57 pages: 21 ✅,
+16 🟨, 15 🟥, 5 ↪️/static) instead of carrying the 42-page counts forward. The same pass
+found three stale P0 rows (#2 routing, #4 login accounts, #7 `effStatus`) that were done
+in the code, and the `/staff` "Route for approval ⛔ 404" flow row. The "Rework rate 4.2%"
+on the staff dashboard and My Performance was hard-coded. It is now a real "Changes
+requested" rate. `GET /tasks/stats` can't serve per-user stats: it is department-grouped,
+rejects `assigneeId`, and refuses staff. So the work-queue item that assumed it could was
+moved to the backend list.
+
+**Correction (2026-10-08, later the same day).** While adopting the backend's new
+confidentiality permissions (`0dab81a`), three doc claims turned out wrong. Doc 01 marked
+`GET /documents/:id/versions/:versionId` wired, but nothing called it: the versions panel
+opened the list's own signed URL, which skipped the download check and audit. Doc 02 B3 said
+there was no preview or download endpoint, though `GET /documents/:id` has returned a signed
+`fileUrl` for some time. And doc 02 E1 described a doc-detail edit form offering Top Secret
+that never existed. All corrected in place. **Known stale, not yet fixed:** the per-role
+grant counts in docs 02, 03 and 04 (e.g. supervisor "18", client_admin "45, all global",
+Phase 1's "45 permissions, 100 grants"). The seed now has 73 permissions and 212 grants:
+client_admin 72 (one `own`), supervisor 40, staff 29, management 27, internal_auditor 26,
+schulltech_admin 18. Those counts were already behind before this change.
+
+**Correction (2026-10-09).** While recording edms-backend `dd10017`, three claims turned out
+wrong. Doc 01 §7's Filing table still listed cabinet metadata fields and cabinet access
+grants as "backend only — no UI", with a paragraph saying no screen could grant a cabinet
+permission. The 2026-09-21 correction had fixed this in doc 01's summary and DRIFT register,
+but not in those two rows. Doc 02 A1 said the upload form never asked for cabinet metadata,
+and A4's intro said the same, though the form had rendered the fields since 2026-10-07. All
+corrected in place (A4's intro is marked outdated and kept).
 
 ---
 

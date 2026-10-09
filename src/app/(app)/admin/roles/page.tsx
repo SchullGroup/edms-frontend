@@ -57,6 +57,11 @@ const ACTION_ORDER = [
   'download',
   'export',
   'print',
+  // Confidentiality clearance (edms-backend `0dab81a`): which tiers above
+  // Internal a role can open. Scope narrows it to the department's or own documents.
+  'view_confidential',
+  'view_restricted',
+  'view_top_secret',
   'delete',
 ];
 

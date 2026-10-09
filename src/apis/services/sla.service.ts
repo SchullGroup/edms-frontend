@@ -1,5 +1,12 @@
 import { apiClient } from '@/lib/api-client';
-import { PaginatedResponse, SlaBreach } from '@/types/models';
+import {
+  ApiResponse,
+  PaginatedResponse,
+  SlaBreach,
+  SlaConfiguration,
+  SlaConfigurationUpdate,
+  SlaHoliday,
+} from '@/types/models';
 
 /** Mirrors `GET /sla/breaches`'s query schema. */
 export interface SlaBreachFilters {
@@ -30,5 +37,35 @@ export const slaService = {
       params,
     });
     return response.data;
+  },
+
+  /** Needs `workflow:view`. */
+  getConfiguration: async (): Promise<SlaConfiguration> => {
+    const response = await apiClient.get<ApiResponse<SlaConfiguration>>('/sla/configuration');
+    return response.data.data;
+  },
+
+  /** Needs `workflow:edit`. Send only the fields that changed. */
+  updateConfiguration: async (updates: SlaConfigurationUpdate): Promise<SlaConfiguration> => {
+    const response = await apiClient.patch<ApiResponse<SlaConfiguration>>(
+      '/sla/configuration',
+      updates,
+    );
+    return response.data.data;
+  },
+
+  getHolidays: async (): Promise<SlaHoliday[]> => {
+    const response = await apiClient.get<ApiResponse<SlaHoliday[]>>('/sla/holidays');
+    return response.data.data;
+  },
+
+  /** `date` is "YYYY-MM-DD". */
+  createHoliday: async (holiday: { date: string; name: string }): Promise<SlaHoliday> => {
+    const response = await apiClient.post<ApiResponse<SlaHoliday>>('/sla/holidays', holiday);
+    return response.data.data;
+  },
+
+  deleteHoliday: async (holidayId: string): Promise<void> => {
+    await apiClient.delete(`/sla/holidays/${holidayId}`);
   },
 };

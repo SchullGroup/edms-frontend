@@ -1,5 +1,6 @@
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
-import type { SavedSearch } from '@/types/models';
+import type { DocumentShortcut, SavedSearch } from '@/types/models';
+import type { PortalChoice } from '@/lib/permissions';
 
 export const CONF_LEVELS = ['Public', 'Internal', 'Confidential', 'Restricted', 'Top Secret'];
 export const URGENCY_LEVELS = ['Low', 'Normal', 'High', 'Critical'];
@@ -1450,6 +1451,8 @@ export const SEED = {
   plans: PLANS,
   // Keyed by user id, so people sharing a browser don't see each other's.
   savedSearches: {} as Record<string, SavedSearch[]>,
+  recentDocuments: {} as Record<string, DocumentShortcut[]>,
+  pinnedDocuments: {} as Record<string, DocumentShortcut[]>,
   branding: {
     appName: 'SchullTech EDMS',
     tenantName: 'First Atlantic Bank',
@@ -1458,7 +1461,12 @@ export const SEED = {
     accent: '#C55A11',
     logoText: 'S',
   },
-  prefs: { density: 'comfortable', theme: 'light' },
+  prefs: { density: 'comfortable', theme: 'light' } as {
+    density: string;
+    theme: string;
+    /** The Topbar role switcher's pick (session state, not SEED domain data). */
+    portalChoice?: PortalChoice | null;
+  },
   session: null as string | null,
   seq: 2000,
 };

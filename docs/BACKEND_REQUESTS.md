@@ -1,5 +1,9 @@
 # Backend Requests — from the Frontend Team
 
+> **2026-10-08: the open asks are now one implementable spec,
+> [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
+> against `edms-backend` `dev` at `2db7e19`. This file stays as the history of earlier requests.
+
 **Raised:** 2026-08-29 · **Updated:** 2026-09-21
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `dev` (`b1b0b68`) — **106 routes**
@@ -37,7 +41,7 @@ it. Then BE-1 and BE-4, which are security items rather than features.
 | **BE-10** | JSON 404 handler                                  | Small fix    | 🟡 Low      | No                         |
 | ~~BE-11~~ | ~~`audit` module~~                                | ✅ **Done**  | —           | —                          |
 | ~~BE-13~~ | ~~`forgot-password` / `reset-password`~~          | ✅ **Done**  | —           | —                          |
-| **BE-14** | Confidentiality-tier clearance option on roles    | New field/endpoint | 🟠 Med | No — per-document grants work meanwhile |
+| ~~BE-14~~ | ~~Confidentiality-tier clearance option on roles~~ | ✅ **Done** (`0dab81a`) | — | — |
 | **BE-15** | Revoke a granted `DocumentAccessGrant`            | New endpoint | 🟠 Med      | No — grants just accumulate |
 | **BE-16** | Optional `signature` on the `review` task action  | Schema change | 🟠 Med      | No — "Mark reviewed" ships comment-only meanwhile |
 | **BE-17** | Support >1 document per workflow instance         | Data model change | 🟡 Low | No — single-document version upload covers the common case |
@@ -456,7 +460,15 @@ POST /api/v1/auth/reset-password
 
 ---
 
-## 🟡 BE-14 · Confidentiality-tier clearance for custom roles — **in progress, per conversation 2026-09-18**
+## ✅ BE-14 · Confidentiality-tier clearance for custom roles — **done, `edms-backend` `0dab81a` (2026-10-08)**
+
+**Shipped as permissions, not a role field:** `document:view_confidential`,
+`document:view_restricted` and `document:view_top_secret`, each scoped like any other grant,
+replace the tier role lists. Any role, custom or seeded, is cleared by ticking the box in
+`/admin/roles`. Download, export and print gained their own permissions too. Confirmed live
+on `/auth/me` 2026-10-08. The frontend's clearance check follows it (`isConfidentialityActionAllowed`
+in `src/constants/documentLevels.ts`). The original request follows.
+
 
 **What we found:** `RESTRICTED_TIER_ROLES`/`CONFIDENTIAL_TIER_ROLES` are hardcoded role-*name*
 allowlists (`confidential` → `supervisor`/`management`/`client_admin`/`internal_auditor`;

@@ -529,6 +529,51 @@ input[type="checkbox"] { accent-color: var(--focus); }
 .sig-field { position: absolute; border: 2px dashed var(--status-progress); background: rgba(59,111,212,.07); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-family: Inter, Arial, sans-serif; font-size: 10px; color: var(--status-progress); font-weight: 700; }
 .sig-field.signed { border-style: solid; border-color: var(--status-closed); background: rgba(33,154,111,.06); color: var(--status-closed); font-family: "Segoe Script", cursive; font-size: 16px; }
 
+/* PDF viewer (PdfViewer, pdf.js). Pages render to canvas; the transparent text
+   layer over each one carries selection and find highlights. The .textLayer
+   rules are the subset of pdfjs-dist/web/pdf_viewer.css that TextLayer needs. */
+.pdf-search { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.pdf-search input, .pdf-page-input { height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: inherit; font-size: 12px; }
+.pdf-search input { width: 180px; max-width: 40vw; }
+.pdf-search input::placeholder { color: rgba(201,206,220,.6); }
+.pdf-page-input { width: 46px; padding: 0 6px; }
+.pdf-search input:focus-visible, .pdf-page-input:focus-visible { outline: 2px solid #8FB3FF; outline-offset: 1px; }
+.viewer-bar .icon-btn:disabled { opacity: .4; cursor: default; background: none; }
+.viewer-bar .sep { width: 1px; align-self: stretch; background: rgba(255,255,255,.12); margin: 2px 2px; }
+.pdf-scroll { position: relative; height: min(78vh, 900px); overflow: auto; padding: 12px; outline: none; }
+.pdf-scroll:focus-visible { box-shadow: inset 0 0 0 2px #8FB3FF; }
+/* At least as wide as the widest page, so a zoomed-in page can scroll to its left edge. */
+.pdf-pages { width: max-content; min-width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.pdf-page { position: relative; background: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.4); border-radius: 2px; overflow: hidden; flex-shrink: 0; --scale-round-x: 1px; --scale-round-y: 1px; }
+.pdf-page canvas { display: block; }
+.pdf-page .watermark { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: hidden; }
+.pdf-page .watermark span { transform: rotate(-32deg); font-weight: 800; color: rgba(222,91,109,.14); letter-spacing: .1em; white-space: nowrap; text-transform: uppercase; font-family: Inter, Arial, sans-serif; }
+.pdf-view-toggle { height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,.18); background: transparent; color: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.pdf-view-toggle:hover, .pdf-view-toggle[aria-pressed="true"] { background: rgba(255,255,255,.12); }
+.pdf-view-toggle:focus-visible { outline: 2px solid #8FB3FF; outline-offset: 1px; }
+.ocr-sheet { background-color: #fff; color: #1d2433; max-width: 900px; margin: 0 auto; padding: 28px 32px; border-radius: 2px; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+.ocr-note { font-size: 12px; color: #5b6478; background: #f3f5f9; border-radius: 6px; padding: 8px 10px; margin: 0 0 16px; }
+.ocr-text { white-space: pre-wrap; line-height: 1.6; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+.ocr-hl { background: rgba(255,196,0,.45); color: inherit; border-radius: 2px; }
+.ocr-hl.active { background: rgba(255,120,0,.65); box-shadow: 0 0 0 1px rgba(200,80,0,.8); }
+.pdf-status { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 320px; color: #C9CEDC; text-align: center; padding: 24px; font-size: 13px; }
+.pdf-page .textLayer { color-scheme: only light; position: absolute; text-align: initial; inset: 0; overflow: clip; opacity: 1; line-height: 1; letter-spacing: normal; word-spacing: normal; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; caret-color: CanvasText; z-index: 0;
+  --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
+.pdf-page .textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; user-select: text; }
+.pdf-page .textLayer > :not(.markedContent), .pdf-page .textLayer .markedContent span:not(.markedContent) { z-index: 1; --font-height: 0; font-size: calc(var(--text-scale-factor) * var(--font-height)); --scale-x: 1; --rotate: 0deg; transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+.pdf-page .textLayer .markedContent { display: contents; }
+.pdf-page .textLayer span[role="img"] { user-select: none; cursor: default; }
+.pdf-page .textLayer ::selection { background: color-mix(in srgb, AccentColor, transparent 50%); color: transparent; }
+.pdf-page .textLayer br::selection { background: transparent; }
+.pdf-page .textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0; cursor: default; user-select: none; }
+.pdf-page .textLayer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
+.pdf-page .textLayer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
+.pdf-page .textLayer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }
+/* Without copy permission the text stays findable but can't be selected. */
+.pdf-page .textLayer.no-select :is(span, br) { user-select: none; cursor: default; }
+.pdf-page .textLayer span.pdf-hl { position: static; transform: none; margin: -1px; padding: 1px; border-radius: 3px; background: rgba(255,196,0,.45); }
+.pdf-page .textLayer span.pdf-hl.active { background: rgba(255,120,0,.65); box-shadow: 0 0 0 1px rgba(200,80,0,.8); }
+
 /* metadata */
 .meta-row { display: flex; justify-content: space-between; gap: 10px; padding: 8.5px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
 .meta-row:last-child { border-bottom: 0; }
@@ -729,3 +774,17 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
     color: #666;
   }
 }
+
+/* Help page */
+.help-toc { display: flex; flex-wrap: wrap; gap: 8px; }
+.help-toc .chip { display: inline-flex; align-items: center; padding: 5px 11px; border-radius: 99px; border: 1px solid var(--border); background: var(--panel); color: var(--ink); font-size: 12.5px; text-decoration: none; }
+.help-toc .chip:hover { background: var(--surface); }
+.help-toc .chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.help-topic { scroll-margin-top: 80px; }
+.help-body { font-size: 13.5px; line-height: 1.65; max-width: 760px; }
+.help-body p + p, .help-body p + ul, .help-body ul + p, .help-body p + ol { margin-top: 10px; }
+.help-body ul, .help-body ol { padding-left: 20px; }
+.help-body ul { list-style: disc; }
+.help-body ol { list-style: decimal; }
+.help-body li + li { margin-top: 6px; }
+.help-body a { color: var(--focus); text-decoration: underline; }
