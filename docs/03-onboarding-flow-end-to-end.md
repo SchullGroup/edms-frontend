@@ -727,8 +727,8 @@ Once documents are flowing, this is what daily use looks like and what it costs.
 | Notifications | ⛔ | module missing; returns an HTML 404 that axios can't parse |
 | Delegate while away | 🟨 | backend complete, no UI at all |
 | Supervisor workload view | 🟨 | works, but walks every page of `/documents` client-side |
-| Management reports | 🟨 | works, but computes all aggregates in the browser |
-| Circulars | 🟨 | backend module built; frontend wired 2026-10-05 (`/circulars`, `/circulars/manage`) — not yet verified live |
+| Management reports | ✅ | four real reports with CSV export, rebuilt 2026-10-08 *(confirmed by the product owner’s testing, 2026-10-09)* |
+| Circulars | ✅ | backend module built; frontend wired 2026-10-05 (`/circulars`, `/circulars/manage`) *(confirmed by the product owner’s testing, 2026-10-09)* |
 
 ### The performance cliff worth planning for
 

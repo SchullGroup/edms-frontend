@@ -74,12 +74,13 @@ export default function UsersPage() {
 
   const handleUserModal = (user: any | null) => {
     const isNew = !user;
-    const existingRoleId = user?.userRoles?.[0]?.roleId ?? user?.roles?.[0]?.id ?? '';
+    const existingRoleIds: string[] =
+      user?.userRoles?.map((ur: any) => ur.roleId) ?? user?.roles?.map((r: any) => r.id) ?? [];
     let u = {
       id: user?.id,
       name: user?.name || '',
       email: user?.email || '',
-      roleId: existingRoleId,
+      roleIds: existingRoleIds,
       departmentId: user?.departmentId || departmentList[0]?.id || '',
     };
     // Modal actions aren't real <form> submits, so `required`/`type="email"`
@@ -119,10 +120,6 @@ export default function UsersPage() {
             />
           </div>
           <div className="field">
-            <label>Role</label>
-            <RoleSelect initialRoleId={u.roleId} onChange={(roleId) => (u.roleId = roleId)} />
-          </div>
-          <div className="field">
             <label>Department</label>
             <select
               className="input"
@@ -135,6 +132,14 @@ export default function UsersPage() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="field col-span-2">
+            <label>Roles</label>
+            <RolePicker initialRoleIds={u.roleIds} onChange={(roleIds) => (u.roleIds = roleIds)} />
+            <div className="help">
+              Someone with several roles has the rights of all of them, and switches between their
+              portals from the top bar.
+            </div>
           </div>
         </div>
       ),
@@ -161,7 +166,7 @@ export default function UsersPage() {
                   email: u.email,
                   name: u.name,
                   departmentId: u.departmentId || undefined,
-                  roleIds: u.roleId ? [u.roleId] : undefined,
+                  roleIds: u.roleIds.length ? u.roleIds : undefined,
                 })
                 .then((newUser: any) => {
                   auditAction('USER_INVITE', newUser.id, 'Invited ' + u.email);
@@ -170,7 +175,7 @@ export default function UsersPage() {
             }
             // Returning the combined promise keeps the modal open (with a
             // loading state) until the profile update — and, if changed, the
-            // role swap — actually land, instead of closing immediately and
+            // role changes — actually land, instead of closing immediately and
             // hoping they succeed in the background.
             const tasks: Promise<any>[] = [
               updateUser
@@ -182,20 +187,35 @@ export default function UsersPage() {
                   auditAction('USER_EDIT', u.id, 'Updated profile');
                 }),
             ];
-            // Persist a role change — the modal only tracks a single role.
-            // Assign the new one before removing the old one, sequenced
-            // rather than parallel, so the user is never briefly role-less.
-            if (u.roleId && u.roleId !== existingRoleId) {
+            // Role changes: `POST /users/:id/roles` adds, `DELETE .../roles/:roleId`
+            // removes one. Additions go first and removals after, one at a time,
+            // so a user swapping roles is never briefly left with none.
+            const added = u.roleIds.filter((id) => !existingRoleIds.includes(id));
+            const removed = existingRoleIds.filter((id) => !u.roleIds.includes(id));
+            if (added.length || removed.length) {
               tasks.push(
-                assignUserRoles
-                  .mutateAsync({ id: u.id, roleIds: [u.roleId] })
+                (added.length
+                  ? assignUserRoles.mutateAsync({ id: u.id, roleIds: added })
+                  : Promise.resolve()
+                )
+                  .then(() =>
+                    removed.reduce<Promise<unknown>>(
+                      (chain, roleId) =>
+                        chain.then(() => removeUserRole.mutateAsync({ id: u.id, roleId })),
+                      Promise.resolve(),
+                    ),
+                  )
                   .then(() => {
-                    if (existingRoleId) {
-                      return removeUserRole.mutateAsync({ id: u.id, roleId: existingRoleId });
-                    }
-                  })
-                  .then(() => {
-                    auditAction('USER_ROLE_CHANGE', u.id, `Role → ${u.roleId}`);
+                    auditAction(
+                      'USER_ROLE_CHANGE',
+                      u.id,
+                      [
+                        added.length ? `added ${added.join(', ')}` : '',
+                        removed.length ? `removed ${removed.join(', ')}` : '',
+                      ]
+                        .filter(Boolean)
+                        .join('; '),
+                    );
                   }),
               );
             }
@@ -251,7 +271,7 @@ export default function UsersPage() {
         </span>
       ),
     },
-    { key: 'roleLabel', label: 'Role', sortable: true },
+    { key: 'roleLabel', label: 'Roles', sortable: true },
     { key: 'dept', label: 'Department' },
     {
       key: 'status',
@@ -293,9 +313,7 @@ export default function UsersPage() {
             <button
               className="btn btn-secondary btn-sm"
               disabled={resendInvitation.isPending || !canCreateUser}
-              title={
-                !canCreateUser ? "You don't have permission to invite users" : undefined
-              }
+              title={!canCreateUser ? "You don't have permission to invite users" : undefined}
               onClick={(e) => {
                 e.stopPropagation();
                 handleResendInvitation(u);
@@ -315,7 +333,7 @@ export default function UsersPage() {
         <div>
           <div className="page-title">Users</div>
           <div className="page-sub">
-            Invite people, edit their profile and department, and assign a role.
+            Invite people, edit their profile and department, and assign their roles.
           </div>
         </div>
         <div className="actions">
@@ -372,7 +390,7 @@ export default function UsersPage() {
           </div>
         </div>
         {isLoading ? (
-          <SkeletonTable columns={['Name', 'Role', 'Department', 'Status', '']} rows={8} />
+          <SkeletonTable columns={['Name', 'Roles', 'Department', 'Status', '']} rows={8} />
         ) : (
           <>
             <Table cols={userCols} rows={users} />
@@ -393,43 +411,56 @@ export default function UsersPage() {
 }
 
 /**
- * The invite/edit modal's role picker. Split out into its own component so it
- * fetches roles itself rather than reading a `roles` value captured by the
- * surrounding `openModal(...)` call — that value is frozen at the moment the
- * modal button is clicked, so if the query hadn't resolved yet the `<select>`
- * was stuck without roles until the modal was closed and reopened.
- *
- * `key={isLoading ...}` forces a remount once roles arrive, so an edit modal's
- * `defaultValue` (the user's existing role) gets re-applied against the
- * now-available `<option>` list instead of falling back to "Unassigned".
+ * The invite/edit modal's role picker: one checkbox per role, any number ticked.
+ * It fetches roles itself rather than reading a `roles` value captured by the
+ * surrounding `openModal(...)` call, which is frozen at the moment the modal
+ * opens, so roles still loading then would never appear. The ticked set is its
+ * own state, reported up through `onChange`.
  */
-function RoleSelect({
-  initialRoleId,
+function RolePicker({
+  initialRoleIds,
   onChange,
 }: {
-  initialRoleId: string;
-  onChange: (roleId: string) => void;
+  initialRoleIds: string[];
+  onChange: (roleIds: string[]) => void;
 }) {
   const { data: roles, isLoading } = useRoles();
+  const [selected, setSelected] = useState<string[]>(initialRoleIds);
+
+  const toggle = (roleId: string) => {
+    const next = selected.includes(roleId)
+      ? selected.filter((id) => id !== roleId)
+      : [...selected, roleId];
+    setSelected(next);
+    onChange(next);
+  };
+
+  if (isLoading) return <div className="caption">Loading roles…</div>;
 
   return (
-    <select
-      key={isLoading ? 'loading' : 'loaded'}
-      className="input capitalize"
-      defaultValue={initialRoleId}
-      onChange={(e) => onChange(e.target.value)}
+    <div
+      role="group"
+      aria-label="Roles"
+      className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1"
+      style={{
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        padding: '8px 12px',
+        maxHeight: 180,
+        overflowY: 'auto',
+      }}
     >
-      <option value="">Unassigned</option>
-      {isLoading && (
-        <option value="_loading" disabled>
-          Loading roles….
-        </option>
-      )}
       {roles?.map((r) => (
-        <option key={r.id} value={r.id}>
-          {r.name.replace('_', ' ')}
-        </option>
+        <label
+          key={r.id}
+          className="flex items-center gap-2 capitalize"
+          style={{ fontWeight: 500, cursor: 'pointer', padding: '3px 0', margin: 0 }}
+        >
+          <input type="checkbox" checked={selected.includes(r.id)} onChange={() => toggle(r.id)} />
+          {r.name.replace(/_/g, ' ')}
+        </label>
       ))}
-    </select>
+      {!roles?.length && <div className="caption">No roles defined yet.</div>}
+    </div>
   );
 }
