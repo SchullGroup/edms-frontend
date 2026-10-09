@@ -890,8 +890,9 @@ layer (staff → supervisor → management) is largely wired; the governance lay
 
 ## Multi-role users
 
-A user may hold several roles simultaneously (`UserRole` is a many-to-many join). Two
-different resolution rules apply, and they disagree.
+A user may hold several roles simultaneously (`UserRole` is a many-to-many join). Since
+2026-10-09 `/admin/users` assigns any number of them (a checkbox list; before, it handled one
+role only). Two different resolution rules apply, and they disagree.
 
 ### At the API — most permissive wins
 

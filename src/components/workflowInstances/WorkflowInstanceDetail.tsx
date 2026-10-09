@@ -45,8 +45,7 @@ export function WorkflowInstanceDetail({
 
   const stages = instance.workflowDefinition?.definition?.stages;
   const pendingTask = instance.tasks?.find((t) => t.status === 'pending');
-  const actorName =
-    pendingTask?.assignee?.name || pendingTask?.assignedRole?.name || 'Unassigned';
+  const actorName = pendingTask?.assignee?.name || pendingTask?.assignedRole?.name || 'Unassigned';
   const closed = instance.status === 'closed';
   const nearestDue = positions
     .flatMap((p) => p.active.map((e) => e.stageDueAt))
@@ -199,15 +198,18 @@ function WorkflowInstanceDetailSkeleton() {
 
       <div className="divider"></div>
       <div className="h3 mb-2">Stages</div>
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="wf-stage" style={{ cursor: 'default' }} aria-hidden="true">
-          <Skeleton width={24} height={24} circle />
-          <div className="wf-info" style={{ flex: 1 }}>
-            <Skeleton height={12} width="55%" style={{ marginBottom: '5px' }} />
-            <Skeleton height={10} width="30%" />
+      {/* Wrapped so `.wf-stage:last-child` drops the last connector. */}
+      <div>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="wf-stage" style={{ cursor: 'default' }} aria-hidden="true">
+            <Skeleton width={24} height={24} circle />
+            <div className="wf-info" style={{ flex: 1 }}>
+              <Skeleton height={12} width="55%" style={{ marginBottom: '5px' }} />
+              <Skeleton height={10} width="30%" />
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
 
       <div className="divider"></div>
       <div className="h3 mb-2">Activity trail</div>
