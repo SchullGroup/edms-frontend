@@ -983,7 +983,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents` | ✅ | ✅ |
 | `GET /documents/search` | ✅ | ✅ (misses a document if its OCR job gets stuck at `pending` — see DRIFT-06) |
 | `GET /documents/:id` | ✅ | ✅ — embeds `checkoutLock` + `locker {id,name,email}` since `edms-backend` `b4a3f81` (2026-09-29); before that only `isCheckedOut` came back, so even the lock holder couldn't check the document back in (TEST_PLAN "Things to check") |
-| `POST /documents` | ✅ — since `edms-backend` `dd10017` (2026-10-09) takes `metadata: [{ fieldId, value }]`, checked against the cabinet's fields and saved in the same transaction. A missing **required** field fails the upload (400), so a client that sends no metadata can't file into a cabinet with required fields | ✅ — `metadata` sent from `/upload` and the workflow picker's "Upload from computer" since 2026-10-09. **Verified live 2026-10-09** on `/upload`: a `staff` user (no `document_metadata:edit`) filed with a value, `GET /documents/:id/metadata` returned it, no `PUT` was made. The picker is 🟨 type-checked only (no test user had a review task) |
+| `POST /documents` | ✅ — since `edms-backend` `dd10017` (2026-10-09) takes `metadata: [{ fieldId, value }]`, checked against the cabinet's fields and saved in the same transaction. A missing **required** field fails the upload (400), so a client that sends no metadata can't file into a cabinet with required fields | ✅ — `metadata` sent from `/upload` and the workflow picker's "Upload from computer" since 2026-10-09. **Verified live 2026-10-09** on `/upload`: a `staff` user (no `document_metadata:edit`) filed with a value, `GET /documents/:id/metadata` returned it, no `PUT` was made. The picker was confirmed by the product owner's testing 2026-10-09 |
 | `POST /documents/batch` (≤ 20, one transaction) | ✅ — each item takes `metadata` too (`dd10017`) | ✅ wired 2026-10-08 — `/upload`'s "File all", in chunks of 20; confirmed in testing 2026-10-08. Each item carries its card's metadata since 2026-10-09, **verified live** (two documents, two values stored). *This row was missing from the matrix* |
 | `POST /documents/versions/batch` (≤ 20) | ✅ | ⚠️ backend only — nothing uploads several new versions at once |
 | `PATCH /documents/:id` | ✅ — since `dd10017` (2026-10-09) also moves documents: `cabinetId` changes the cabinet (the folder is cleared unless a folder in the new cabinet is given) and `folderId: null` moves to the cabinet root; a folder from another cabinet is a 400. ⚠️ Edit access is checked only on the **destination** cabinet, so someone with edit on any cabinet can pull a document out of one they can't edit (request doc item 7) | ✅ — also, from 2026-10-08, the document page's "Change classification" dialog (`confidentiality`, `urgency`; 🟨 not verified live). Moves still send only `folderId` within the cabinet: cross-cabinet Move waits on the item 7 fix |
@@ -1067,22 +1067,21 @@ twice. Both screens have existed since at least 2026-09-21 (see the 2026-09-21 c
 Backend `src/modules/circulars/` — 15 routes, two BullMQ workers (delivery fan-out and a
 reconcile/expiry/reminder sweep), and `circular:view|create|publish|withdraw` permissions
 seeded for `client_admin`, `supervisor`, `management` and `internal_auditor`. Frontend:
-`circulars.service.ts` + `useCirculars.ts`. Every row is 🟨 — **built and type/build-checked,
-not verified end to end against a live backend.**
+`circulars.service.ts` + `useCirculars.ts`. Every row is ✅ — built 2026-10-05, *(confirmed by the product owner’s testing, 2026-10-09)*.
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `getInbox` | `GET /circulars/inbox` | 🟨 |
-| `getInboxSummary` | `GET /circulars/inbox/summary` | 🟨 sidebar badge = `unacknowledged` |
-| `getInboxItem` | `GET /circulars/inbox/:id` (first open = read receipt) | 🟨 |
-| `acknowledge` | `POST /circulars/inbox/:id/acknowledge` | 🟨 |
-| `getAll` | `GET /circulars` (`circular:view`) | 🟨 |
-| `getById` | `GET /circulars/:id` | 🟨 |
-| `create` · `update` · `remove` | `POST /circulars` · `PATCH`/`DELETE /circulars/:id` (`circular:create`, drafts only) | 🟨 |
-| `publish` · `cancelSchedule` | `POST /circulars/:id/publish` · `/cancel-schedule` (`circular:publish`) | 🟨 |
-| `withdraw` | `POST /circulars/:id/withdraw` (`circular:withdraw`) | 🟨 |
-| `revise` | `POST /circulars/:id/revisions` (`circular:create`) | 🟨 |
-| `getRecipients` | `GET /circulars/:id/recipients` | 🟨 |
-| `sendReminders` | `POST /circulars/:id/reminders` (`circular:publish`) | 🟨 |
+| `getInbox` | `GET /circulars/inbox` | ✅ |
+| `getInboxSummary` | `GET /circulars/inbox/summary` | ✅ sidebar badge = `unacknowledged` |
+| `getInboxItem` | `GET /circulars/inbox/:id` (first open = read receipt) | ✅ |
+| `acknowledge` | `POST /circulars/inbox/:id/acknowledge` | ✅ |
+| `getAll` | `GET /circulars` (`circular:view`) | ✅ |
+| `getById` | `GET /circulars/:id` | ✅ |
+| `create` · `update` · `remove` | `POST /circulars` · `PATCH`/`DELETE /circulars/:id` (`circular:create`, drafts only) | ✅ |
+| `publish` · `cancelSchedule` | `POST /circulars/:id/publish` · `/cancel-schedule` (`circular:publish`) | ✅ |
+| `withdraw` | `POST /circulars/:id/withdraw` (`circular:withdraw`) | ✅ |
+| `revise` | `POST /circulars/:id/revisions` (`circular:create`) | ✅ |
+| `getRecipients` | `GET /circulars/:id/recipients` | ✅ |
+| `sendReminders` | `POST /circulars/:id/reminders` (`circular:publish`) | ✅ |
 
 Contract notes: list endpoints use the standard paginated envelope; `archived` is sent as
 the string `'true'|'false'` (axios serialises the boolean); a `PATCH` that includes

@@ -215,7 +215,7 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 
 > **Persona:** Bola · the tenant's own system owner, usually IT or Operations management
 > **Landing page:** `/admin` · **Sidebar:** Client Administration
-> **Overall status:** 🟨 **Structure is real; policy and branding are mock** (circulars wired 2026-10-05, not yet verified live)
+> **Overall status:** 🟨 **Structure is real; policy and branding are mock** (circulars wired 2026-10-05, confirmed working 2026-10-09)
 
 ### Identity and rights
 
@@ -244,7 +244,7 @@ This must be done in order; each step produces the input for the next.
 | 8 | **Design and publish workflows** | `/admin/workflows` | `POST /workflows`, `/publish` | 🟨 **no authorization** |
 | 9 | Set retention and confidentiality policy | `/admin/policies` | — | 🟥 `SEED.policies` |
 | 10 | Apply branding | `/admin/branding` | — | 🟥 `SEED.branding` |
-| 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | 🟨 wired 2026-10-05, not yet verified live |
+| 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 12 | Review the tenant audit trail | `/admin/audit` | `GET /audit`, `/audit/verify` | ✅ wired 2026-09-18 (was `SEED.audit`) |
 
 **Steps 2, 3, 4, 5, 7, 8 and 12 are real; step 6 is wired but not yet verified live.** Everything else is either missing a UI or writes
@@ -283,7 +283,7 @@ consistently fails.
 | Read `top_secret` documents | ❌ **nobody can** | — |
 | Configure retention | ❌ | 🟥 |
 | Configure branding | ❌ | 🟥 |
-| Publish circulars | ✅ `circular:*` at `global` scope | 🟨 wired 2026-10-05, not verified live |
+| Publish circulars | ✅ `circular:*` at `global` scope | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | View the audit trail | ✅ | ✅ wired 2026-09-18 |
 
 ### Where it breaks, ranked
@@ -344,7 +344,7 @@ workflow:route:global
 | 6 | Open it and check the details | `/doc/[id]` | ✅ |
 | 7 | Route it for approval | `/doc/[id]` | ⛔ **404 (DRIFT-09)** |
 | 8 | Check their task queue | `/staff/tasks` | ✅ |
-| 9 | Read circulars | `/circulars` | 🟨 `GET /circulars/inbox` — wired 2026-10-05, not verified live |
+| 9 | Read circulars | `/circulars` | ✅ `GET /circulars/inbox` — wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 10 | Check notifications | `/notifications` | ⛔ HTML 404 |
 
 ### First week — habits that form
@@ -368,7 +368,7 @@ morning   → /staff        check dashboard   ⚠️ must remember to; nothing p
 during    → /upload       file arrivals     ✅  (⚠️ >2 MB rejected, PDF/images only)
           → /doc/[id]     add context       ⛔ comments 404
           → route         send for approval ⛔ 404
-          → /search       find something    🟨 pending check
+          → /search       find something    ✅ confirmed 2026-10-09
 end       → /staff/tasks  clear the queue   ✅
 ```
 
@@ -438,7 +438,7 @@ The two task constants — not the permission table — are what actually make s
 | Task | Status | Note |
 |---|---|---|
 | Clear the approvals queue daily | ✅ | Prioritised by urgency then due date — genuinely good |
-| Approve / reject / request changes | 🟨 | On the workflow page (`/workflow-instances/[id]`, 2026-10-02). Request changes now asks which of the task's documents need changes — DRIFT-18 fixed, not yet verified e2e |
+| Approve / reject / request changes | ✅ | On the workflow page (`/workflow-instances/[id]`, 2026-10-02). Request changes asks which of the task's documents need changes — DRIFT-18 fixed. All three *(confirmed by the product owner’s testing, 2026-10-09)* |
 | Release a team member's overdue checkout | 🟨 | Notified via `checkout.overdue` when a same-department holder misses `expectedReturnAt`; "Force check in" on `/doc/[id]` if they hold `document_lock:delete` at department scope for that cabinet's department (2026-10-02, not yet verified e2e) |
 | Follow a notification to its item | 🟨 | Task and workflow links (`/tasks/:id`, `/workflow-instances/:id`) open the workflow page; `/documents/:id` opens the document page (DRIFT-17); previously 404'd |
 | Spot ageing work | 🟨 | Ageing in days is real (computed from `createdAt` on live documents), but the **breach count is permanently zero**: `effStatus()` looks for a `due` field that `Document` does not have, and compares capitalized statuses against lowercase values (DRIFT-13). Separately, **`SlaBreach` rows exist in the DB and no screen reads them.** |
@@ -522,7 +522,7 @@ nothing.
 | 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED` |
 | 5 | Review performance | `/management/performance` | 🟨 43-line thin page |
 | 6 | Review findings | `/management/findings` | 🟥 re-export of `/auditor/findings` |
-| 7 | Export a report | `/management/reports` | 🟨 CSV works |
+| 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
 
 ### First week
 
@@ -609,7 +609,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | 1 | Log in, land on Audit Dashboard | `/auditor` | 🟥 `SEED.findings`, `SEED.audit` |
 | 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
-| 4 | Search for evidence | `/search` | 🟨 index built on backend; page rebuilt 2026-09-30, pending end-to-end check |
+| 4 | Search for evidence | `/search` | ✅ index built on backend; page rebuilt 2026-09-30 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 5 | Raise a finding | `/auditor/findings` | 🟥 367 lines on `SEED.findings` |
 | 6 | Review compliance posture | `/auditor/compliance` | 🟥 re-export of `/management/compliance` |
 

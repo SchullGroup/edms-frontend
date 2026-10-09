@@ -542,8 +542,9 @@ images with the watermark burned in; Export (document page) goes through
       and the version list all return a signed URL to anyone who can view. Raised with the
       backend 2026-10-08
 - [x] Print and Export buttons (2026-10-08). Print verified in the browser against the
-      live API (audited call made, watermarked print frame built); Export not yet clicked
-- [ ] Download and Export not yet clicked through end to end in the UI
+      live API (audited call made, watermarked print frame built)
+- [x] Download and Export clicked through end to end in the UI (2026-10-09): each made its
+      audited call and opened the signed URL
 
 ---
 
@@ -1241,13 +1242,12 @@ beautifully and persists nowhere.** No `Branding` model, no endpoint.
 
 ## Epic J — Communication & Circulars
 
-> 🟨 **Circulars wired 2026-10-05** against the backend `circulars` module (model,
-> 15 routes, delivery and reminder workers). Built and type/build-checked; **not yet
-> verified end to end against a live backend**, so J1/J2 are 🟨, not ✅.
+> ✅ **Circulars wired 2026-10-05** against the backend `circulars` module (model,
+> 15 routes, delivery and reminder workers), *(confirmed by the product owner’s testing, 2026-10-09)*, so J1/J2 are ✅.
 
 ---
 
-### J1 — Broadcast a circular · 🟨 **Partial** *(was 🟥 Mock)*
+### J1 — Broadcast a circular · ✅ **Done** *(was 🟥 Mock)*
 
 > **As** Bola,
 > **I want to** send a policy update to all staff and require acknowledgement,
@@ -1268,11 +1268,11 @@ or scheduled; recipients are fixed at publication. Published circulars change by
 - [x] Acknowledgement endpoint — `POST /circulars/inbox/:id/acknowledge`
 - [x] Acknowledgement compliance dashboard — stats, per-department breakdown and recipients report on `/circulars/manage/[id]`, with reminders
 - [x] `circular.acknowledged` audit entry (backend `audit` middleware, with the version acknowledged)
-- [ ] Verified end to end against a live backend
+- [x] Verified end to end against a live backend *(confirmed by the product owner’s testing, 2026-10-09)*
 
 ---
 
-### J2 — Acknowledge a circular · 🟨 **Partial** *(was 🟥 Mock)*
+### J2 — Acknowledge a circular · ✅ **Done** *(was 🟥 Mock)*
 
 > **As** Chika,
 > **I want to** mark a circular as read,
@@ -1282,7 +1282,7 @@ or scheduled; recipients are fixed at publication. Published circulars change by
 - [x] UI exists — `/circulars` inbox and `/circulars/[id]` reading view (the store's `markCircularAck` was removed 2026-10-05)
 - [x] Persisted — `POST /circulars/inbox/:id/acknowledge`; opening a circular records the read receipt
 - [x] Pending-acknowledgement badge driven by real data — `GET /circulars/inbox/summary`
-- [ ] Verified end to end against a live backend
+- [x] Verified end to end against a live backend *(confirmed by the product owner’s testing, 2026-10-09)*
 
 ---
 
@@ -1465,9 +1465,9 @@ error paths and workers).
 | G — Executive Reporting | 0 | 3 | 0 | 0 | Works today; will not scale |
 | H — Audit & Compliance | 0 | 0 | 2 | 1 | **Entirely mock — the biggest gap** |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
-| J — Circulars & Notifications | 0 | 3 | 0 | 0 | Circulars wired 2026-10-05, not verified live; notifications **plumbed but silent** |
+| J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications **plumbed but silent** |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **13** | **18** | **9** | **2** | 42 functional stories |
+| **Total** | **15** | **16** | **9** | **2** | 42 functional stories |
 
 **The honest one-paragraph summary:** the *document* half of this EDMS — capture, filing,
 versioning, checkout, classification, task execution and approval — is genuinely built and
