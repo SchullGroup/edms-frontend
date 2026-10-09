@@ -289,9 +289,10 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
       The confidence badge is decoration.
 - [ ] ⚠️ **The due date is collected and discarded.** The form has a `due` field; it is
       never sent to the API, and the backend `Document` model has no due-date column.
-- [ ] ⚠️ **Custom metadata is not captured.** `PUT /documents/:id/metadata` exists and
-      cabinets can define required fields, but the upload form never asks for them —
-      so a cabinet with required metadata is filed incomplete every time.
+- [x] Custom metadata is captured at upload — **2026-10-09, verified live**: the card shows
+      the cabinet's fields and sends them with `POST /documents` (`metadata`, edms-backend
+      `dd10017`), which refuses an upload missing a required field. *This box said the form
+      never asked for them; it has rendered them since 2026-10-07, saved by a second call.*
 - [ ] ⚠️ **2 MB ceiling** (`s3.service.ts` `maxFileSize`), and only PDF and image types
       actually upload despite a broader allowlist in `validateFile`.
 
@@ -363,7 +364,9 @@ the live `POST /cabinets/:id/metadata-fields` and
 **editing/reordering an existing field** (`PATCH .../metadata-fields/:fieldId` exists but
 no screen calls it) and, more importantly, **anything that captures the values**: neither
 the upload form nor the document-detail screen renders a cabinet's fields, so a cabinet
-with required metadata is still filed incomplete every time.
+with required metadata is still filed incomplete every time. *(Outdated: the upload form
+captures them since 2026-10-07, sent with the upload since 2026-10-09 — see the criteria
+below.)*
 
 **Acceptance criteria**
 - [x] Backend: fields definable per cabinet with all five types
@@ -376,15 +379,16 @@ with required metadata is still filed incomplete every time.
       — *this box said the PATCH endpoint was unused; the Designer's "Edit" button has called it
       since at least 2026-09-21. Corrected 2026-10-06*
 - [ ] Reorder fields (`displayOrder` is only set on create)
-- [ ] 🟨 Upload form renders the target cabinet's fields — built 2026-10-07, not yet verified
-      live. Values are saved by a second call after the upload (`POST /documents` takes no
-      metadata), and that call needs `document_metadata:edit` **and** `edit` on the cabinet —
-      which seeded `staff` don't have — so for most uploaders the form only *lists* the fields.
-      Backend ask: accept metadata on `POST /documents` under the upload permission
+- [x] Upload form renders the target cabinet's fields and files them with the document —
+      **2026-10-09, verified live as `staff`**: values go in `POST /documents` / `/batch`
+      (`metadata`, edms-backend `dd10017`) under the upload permission alone. Required fields
+      are enforced in the form and by the API (400). *Until then they were saved by a second
+      `PUT`, which seeded `staff` couldn't make, so most uploaders only saw the field list*
 - [ ] ⚠️ Metadata now drives **workflow routing** (backend conditional routing, merged
       2026-10-06): a branch condition on an empty field evaluates to "no match" without an
       error, so a document filed without its metadata silently skips that branch. Search also
-      indexes metadata values, but only once, when OCR finishes — later edits aren't re-indexed
+      indexes metadata values; since `dd10017` it re-indexes after a metadata save or an upload
+      with metadata, but still not after a title/type change, a restore, or failed OCR
 - [ ] Document detail renders and edits them
 - [ ] ⚠️ Backend bug: sending all-null values to clear metadata silently no-ops
       (`normalized.length === 0` short-circuits the write)
@@ -824,8 +828,8 @@ outstanding problem is the one that always mattered:
 now also appears as an **Access** tab on `/staff/cabinets` for anyone holding
 `cabinet_access:create` and `edit` on that cabinet, so a client admin can hand a cabinet to
 a records officer. The picker leaves out the user themselves, roles they hold, client admins
-(who already reach every cabinet) and levels above their own — **UI-only**: the API doesn't
-refuse any of these yet.
+(who already reach every cabinet) and levels above their own. Since edms-backend `dd10017`
+(2026-10-09) the API refuses the same three (403), so the rule no longer rests on the UI.
 
 **Acceptance criteria**
 - [x] Backend: role and user grants with a permission hierarchy
@@ -833,7 +837,7 @@ refuse any of these yet.
 - [x] Backend: enforced on document upload, edit, delete and routing
 - [x] Admin UI to view, grant and revoke (`/admin/cabinets` access panel)
 - [ ] 🟨 Delegated managers grant and revoke from `/staff/cabinets` (built 2026-10-06, not
-      verified live); self-grant / escalation blocked in the UI only — needs a backend rule
+      verified live); self-grant / escalation blocked in the UI and, since `dd10017`, by the API
 - [ ] 🔴 Enforced on **read** paths — cabinet list/detail and folders now are (code-read
       2026-10-06); document list/detail/search unverified
 - [ ] "Who can see this cabinet?" view for auditors (`cabinet_access:view` is already

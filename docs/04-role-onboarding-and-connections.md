@@ -924,7 +924,9 @@ That single role determines the **entire sidebar** and the **post-login landing 
 | `staff` + `supervisor` | Both | **Supervisor Console only** | No Upload link in the sidebar, though upload works if they navigate directly |
 | `management` + `client_admin` | Both | **Client Administration only** | No management dashboards in the nav |
 
-~~**There is no role switcher.**~~ **Role switcher added 2026-10-08 (🟨 not verified live).**
+~~**There is no role switcher.**~~ **Role switcher added 2026-10-08, verified live 2026-10-09**
+(a `staff` user temporarily given `supervisor`: both portals listed, switching moved the
+sidebar and home both ways, and the choice survived a reload).
 A user holding more than one built-in role sees a dropdown in place of the Topbar's portal
 label, listing one portal per role they hold (`availablePortals` in `src/lib/permissions.ts`).
 Picking one switches the sidebar and opens that portal's home. The pick is saved in `prefs`

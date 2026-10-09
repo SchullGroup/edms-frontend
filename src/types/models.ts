@@ -274,13 +274,20 @@ export interface UploadDocumentRequest {
   fileSize?: number;
   documentType?: string;
   folderId?: string;
+  /** Cabinet metadata, saved in the same transaction (edms-backend `dd10017`). The
+   *  backend rejects the upload (400) if a required field is missing or a value
+   *  doesn't fit its field type. */
+  metadata?: DocumentMetadataValueInput[];
 }
 
 /** Body for `PATCH /documents/{id}`. At least one field required. */
 export interface UpdateDocumentRequest {
   title?: string;
   documentType?: string;
-  folderId?: string;
+  /** Moves the document; a folder left out is cleared (edms-backend `dd10017`). */
+  cabinetId?: string;
+  /** `null` takes the document out of its folder, to the cabinet root. */
+  folderId?: string | null;
   confidentiality?: DocumentConfidentiality;
   urgency?: DocumentUrgency;
   status?: DocumentStatus;

@@ -460,6 +460,14 @@ Phase 1's "45 permissions, 100 grants"). The seed now has 73 permissions and 212
 client_admin 72 (one `own`), supervisor 40, staff 29, management 27, internal_auditor 26,
 schulltech_admin 18. Those counts were already behind before this change.
 
+**Correction (2026-10-09).** While recording edms-backend `dd10017`, three claims turned out
+wrong. Doc 01 §7's Filing table still listed cabinet metadata fields and cabinet access
+grants as "backend only — no UI", with a paragraph saying no screen could grant a cabinet
+permission. The 2026-09-21 correction had fixed this in doc 01's summary and DRIFT register,
+but not in those two rows. Doc 02 A1 said the upload form never asked for cabinet metadata,
+and A4's intro said the same, though the form had rendered the fields since 2026-10-07. All
+corrected in place (A4's intro is marked outdated and kept).
+
 ---
 
 ## Relationship to the older docs

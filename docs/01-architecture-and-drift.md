@@ -983,18 +983,18 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents` | ✅ | ✅ |
 | `GET /documents/search` | ✅ | ✅ (misses a document if its OCR job gets stuck at `pending` — see DRIFT-06) |
 | `GET /documents/:id` | ✅ | ✅ — embeds `checkoutLock` + `locker {id,name,email}` since `edms-backend` `b4a3f81` (2026-09-29); before that only `isCheckedOut` came back, so even the lock holder couldn't check the document back in (TEST_PLAN "Things to check") |
-| `POST /documents` | ✅ | ✅ |
-| `POST /documents/batch` (≤ 20, one transaction) | ✅ | ✅ wired 2026-10-08 — `/upload`'s "File all", in chunks of 20; confirmed in testing 2026-10-08. *This row was missing from the matrix* |
+| `POST /documents` | ✅ — since `edms-backend` `dd10017` (2026-10-09) takes `metadata: [{ fieldId, value }]`, checked against the cabinet's fields and saved in the same transaction. A missing **required** field fails the upload (400), so a client that sends no metadata can't file into a cabinet with required fields | ✅ — `metadata` sent from `/upload` and the workflow picker's "Upload from computer" since 2026-10-09. **Verified live 2026-10-09** on `/upload`: a `staff` user (no `document_metadata:edit`) filed with a value, `GET /documents/:id/metadata` returned it, no `PUT` was made. The picker is 🟨 type-checked only (no test user had a review task) |
+| `POST /documents/batch` (≤ 20, one transaction) | ✅ — each item takes `metadata` too (`dd10017`) | ✅ wired 2026-10-08 — `/upload`'s "File all", in chunks of 20; confirmed in testing 2026-10-08. Each item carries its card's metadata since 2026-10-09, **verified live** (two documents, two values stored). *This row was missing from the matrix* |
 | `POST /documents/versions/batch` (≤ 20) | ✅ | ⚠️ backend only — nothing uploads several new versions at once |
-| `PATCH /documents/:id` | ✅ | ✅ — also, from 2026-10-08, the document page's "Change classification" dialog (`confidentiality`, `urgency`; 🟨 not verified live) |
+| `PATCH /documents/:id` | ✅ — since `dd10017` (2026-10-09) also moves documents: `cabinetId` changes the cabinet (the folder is cleared unless a folder in the new cabinet is given) and `folderId: null` moves to the cabinet root; a folder from another cabinet is a 400. ⚠️ Edit access is checked only on the **destination** cabinet, so someone with edit on any cabinet can pull a document out of one they can't edit (request doc item 7) | ✅ — also, from 2026-10-08, the document page's "Change classification" dialog (`confidentiality`, `urgency`; 🟨 not verified live). Moves still send only `folderId` within the cabinet: cross-cabinet Move waits on the item 7 fix |
 | `POST /documents/:id/checkout` | ✅ | ✅ |
 | `POST /documents/:id/checkin` | ✅ | ✅ — holder, **or** a `document_lock:delete` holder at `global` scope / `department` scope for the cabinet's department (`canReleaseLock`). Frontend offers that "Force check in" only once the lock is past `expectedReturnAt` (2026-10-02) |
 | `GET /documents/:id/metadata` | ✅ | ✅ |
-| `PUT /documents/:id/metadata` | ✅ | ✅ (cannot clear values — see backend analysis) |
+| `PUT /documents/:id/metadata` | ✅ — re-indexes search after a change since `dd10017` | ✅ (cannot clear values — see backend analysis). Since 2026-10-09 only the document page's metadata editor calls it; uploads send metadata with the create call |
 | `GET /documents/:id/versions` | ✅ | ✅ |
-| `GET /documents/:id/versions/:versionId` | ✅ — since `edms-backend` `0dab81a` (2026-10-08) needs `document:download` on top of confidentiality clearance, and is audited as `document.downloaded` | 🟨 **wired 2026-10-08** as the only download path (`useDownloadDocumentVersion`): `/doc/[id]`'s Download, the workflow viewer's Download, and each version's Open in `DocumentVersionsPanel`. Permissions confirmed live on `/auth/me`; not yet clicked through in the UI. *Was marked ✅ before, but nothing called it: the versions panel opened the list's own signed `fileUrl`. Corrected 2026-10-08* |
+| `GET /documents/:id/versions/:versionId` | ✅ — since `edms-backend` `0dab81a` (2026-10-08) needs `document:download` on top of confidentiality clearance, and is audited as `document.downloaded` | 🟨 **wired 2026-10-08** as the only download path (`useDownloadDocumentVersion`): `/doc/[id]`'s Download, the workflow viewer's Download, and each version's Open in `DocumentVersionsPanel`. Permissions confirmed live on `/auth/me`. ✅ **Clicked through 2026-10-09** (Finance supervisor, `department` scope): Download on `/doc/[id]` and in the workflow viewer each called this route (200) and sent the new tab to the signed S3 URL. *Was marked ✅ before, but nothing called it: the versions panel opened the list's own signed `fileUrl`. Corrected 2026-10-08* |
 | `POST /documents/:id/versions` | ✅ | ✅ |
-| `GET /documents/:id/export`, `GET /documents/:id/print` | ✅ new in `0dab81a` — `document:export` / `document:print` plus clearance; audited as `document.exported` / `document.printed`; return the document like `GET /documents/:id` | ✅ `/print` — wired 2026-10-08 (`usePrintDocument`): the PDF viewer's Print calls it first and only prints if it succeeds; verified in a browser against the live API · 🟨 `/export` — wired 2026-10-08 (`useExportDocument`), `/doc/[id]`'s Export button, not clicked through |
+| `GET /documents/:id/export`, `GET /documents/:id/print` | ✅ new in `0dab81a` — `document:export` / `document:print` plus clearance; audited as `document.exported` / `document.printed`; return the document like `GET /documents/:id` | ✅ `/print` — wired 2026-10-08 (`usePrintDocument`): the PDF viewer's Print calls it first and only prints if it succeeds; verified in a browser against the live API · ✅ `/export` — wired 2026-10-08 (`useExportDocument`), `/doc/[id]`'s Export button; **clicked through 2026-10-09**: the call returned 200 and the new tab went to the signed S3 URL |
 | `GET/POST /documents/:id/comments`, `/signatures` | ✅ both exist, real endpoints | 🟥 **deliberately unused (reverted 2026-09-18, same day)** — briefly wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel` earlier the same day, then removed: product decision to keep every comment/signature scoped to the workflow trail (`POST /tasks/:id/action`'s `comment`/`approve`'s `signature`) rather than split across a second, task-independent thread. See DRIFT-08's note below and BE-16/BE-17 in `BACKEND_REQUESTS.md` |
 | `GET/POST /documents/:id/access-requests`, `/grant`, `/deny`, admin inbox `GET /documents/access-requests` | ✅ | ✅ wired 2026-09-18 — "Request access" on `/doc/[id]` is real now (was audit-log-only, see BE-1); grant/deny at `/admin/access-requests` (client_admin-only, new page) |
 | `DELETE /documents/:id` (archive) | ✅ | ✅ wired — "Archive document" in `/doc/[id]`'s overflow menu (`useArchiveDocument`) |
@@ -1055,13 +1055,12 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 | `GET/POST/PATCH/DELETE /cabinets(/:id)` | ✅ | ✅ |
 | `GET/POST /cabinets/:cabinetId/folders` | ✅ | ✅ |
 | `GET/PATCH/DELETE /folders/:id` | ✅ | ✅ |
-| — | `POST/PATCH/DELETE /cabinets/:id/metadata-fields` | ⚠️ backend only — **no UI** |
-| — | `GET/POST /cabinets/:id/access`, `DELETE /:id/access/:grantId` | ⚠️ backend only — **no UI** |
+| `POST/PATCH/DELETE /cabinets/:id/metadata-fields` | ✅ | ✅ — Cabinet Designer's metadata panel (`/admin/cabinets`) and, since 2026-10-06, the cabinet's **Metadata schema** tab on `/staff/cabinets` |
+| `GET/POST /cabinets/:id/access`, `DELETE /:id/access/:grantId` | ✅ — since `dd10017` (2026-10-09) `POST` refuses (403) a grant to yourself, to a role you hold, or above your own level on the cabinet; admins (`CABINET_ACCESS_BYPASS_ROLES`) are exempt. The grants' `user` is now `{ id, name, email }` only — it used to be the whole row, password hash included (spec item S1) | ✅ — Cabinet Designer's **Access** card and the cabinet's **Access** tab on `/staff/cabinets`. The UI already left out the choices the API now refuses |
 
-The cabinet-access gap is worth calling out twice: `CabinetAccess` is the table that makes
-per-cabinet need-to-know work, the backend exposes full CRUD for it, and **no screen in the
-product can grant or revoke a cabinet permission.** The Cabinet Designer at
-`/admin/cabinets` manages cabinets but not their access grants.
+*These two rows said "backend only — no UI", with a paragraph calling the access gap out
+twice. Both screens have existed since at least 2026-09-21 (see the 2026-09-21 correction in
+§1 and the DRIFT register). Rows corrected 2026-10-09.*
 
 ### Circulars *(wired 2026-10-05)*
 

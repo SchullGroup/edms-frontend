@@ -10,6 +10,8 @@ import { documentsService } from '@/apis/services/documents.service';
 import { calculateChecksum } from '@/apis/services/s3.service';
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
 import { UPLOAD_ACCEPT, UPLOAD_TYPES_LABEL, resolveUploadMimeType } from '@/constants/uploadTypes';
+import { MetadataFieldInput } from '@/components/documents/MetadataFieldInput';
+import { useUploadMetadata } from '@/components/documents/useUploadMetadata';
 import { ConfBadge } from '@/components/ui/Badges';
 import { Icon } from '@/components/ui/Icons';
 import { useUIStore } from '@/store/useUIStore';
@@ -272,8 +274,18 @@ function UploadNewDocument({
     if (f && !title) setTitle(f.name.replace(/\.[^.]+$/, ''));
   };
 
+  // The cabinet's metadata goes in the create call; the backend refuses the
+  // upload if a required field is empty.
+  const meta = useUploadMetadata(cabinetId || undefined);
+
   // A document must land in a folder — same rule as the Upload page.
-  const ready = !!file && !!title.trim() && !!cabinetId && !!folderId;
+  const ready =
+    !!file &&
+    !!title.trim() &&
+    !!cabinetId &&
+    !!folderId &&
+    meta.missing.length === 0 &&
+    !meta.loading;
 
   const upload = async () => {
     if (!file || !ready) return;
@@ -292,6 +304,7 @@ function UploadNewDocument({
         mimeType: resolveUploadMimeType(file) ?? file.type,
         fileSize: file.size,
         checksum,
+        metadata: meta.toPayload(),
       });
       queryClient.invalidateQueries({ queryKey: ['documents'] });
       onCreated({ id: created.id, title: created.title, uploaded: true });
@@ -480,6 +493,24 @@ function UploadNewDocument({
           </select>
         </div>
       </div>
+      {meta.fields.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
+          {meta.fields.map((f) => (
+            <div key={f.id} className="field" style={{ flex: '1 1 140px' }}>
+              <label>
+                {f.name} {f.isRequired && <span className="req">*</span>}
+              </label>
+              <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+                <MetadataFieldInput
+                  field={f}
+                  value={meta.valueOf(f)}
+                  onChange={(v) => meta.setValue(f.id, v)}
+                />
+              </fieldset>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex items-center gap-2 flex-wrap">
         <button
           type="button"
@@ -490,7 +521,9 @@ function UploadNewDocument({
           {busy ? 'Uploading…' : 'Upload & add to list'}
         </button>
         <span className="caption">
-          The file is filed in the cabinet straight away; it joins the workflow when you finish.
+          {file && title.trim() && folderId && meta.missing.length > 0
+            ? `Fill in ${meta.missing.map((f) => f.name).join(', ')} to upload.`
+            : 'The file is filed in the cabinet straight away; it joins the workflow when you finish.'}
         </span>
       </div>
     </div>
