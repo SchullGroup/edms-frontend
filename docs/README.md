@@ -468,6 +468,19 @@ but not in those two rows. Doc 02 A1 said the upload form never asked for cabine
 and A4's intro said the same, though the form had rendered the fields since 2026-10-07. All
 corrected in place (A4's intro is marked outdated and kept).
 
+**Correction (2026-10-12).** While mapping the product tracker spreadsheet onto the code
+(`docs/specs/frontend-task-tracker-2026-10-12.md`), two doc 05 page rows turned out stale.
+`/notifications` was listed 🟥 Mock reading `SEED.notifications`; it has called the real
+API (list, mark read, preferences) since `bba1e2d`, and doc 01 had recorded the backend half
+as resolved since 2026-09-21 (DRIFT-10). It's now 🟨 (not clicked through), so the portfolio
+total moves from 10 🟨 / 13 🟥 to 11 🟨 / 12 🟥. `/supervisor/bottlenecks` was still described
+as client-side ageing with "overdue always 0"; it reads `GET
+/workflow-instances/bottlenecks-ageing`. Doc 05's staff and supervisor "APIs missing",
+flows and what's-left lists, and doc 04's staff journey (which still said routing 404s,
+search returns nothing, no notifications, comments 404), were corrected in place, struck
+through rather than deleted. The same pass recorded edms-backend `3014b89` (PR #47) as
+DRIFT-20…22 in doc 01.
+
 ---
 
 ## Relationship to the older docs

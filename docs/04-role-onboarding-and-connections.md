@@ -337,27 +337,27 @@ workflow:route:global
 | # | Step | Screen | Status |
 |---|---|---|---|
 | 1 | Log in with the password the admin gave them | `/` | ✅ ⚠️ no forced change |
-| 2 | Land on the Staff Dashboard | `/staff` | 🟨 tasks from API, notifications ⛔ 404 |
+| 2 | Land on the Staff Dashboard | `/staff` | ✅ tasks, workflow tiles and notifications from the API *(corrected 2026-10-12: notifications were listed ⛔ 404)* |
 | 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (added 2026-10-06, ✅ tested by the user 2026-10-08; each action needs the role permission **and** the cabinet level — see doc 05) |
 | 4 | Upload their first document | `/upload` | ✅ |
 | 5 | Watch it appear in the cabinet | `/staff/cabinets` | ✅ |
 | 6 | Open it and check the details | `/doc/[id]` | ✅ |
-| 7 | Route it for approval | `/doc/[id]` | ⛔ **404 (DRIFT-09)** |
+| 7 | Route it for approval | `/doc/[id]` or `/search` | ✅ DRIFT-09 resolved; several documents per workflow confirmed in testing 2026-10-08. ⚠️ Since `3014b89` they can't see the workflow afterwards unless they hold one of its tasks (DRIFT-22) |
 | 8 | Check their task queue | `/staff/tasks` | ✅ |
 | 9 | Read circulars | `/circulars` | ✅ `GET /circulars/inbox` — wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
-| 10 | Check notifications | `/notifications` | ⛔ HTML 404 |
+| 10 | Check notifications | `/notifications` | 🟨 real API (list, mark read, delivery preferences); not clicked through end to end *(corrected 2026-10-12)* |
 
 ### First week — habits that form
 
 | Habit | Status | Note |
 |---|---|---|
 | File 20–30 documents a day | ✅ | The core loop works well |
-| Search for a document by content | ⛔ | **Returns nothing.** OCR always fails, so the index is never built. |
+| Search for a document by content | ✅ | `/search` confirmed by the product owner 2026-10-09. *(Was "returns nothing"; the OCR claim was retracted, DRIFT-06)* DOCX/XLSX aren't text-searchable |
 | Browse to a document instead | ✅ | This becomes the workaround, and it works |
 | Check out before editing | ✅ | Lock prevents concurrent edits, returns 409 |
 | Upload a revised version | ✅ | Auto-increments the version number |
-| Route for approval | ⛔ | 404 — the single biggest blocker for this role |
-| Watch their own task queue | ✅ | ⚠️ manually, because no notification ever arrives |
+| Route for approval | ✅ | DRIFT-09 resolved. ⚠️ DRIFT-22: the router loses sight of the workflow unless they hold a task in it |
+| Watch their own task queue | ✅ | Assignment notifications arrive in the bell (DRIFT-10 resolved) |
 | Check "my performance" | 🟨 | `/staff/performance` mixes API and `SEED` |
 
 ### Steady state — the daily loop
@@ -391,10 +391,13 @@ end       → /staff/tasks  clear the queue   ✅
 
 ### Where it breaks, ranked
 
-1. ⛔ **Routing 404s** — they can file but not send anything for approval
-2. ⛔ **Search is empty** — the feature that justifies scanning
-3. ⛔ **No notifications** — they must poll their own queue
-4. ⛔ **Comments 404** — no way to add context to a document
+*Corrected 2026-10-12: the first four items below were all resolved (DRIFT-09, DRIFT-06 retracted, DRIFT-10, DRIFT-08); struck through rather than deleted.*
+
+1. ~~⛔ **Routing 404s**~~ — resolved (DRIFT-09)
+2. ~~⛔ **Search is empty**~~ — works; confirmed 2026-10-09
+3. ~~⛔ **No notifications**~~ — resolved (DRIFT-10)
+4. ~~⛔ **Comments 404**~~ — comments go on workflow actions (DRIFT-08)
+4a. ⛔ **Request access is a 400** since `3014b89` (DRIFT-20) — new, 2026-10-12
 5. ⚠️ **2 MB limit, PDF/images only** — many real documents rejected
 6. ⚠️ **No forced password change** on first login
 
