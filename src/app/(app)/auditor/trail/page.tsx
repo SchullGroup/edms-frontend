@@ -12,6 +12,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { AuditEntry } from '@/types/models';
+import { AuditTypeActionFilters } from '@/components/audit/AuditTypeActionFilters';
 
 const PAGE_SIZE = 20;
 
@@ -28,6 +29,7 @@ export default function AuditorTrailPage() {
   const [page, setPage] = useState(1);
   const [actorId, setActorId] = useState('');
   const [action, setAction] = useState('');
+  const [objectType, setObjectType] = useState('');
   const [days, setDays] = useState(30);
 
   // Memoized on `days` alone — recomputing this from `Date.now()` on every
@@ -43,7 +45,8 @@ export default function AuditorTrailPage() {
     page,
     limit: PAGE_SIZE,
     actorId: actorId || undefined,
-    action: action.trim() || undefined,
+    action: action || undefined,
+    objectType: objectType || undefined,
     from,
   };
 
@@ -69,7 +72,12 @@ export default function AuditorTrailPage() {
       : users.find((u: any) => u.id === a.actorId)?.name || a.actorId;
 
   const handleExport = () => {
-    exportCsv.mutate({ actorId: filters.actorId, action: filters.action, from });
+    exportCsv.mutate({
+      actorId: filters.actorId,
+      action: filters.action,
+      objectType: filters.objectType,
+      from,
+    });
   };
 
   const handleRaiseFinding = (a: AuditEntry) => {
@@ -207,14 +215,12 @@ export default function AuditorTrailPage() {
           </div>
         </div>
         <div className="actions">
-          <input
-            className="input"
-            type="text"
-            placeholder="Filter by action…"
-            style={{ width: '160px', height: '32px' }}
-            value={action}
-            onChange={(e) => {
-              setAction(e.target.value);
+          <AuditTypeActionFilters
+            objectType={objectType}
+            action={action}
+            onChange={(next) => {
+              setObjectType(next.objectType);
+              setAction(next.action);
               setPage(1);
             }}
           />

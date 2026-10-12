@@ -15,6 +15,7 @@ import {
   useUpdateFolder,
   useDeleteFolder,
 } from '@/apis/hooks/useFolders';
+import { childFolders, folderAncestry, foldersAsPaths } from '@/utils/folders';
 import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { documentStatusLabel } from '@/utils/helpers';
@@ -94,6 +95,8 @@ export default function CabinetBrowserPage() {
   );
   const activeCabFolders = activeCabFoldersData?.data || [];
   const activeCabinet = activeCab ? cabById(cabinets, activeCab) : undefined;
+  // Folders nest through `parentId`; the API returns them flat.
+  const subFolders = showingRealFolder ? childFolders(activeCabFolders, activeFolder) : [];
   const openFolder = showingRealFolder
     ? activeCabFolders.find((f: any) => f.id === activeFolder)
     : undefined;
@@ -120,11 +123,11 @@ export default function CabinetBrowserPage() {
   const updateFolder = useUpdateFolder();
   const deleteFolder = useDeleteFolder();
 
-  const handleNewFolder = () => {
+  const handleNewFolder = (parent?: { id: string; name: string }) => {
     if (!activeCabinet) return;
     let name = '';
     openModal({
-      title: 'New folder in ' + activeCabinet.name,
+      title: 'New folder in ' + (parent?.name ?? activeCabinet.name),
       body: (
         <div className="field">
           <label>Name</label>
@@ -144,7 +147,10 @@ export default function CabinetBrowserPage() {
           onClick: () => {
             if (!name.trim()) return false;
             return createFolder
-              .mutateAsync({ cabinetId: activeCabinet.id, data: { name: name.trim() } })
+              .mutateAsync({
+                cabinetId: activeCabinet.id,
+                data: { name: name.trim(), ...(parent ? { parentId: parent.id } : {}) },
+              })
               .then(() => {
                 auditAction('FOLDER_CREATE', activeCabinet.id, 'Added folder ' + name.trim());
               })
@@ -194,6 +200,11 @@ export default function CabinetBrowserPage() {
       addToast('Folder contains documents — move them first', 'error');
       return;
     }
+    // The API would leave its sub-folders orphaned at the top level.
+    if (childFolders(activeCabFolders, f.id).length > 0) {
+      addToast('Folder has sub-folders — delete or move them first', 'error');
+      return;
+    }
     openConfirm({
       title: `Delete folder "${f.name}"?`,
       message: 'The folder is empty and will be removed from the cabinet structure.',
@@ -204,7 +215,7 @@ export default function CabinetBrowserPage() {
           .mutateAsync({ id: f.id, cabinetId: f.cabinetId })
           .then(() => {
             auditAction('FOLDER_DELETE', f.cabinetId, 'Deleted ' + f.name);
-            setActiveFolder(null);
+            setActiveFolder(f.parentId ?? null);
             setSelected([]);
           })
           .catch(() => false),
@@ -219,7 +230,9 @@ export default function CabinetBrowserPage() {
    */
   const handleMoveModal = () => {
     const docs = selected;
-    const destinations = activeCabFolders.filter((f: any) => f.id !== activeFolder);
+    const destinations = foldersAsPaths(activeCabFolders)
+      .filter((f: any) => f.id !== activeFolder)
+      .map((f) => ({ id: f.id, name: f.path }));
     let destFolderId = '';
     openModal({
       title: docs.length > 1 ? `Move ${docs.length} documents` : `Move “${docs[0].title}”`,
@@ -364,21 +377,25 @@ export default function CabinetBrowserPage() {
               </div>
               {activeCab === c.id && activeCabFolders.length > 0 && (
                 <div className="tree-kids">
-                  {activeCabFolders.map((f: any) => (
-                    <div
-                      key={f.id}
-                      className={`tree-item ${activeFolder === f.id ? 'active' : ''}`}
-                      onClick={() => {
-                        setActiveFolder(f.id);
-                        setSelected([]);
-                      }}
-                    >
-                      <span style={{ marginRight: '8px' }}>
-                        <Icon name="folder" size={14} />
-                      </span>{' '}
-                      {f.name}
-                    </div>
-                  ))}
+                  {foldersAsPaths(activeCabFolders).map((f: any) => {
+                    const depth = folderAncestry(activeCabFolders, f.id).length - 1;
+                    return (
+                      <div
+                        key={f.id}
+                        className={`tree-item ${activeFolder === f.id ? 'active' : ''}`}
+                        style={depth ? { paddingLeft: `${12 + depth * 14}px` } : undefined}
+                        onClick={() => {
+                          setActiveFolder(f.id);
+                          setSelected([]);
+                        }}
+                      >
+                        <span style={{ marginRight: '8px' }}>
+                          <Icon name="folder" size={14} />
+                        </span>{' '}
+                        {f.name}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </React.Fragment>
@@ -415,26 +432,48 @@ export default function CabinetBrowserPage() {
                   )}
                 </>
               )}
-              {activeFolder && (
+              {showingUnfiled && (
                 <>
                   <span className="sep">›</span>
-                  <span className="cur">
-                    {showingUnfiled
-                      ? 'Unfiled documents'
-                      : activeCabFolders.find((f: any) => f.id === activeFolder)?.name || ''}
-                  </span>
+                  <span className="cur">Unfiled documents</span>
                 </>
               )}
+              {showingRealFolder &&
+                folderAncestry(activeCabFolders, activeFolder!).map((f: any) => (
+                  <React.Fragment key={f.id}>
+                    <span className="sep">›</span>
+                    {f.id === activeFolder ? (
+                      <span className="cur">{f.name}</span>
+                    ) : (
+                      <a
+                        onClick={() => {
+                          setActiveFolder(f.id);
+                          setSelected([]);
+                        }}
+                      >
+                        {f.name}
+                      </a>
+                    )}
+                  </React.Fragment>
+                ))}
             </div>
 
             {activeCab && !activeFolder && canCreateFolder && cabTab === 'folders' && (
-              <button className="btn btn-secondary btn-sm" onClick={handleNewFolder}>
+              <button className="btn btn-secondary btn-sm" onClick={() => handleNewFolder()}>
                 + New folder
               </button>
             )}
 
             {activeFolder && (
               <div className="flex items-center gap-3">
+                {openFolder && canCreateFolder && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => handleNewFolder(openFolder)}
+                  >
+                    + New sub-folder
+                  </button>
+                )}
                 {openFolder && canRenameFolder && (
                   <button
                     className="btn btn-ghost btn-sm"
@@ -512,6 +551,24 @@ export default function CabinetBrowserPage() {
               >
                 Clear
               </button>
+            </div>
+          )}
+
+          {subFolders.length > 0 && (
+            <div className="flex gap-2 mb-2" style={{ flexWrap: 'wrap' }}>
+              {subFolders.map((f: any) => (
+                <button
+                  key={f.id}
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setActiveFolder(f.id);
+                    setSelected([]);
+                  }}
+                >
+                  <Icon name="folder" size={13} /> {f.name}
+                  <span className="caption">{f._count?.documents ?? 0}</span>
+                </button>
+              ))}
             </div>
           )}
 
@@ -614,7 +671,7 @@ export default function CabinetBrowserPage() {
                       <Icon name="folder" size={32} />
                       <div className="h3 mt-4 mb-2">No folders in this cabinet yet</div>
                       {canCreateFolder ? (
-                        <button className="btn btn-primary btn-sm" onClick={handleNewFolder}>
+                        <button className="btn btn-primary btn-sm" onClick={() => handleNewFolder()}>
                           + New folder
                         </button>
                       ) : (
@@ -625,7 +682,7 @@ export default function CabinetBrowserPage() {
                     </div>
                   ) : (
                     <div className="doc-grid">
-                      {activeCabFolders.map((f: any) => (
+                      {childFolders(activeCabFolders, null).map((f: any) => (
                         <div
                           key={f.id}
                           className="doc-card"

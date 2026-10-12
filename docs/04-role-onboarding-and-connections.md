@@ -149,9 +149,10 @@ That is the complete list. This role **cannot** call `GET /users`, `GET /documen
 `GET /cabinets`, or `GET /departments` — all return 403.
 
 **And that is correct.** `access-control.constants.ts` documents the reasoning explicitly:
-`schulltech_admin` is **deliberately excluded** from `CABINET_ACCESS_BYPASS_ROLES` and from
-every confidentiality tier list, including `TOP_SECRET_TIER_ROLES` (which is empty by
-design). The comment states that any future support access should be a *time-boxed, audited
+`schulltech_admin` is **deliberately excluded** from `CABINET_ACCESS_BYPASS_ROLES`, and the
+seed gives it none of the `document:view_confidential` / `view_restricted` /
+`view_top_secret` clearance permissions (which replaced the tier role lists in
+`edms-backend` `0dab81a`, 2026-10-08). The comment states that any future support access should be a *time-boxed, audited
 impersonation flow* — its own mechanism, not a standing role grant.
 
 **The vendor cannot read customer documents.** For a multi-tenant SaaS handling regulated
@@ -171,7 +172,7 @@ records, that is a serious and correct architectural decision.
 | 3 | Review platform health | `/platform/sysconfig` | 🟥 `SEED` |
 | 4 | Check plans and entitlements | `/platform/plans` | 🟥 `SEED.plans` |
 | 5 | Review billing and usage | `/platform/billing` | 🟥 `SEED` |
-| 6 | Check feature flags | `/platform/flags` | 🟥 ⚠️ **re-exports `/platform/sysconfig` — wrong page** |
+| 6 | Check feature flags | `/platform/flags` | 🟥 `SEED.featureFlags` — its own page since 2026-10-08 |
 | 7 | Review the platform audit log | `/platform/audit` | 🟥 `SEED.audit` |
 
 ### First week — what they would try to do
@@ -214,7 +215,7 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 
 > **Persona:** Bola · the tenant's own system owner, usually IT or Operations management
 > **Landing page:** `/admin` · **Sidebar:** Client Administration
-> **Overall status:** 🟨 **Structure is real; policy and branding are mock** (circulars wired 2026-10-05, not yet verified live)
+> **Overall status:** 🟨 **Structure is real; policy and branding are mock** (circulars wired 2026-10-05, confirmed working 2026-10-09)
 
 ### Identity and rights
 
@@ -223,7 +224,7 @@ metadata fields, cabinet access, folders, departments, users, roles, workflows, 
 
 Two unique properties:
 - The **only** role in `CABINET_ACCESS_BYPASS_ROLES` — sees every cabinet regardless of grants
-- The **only** role in `RESTRICTED_TIER_ROLES` — the sole reader of `restricted` documents
+- The **only** seeded role holding `document:view_restricted` — the sole reader of `restricted` documents (an admin can now grant it to another role in `/admin/roles`)
 
 This is the most powerful role in the tenant, and appropriately so.
 
@@ -243,7 +244,7 @@ This must be done in order; each step produces the input for the next.
 | 8 | **Design and publish workflows** | `/admin/workflows` | `POST /workflows`, `/publish` | 🟨 **no authorization** |
 | 9 | Set retention and confidentiality policy | `/admin/policies` | — | 🟥 `SEED.policies` |
 | 10 | Apply branding | `/admin/branding` | — | 🟥 `SEED.branding` |
-| 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | 🟨 wired 2026-10-05, not yet verified live |
+| 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 12 | Review the tenant audit trail | `/admin/audit` | `GET /audit`, `/audit/verify` | ✅ wired 2026-09-18 (was `SEED.audit`) |
 
 **Steps 2, 3, 4, 5, 7, 8 and 12 are real; step 6 is wired but not yet verified live.** Everything else is either missing a UI or writes
@@ -282,7 +283,7 @@ consistently fails.
 | Read `top_secret` documents | ❌ **nobody can** | — |
 | Configure retention | ❌ | 🟥 |
 | Configure branding | ❌ | 🟥 |
-| Publish circulars | ✅ `circular:*` at `global` scope | 🟨 wired 2026-10-05, not verified live |
+| Publish circulars | ✅ `circular:*` at `global` scope | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | View the audit trail | ✅ | ✅ wired 2026-09-18 |
 
 ### Where it breaks, ranked
@@ -336,27 +337,27 @@ workflow:route:global
 | # | Step | Screen | Status |
 |---|---|---|---|
 | 1 | Log in with the password the admin gave them | `/` | ✅ ⚠️ no forced change |
-| 2 | Land on the Staff Dashboard | `/staff` | 🟨 tasks from API, notifications ⛔ 404 |
-| 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (🟨 added 2026-10-06, not verified live; each action needs the role permission **and** the cabinet level — see doc 05) |
+| 2 | Land on the Staff Dashboard | `/staff` | ✅ tasks, workflow tiles and notifications from the API *(corrected 2026-10-12: notifications were listed ⛔ 404)* |
+| 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (added 2026-10-06, ✅ tested by the user 2026-10-08; each action needs the role permission **and** the cabinet level — see doc 05) |
 | 4 | Upload their first document | `/upload` | ✅ |
 | 5 | Watch it appear in the cabinet | `/staff/cabinets` | ✅ |
 | 6 | Open it and check the details | `/doc/[id]` | ✅ |
-| 7 | Route it for approval | `/doc/[id]` | ⛔ **404 (DRIFT-09)** |
+| 7 | Route it for approval | `/doc/[id]` or `/search` | ✅ DRIFT-09 resolved; several documents per workflow confirmed in testing 2026-10-08. ⚠️ Since `3014b89` they can't see the workflow afterwards unless they hold one of its tasks (DRIFT-22) |
 | 8 | Check their task queue | `/staff/tasks` | ✅ |
-| 9 | Read circulars | `/circulars` | 🟨 `GET /circulars/inbox` — wired 2026-10-05, not verified live |
-| 10 | Check notifications | `/notifications` | ⛔ HTML 404 |
+| 9 | Read circulars | `/circulars` | ✅ `GET /circulars/inbox` — wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
+| 10 | Check notifications | `/notifications` | 🟨 real API (list, mark read, delivery preferences); not clicked through end to end *(corrected 2026-10-12)* |
 
 ### First week — habits that form
 
 | Habit | Status | Note |
 |---|---|---|
 | File 20–30 documents a day | ✅ | The core loop works well |
-| Search for a document by content | ⛔ | **Returns nothing.** OCR always fails, so the index is never built. |
+| Search for a document by content | ✅ | `/search` confirmed by the product owner 2026-10-09. *(Was "returns nothing"; the OCR claim was retracted, DRIFT-06)* DOCX/XLSX aren't text-searchable |
 | Browse to a document instead | ✅ | This becomes the workaround, and it works |
 | Check out before editing | ✅ | Lock prevents concurrent edits, returns 409 |
 | Upload a revised version | ✅ | Auto-increments the version number |
-| Route for approval | ⛔ | 404 — the single biggest blocker for this role |
-| Watch their own task queue | ✅ | ⚠️ manually, because no notification ever arrives |
+| Route for approval | ✅ | DRIFT-09 resolved. ⚠️ DRIFT-22: the router loses sight of the workflow unless they hold a task in it |
+| Watch their own task queue | ✅ | Assignment notifications arrive in the bell (DRIFT-10 resolved) |
 | Check "my performance" | 🟨 | `/staff/performance` mixes API and `SEED` |
 
 ### Steady state — the daily loop
@@ -367,7 +368,7 @@ morning   → /staff        check dashboard   ⚠️ must remember to; nothing p
 during    → /upload       file arrivals     ✅  (⚠️ >2 MB rejected, PDF/images only)
           → /doc/[id]     add context       ⛔ comments 404
           → route         send for approval ⛔ 404
-          → /search       find something    🟨 pending check
+          → /search       find something    ✅ confirmed 2026-10-09
 end       → /staff/tasks  clear the queue   ✅
 ```
 
@@ -390,10 +391,13 @@ end       → /staff/tasks  clear the queue   ✅
 
 ### Where it breaks, ranked
 
-1. ⛔ **Routing 404s** — they can file but not send anything for approval
-2. ⛔ **Search is empty** — the feature that justifies scanning
-3. ⛔ **No notifications** — they must poll their own queue
-4. ⛔ **Comments 404** — no way to add context to a document
+*Corrected 2026-10-12: the first four items below were all resolved (DRIFT-09, DRIFT-06 retracted, DRIFT-10, DRIFT-08); struck through rather than deleted.*
+
+1. ~~⛔ **Routing 404s**~~ — resolved (DRIFT-09)
+2. ~~⛔ **Search is empty**~~ — works; confirmed 2026-10-09
+3. ~~⛔ **No notifications**~~ — resolved (DRIFT-10)
+4. ~~⛔ **Comments 404**~~ — comments go on workflow actions (DRIFT-08)
+4a. ~~⛔ **Request access was refused (422)**~~ after `3014b89` (DRIFT-20); fixed on both pages 2026-10-12
 5. ⚠️ **2 MB limit, PDF/images only** — many real documents rejected
 6. ⚠️ **No forced password change** on first login
 
@@ -408,13 +412,15 @@ end       → /staff/tasks  clear the queue   ✅
 ### Identity and rights
 
 **18 grants**, mostly `department`-scoped, plus two memberships that matter more than the
-grants:
+grants, and one grant worth naming:
 
 - `TASK_VIEW_ALL_ROLES` → may request `GET /tasks?scope=all` and see the whole team's queue
 - `TASK_REASSIGN_ROLES` → may `PATCH /tasks/:id/reassign`
-- `CONFIDENTIAL_TIER_ROLES` → may read `confidential`-tier documents
+- `document:view_confidential:department` → may read `confidential`-tier documents in their
+  own department's cabinets (a permission since `edms-backend` `0dab81a`, 2026-10-08; it was
+  membership of `CONFIDENTIAL_TIER_ROLES` before, with no department limit)
 
-Those three constants — not the permission table — are what actually make supervision work.
+The two task constants — not the permission table — are what actually make supervision work.
 
 ### Day one
 
@@ -435,7 +441,7 @@ Those three constants — not the permission table — are what actually make su
 | Task | Status | Note |
 |---|---|---|
 | Clear the approvals queue daily | ✅ | Prioritised by urgency then due date — genuinely good |
-| Approve / reject / request changes | 🟨 | On the workflow page (`/workflow-instances/[id]`, 2026-10-02). Request changes now asks which of the task's documents need changes — DRIFT-18 fixed, not yet verified e2e |
+| Approve / reject / request changes | ✅ | On the workflow page (`/workflow-instances/[id]`, 2026-10-02). Request changes asks which of the task's documents need changes — DRIFT-18 fixed. All three *(confirmed by the product owner’s testing, 2026-10-09)* |
 | Release a team member's overdue checkout | 🟨 | Notified via `checkout.overdue` when a same-department holder misses `expectedReturnAt`; "Force check in" on `/doc/[id]` if they hold `document_lock:delete` at department scope for that cabinet's department (2026-10-02, not yet verified e2e) |
 | Follow a notification to its item | 🟨 | Task and workflow links (`/tasks/:id`, `/workflow-instances/:id`) open the workflow page; `/documents/:id` opens the document page (DRIFT-17); previously 404'd |
 | Spot ageing work | 🟨 | Ageing in days is real (computed from `createdAt` on live documents), but the **breach count is permanently zero**: `effStatus()` looks for a `due` field that `Document` does not have, and compares capitalized statuses against lowercase values (DRIFT-13). Separately, **`SlaBreach` rows exist in the DB and no screen reads them.** |
@@ -519,7 +525,7 @@ nothing.
 | 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED` |
 | 5 | Review performance | `/management/performance` | 🟨 43-line thin page |
 | 6 | Review findings | `/management/findings` | 🟥 re-export of `/auditor/findings` |
-| 7 | Export a report | `/management/reports` | 🟨 CSV works |
+| 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
 
 ### First week
 
@@ -590,8 +596,8 @@ folder:view:global            department:view:global
 workflow:view:global          audit:view:global
 ```
 
-Plus membership of `CONFIDENTIAL_TIER_ROLES`, so they can read `confidential`-tier
-documents. **Deliberately cannot mutate anything** — that independence is the point of the
+Plus `document:view_confidential:global`, so they can read `confidential`-tier documents
+(a permission since `edms-backend` `0dab81a`; it was a role list before). **Deliberately cannot mutate anything** — that independence is the point of the
 role.
 
 One of these grants now has a real screen behind it, and one still doesn't:
@@ -606,7 +612,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | 1 | Log in, land on Audit Dashboard | `/auditor` | 🟥 `SEED.findings`, `SEED.audit` |
 | 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
-| 4 | Search for evidence | `/search` | 🟨 index built on backend; page rebuilt 2026-09-30, pending end-to-end check |
+| 4 | Search for evidence | `/search` | ✅ index built on backend; page rebuilt 2026-09-30 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 5 | Raise a finding | `/auditor/findings` | 🟥 367 lines on `SEED.findings` |
 | 6 | Review compliance posture | `/auditor/compliance` | 🟥 re-export of `/management/compliance` |
 
@@ -887,8 +893,9 @@ layer (staff → supervisor → management) is largely wired; the governance lay
 
 ## Multi-role users
 
-A user may hold several roles simultaneously (`UserRole` is a many-to-many join). Two
-different resolution rules apply, and they disagree.
+A user may hold several roles simultaneously (`UserRole` is a many-to-many join). Since
+2026-10-09 `/admin/users` assigns any number of them (a checkbox list; before, it handled one
+role only). Two different resolution rules apply, and they disagree.
 
 ### At the API — most permissive wins
 
@@ -921,13 +928,31 @@ That single role determines the **entire sidebar** and the **post-login landing 
 | `staff` + `supervisor` | Both | **Supervisor Console only** | No Upload link in the sidebar, though upload works if they navigate directly |
 | `management` + `client_admin` | Both | **Client Administration only** | No management dashboards in the nav |
 
-**There is no role switcher.** A dual-role user simply cannot reach half their
-functionality through navigation.
+~~**There is no role switcher.**~~ **Role switcher added 2026-10-08, verified live 2026-10-09**
+(a `staff` user temporarily given `supervisor`: both portals listed, switching moved the
+sidebar and home both ways, and the choice survived a reload).
+A user holding more than one built-in role sees a dropdown in place of the Topbar's portal
+label, listing one portal per role they hold (`availablePortals` in `src/lib/permissions.ts`).
+Picking one switches the sidebar and opens that portal's home. The pick is saved in `prefs`
+with the user's id, so it survives a reload and a fresh sign-in but never follows another
+user on the same browser. It defaults to the priority-list winner below. A user with only
+custom roles still gets the single portal their permissions resolve to.
 
-**Recommended fix:** a role switcher in the Topbar that lets the user choose which surface
-to view, defaulting to the priority-list winner. This is a small, high-value UI addition —
-and it becomes necessary the moment any real organisation assigns a combined role, which
-they will.
+**Where a custom-role user lands (checked 2026-10-08, doc 05 backlog 29a).** That resolution
+takes the first portal whose entry permissions the user holds: `admin` (`user:view`,
+`role:view` or `workflow:view`), then `auditor` (`audit:view`), then `management`
+(`document:view`, `workflow_instance:view`, `task:view` or `department:view`), then
+`supervisor`, then `staff`. Because `workflow:view` and `document:view` are near-universal,
+custom roles almost never reach the Staff Workspace or Supervisor Console: the tenant's
+"Budget Officer" lands in Client Administration.
+
+**Fixed the same day.** Custom-role users are now placed by what their permissions let them
+do (`customRolePortalOrder` in `src/lib/permissions.ts`): configuring the tenant → Client
+Administration, reassigning tasks → Supervisor Console, acting on tasks / filing / routing →
+Staff Workspace, reading the audit trail → Audit, `department:view` → Management, then any
+portal they can enter. Built-in roles are unchanged. Budget Officer now lands in Staff.
+
+The table above describes the default, before any switch.
 
 ---
 

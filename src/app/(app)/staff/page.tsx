@@ -5,7 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
-import { useWorkflowInstanceStatusCounts } from '@/apis/hooks/useWorkflowInstances';
+import {
+  useWorkflowInstanceStatusCounts,
+  useWorkflowInstances,
+} from '@/apis/hooks/useWorkflowInstances';
 import { useSlaBreaches } from '@/apis/hooks/useSla';
 import { useNotifications, useMarkNotificationRead } from '@/apis/hooks/useNotifications';
 import {
@@ -16,10 +19,19 @@ import {
 import { Icon } from '@/components/ui/Icons';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TaskRow } from '@/components/ui/TaskRow';
+import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
+import { StatusBadge } from '@/components/ui/Badges';
+import { instanceTitle } from '@/utils/workflowDocuments';
+import type { WorkflowInstance } from '@/types/models';
 import { SkeletonNotifRows, SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { timeAgo, fmtDate } from '@/utils/helpers';
-import { byUrgencyThenDue, isOverdue, turnaroundDays } from '@/utils/supervisor';
+import {
+  byUrgencyThenDue,
+  changesRequestedRate,
+  isOverdue,
+  turnaroundDays,
+} from '@/utils/supervisor';
 
 // Simple pure SVG donut. A null value draws an empty ring with a dash: no data,
 // not a score of zero.
@@ -87,6 +99,24 @@ export default function StaffDashboard() {
   // but each open breach names its task.
   const { data: slaBreaches } = useSlaBreaches({ scope: 'mine', status: 'open', limit: 100 });
   const breachedTaskIds = new Set((slaBreaches?.data ?? []).map((b) => b.taskId));
+  // The Pending / In Progress / Closed tiles count workflows, so clicking one lists
+  // those workflows (same `mine` scope as the counts). In Progress includes on hold.
+  const instanceStatus =
+    filter === 'Pending'
+      ? 'pending'
+      : filter === 'In Progress'
+        ? 'in_progress'
+        : filter === 'Closed'
+          ? 'closed'
+          : null;
+  const instancesQuery = useWorkflowInstances(
+    { status: instanceStatus, limit: 8 },
+    { enabled: !!instanceStatus },
+  );
+  const onHoldQuery = useWorkflowInstances(
+    { status: 'on_hold', limit: 8 },
+    { enabled: filter === 'In Progress' },
+  );
 
   if (!currentUser) return null;
 
@@ -103,18 +133,22 @@ export default function StaffDashboard() {
   };
 
   let list = open.filter((t) => {
-    if (!filter) return true;
-    if (filter === 'Overdue') return breachedTaskIds.has(t.id) || isOverdue(t);
-    if (filter === 'Closed') return t.status === 'completed';
-    return t.status === 'pending';
+    if (filter !== 'Overdue') return true;
+    return breachedTaskIds.has(t.id) || isOverdue(t);
   });
+  const instances: WorkflowInstance[] = [
+    ...(instancesQuery.data?.data ?? []),
+    ...(filter === 'In Progress' ? (onHoldQuery.data?.data ?? []) : []),
+  ];
+  const instancesLoading =
+    instancesQuery.isLoading || (filter === 'In Progress' && onHoldQuery.isLoading);
 
   list.sort(byUrgencyThenDue);
 
   const tileDefs = [
     { key: 'Pending', cls: 't-pending', icon: 'clock' },
     { key: 'In Progress', cls: 't-progress', icon: 'pulse' },
-    { key: 'Closed', cls: 't-closed', icon: 'check', label: 'Closed (30d)' },
+    { key: 'Closed', cls: 't-closed', icon: 'check' },
     { key: 'Overdue', cls: 't-overdue', icon: 'alert', label: 'Overdue / SLA' },
   ];
 
@@ -177,6 +211,8 @@ export default function StaffDashboard() {
       </div>
 
       <div className="grid gap-4">
+        <QuickAccessCard />
+
         <div className="grid grid-cols-2 gap-4">
           <div className="card">
             <div className="card-head">
@@ -245,8 +281,8 @@ export default function StaffDashboard() {
                     <b>{volume30d}</b>
                   </div>
                   <div className="metric-li">
-                    <span>Rework rate</span>
-                    <b>4.2%</b>
+                    <span>Changes requested</span>
+                    <b>{changesRequestedRate(closedTasks)}</b>
                   </div>
                 </div>
               </div>
@@ -257,7 +293,10 @@ export default function StaffDashboard() {
         <div className="card">
           <div className="card-head">
             <span className="h3">
-              <Icon name="inbox" size={16} /> My Tasks{filter ? ` — ${filter}` : ''}
+              <Icon name="inbox" size={16} />{' '}
+              {instanceStatus
+                ? `My workflows — ${filter}`
+                : `My Tasks${filter ? ` — ${filter}` : ''}`}
             </span>
             <div className="flex gap-2">
               {filter && (
@@ -265,12 +304,39 @@ export default function StaffDashboard() {
                   Clear filter
                 </button>
               )}
-              <button className="btn btn-secondary btn-sm" onClick={() => router.push('/search')}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => router.push('/staff/tasks')}
+              >
                 View all
               </button>
             </div>
           </div>
-          {isTasksError ? (
+          {instanceStatus ? (
+            instancesQuery.isError ? (
+              <div style={{ padding: '32px' }}>
+                <ErrorMessage message="Failed to load workflows" retry={instancesQuery.refetch} />
+              </div>
+            ) : instancesLoading ? (
+              <SkeletonTaskRows rows={4} />
+            ) : instances.length ? (
+              <div className="rowlist">
+                {instances.slice(0, 8).map((wi) => (
+                  <InstanceRow
+                    key={wi.id}
+                    instance={wi}
+                    onOpen={() => router.push(`/workflow-instances/${wi.id}`)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon="approve"
+                title={`No ${filter?.toLowerCase()} workflows`}
+                message="Workflows you're part of show here."
+              />
+            )
+          ) : isTasksError ? (
             <div style={{ padding: '32px' }}>
               <ErrorMessage message="Failed to load tasks" retry={refetchTasks} />
             </div>
@@ -303,6 +369,48 @@ export default function StaffDashboard() {
             />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** One workflow in the tile drill-down; opens its workflow page. */
+function InstanceRow({ instance, onOpen }: { instance: WorkflowInstance; onOpen: () => void }) {
+  const docCount = instance.documents?.length ?? 0;
+  return (
+    <div
+      className="task-row"
+      tabIndex={0}
+      role="button"
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onOpen();
+      }}
+    >
+      <div className="task-main">
+        <div className="task-title">{instanceTitle(instance)}</div>
+        <div className="task-meta">
+          <StatusBadge status={instance.status} />
+          {instance.workflowDefinition?.name && <span>{instance.workflowDefinition.name}</span>}
+          {docCount > 1 && <span>· {docCount} documents</span>}
+          <span>
+            ·{' '}
+            {instance.closedAt
+              ? `Closed ${fmtDate(instance.closedAt)}`
+              : `Started ${fmtDate(instance.startedAt)}`}
+          </span>
+        </div>
+      </div>
+      <div className="task-actions">
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen();
+          }}
+        >
+          Open
+        </button>
       </div>
     </div>
   );

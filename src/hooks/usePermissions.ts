@@ -5,7 +5,8 @@ import {
   normalizePermission,
   parseScope,
   permissionMatches,
-  resolvePortal,
+  availablePortals,
+  effectivePortal,
   type PermissionScope,
   type PortalKey,
 } from '@/lib/permissions';
@@ -22,6 +23,7 @@ import {
  */
 export const usePermissions = () => {
   const currentUser = useStore((s) => s.currentUser);
+  const portalChoice = useStore((s) => s.prefs?.portalChoice);
 
   const { granted, isReady } = useMemo(() => {
     const roleNames = currentUser?.roles ?? [];
@@ -75,7 +77,12 @@ export const usePermissions = () => {
   };
 
   const portal: PortalKey = useMemo(
-    () => resolvePortal(granted, currentUser?.roles),
+    () => effectivePortal(granted, currentUser?.roles, currentUser?.id, portalChoice),
+    [granted, currentUser, portalChoice],
+  );
+  /** More than one means the Topbar shows the role switcher. */
+  const portals: PortalKey[] = useMemo(
+    () => availablePortals(granted, currentUser?.roles),
     [granted, currentUser],
   );
 
@@ -87,6 +94,7 @@ export const usePermissions = () => {
     scopeFor,
     isReady,
     portal,
+    portals,
     /** The resolved grant set (live if available, else the pre-hydration
      *  fallback) — what `AppShell`'s route guard passes into
      *  `evaluateRouteAccess` (`@/lib/routeAccess`), the same function

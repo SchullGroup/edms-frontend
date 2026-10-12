@@ -170,6 +170,14 @@ export interface DocumentVersion {
 /** A search the user saved on `/search`: the query text plus at most one
  *  value per filter, in the backend's own enum values. Kept in the persisted
  *  store per user — see `savedSearches` in `initialData.ts`. */
+/** A document in someone's Recent or Pinned list (staff dashboard). Kept in the
+ *  browser per user — the API has no favourites or view-history endpoint. */
+export interface DocumentShortcut {
+  id: string;
+  title: string;
+  at: number;
+}
+
 export interface SavedSearch {
   id: string;
   name: string;
@@ -202,6 +210,11 @@ export interface PersonSummary {
   email: string;
 }
 
+/** What an access request asks for (edms-backend `3014b89`): `view` is View
+ *  access (open the document), `route` is Action access (act on it in a
+ *  workflow without opening it). One request, and one grant, per kind. */
+export type DocumentAccessKind = 'view' | 'route';
+
 /**
  * `GET/POST /documents/:id/access-requests`, grant/deny, and the admin inbox
  * `GET /documents/access-requests`. Verified live 2026-09-18 — `reviewer` and
@@ -213,6 +226,8 @@ export interface AccessRequest {
   documentId: string;
   requesterId: string;
   requester: PersonSummary;
+  /** Missing on requests made before `3014b89`, which were all for viewing. */
+  permission?: DocumentAccessKind;
   reason: string | null;
   status: 'pending' | 'approved' | 'denied';
   reviewedBy: string | null;
@@ -266,13 +281,20 @@ export interface UploadDocumentRequest {
   fileSize?: number;
   documentType?: string;
   folderId?: string;
+  /** Cabinet metadata, saved in the same transaction (edms-backend `dd10017`). The
+   *  backend rejects the upload (400) if a required field is missing or a value
+   *  doesn't fit its field type. */
+  metadata?: DocumentMetadataValueInput[];
 }
 
 /** Body for `PATCH /documents/{id}`. At least one field required. */
 export interface UpdateDocumentRequest {
   title?: string;
   documentType?: string;
-  folderId?: string;
+  /** Moves the document; a folder left out is cleared (edms-backend `dd10017`). */
+  cabinetId?: string;
+  /** `null` takes the document out of its folder, to the cabinet root. */
+  folderId?: string | null;
   confidentiality?: DocumentConfidentiality;
   urgency?: DocumentUrgency;
   status?: DocumentStatus;
@@ -427,6 +449,20 @@ export interface WorkflowDocumentExecution {
   createdAt?: string;
 }
 
+/**
+ * What the caller may do with one document in a workflow (edms-backend
+ * `3014b89`). A document they can't open comes back as a Restricted document:
+ * title "Restricted document", classification and version nulled.
+ * `canRoute` is Action access (act on it in a workflow without opening it):
+ * always on task documents, only on restricted workflow documents.
+ */
+export interface WorkflowDocumentAccess {
+  canView: boolean;
+  canRoute?: boolean;
+  canRequestView?: boolean;
+  canRequestRoute?: boolean;
+}
+
 /** A document's membership of a workflow. */
 export interface WorkflowInstanceDocument {
   id: string;
@@ -440,17 +476,22 @@ export interface WorkflowInstanceDocument {
   comment?: string | null;
   addedBy?: string | null;
   addedAt?: string;
+  /** `GET /workflow-instances/{id}`: true for a Restricted document. */
+  isLocked?: boolean;
+  access?: WorkflowDocumentAccess;
+  /** For a Restricted document the title is "Restricted document" and the
+   *  nullable fields below are null. */
   document: {
     id: string;
     title: string;
-    status: string;
-    confidentiality: string;
-    urgency: string;
+    status: string | null;
+    confidentiality: string | null;
+    urgency: string | null;
     documentType?: string | null;
     currentVersionId?: string | null;
-    cabinetId?: string;
+    cabinetId?: string | null;
     archivedAt?: string | null;
-    createdBy?: string;
+    createdBy?: string | null;
     currentVersion?: {
       id: string;
       versionNumber: number;
@@ -639,8 +680,10 @@ export interface WorkflowHistoryRecord {
   } | null;
   /** Confirmed live 2026-09-18: carries `signature` (populated only for an
    *  `approve` action — the only action the backend allows one on) alongside
-   *  the completed task's own `comment`/`note`. */
-  task?: (Record<string, any> & { signature?: TaskActionSignature | null }) | null;
+   *  the completed task's own `comment`/`note`. The backend stores only the
+   *  approve request's `signature.fileUrl`, so here it is a plain URL string
+   *  (edms-backend `tasks.service.ts` `signature: input.signature.fileUrl`). */
+  task?: (Record<string, any> & { signature?: string | null }) | null;
   workflowInstance?: Record<string, any>;
   /** The document this event is about, when it is about one. */
   workflowInstanceDocumentId?: string | null;
@@ -715,9 +758,11 @@ export interface Task {
 export interface TaskDocumentSnapshot {
   id: string;
   workflowDocumentExecutionId: string;
-  /** `GET /tasks/:id` only. */
-  documentVersionId?: string;
+  /** `GET /tasks/:id` only; null for a Restricted document. */
+  documentVersionId?: string | null;
   createdAt: string;
+  /** `GET /tasks/:id` only (edms-backend `3014b89`). */
+  access?: WorkflowDocumentAccess;
   /** Stage, status and deadline: `GET /tasks/:id` only (requested on the list). */
   workflowDocumentExecution: Partial<WorkflowDocumentExecution> & {
     id: string;
@@ -727,19 +772,20 @@ export interface TaskDocumentSnapshot {
       addedAtStage?: string | null;
       comment?: string | null;
       addedAt?: string;
+      /** Restricted document: title "Restricted document", the rest null. */
       document: {
         id: string;
         title: string;
         documentType?: string | null;
-        status: string;
-        confidentiality: string;
-        urgency: string;
+        status: string | null;
+        confidentiality: string | null;
+        urgency: string | null;
         currentVersionId?: string | null;
-        cabinetId?: string;
+        cabinetId?: string | null;
       };
     };
   };
-  /** `GET /tasks/:id` only. */
+  /** `GET /tasks/:id` only; null for a Restricted document. */
   documentVersion?: {
     id: string;
     versionNumber: number;
@@ -747,7 +793,7 @@ export interface TaskDocumentSnapshot {
     ocrStatus?: string;
     uploadedBy: string;
     createdAt: string;
-  };
+  } | null;
 }
 
 /** A `request_changes` revision still waiting on a new version. */
@@ -867,6 +913,44 @@ export interface TaskWorkloadSummary {
 export interface TaskWorkloadData {
   members: TaskWorkloadMember[];
   summary: TaskWorkloadSummary;
+}
+
+/** What happens when a stage deadline passes (`SLA_BREACH_ACTIONS`). `flag` only
+ *  records the breach; `notify_supervisor` also tells the department's
+ *  supervisors; `escalate` does that and escalates the task. */
+export type SlaBreachAction = 'flag' | 'notify_supervisor' | 'escalate';
+
+/**
+ * `GET/PATCH /sla/configuration` — the tenant's one SLA policy. A stage's
+ * deadline is its `sla_hours` × the document's urgency multiplier, counted in
+ * wall-clock hours or, with `businessHoursEnabled`, working hours only.
+ * `workingDays` are ISO weekdays (1 = Monday … 7 = Sunday); times are "HH:mm"
+ * in `timezone`. Changes apply to deadlines set afterwards, not existing ones.
+ */
+export interface SlaConfiguration {
+  id: string;
+  timezone: string;
+  businessHoursEnabled: boolean;
+  workingDays: number[];
+  workStart: string;
+  workEnd: string;
+  excludeHolidays: boolean;
+  warningHours: number;
+  breachAction: SlaBreachAction;
+  lowUrgencyMultiplier: number;
+  normalUrgencyMultiplier: number;
+  highUrgencyMultiplier: number;
+  criticalUrgencyMultiplier: number;
+}
+
+export type SlaConfigurationUpdate = Partial<Omit<SlaConfiguration, 'id'>>;
+
+/** One row of `GET /sla/holidays`. `date` is a date-only value sent as an ISO
+ *  timestamp at UTC midnight — read its first 10 characters. */
+export interface SlaHoliday {
+  id: string;
+  date: string;
+  name: string;
 }
 
 /** One row of `GET /sla/breaches` — a persisted SLA warning/escalation event. */

@@ -11,6 +11,7 @@ import {
   UploadDocumentRequest,
   DocumentStatsResponse,
   AccessRequest,
+  DocumentAccessKind,
 } from '@/types/models';
 
 export interface AccessRequestInboxFilters {
@@ -134,6 +135,19 @@ export const documentsService = {
     return response.data.data;
   },
 
+  // Same document as `GET /documents/:id`, through routes that also check
+  // `document:export` / `document:print` and are audited as `document.exported` /
+  // `document.printed` (edms-backend `0dab81a`). Call before exporting or printing.
+  exportDocument: async (id: string): Promise<Document> => {
+    const response = await apiClient.get<ApiResponse<Document>>(`/documents/${id}/export`);
+    return response.data.data;
+  },
+
+  printDocument: async (id: string): Promise<Document> => {
+    const response = await apiClient.get<ApiResponse<Document>>(`/documents/${id}/print`);
+    return response.data.data;
+  },
+
   // Version Control
   getVersions: async (id: string): Promise<DocumentVersion[]> => {
     const response = await apiClient.get<ApiResponse<DocumentVersion[]>>(
@@ -166,12 +180,17 @@ export const documentsService = {
   },
 
   // Access requests — any authenticated user may request access to any
-  // document by id (409 if they already have a pending request on it);
-  // grant/deny is client_admin-only. Verified live 2026-09-18.
-  requestAccess: async (id: string, reason?: string): Promise<AccessRequest> => {
+  // document by id, one request per kind (409 if one of that kind is already
+  // pending); grant/deny is client_admin-only. `permission` is required since
+  // edms-backend `3014b89` (422 without it).
+  requestAccess: async (
+    id: string,
+    permission: DocumentAccessKind,
+    reason?: string,
+  ): Promise<AccessRequest> => {
     const response = await apiClient.post<ApiResponse<AccessRequest>>(
       `/documents/${id}/access-requests`,
-      reason ? { reason } : {},
+      reason ? { permission, reason } : { permission },
     );
     return response.data.data;
   },
