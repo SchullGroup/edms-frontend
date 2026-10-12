@@ -733,9 +733,14 @@ Confidential one is restricted for them. To re-run, create a fresh pair the same
 - [x] **TP-R9.** As staff, the activity trail says "Comments and signatures are hidden
       because this workflow includes documents you can't open"; client admin doesn't see
       it.
-- [ ] **TP-R10.** Not yet run: someone following the workflow without holding its task
-      gets only "Open the document" pre-ticked; the request dialog won't send with nothing
-      ticked.
+- [x] **TP-R10.** With nothing actionable (a one-document task on a Restricted document),
+      the caption's "Request access" opens the dialog with both kinds ticked; unticking
+      both and pressing Send keeps the dialog open with "Tick at least one" and sends
+      nothing (2026-10-12, instance `bc01e5d3-5426-42db-a7e8-490bb096c09d`).
+- [ ] **TP-R11.** Not run: someone following the workflow without holding its task gets
+      only "Open the document" pre-ticked. No fixture account fits: `staff` see only their
+      own workflows, and every oversight role can open Confidential documents. Needs a
+      custom role with workflow oversight but no `view_confidential`.
 
 ---
 

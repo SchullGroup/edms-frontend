@@ -481,6 +481,11 @@ search returns nothing, no notifications, comments 404), were corrected in place
 through rather than deleted. The same pass recorded edms-backend `3014b89` (PR #47) as
 DRIFT-20…22 in doc 01.
 
+**Correction (2026-10-12, later).** DRIFT-20 was first recorded as Request access returning
+**400**. Checked live, the backend answers a request without `permission` with **422**
+(`VALIDATION_ERROR`). Docs 01, 04 and 05 said 400 in several places; corrected in place to
+422 the same day, while fixing it.
+
 ---
 
 ## Relationship to the older docs
