@@ -19,7 +19,11 @@ export interface WorkflowDocumentViewerProps {
   documentId: string;
   /** From the task snapshot — shown when the document itself can't be loaded. */
   title: string;
-  confidentiality: string;
+  /** Null for a Restricted document (the backend withholds it). */
+  confidentiality: string | null;
+  /** The workflow response says the viewer can't open this document: show the
+   *  request card straight away instead of fetching it into a 403. */
+  restricted?: boolean;
   viewerId: string;
   viewerName: string;
 }
@@ -28,28 +32,31 @@ export interface WorkflowDocumentViewerProps {
  * One workflow document in the viewer. A reviewer can be refused a document
  * for two reasons: its confidentiality tier is above their role's clearance,
  * or it belongs to another department and they hold no access grant for it
- * (a workflow can mix documents from several departments). `GET /documents/:id`
- * 403s either way without saying which, so the overlay doesn't guess — it
- * offers "Request access", which an administrator reviews. The rest of the
- * workflow stays usable.
+ * (a workflow can mix documents from several departments). The workflow
+ * response marks such a document restricted (edms-backend `3014b89`); for any
+ * other refusal `GET /documents/:id` 403s. Either way the card offers "Request
+ * access", which an administrator reviews. The rest of the workflow stays
+ * usable.
  */
 export function WorkflowDocumentViewer({
   documentId,
   title,
   confidentiality,
+  restricted = false,
   viewerId,
   viewerName,
 }: WorkflowDocumentViewerProps) {
   const [zoom, setZoom] = useState(1);
-  const { data: doc, isLoading, error } = useDocument(documentId);
+  // An empty id disables the query: a Restricted document is never fetched.
+  const { data: doc, isLoading, error } = useDocument(restricted ? '' : documentId);
   const { policyFor } = useConfidentialityPolicy();
   const { allows } = useConfidentialityClearance();
   const downloadVersion = useDownloadDocumentVersion();
   const printDocument = usePrintDocument();
   const { promptRequestAccess, isRequesting } = useRequestAccessPrompt();
-  const denied = (error as any)?.response?.status === 403;
+  const denied = restricted || (error as any)?.response?.status === 403;
 
-  if (isLoading) {
+  if (!restricted && isLoading) {
     return <Skeleton height={620} radius={16} style={{ width: '100%' }} />;
   }
 
@@ -57,7 +64,9 @@ export function WorkflowDocumentViewer({
     return (
       <div className="viewer doc-viewer-col" style={{ position: 'relative' }}>
         <div className="viewer-bar">
-          <span style={{ flex: 1 }}>{denied ? 'No access' : 'Unavailable'}</span>
+          <span style={{ flex: 1 }}>
+            {restricted ? 'Restricted document' : denied ? 'No access' : 'Unavailable'}
+          </span>
         </div>
         <div className="viewer-page-wrap" aria-hidden="true">
           <div className="doc-page" style={{ filter: 'blur(6px)', opacity: 0.35 }} />

@@ -19,8 +19,13 @@ import { Icon } from '@/components/ui/Icons';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { fmtDateTime } from '@/utils/helpers';
-import { instanceTitle, taskDueAt } from '@/utils/workflowDocuments';
-import type { Task, WorkflowInstanceStatus, WorkflowStageAction } from '@/types/models';
+import { documentsLabel, taskDueAt } from '@/utils/workflowDocuments';
+import type {
+  Task,
+  WorkflowDocumentAccess,
+  WorkflowInstanceStatus,
+  WorkflowStageAction,
+} from '@/types/models';
 
 const STATUS_LABEL: Record<WorkflowInstanceStatus, string> = {
   pending: 'Pending',
@@ -30,6 +35,27 @@ const STATUS_LABEL: Record<WorkflowInstanceStatus, string> = {
 };
 
 const ACTIVE_TASK_STATUSES = ['pending', 'escalated'];
+
+/** One of the documents this page is about, as the viewer is allowed to see it. */
+interface PageDocument {
+  id: string;
+  /** "Restricted document" when restricted: the backend withholds the real one. */
+  title: string;
+  confidentiality: string | null;
+  versionNumber?: number;
+  /** A Restricted document: the viewer can't open it. */
+  restricted: boolean;
+  /** The viewer has Action access: stage actions may include it. */
+  actionable: boolean;
+}
+
+/** Reads the access the backend reports for a document (edms-backend
+ *  `3014b89`). A response without it predates the change, when every document
+ *  returned was one the viewer could open and act on. */
+function accessFlags(access: WorkflowDocumentAccess | undefined, isLocked?: boolean) {
+  const restricted = isLocked ?? (access ? !access.canView : false);
+  return { restricted, actionable: access?.canRoute ?? !restricted };
+}
 
 /**
  * The workflow page — where a workflow's documents are reviewed and its
@@ -93,7 +119,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   // full document list.
   const { data: taskDetail } = useTask(focusTask?.id ?? '');
 
-  const documents = taskDetail?.documents?.length
+  const documents: PageDocument[] = taskDetail?.documents?.length
     ? taskDetail.documents.map((s) => {
         const wid = s.workflowDocumentExecution.workflowInstanceDocument;
         return {
@@ -101,21 +127,26 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
           title: wid.document.title,
           confidentiality: wid.document.confidentiality,
           versionNumber: s.documentVersion?.versionNumber,
+          ...accessFlags(s.access),
         };
       })
     : (instance?.documents ?? []).map((d) => ({
         id: d.documentId ?? d.document.id,
         title: d.document.title || 'Document',
-        confidentiality: d.document.confidentiality || 'internal',
+        confidentiality: d.document.confidentiality,
         versionNumber: d.document.currentVersion?.versionNumber,
+        ...accessFlags(d.access, d.isLocked),
       }));
 
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const selected = documents.find((d) => d.id === selectedId) ?? documents[0];
 
   // Only needed to know whether the selected document is viewable (the viewer
-  // itself fetches it too — same query, deduplicated).
-  const { data: selectedDoc } = useDocument(selected?.id ?? '');
+  // itself fetches it too — same query, deduplicated). A Restricted document is
+  // never fetched: it would only 403.
+  const { data: selectedDoc } = useDocument(
+    selected && !selected.restricted ? selected.id : '',
+  );
 
   const workflowName = instance?.workflowDefinition?.name || 'Workflow';
   useEffect(() => {
@@ -235,7 +266,10 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
       <div className="page-head">
         <div style={{ minWidth: 0 }}>
           <div className="page-title" style={{ fontSize: '19px' }}>
-            {instance.documents?.length ? instanceTitle(instance) : workflowName}
+            {/* Restricted documents stay out of the title: it would read
+                "Restricted document". */}
+            {documentsLabel(documents.filter((d) => !d.restricted).map((d) => d.title)) ||
+              workflowName}
           </div>
           <div className="flex gap-2 mt-2 flex-wrap items-center">
             <StatusBadge status={STATUS_LABEL[instance.status]} />
@@ -299,6 +333,11 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               className={`tab ${d.id === selected?.id ? 'active' : ''}`}
               onClick={() => setSelectedId(d.id)}
             >
+              {d.restricted && (
+                <>
+                  <Icon name="lock" size={12} />{' '}
+                </>
+              )}
               {d.title}
               {revisionsFor(d.id).length > 0 && (
                 <span style={{ color: 'var(--status-pending)' }} title="Changes requested">
@@ -321,6 +360,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               documentId={selected.id}
               title={selected.title}
               confidentiality={selected.confidentiality}
+              restricted={selected.restricted}
               viewerId={me.id}
               viewerName={me.name}
             />
