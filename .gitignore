@@ -45,3 +45,6 @@ next-env.d.ts
 
 # specs
 /docs/specs/
+
+# custom files for local development
+GLOSSARY.md
