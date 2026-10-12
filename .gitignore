@@ -48,3 +48,4 @@ next-env.d.ts
 
 # custom files for local development
 GLOSSARY.md
+.scratch
