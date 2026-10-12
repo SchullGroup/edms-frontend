@@ -13,10 +13,15 @@ import {
 } from '@/apis/hooks/useDocuments';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
-import { AccessRequest } from '@/types/models';
+import { AccessRequest, DocumentAccessKind } from '@/types/models';
+import { ACCESS_KIND_LABEL } from '@/constants/documentLevels';
 import { fmtDateTime } from '@/utils/helpers';
 
 const PAGE_SIZE = 20;
+
+/** Requests made before edms-backend `3014b89` carry no kind; they were all
+ *  for viewing. */
+const accessKind = (r: AccessRequest): DocumentAccessKind => r.permission ?? 'view';
 
 export default function AccessRequestsInboxPage() {
   const router = useRouter();
@@ -43,10 +48,14 @@ export default function AccessRequestsInboxPage() {
   }, [setPageTitle]);
 
   const handleGrant = (r: AccessRequest) => {
+    const kind = accessKind(r);
     openConfirm({
       title: 'Grant access?',
-      message: `Creates a standing, view-only access grant for ${r.requester.name} on "${r.document?.title}" — it bypasses confidentiality tier and own/department scope for viewing, but never edit, delete or checkout.`,
-      confirmLabel: 'Grant view access',
+      message:
+        kind === 'route'
+          ? `${r.requester.name} will be able to act on "${r.document?.title}" in workflows (approve, reject, review and so on) without being able to open it. The grant stays until it's revoked.`
+          : `${r.requester.name} will be able to open "${r.document?.title}" despite its confidentiality level or department. They still won't be able to edit, delete, check out, download, export or print it. The grant stays until it's revoked.`,
+      confirmLabel: kind === 'route' ? 'Grant: act on this document' : 'Grant: open the document',
       onConfirm: () =>
         grantRequest.mutateAsync({ id: r.documentId, requestId: r.id }).then(() => {}),
     });
@@ -89,6 +98,15 @@ export default function AccessRequestsInboxPage() {
         <span>
           <div style={{ fontWeight: 600 }}>{r.requester.name}</div>
           <div className="caption">{r.requester.email}</div>
+        </span>
+      ),
+    },
+    {
+      key: 'permission',
+      label: 'Access',
+      render: (r) => (
+        <span title={ACCESS_KIND_LABEL[accessKind(r)]}>
+          {accessKind(r) === 'route' ? 'Act' : 'Open'}
         </span>
       ),
     },
@@ -162,8 +180,9 @@ export default function AccessRequestsInboxPage() {
         <div>
           <div className="page-title">Access Requests</div>
           <div className="page-sub">
-            Requests from users blocked by confidentiality tier or own/department scope.
-            Granting creates a standing, view-only exception for that document.
+            Requests from users blocked by a document’s confidentiality level or department,
+            either to open it or to act on it in workflows. Each grant covers one document and
+            stands until it’s revoked.
           </div>
         </div>
         <div className="actions">

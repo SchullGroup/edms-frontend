@@ -13,12 +13,12 @@ import {
   PORTAL_BY_KEY,
   fallbackPermissionsForRoles,
   normalizePermission,
-  resolvePortal,
+  effectivePortal,
 } from '@/lib/permissions';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { currentUser, setCurrentUser } = useStore();
+  const { currentUser, setCurrentUser, prefs } = useStore();
   const { addToast } = useUIStore();
 
   const [email, setEmail] = useState('');
@@ -33,9 +33,16 @@ export default function LoginPage() {
         currentUser.permissions && currentUser.permissions.length > 0
           ? currentUser.permissions.map(normalizePermission)
           : fallbackPermissionsForRoles(currentUser.roles);
-      const portalKey = resolvePortal(perms, currentUser.roles);
+      const portalKey = effectivePortal(
+        perms,
+        currentUser.roles,
+        currentUser.id,
+        prefs?.portalChoice,
+      );
       router.push(PORTAL_BY_KEY[portalKey]?.home || '/staff');
     }
+    // Only on sign-in, not when the switcher later changes `prefs`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, router]);
 
   const loginMutation = useMutation({

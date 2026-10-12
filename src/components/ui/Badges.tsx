@@ -52,7 +52,10 @@ export const SlaBadge = ({ status }: { status: string }) => {
   );
 };
 
-export const ConfBadge = ({ level }: { level: string }) => {
+// A Restricted document's confidentiality and urgency are withheld (null), so
+// both badges render nothing for a missing level rather than throwing.
+export const ConfBadge = ({ level }: { level: string | null | undefined }) => {
+  if (!level) return null;
   const label = titleCase(level);
   const cls = 'b-conf-' + label.toLowerCase().replace(/\s+/g, '-');
   return (
@@ -62,7 +65,8 @@ export const ConfBadge = ({ level }: { level: string }) => {
   );
 };
 
-export const UrgBadge = ({ level }: { level: string }) => {
+export const UrgBadge = ({ level }: { level: string | null | undefined }) => {
+  if (!level) return null;
   const label = titleCase(level);
   const cls = 'b-urg-' + label.toLowerCase();
   return (

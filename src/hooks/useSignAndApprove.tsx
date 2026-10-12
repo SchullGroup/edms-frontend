@@ -17,8 +17,11 @@ interface PromptArgs {
   taskId: string;
   /** Document / task title for the modal heading. */
   title?: string;
-  /** The task's documents — with more than one, the approver picks which to approve. */
+  /** The task's documents the approver has Action access to — with more than
+   *  one, they pick which to approve. */
   documents?: ScopeDocument[];
+  /** How many of the task's documents they can't act on (never offered). */
+  heldBack?: number;
   onSuccess?: () => void;
 }
 
@@ -33,7 +36,13 @@ export function useSignAndApprove() {
   const taskAction = useTaskAction();
   const { startUpload } = useMultipartUploader();
 
-  const promptSignAndApprove = ({ taskId, title, documents = [], onSuccess }: PromptArgs) => {
+  const promptSignAndApprove = ({
+    taskId,
+    title,
+    documents = [],
+    heldBack = 0,
+    onSuccess,
+  }: PromptArgs) => {
     const sig: { current: { blob: Blob; mimeType: Mime } | null } = { current: null };
     const chosen = new Set(documents.map((d) => d.id));
     const comment: { current: string } = { current: '' };
@@ -51,6 +60,7 @@ export function useSignAndApprove() {
           <DocumentScopeField
             documents={documents}
             chosen={chosen}
+            heldBack={heldBack}
             label="Approve which documents?"
           />
           <div className="field mb-4">
@@ -83,7 +93,7 @@ export function useSignAndApprove() {
               addToast('Add a signature to approve', 'error');
               return false;
             }
-            const scope = scopedDocuments(documents, chosen);
+            const scope = scopedDocuments(documents, chosen, heldBack);
             submitting = true;
             try {
               const { blob, mimeType } = sig.current;

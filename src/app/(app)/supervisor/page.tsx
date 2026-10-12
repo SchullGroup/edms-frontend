@@ -21,6 +21,7 @@ import { exportCsv } from '@/utils/exportCsv';
 import { Task, WorkflowTeamStatusMember } from '@/types/models';
 import { taskPrimaryDocument, taskTitle } from '@/utils/workflowDocuments';
 import { isOverdue } from '@/utils/supervisor';
+import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
 
 export default function SupervisorDashboard() {
   const router = useRouter();
@@ -252,6 +253,9 @@ export default function SupervisorDashboard() {
             <HBarChart items={byCab} />
           </div>
         </div>
+      </div>
+      <div className="mt-4">
+        <QuickAccessCard showActions={false} />
       </div>
     </div>
   );

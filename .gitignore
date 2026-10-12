@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# pdf.js runtime files, copied from node_modules by scripts/copy-pdfjs-assets.mjs
+/public/pdfjs/
+
+# specs
+/docs/specs/
+
+# custom files for local development
+GLOSSARY.md
+.scratch

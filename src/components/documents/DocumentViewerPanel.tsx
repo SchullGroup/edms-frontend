@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
 import { Icon } from '@/components/ui/Icons';
+import { PdfViewer } from '@/components/documents/PdfViewer';
 import type { DocumentSignatureFieldUI } from '@/components/documents/types';
+import { fileKindLabel } from '@/constants/uploadTypes';
 
 export interface DocumentViewerPanelProps {
   documentTitle: string;
@@ -22,21 +23,18 @@ export interface DocumentViewerPanelProps {
   lockedByOther: boolean;
   onSignatureFieldClick: (index: number) => void;
   getSignerName: (userId: string) => string;
-}
-
-// Open-parameters honoured by Chromium's and Firefox's (pdf.js) built-in PDF
-// viewers: `toolbar=0`/`navpanes=0`/`scrollbar=0` hide the native chrome — and
-// with it, the browser's own print/download/draw-annotation controls, which
-// otherwise sit on top of this app's confidentiality and watermark policy.
-// `page=N` opens straight to a given page. This is best-effort: it depends on
-// each browser's own PDF viewer honouring the fragment, isn't guaranteed on
-// every platform, and a determined user can always fall back to a viewer that
-// ignores it — it's not a substitute for the server-side download gating that
-// already exists.
-function pdfSrc(fileUrl: string, page: string) {
-  const params = ['toolbar=0', 'navpanes=0', 'scrollbar=0'];
-  if (page.trim()) params.push(`page=${encodeURIComponent(page.trim())}`);
-  return `${fileUrl}#${params.join('&')}`;
+  /** `document:download` plus clearance for this document's tier. Also decides
+   *  whether a PDF's text can be selected and copied. */
+  canDownload: boolean;
+  /** The page's own (audited) download; without one the button opens the file. */
+  onDownload?: () => void;
+  /** `document:print` plus clearance. PDFs only. */
+  canPrint: boolean;
+  /** The audited permission check run before printing; false cancels. */
+  onBeforePrint?: () => Promise<boolean>;
+  /** The version's OCR text, searched and shown when a PDF is a scan. */
+  ocrText?: string | null;
+  ocrStatus?: string;
 }
 
 /**
@@ -44,8 +42,9 @@ function pdfSrc(fileUrl: string, page: string) {
  * similar third-party proxy, since a proxy caching a PDF means a re-uploaded
  * version can keep showing stale content to other viewers.
  *
- * Deliberately view-only: zoom and page navigation only, no print and no
- * markup/redaction tools (those don't exist server-side — see doc/[id]).
+ * PDFs open in `PdfViewer` (pdf.js): find, page navigation, zoom, and Print and
+ * Download that follow the caller's permissions. No markup or redaction tools
+ * (those don't exist server-side — see doc/[id]).
  */
 export function DocumentViewerPanel({
   documentTitle,
@@ -62,6 +61,12 @@ export function DocumentViewerPanel({
   lockedByOther,
   onSignatureFieldClick,
   getSignerName,
+  canDownload,
+  onDownload,
+  canPrint,
+  onBeforePrint,
+  ocrText,
+  ocrStatus,
 }: DocumentViewerPanelProps) {
   const isPdf = fileMimeType === 'application/pdf';
   // TIFF is an `image/*` type but only Safari can draw it in an <img> — in
@@ -69,10 +74,51 @@ export function DocumentViewerPanel({
   // path along with DOCX/XLSX until a renderer exists for those.
   const isImage = fileMimeType.startsWith('image/') && fileMimeType !== 'image/tiff';
 
-  const [pageInput, setPageInput] = useState('');
-  const [pdfPage, setPdfPage] = useState('');
+  const downloadLabel = 'Download a copy';
 
-  const goToPage = () => setPdfPage(pageInput);
+  if (fileUrl && isPdf) {
+    return (
+      <div className="viewer doc-viewer-col">
+        <PdfViewer
+          fileUrl={fileUrl}
+          title={documentTitle}
+          zoom={zoom}
+          onZoomChange={onZoomChange}
+          showWatermark={showWatermark}
+          watermarkText={watermarkText}
+          allowCopy={canDownload}
+          canPrint={canPrint}
+          onBeforePrint={onBeforePrint}
+          ocrText={ocrText}
+          ocrStatus={ocrStatus}
+          actions={
+            canDownload &&
+            (onDownload ? (
+              <button
+                className="icon-btn"
+                onClick={onDownload}
+                title={downloadLabel}
+                aria-label={downloadLabel}
+              >
+                <Icon name="download" size={16} />
+              </button>
+            ) : (
+              <a
+                className="icon-btn"
+                href={fileUrl}
+                target="_blank"
+                rel="noreferrer"
+                title={downloadLabel}
+                aria-label={downloadLabel}
+              >
+                <Icon name="download" size={16} />
+              </a>
+            ))
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="viewer doc-viewer-col">
@@ -80,53 +126,30 @@ export function DocumentViewerPanel({
         <span className="tabular-nums" style={{ flex: 1 }}>
           {fileMimeType || 'Unknown type'}
         </span>
-        {isPdf && fileUrl && (
-          <form
-            className="flex items-center gap-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              goToPage();
-            }}
-          >
-            <span className="caption" style={{ color: 'inherit', opacity: 0.7 }}>
-              Page
-            </span>
-            <input
-              type="number"
-              min={1}
-              inputMode="numeric"
-              value={pageInput}
-              onChange={(e) => setPageInput(e.target.value)}
-              placeholder="#"
-              aria-label="Go to page"
-              style={{
-                width: 44,
-                height: 24,
-                padding: '0 6px',
-                borderRadius: 6,
-                border: '1px solid rgba(255,255,255,.18)',
-                background: 'rgba(255,255,255,.06)',
-                color: 'inherit',
-                fontSize: 12,
-              }}
-            />
-            <button type="submit" className="icon-btn" title="Go to page" aria-label="Go to page">
-              <Icon name="chevR" size={14} />
-            </button>
-          </form>
-        )}
-        <button className="icon-btn" onClick={() => onZoomChange(Math.max(0.6, zoom - 0.15))}>
+        <button
+          className="icon-btn"
+          onClick={() => onZoomChange(Math.max(0.6, zoom - 0.15))}
+          aria-label="Zoom out"
+        >
           −
         </button>
         <span className="tabular-nums">{Math.round(zoom * 100)}%</span>
-        <button className="icon-btn" onClick={() => onZoomChange(Math.min(1.6, zoom + 0.15))}>
+        <button
+          className="icon-btn"
+          onClick={() => onZoomChange(Math.min(1.6, zoom + 0.15))}
+          aria-label="Zoom in"
+        >
           +
         </button>
       </div>
       <div className="viewer-page-wrap">
         <div
           className="doc-page"
-          style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', position: 'relative' }}
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: 'top center',
+            position: 'relative',
+          }}
         >
           {showWatermark && (
             <div className="watermark" style={{ pointerEvents: 'none' }}>
@@ -144,13 +167,6 @@ export function DocumentViewerPanel({
                   : 'This version has no file attached.'}
               </p>
             </div>
-          ) : isPdf ? (
-            <iframe
-              key={pdfPage}
-              src={pdfSrc(fileUrl, pdfPage)}
-              title={documentTitle}
-              style={{ width: '100%', height: '80vh', border: 'none', display: 'block' }}
-            />
           ) : isImage ? (
             <img
               src={fileUrl}
@@ -168,10 +184,27 @@ export function DocumentViewerPanel({
             <div className="empty" style={{ padding: '48px 16px' }}>
               <Icon name="doc" size={32} />
               <div className="h3 mt-4 mb-2">Preview not available</div>
-              <p className="caption mb-4">{fileMimeType || 'This file type'} can't be previewed inline.</p>
-              <a className="btn btn-secondary btn-sm" href={fileUrl} target="_blank" rel="noreferrer">
-                Open file
-              </a>
+              <p className="caption mb-4">
+                {fileKindLabel(fileMimeType)} can’t be previewed yet.
+                {canDownload
+                  ? ' Download it to read it.'
+                  : ` Download is turned off for ${confidentiality} documents.`}
+              </p>
+              {canDownload &&
+                (onDownload ? (
+                  <button className="btn btn-secondary btn-sm" onClick={onDownload}>
+                    <Icon name="download" size={13} /> Download
+                  </button>
+                ) : (
+                  <a
+                    className="btn btn-secondary btn-sm"
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Icon name="download" size={13} /> Download
+                  </a>
+                ))}
             </div>
           )}
 
@@ -185,7 +218,9 @@ export function DocumentViewerPanel({
                 if (!s.signedBy && !sealed && !lockedByOther) onSignatureFieldClick(i);
               }}
             >
-              {s.signedBy ? getSignerName(s.signedBy) : '✎ ' + (s.field || s.fieldName || 'Signature')}
+              {s.signedBy
+                ? getSignerName(s.signedBy)
+                : '✎ ' + (s.field || s.fieldName || 'Signature')}
             </div>
           ))}
         </div>

@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { helpTopicForPath } from '@/constants/helpTopics';
 import { useStore } from '@/store/useStore';
 import { useNavigation } from '@/hooks/useNavigation';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
 import { useUIStore } from '@/store/useUIStore';
+import { PORTAL_BY_KEY, type PortalKey } from '@/lib/permissions';
 import {
   useNotifications,
   useUnreadNotificationCount,
@@ -31,9 +33,10 @@ const QUICK_ACTION: Record<string, { label: string; icon: string; go: string }> 
 
 export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav: () => void }) => {
   const router = useRouter();
+  const pathname = usePathname();
   const { currentUser, prefs, setPrefs } = useStore();
   const nav = useNavigation();
-  const { portal } = usePermissions();
+  const { portal, portals } = usePermissions();
   const [notifOpen, setNotifOpen] = useState(false);
   const me = currentUser;
   const notifRef = useRef<HTMLDivElement>(null);
@@ -97,7 +100,38 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
 
       <div style={{ flex: 1 }}></div>
 
-      <span className="surface-label">{nav.surface}</span>
+      {portals.length > 1 ? (
+        // Someone holding several roles picks which portal they're working in.
+        <select
+          className="surface-label"
+          aria-label="Switch portal"
+          title="Switch to another of your roles"
+          value={portal}
+          style={{ cursor: 'pointer' }}
+          onChange={(e) => {
+            const next = e.target.value as PortalKey;
+            setPrefs({ ...prefs, portalChoice: { userId: me.id, portal: next } });
+            router.push(PORTAL_BY_KEY[next].home);
+          }}
+        >
+          {portals.map((key) => (
+            <option key={key} value={key}>
+              {PORTAL_BY_KEY[key].surface}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span className="surface-label">{nav.surface}</span>
+      )}
+
+      <button
+        className="icon-btn"
+        aria-label="Help for this page"
+        title="Help for this page"
+        onClick={() => router.push(`/help#${helpTopicForPath(pathname)}`)}
+      >
+        <Icon name="info" />
+      </button>
 
       <button
         className="icon-btn"

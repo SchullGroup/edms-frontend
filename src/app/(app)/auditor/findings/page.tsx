@@ -219,57 +219,61 @@ export default function AuditorFindingsPage() {
             <p className="caption">No responses yet.</p>
           )}
 
-          <div className="mt-4">
-            <textarea
-              className="input"
-              placeholder="Add response / evidence note…"
-              style={{ minHeight: '64px' }}
-              onChange={(e) => (responseText = e.target.value)}
-            ></textarea>
-            <div className="flex gap-2 mt-2" style={{ justifyContent: 'flex-end' }}>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  if (!responseText.trim()) return;
-                  const updatedResponses = [
-                    ...(f.responses || []),
-                    { by: currentUser?.id, at: Date.now(), text: responseText.trim() },
-                  ];
-                  updateFinding(f.id, {
-                    responses: updatedResponses,
-                    status: f.status === 'Open' ? 'In Remediation' : f.status,
-                  });
-                  auditAction('FINDING_RESPONSE', f.ref, 'Response added');
-                  addToast('Response recorded', 'success');
-                  closeModal();
-                }}
-              >
-                Add response
-              </button>
-
-              {f.status !== 'Closed' && (
+          {/* Same gate as "Raise finding". `Finding` has no backend model yet, so
+              this matches the create action rather than a real permission. */}
+          {can('audit', 'view') && (
+            <div className="mt-4">
+              <textarea
+                className="input"
+                placeholder="Add response / evidence note…"
+                style={{ minHeight: '64px' }}
+                onChange={(e) => (responseText = e.target.value)}
+              ></textarea>
+              <div className="flex gap-2 mt-2" style={{ justifyContent: 'flex-end' }}>
                 <button
-                  className="btn btn-success btn-sm"
+                  className="btn btn-secondary btn-sm"
                   onClick={() => {
-                    closeModal();
-                    openConfirm?.({
-                      title: `Close ${f.ref}?`,
-                      message:
-                        'Closing certifies that remediation evidence has been reviewed and accepted. The finding remains in the register permanently.',
-                      confirmLabel: 'Close with evidence',
-                      onConfirm: () => {
-                        updateFinding(f.id, { status: 'Closed', closedAt: Date.now() });
-                        auditAction('FINDING_CLOSE', f.ref, 'Closed: ' + f.title);
-                        addToast(`${f.ref} closed`, 'success');
-                      },
+                    if (!responseText.trim()) return;
+                    const updatedResponses = [
+                      ...(f.responses || []),
+                      { by: currentUser?.id, at: Date.now(), text: responseText.trim() },
+                    ];
+                    updateFinding(f.id, {
+                      responses: updatedResponses,
+                      status: f.status === 'Open' ? 'In Remediation' : f.status,
                     });
+                    auditAction('FINDING_RESPONSE', f.ref, 'Response added');
+                    addToast('Response recorded', 'success');
+                    closeModal();
                   }}
                 >
-                  Close finding
+                  Add response
                 </button>
-              )}
+
+                {f.status !== 'Closed' && (
+                  <button
+                    className="btn btn-success btn-sm"
+                    onClick={() => {
+                      closeModal();
+                      openConfirm?.({
+                        title: `Close ${f.ref}?`,
+                        message:
+                          'Closing certifies that remediation evidence has been reviewed and accepted. The finding remains in the register permanently.',
+                        confirmLabel: 'Close with evidence',
+                        onConfirm: () => {
+                          updateFinding(f.id, { status: 'Closed', closedAt: Date.now() });
+                          auditAction('FINDING_CLOSE', f.ref, 'Closed: ' + f.title);
+                          addToast(`${f.ref} closed`, 'success');
+                        },
+                      });
+                    }}
+                  >
+                    Close finding
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       ),
       actions: [{ label: 'Close' }],

@@ -2,6 +2,7 @@
 
 import { STAGE_ACTIONS } from './constants';
 import { Combobox } from '@/components/ui/Combobox';
+import type { WorkflowStageAction } from '@/types/models';
 
 export interface StagePropertiesPanelProps {
   selectedStage: any | null;
@@ -9,8 +10,8 @@ export interface StagePropertiesPanelProps {
   dirty: boolean;
   nameDraft: string;
   onNameChange: (name: string) => void;
-  actionsDraft: string[];
-  onToggleAction: (action: string) => void;
+  actionsDraft: WorkflowStageAction[];
+  onToggleAction: (action: WorkflowStageAction) => void;
   assigneeMode: 'role' | 'person';
   onAssigneeModeChange: (mode: 'role' | 'person') => void;
   roles: { id: string; name: string }[];

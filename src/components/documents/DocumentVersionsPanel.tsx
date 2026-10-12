@@ -6,6 +6,7 @@ import {
   useDocumentVersions,
   useAddDocumentVersion,
   useRestoreDocumentVersion,
+  useDownloadDocumentVersion,
 } from '@/apis/hooks/useDocuments';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 import { calculateChecksum } from '@/apis/services/s3.service';
@@ -19,6 +20,9 @@ interface Props {
   currentVersionId?: string | null;
   /** Reader — controls whether the panel renders at all. */
   canView: boolean;
+  /** Opening a version is a download to the API (`document:download` plus
+   *  confidentiality clearance) — controls the per-version "Open" button. */
+  canDownload: boolean;
   /** Writer — controls the "Restore" affordance. */
   canEdit: boolean;
   /** Controls the "New version" upload affordance specifically — true only
@@ -33,6 +37,7 @@ export function DocumentVersionsPanel({
   documentId,
   currentVersionId,
   canView,
+  canDownload,
   canEdit,
   canUploadVersion,
   getUploaderName,
@@ -40,6 +45,7 @@ export function DocumentVersionsPanel({
   const { data: versions, isLoading } = useDocumentVersions(canView ? documentId : '');
   const addVersion = useAddDocumentVersion();
   const restoreVersion = useRestoreDocumentVersion();
+  const downloadVersion = useDownloadDocumentVersion();
   const { startUpload, uploadProgress } = useMultipartUploader();
   const { openConfirm, addToast } = useUIStore();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -140,16 +146,20 @@ export function DocumentVersionsPanel({
                   {fmtDate(v.createdAt)}
                   {v.ocrStatus && v.ocrStatus !== 'completed' ? ` · OCR ${v.ocrStatus}` : ''}
                 </span>
-                {v.fileUrl && (
-                  <a
+                {v.fileUrl && canDownload && (
+                  <button
                     className="btn btn-ghost btn-sm"
-                    href={v.fileUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                    onClick={() => {
+                      const tab = window.open('', '_blank');
+                      if (tab) tab.opener = null;
+                      downloadVersion.mutate({ id: documentId, versionId: v.id, tab });
+                    }}
+                    disabled={downloadVersion.isPending}
                     title="Open this version"
+                    aria-label={`Open version ${v.versionNumber}`}
                   >
                     <Icon name="download" size={13} />
-                  </a>
+                  </button>
                 )}
                 {canEdit && !isCurrent && (
                   <button
