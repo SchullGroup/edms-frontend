@@ -60,7 +60,10 @@ function accessFlags(access: WorkflowDocumentAccess | undefined, isLocked?: bool
   const restricted = isLocked ?? (access ? !access.canView : false);
   const requestable: DocumentAccessKind[] = [];
   if (access?.canRequestView ?? restricted) requestable.push('view');
-  if (access?.canRequestRoute) requestable.push('route');
+  // Task documents say outright; workflow documents (shown until the task
+  // loads) don't, but the backend offers Action access whenever a document
+  // isn't actionable, and they mark a Restricted one `canRoute: false`.
+  if (access?.canRequestRoute ?? access?.canRoute === false) requestable.push('route');
   return { restricted, actionable: access?.canRoute ?? !restricted, requestable };
 }
 
@@ -207,14 +210,15 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   // The backend refuses an action that would touch any other; the rest of the
   // task stays at this stage, in a new task for the same person.
   const actionableDocuments = documents.filter((d) => d.actionable);
-  const heldBack = documents.length - actionableDocuments.length;
-  const firstHeldBack = documents.find((d) => !d.actionable);
+  const heldBackDocuments = documents.filter((d) => !d.actionable);
+  const heldBack = heldBackDocuments.length;
+  const firstHeldBack = heldBackDocuments[0];
 
   const actions = useWorkflowTaskActions({
     taskId: canAct ? focusTask?.id : undefined,
     stageLabel,
     documents: actionableDocuments,
-    heldBack,
+    heldBackDocuments,
     selectedDocumentId: selected?.actionable ? selected.id : undefined,
     auditTargetId: selected?.id ?? id,
     instanceId: id,
@@ -370,18 +374,21 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
             unavailable.
           </>
         )}
-        {canAct && firstHeldBack && (
+        {canAct && firstHeldBack && firstHeldBack.requestable.length > 0 && (
           <>
             {' '}
             <a
               style={{ cursor: 'pointer' }}
-              onClick={() =>
-                firstHeldBack.restricted
-                  ? setSelectedId(firstHeldBack.id)
-                  : promptRequestAccess(firstHeldBack.id, firstHeldBack.title, {
-                      kinds: ['route'],
-                    })
-              }
+              onClick={() => {
+                // Show the document the request is about, then ask. The caller
+                // holds the task, so everything still requestable starts ticked.
+                setSelectedId(firstHeldBack.id);
+                promptRequestAccess(
+                  firstHeldBack.id,
+                  firstHeldBack.restricted ? undefined : firstHeldBack.title,
+                  { kinds: firstHeldBack.requestable },
+                );
+              }}
             >
               Request access
             </a>

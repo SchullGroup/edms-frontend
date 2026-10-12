@@ -101,7 +101,11 @@ export function WorkflowDocumentViewer({
               </div>
               <p className="caption mb-4">
                 {denied
-                  ? "You haven't been given access to this document yet, either because of its confidentiality level or because it belongs to another department. Request access: your request will be reviewed and you will be notified of the decision. The rest of this workflow is still available to you."
+                  ? `You haven’t been given access to this document yet, either because of its confidentiality level or because it belongs to another department. ${
+                      requestKinds.length > 0
+                        ? 'Request access: your request will be reviewed and you will be notified of the decision. '
+                        : ''
+                    }The rest of this workflow is still available to you.`
                   : 'It may have been archived or removed. Try again later, or contact the document owner.'}
               </p>
               {denied && requestKinds.length > 0 && (

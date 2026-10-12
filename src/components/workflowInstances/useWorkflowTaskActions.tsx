@@ -21,9 +21,9 @@ export interface WorkflowTaskActionsArgs {
   /** The task's documents the caller has Action access to — the only ones an
    *  action can cover. */
   documents: { id: string; title: string }[];
-  /** How many of the task's documents the caller has no Action access to.
-   *  They're never offered, and any action then names its documents. */
-  heldBack?: number;
+  /** The task's documents the caller has no Action access to. They're never
+   *  offered, and any action then names its documents. */
+  heldBackDocuments?: { id: string; title: string }[];
   /** Pre-ticked in the "Request changes" picker — the one being viewed. */
   selectedDocumentId?: string;
   /** Audit-log target — the workflow's primary document. */
@@ -48,7 +48,7 @@ export function useWorkflowTaskActions({
   taskId,
   stageLabel,
   documents,
-  heldBack = 0,
+  heldBackDocuments = [],
   selectedDocumentId,
   auditTargetId,
   instanceId,
@@ -62,6 +62,7 @@ export function useWorkflowTaskActions({
   const attachDocument = useAttachWorkflowDocument();
   const createAuditLog = useCreateAuditLog();
   const { promptSignAndApprove } = useSignAndApprove();
+  const heldBack = heldBackDocuments.length;
 
   const runAction = (
     actionReq: TaskActionRequest,
@@ -139,7 +140,8 @@ export function useWorkflowTaskActions({
               to the next stage.
             </div>
             <WorkflowDocumentPicker
-              excludeIds={documents.map((d) => d.id)}
+              // Every document already in the task, held back or not.
+              excludeIds={[...documents, ...heldBackDocuments].map((d) => d.id)}
               initialSelected={picked}
               uploadDefaults={uploadDefaults}
               onChange={(docs) => (picked = docs)}

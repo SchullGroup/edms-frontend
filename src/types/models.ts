@@ -210,17 +210,17 @@ export interface PersonSummary {
   email: string;
 }
 
+/** What an access request asks for (edms-backend `3014b89`): `view` is View
+ *  access (open the document), `route` is Action access (act on it in a
+ *  workflow without opening it). One request, and one grant, per kind. */
+export type DocumentAccessKind = 'view' | 'route';
+
 /**
  * `GET/POST /documents/:id/access-requests`, grant/deny, and the admin inbox
  * `GET /documents/access-requests`. Verified live 2026-09-18 — `reviewer` and
  * (inbox only) `document` are present once populated; absent/undefined
  * otherwise, not `null`.
  */
-/** What an access request asks for (edms-backend `3014b89`): `view` is View
- *  access (open the document), `route` is Action access (act on it in a
- *  workflow without opening it). One request, and one grant, per kind. */
-export type DocumentAccessKind = 'view' | 'route';
-
 export interface AccessRequest {
   id: string;
   documentId: string;
