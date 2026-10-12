@@ -147,12 +147,15 @@ export const routeConfig: RouteRule[] = [
     matchType: 'prefix',
     anyPermissions: ['audit:view'],
   },
-  // Approving a request *is* granting access — same privilege-escalation category
-  // as Roles above, not a contained CRUD page. Matches the nav item gate.
+  // Gated on what the inbox's API checks (`document_access_request:view` to
+  // list; the page disables Grant/Deny without `:grant`), not on `user:edit`,
+  // which no access-request route uses. Ahead of the `/admin` rule, so a holder
+  // from any portal can open it — and land here from a notification link.
+  // Matches the nav item gate.
   {
     path: '/admin/access-requests',
     matchType: 'prefix',
-    anyPermissions: ['user:edit'],
+    anyPermissions: ['document_access_request:view'],
   },
   // Role-gated, not permission-gated — per an explicit call: stays scoped to the
   // role it was built for (client_admin) rather than opening up to any custom
