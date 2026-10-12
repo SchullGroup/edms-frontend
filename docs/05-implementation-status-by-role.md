@@ -31,10 +31,10 @@ The backend moved after the morning revision above. Two changes affect this docu
 swagger describes department task assignment and "Restricted document" entries. Three
 contract changes break or change frontend behaviour today (doc 01 → DRIFT-20…22):
 
-- ⛔ **Request access is broken (DRIFT-20).** `POST /documents/:id/access-requests` now
+- ✅ ~~**Request access is broken (DRIFT-20).**~~ *Fixed 2026-10-12.* `POST /documents/:id/access-requests` now
   requires `permission: 'view' | 'route'`; the frontend sent only `{ reason }`, so every
-  request was refused (422; this said 400 until checked live). *Fixed on `/doc/[id]`
-  2026-10-12; the workflow page follows.* Document grants are per permission now: a `route` grant lets someone
+  request was refused (422; this said 400 until checked live). *Fixed on both pages
+  2026-10-12, verified live.* Document grants are per permission now: a `route` grant lets someone
   act on a document in a workflow without being able to open it.
 - ⛔ **The workflow page crashes on a document the user can't see (DRIFT-21).**
   `GET /tasks/:id` and `GET /workflow-instances/:id` now return every document, with locked
@@ -308,7 +308,7 @@ destination (request doc item 7).
 |---|---|---|
 | ~~`POST /workflow-instances` + `/:id/start`~~ | ✅ Resolved (DRIFT-09) | — |
 | ~~`GET/PATCH /notifications*`~~ | ✅ **Built and wired** — this row was stale (corrected 2026-10-12). The module exists and fires on assignment, outcomes, delegation, access requests, SLA warning/breach (doc 01 DRIFT-10); `/notifications` and the bell call it | — |
-| `POST /documents/:id/access-requests` with `permission` | 🟨 **DRIFT-20 partly fixed 2026-10-12** — `/doc/[id]` sends `view` (verified live); the workflow page doesn't yet | Workflow page Request access still refused (422) |
+| ~~`POST /documents/:id/access-requests` with `permission`~~ | ✅ **DRIFT-20 fixed 2026-10-12** — `/doc/[id]` sends `view`; the workflow page sends `view` and/or `route` (verified live) | — |
 | ~~`POST /documents/:id/comments`~~ | Not a real endpoint — use the `comment` field on `POST /tasks/:id/action` | — |
 | `GET /documents/:id/download` | Not built | No way to retrieve the file |
 | ~~`GET /circulars`, `POST /circulars/:id/ack`~~ | ✅ **Built** (backend `circulars` module) and wired 2026-10-05 — the real routes are `/circulars/inbox*` (see APIs wired) | — |
@@ -336,7 +336,7 @@ destination (request doc item 7).
 | Work the task queue | ✅ | Prioritised by urgency then due date |
 | Act on a task | ✅ | |
 | Receive a notification | 🟨 | Backend fires them and the bell + `/notifications` read them (corrected 2026-10-12; was "⛔ 404"). Not clicked through end to end. Arrives within 60 s (polling, no push) |
-| Request access to a document | 🟨 | ✅ from `/doc/[id]` (View access; verified live 2026-10-12: 201, then 409 → "Already pending"). ⛔ from the workflow page until DRIFT-20 is fully fixed |
+| Request access to a document | ✅ | Verified live 2026-10-12: from `/doc/[id]` (View access: 201, then 409 → "Already pending") and from a Restricted document on the workflow page (View and/or Action access, one request and toast per kind) |
 | Comment on a document | ⛔ | 404 |
 | Read/acknowledge a circular | ✅ | Wired 2026-10-05 to `/circulars/inbox*` — read receipt on open, acknowledgement recorded and audited server-side. *(confirmed by the product owner’s testing, 2026-10-09)* |
 
@@ -346,8 +346,7 @@ destination (request doc item 7).
 2. **Fix the upload→OCR bucket** so search works at all.
 3. ~~**Build notifications** (backend module + wire the bell).~~ **Done** on both sides; this
    line was stale until 2026-10-12. Still owed: an end-to-end click-through.
-3a. **Fix Request access (DRIFT-20)** — send `permission` (`view`, or `route` from the
-   workflow page when the user can't act on a document).
+3a. ~~**Fix Request access (DRIFT-20)**~~ — **done 2026-10-12**, verified live.
 4. ~~Add `POST /documents/:id/comments`~~ — **done differently (2026-09-10):** comments are the `comment` field on `POST /tasks/:id/action`; the stage-action modals now send it.
 5. ~~**Add a download endpoint** gated by `requireConfidentiality('download')`.~~ **Done:** `GET /documents/:id/versions/:vid` checks `document:download` + clearance (edms-backend `0dab81a`); the frontend downloads only through it, clicked through 2026-10-09.
 6. **Replace `IDU_GUESSES`** with real extraction, or clearly label it as a preview.
@@ -1067,7 +1066,7 @@ for as long as it did.
 | 6 | ✅ ~~Make `usePermissions` parse three-segment strings~~ — **done 2026-09-10, backend caught up 2026-09-15.** `src/lib/permissions.ts` normalises/matches on `resource:action`, parses scope separately; role-name heuristics removed; gating now permission-key based (`routes.config` `anyPermissions`). Login + `GET /auth/me` now return a live, scoped `permissions` array — that's the source of truth; `useHydratePermissions` (from `GET /roles`) only tops up keys it's missing | Frontend + Backend | — | Was: every `<Guard>` would go dark the moment `/auth/me` returned `permissions`; that day has arrived and it didn't |
 | 7 | ✅ ~~Fix `effStatus()`~~ — **done 2026-09-21** (DRIFT-13): `effStatus` deleted for `taskStatusLabel`/`isOverdue` in `utils/supervisor.ts`. Since `919d0ef` list responses lack deadlines again, so list overdue counts come from open SLA breach events (DRIFT-19) (ticked 2026-10-08) | Frontend | — | Was: every overdue badge read zero |
 
-| 7a | **Send `permission` with access requests** (DRIFT-20, 2026-10-12). `documentsService.requestAccess` posts `{ reason }`; `3014b89` made `permission: 'view' \| 'route'` required, so Request access is a 400 everywhere. `/doc/[id]` asks for `view`; the workflow page asks for `view` or `route` depending on what the document's `access` says is missing | Frontend | 1–2 h | Request access is broken on the live API |
+| 7a | ✅ ~~**Send `permission` with access requests**~~ — **done 2026-10-12, verified live** (DRIFT-20). `documentsService.requestAccess` posts `{ reason }`; `3014b89` made `permission: 'view' \| 'route'` required, so Request access is a 400 everywhere. `/doc/[id]` asks for `view`; the workflow page asks for `view` or `route` depending on what the document's `access` says is missing | Frontend | 1–2 h | Request access is broken on the live API |
 | 7b | **Handle locked documents on the workflow page** (DRIFT-21, 2026-10-12). Use `access` / `isLocked` from `GET /tasks/:id` and `GET /workflow-instances/:id`; guard `confidentiality: null` (`ConfBadge` → `titleCase(null)` throws); keep locked documents out of the action pickers unless `canRoute`; show "Restricted document" tabs with the request-access card instead of fetching them | Frontend | ½–1 day | The workflow page crashes for anyone whose task holds a document above their clearance |
 
 *Items 1, 2, 4, 5 and 6 total under two hours and move the product from "demo with a broken

@@ -21,6 +21,7 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { fmtDateTime } from '@/utils/helpers';
 import { documentsLabel, taskDueAt } from '@/utils/workflowDocuments';
 import type {
+  DocumentAccessKind,
   Task,
   WorkflowDocumentAccess,
   WorkflowInstanceStatus,
@@ -47,6 +48,8 @@ interface PageDocument {
   restricted: boolean;
   /** The viewer has Action access: stage actions may include it. */
   actionable: boolean;
+  /** The kinds of access the viewer may still request for it. */
+  requestable: DocumentAccessKind[];
 }
 
 /** Reads the access the backend reports for a document (edms-backend
@@ -54,7 +57,10 @@ interface PageDocument {
  *  returned was one the viewer could open and act on. */
 function accessFlags(access: WorkflowDocumentAccess | undefined, isLocked?: boolean) {
   const restricted = isLocked ?? (access ? !access.canView : false);
-  return { restricted, actionable: access?.canRoute ?? !restricted };
+  const requestable: DocumentAccessKind[] = [];
+  if (access?.canRequestView ?? restricted) requestable.push('view');
+  if (access?.canRequestRoute) requestable.push('route');
+  return { restricted, actionable: access?.canRoute ?? !restricted, requestable };
 }
 
 /**
@@ -361,6 +367,14 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               title={selected.title}
               confidentiality={selected.confidentiality}
               restricted={selected.restricted}
+              requestKinds={selected.requestable}
+              // The task's holder needs both to finish the task; anyone else
+              // starts with just opening it.
+              requestChecked={
+                focusMine && focusActive
+                  ? selected.requestable
+                  : selected.requestable.filter((k) => k === 'view')
+              }
               viewerId={me.id}
               viewerName={me.name}
             />

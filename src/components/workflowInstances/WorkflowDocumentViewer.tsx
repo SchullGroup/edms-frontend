@@ -14,6 +14,7 @@ import { ConfBadge } from '@/components/ui/Badges';
 import { Icon } from '@/components/ui/Icons';
 import { Skeleton } from '@/components/common/Skeleton';
 import { documentFile } from '@/utils/documentFile';
+import type { DocumentAccessKind } from '@/types/models';
 
 export interface WorkflowDocumentViewerProps {
   documentId: string;
@@ -24,6 +25,10 @@ export interface WorkflowDocumentViewerProps {
   /** The workflow response says the viewer can't open this document: show the
    *  request card straight away instead of fetching it into a 403. */
   restricted?: boolean;
+  /** What "Request access" may ask for, and which start ticked. Defaults to
+   *  View access only. */
+  requestKinds?: DocumentAccessKind[];
+  requestChecked?: DocumentAccessKind[];
   viewerId: string;
   viewerName: string;
 }
@@ -43,6 +48,8 @@ export function WorkflowDocumentViewer({
   title,
   confidentiality,
   restricted = false,
+  requestKinds = ['view'],
+  requestChecked,
   viewerId,
   viewerName,
 }: WorkflowDocumentViewerProps) {
@@ -97,11 +104,16 @@ export function WorkflowDocumentViewer({
                   ? "You haven't been given access to this document yet, either because of its confidentiality level or because it belongs to another department. Request access: your request will be reviewed and you will be notified of the decision. The rest of this workflow is still available to you."
                   : 'It may have been archived or removed. Try again later, or contact the document owner.'}
               </p>
-              {denied && (
+              {denied && requestKinds.length > 0 && (
                 <button
                   className="btn btn-primary"
                   disabled={isRequesting}
-                  onClick={() => promptRequestAccess(documentId, title)}
+                  onClick={() =>
+                    promptRequestAccess(documentId, restricted ? undefined : title, {
+                      kinds: requestKinds,
+                      checked: requestChecked,
+                    })
+                  }
                 >
                   Request access
                 </button>
