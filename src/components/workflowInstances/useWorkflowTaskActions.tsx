@@ -11,15 +11,19 @@ import {
 } from './WorkflowDocumentPicker';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useSignAndApprove } from '@/hooks/useSignAndApprove';
-import { DocumentScopeField, scopedDocuments } from './DocumentScopeField';
+import { DocumentScopeField, HeldBackNote, scopedDocuments } from './DocumentScopeField';
 import type { TaskActionRequest, User } from '@/types/models';
 
 export interface WorkflowTaskActionsArgs {
   /** The task being actioned — must be the caller's active, current-stage task. */
   taskId: string | undefined;
   stageLabel: string;
-  /** The task's documents — for choosing which ones an action covers. */
+  /** The task's documents the caller has Action access to — the only ones an
+   *  action can cover. */
   documents: { id: string; title: string }[];
+  /** How many of the task's documents the caller has no Action access to.
+   *  They're never offered, and any action then names its documents. */
+  heldBack?: number;
   /** Pre-ticked in the "Request changes" picker — the one being viewed. */
   selectedDocumentId?: string;
   /** Audit-log target — the workflow's primary document. */
@@ -44,6 +48,7 @@ export function useWorkflowTaskActions({
   taskId,
   stageLabel,
   documents,
+  heldBack = 0,
   selectedDocumentId,
   auditTargetId,
   instanceId,
@@ -108,7 +113,7 @@ export function useWorkflowTaskActions({
           return false;
         }
       }
-      const scope = scopedDocuments(documents, reviewed);
+      const scope = scopedDocuments(documents, reviewed, heldBack);
       return runAction(
         {
           action: 'review',
@@ -182,6 +187,7 @@ export function useWorkflowTaskActions({
             <DocumentScopeField
               documents={documents}
               chosen={reviewed}
+              heldBack={heldBack}
               label="Mark which documents reviewed?"
             />
             <div className="field">
@@ -231,6 +237,7 @@ export function useWorkflowTaskActions({
       taskId,
       title: stageLabel,
       documents,
+      heldBack,
       onSuccess: () =>
         createAuditLog.mutate({
           action: 'APPROVE',
@@ -277,6 +284,7 @@ export function useWorkflowTaskActions({
                 </label>
               ))}
             </div>
+            {heldBack > 0 && <HeldBackNote count={heldBack} />}
           </div>
           <div className="field">
             <label>
@@ -329,7 +337,8 @@ export function useWorkflowTaskActions({
     if (!taskId) return;
     let reasonText = '';
     const rejected = new Set(documents.map((d) => d.id));
-    const multi = documents.length > 1;
+    // With documents held back, rejecting never ends the whole workflow.
+    const multi = documents.length > 1 || heldBack > 0;
     openModal({
       title: multi ? 'Reject documents' : 'Reject and end this workflow',
       body: (
@@ -350,6 +359,7 @@ export function useWorkflowTaskActions({
           <DocumentScopeField
             documents={documents}
             chosen={rejected}
+            heldBack={heldBack}
             label="Reject which documents?"
           />
           <div className="field">
@@ -378,7 +388,7 @@ export function useWorkflowTaskActions({
               addToast('A reason is required', 'error');
               return false;
             }
-            const scope = scopedDocuments(documents, rejected);
+            const scope = scopedDocuments(documents, rejected, heldBack);
             const titles = documents.filter((d) => rejected.has(d.id)).map((d) => d.title);
             return runAction(
               {
@@ -392,7 +402,7 @@ export function useWorkflowTaskActions({
               },
               {
                 message: scope
-                  ? `Rejected ${titles.length} of ${documents.length} documents`
+                  ? `Rejected ${titles.length} of ${documents.length + heldBack} documents`
                   : 'Rejected — workflow ended',
                 kind: 'warning',
               },
