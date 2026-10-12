@@ -30,8 +30,8 @@ export interface WorkflowDocumentViewerProps {
  * or it belongs to another department and they hold no access grant for it
  * (a workflow can mix documents from several departments). `GET /documents/:id`
  * 403s either way without saying which, so the overlay doesn't guess — it
- * offers "Request access", which the document's owner and its department's
- * supervisors review. The rest of the workflow stays usable.
+ * offers "Request access", which an administrator reviews. The rest of the
+ * workflow stays usable.
  */
 export function WorkflowDocumentViewer({
   documentId,
@@ -85,7 +85,7 @@ export function WorkflowDocumentViewer({
               </div>
               <p className="caption mb-4">
                 {denied
-                  ? "You haven't been given access to this document yet, either because of its confidentiality level or because it belongs to another department. Request access and the document's owner or its department's supervisor can approve it. The rest of this workflow is still available to you."
+                  ? "You haven't been given access to this document yet, either because of its confidentiality level or because it belongs to another department. Request access: your request will be reviewed and you will be notified of the decision. The rest of this workflow is still available to you."
                   : 'It may have been archived or removed. Try again later, or contact the document owner.'}
               </p>
               {denied && (

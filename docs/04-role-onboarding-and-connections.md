@@ -397,7 +397,7 @@ end       → /staff/tasks  clear the queue   ✅
 2. ~~⛔ **Search is empty**~~ — works; confirmed 2026-10-09
 3. ~~⛔ **No notifications**~~ — resolved (DRIFT-10)
 4. ~~⛔ **Comments 404**~~ — comments go on workflow actions (DRIFT-08)
-4a. ⛔ **Request access is a 400** since `3014b89` (DRIFT-20) — new, 2026-10-12
+4a. 🟨 **Request access was refused (422)** after `3014b89` (DRIFT-20); fixed on the document page 2026-10-12, the workflow page follows
 5. ⚠️ **2 MB limit, PDF/images only** — many real documents rejected
 6. ⚠️ **No forced password change** on first login
 

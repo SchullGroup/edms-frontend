@@ -216,11 +216,18 @@ export interface PersonSummary {
  * (inbox only) `document` are present once populated; absent/undefined
  * otherwise, not `null`.
  */
+/** What an access request asks for (edms-backend `3014b89`): `view` is View
+ *  access (open the document), `route` is Action access (act on it in a
+ *  workflow without opening it). One request, and one grant, per kind. */
+export type DocumentAccessKind = 'view' | 'route';
+
 export interface AccessRequest {
   id: string;
   documentId: string;
   requesterId: string;
   requester: PersonSummary;
+  /** Missing on requests made before `3014b89`, which were all for viewing. */
+  permission?: DocumentAccessKind;
   reason: string | null;
   status: 'pending' | 'approved' | 'denied';
   reviewedBy: string | null;

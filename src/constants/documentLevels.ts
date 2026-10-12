@@ -1,7 +1,15 @@
 import type {
+  DocumentAccessKind,
   DocumentConfidentiality as Confidentiality,
   DocumentUrgency as Urgency,
 } from '@/types/models';
+
+/** How each kind of access request reads to users. `route` is Action access:
+ *  acting on a document in a workflow without being able to open it. */
+export const ACCESS_KIND_LABEL: Record<DocumentAccessKind, string> = {
+  view: 'Open the document',
+  route: 'Act on this document',
+};
 
 /** The levels a document can be filed or reclassified at. `top_secret` is left
  *  out: no seeded role holds `document:view_top_secret`, so nobody could open

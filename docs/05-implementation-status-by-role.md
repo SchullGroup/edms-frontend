@@ -32,8 +32,9 @@ swagger describes department task assignment and "Restricted document" entries. 
 contract changes break or change frontend behaviour today (doc 01 → DRIFT-20…22):
 
 - ⛔ **Request access is broken (DRIFT-20).** `POST /documents/:id/access-requests` now
-  requires `permission: 'view' | 'route'`; the frontend sends only `{ reason }`, so every
-  request is a 400. Document grants are per permission now: a `route` grant lets someone
+  requires `permission: 'view' | 'route'`; the frontend sent only `{ reason }`, so every
+  request was refused (422; this said 400 until checked live). *Fixed on `/doc/[id]`
+  2026-10-12; the workflow page follows.* Document grants are per permission now: a `route` grant lets someone
   act on a document in a workflow without being able to open it.
 - ⛔ **The workflow page crashes on a document the user can't see (DRIFT-21).**
   `GET /tasks/:id` and `GET /workflow-instances/:id` now return every document, with locked
@@ -307,7 +308,7 @@ destination (request doc item 7).
 |---|---|---|
 | ~~`POST /workflow-instances` + `/:id/start`~~ | ✅ Resolved (DRIFT-09) | — |
 | ~~`GET/PATCH /notifications*`~~ | ✅ **Built and wired** — this row was stale (corrected 2026-10-12). The module exists and fires on assignment, outcomes, delegation, access requests, SLA warning/breach (doc 01 DRIFT-10); `/notifications` and the bell call it | — |
-| `POST /documents/:id/access-requests` with `permission` | ⛔ **Broken since `3014b89` (DRIFT-20)** — the body now requires `permission: 'view' \| 'route'`; the frontend omits it | "Request access" on `/doc/[id]` and the workflow page is a 400 |
+| `POST /documents/:id/access-requests` with `permission` | 🟨 **DRIFT-20 partly fixed 2026-10-12** — `/doc/[id]` sends `view` (verified live); the workflow page doesn't yet | Workflow page Request access still refused (422) |
 | ~~`POST /documents/:id/comments`~~ | Not a real endpoint — use the `comment` field on `POST /tasks/:id/action` | — |
 | `GET /documents/:id/download` | Not built | No way to retrieve the file |
 | ~~`GET /circulars`, `POST /circulars/:id/ack`~~ | ✅ **Built** (backend `circulars` module) and wired 2026-10-05 — the real routes are `/circulars/inbox*` (see APIs wired) | — |
@@ -335,7 +336,7 @@ destination (request doc item 7).
 | Work the task queue | ✅ | Prioritised by urgency then due date |
 | Act on a task | ✅ | |
 | Receive a notification | 🟨 | Backend fires them and the bell + `/notifications` read them (corrected 2026-10-12; was "⛔ 404"). Not clicked through end to end. Arrives within 60 s (polling, no push) |
-| Request access to a document | ⛔ | 400 since `3014b89` — `permission` missing from the request body (DRIFT-20) |
+| Request access to a document | 🟨 | ✅ from `/doc/[id]` (View access; verified live 2026-10-12: 201, then 409 → "Already pending"). ⛔ from the workflow page until DRIFT-20 is fully fixed |
 | Comment on a document | ⛔ | 404 |
 | Read/acknowledge a circular | ✅ | Wired 2026-10-05 to `/circulars/inbox*` — read receipt on open, acknowledgement recorded and audited server-side. *(confirmed by the product owner’s testing, 2026-10-09)* |
 
@@ -945,7 +946,7 @@ the document on its own: file, details, versions, custody, archive.
 | Feature | Status |
 |---|---|
 | Load document | ✅ `GET /documents/:id` |
-| No access (confidentiality 403) | 🟨 full-page "You don't have access" ✅ + **Request access** (`useRequestAccessPrompt`, shared with the workflow page) ⛔ **400 since `3014b89`**: the request body now needs `permission: 'view' \| 'route'` (DRIFT-20) |
+| No access (confidentiality 403) | 🟨 full-page "You don't have access" ✅ + **Request access** (`useRequestAccessPrompt`, shared with the workflow page) ✅ **fixed 2026-10-12, verified live**: asks for View access (`permission: 'view'`), says "Your request will be reviewed and you will be notified of the decision", and turns a 409 into an "Already pending" toast. The mock `ACCESS_REQUEST` audit call is gone; the backend audits `document.access_requested` (DRIFT-20) |
 | Metadata panel | ✅ `GET` + inline editor `PUT /documents/:id/metadata` (when `document:edit`) |
 | Pin | 🟨 **new 2026-10-08** — toolbar **Pin** keeps the document in the Quick access card, which is on the staff, supervisor, management, auditor and admin homes (not platform: that role can't open documents). Opening the page also records it under Recently opened. Browser-only, per user: pins don't follow you to another browser or device. Verified in a browser for admin and management |
 | Change classification | 🟨 **new 2026-10-08, not verified live** — Details card → **Change** on the Classification row → dialog for confidentiality and urgency → `PATCH /documents/:id`. Shown with `document:edit` + Edit on the cabinet, not while the document is closed or checked out by someone else. Tiers the user couldn't open the document at are disabled (they'd lose access), by the backend's own rule: the tier's `document:view_*` permission and its scope (`useConfidentialityClearance`, 2026-10-08). Top Secret is listed only for someone holding `view_top_secret` |
