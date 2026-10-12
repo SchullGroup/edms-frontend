@@ -410,3 +410,39 @@ branch. If it fails, move the self-heal SQL into a new migration and restore the
 `view_restricted`, `view_top_secret`, `download`, `export`, `print`). Each tenant needs
 `db:setup` (or the seed) re-run before its roles get them; until then even client_admin can't
 open Confidential documents. The test tenant has been re-seeded (checked 2026-10-08).
+
+---
+
+## Questions for the backend developer (2026-10-12)
+
+Raised while updating the frontend for PR #47 (`3014b89`, "improve routing and access
+controls"). Sent to the backend developer 2026-10-12; answers pending.
+
+**Q1. Why are history comments hidden for the whole workflow?**
+If a workflow includes even one document the reader can't open, `GET /workflow-history` now
+blanks `comment`, `note` and `task.signature` on every entry in that workflow, not just the
+entries linked to that document. A reviewer who can open 3 of 4 documents loses every
+comment and signature in the trail. The code comment says free text might mention other
+documents. Is whole-workflow hiding the intended rule? Do signatures need hiding too, since
+a signature isn't free text?
+
+**Q2. Where did department assignment come from, and should it include sub-departments?**
+Stages accept `department_id`, alone or with a role. Was this built for tracker item 6.4, or
+requested by someone? The match is exact (`userDepartmentId === assignedDepartmentId`), so a
+stage assigned to "Finance" excludes people in "Finance › Payables". Is that intended? How
+should a whole department, sub-departments included, be assigned: an "include
+sub-departments" option? Please confirm role + department means "this role, only within
+this department".
+
+**Q3. How can the frontend tell whether a department-assigned task is the user's?**
+`/auth/me` and login don't return `departmentId` (see O1), and staff don't hold `user:view`,
+so the frontend can't decide whether a department-assigned task is the user's. Either add
+`departmentId` to `/auth/me` and login, or return a per-task flag (e.g. `canAct`) on
+`GET /tasks/:id` and on the tasks embedded in `GET /workflow-instances/:id`.
+
+**Q4. Should someone still see a workflow after routing it? (DRIFT-22)**
+At `own` scope, `buildInstanceAccessFilter` and `canActorAccessInstance` follow task
+assignment only; the "created one of its documents" clause is gone. A staff member who
+routes their document to a supervisor stage can't see that workflow in their list or open
+it, and the document page offers "Route to workflow" again. Intended? If so, is there
+anything stopping the same document being routed into a second active workflow?
