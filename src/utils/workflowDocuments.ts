@@ -71,9 +71,11 @@ export function taskTitle(task: Pick<Task, 'documents'>): string {
 /** The most urgent of a task's documents' urgencies. */
 export function taskUrgency(task: Pick<Task, 'documents'>): string | undefined {
   const rank: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3 };
+  // A Restricted document's urgency is withheld (null), so it can't rank.
   return taskDocuments(task)
     .map((d) => d.urgency)
-    .sort((a, b) => (rank[a?.toLowerCase()] ?? 2) - (rank[b?.toLowerCase()] ?? 2))[0];
+    .filter((u): u is string => !!u)
+    .sort((a, b) => (rank[a.toLowerCase()] ?? 2) - (rank[b.toLowerCase()] ?? 2))[0];
 }
 
 /** A task's deadline: the earliest `stageDueAt` among its documents still in

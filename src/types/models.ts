@@ -210,6 +210,11 @@ export interface PersonSummary {
   email: string;
 }
 
+/** What an access request asks for (edms-backend `3014b89`): `view` is View
+ *  access (open the document), `route` is Action access (act on it in a
+ *  workflow without opening it). One request, and one grant, per kind. */
+export type DocumentAccessKind = 'view' | 'route';
+
 /**
  * `GET/POST /documents/:id/access-requests`, grant/deny, and the admin inbox
  * `GET /documents/access-requests`. Verified live 2026-09-18 — `reviewer` and
@@ -221,6 +226,8 @@ export interface AccessRequest {
   documentId: string;
   requesterId: string;
   requester: PersonSummary;
+  /** Missing on requests made before `3014b89`, which were all for viewing. */
+  permission?: DocumentAccessKind;
   reason: string | null;
   status: 'pending' | 'approved' | 'denied';
   reviewedBy: string | null;
@@ -442,6 +449,20 @@ export interface WorkflowDocumentExecution {
   createdAt?: string;
 }
 
+/**
+ * What the caller may do with one document in a workflow (edms-backend
+ * `3014b89`). A document they can't open comes back as a Restricted document:
+ * title "Restricted document", classification and version nulled.
+ * `canRoute` is Action access (act on it in a workflow without opening it):
+ * always on task documents, only on restricted workflow documents.
+ */
+export interface WorkflowDocumentAccess {
+  canView: boolean;
+  canRoute?: boolean;
+  canRequestView?: boolean;
+  canRequestRoute?: boolean;
+}
+
 /** A document's membership of a workflow. */
 export interface WorkflowInstanceDocument {
   id: string;
@@ -455,17 +476,22 @@ export interface WorkflowInstanceDocument {
   comment?: string | null;
   addedBy?: string | null;
   addedAt?: string;
+  /** `GET /workflow-instances/{id}`: true for a Restricted document. */
+  isLocked?: boolean;
+  access?: WorkflowDocumentAccess;
+  /** For a Restricted document the title is "Restricted document" and the
+   *  nullable fields below are null. */
   document: {
     id: string;
     title: string;
-    status: string;
-    confidentiality: string;
-    urgency: string;
+    status: string | null;
+    confidentiality: string | null;
+    urgency: string | null;
     documentType?: string | null;
     currentVersionId?: string | null;
-    cabinetId?: string;
+    cabinetId?: string | null;
     archivedAt?: string | null;
-    createdBy?: string;
+    createdBy?: string | null;
     currentVersion?: {
       id: string;
       versionNumber: number;
@@ -732,9 +758,11 @@ export interface Task {
 export interface TaskDocumentSnapshot {
   id: string;
   workflowDocumentExecutionId: string;
-  /** `GET /tasks/:id` only. */
-  documentVersionId?: string;
+  /** `GET /tasks/:id` only; null for a Restricted document. */
+  documentVersionId?: string | null;
   createdAt: string;
+  /** `GET /tasks/:id` only (edms-backend `3014b89`). */
+  access?: WorkflowDocumentAccess;
   /** Stage, status and deadline: `GET /tasks/:id` only (requested on the list). */
   workflowDocumentExecution: Partial<WorkflowDocumentExecution> & {
     id: string;
@@ -744,19 +772,20 @@ export interface TaskDocumentSnapshot {
       addedAtStage?: string | null;
       comment?: string | null;
       addedAt?: string;
+      /** Restricted document: title "Restricted document", the rest null. */
       document: {
         id: string;
         title: string;
         documentType?: string | null;
-        status: string;
-        confidentiality: string;
-        urgency: string;
+        status: string | null;
+        confidentiality: string | null;
+        urgency: string | null;
         currentVersionId?: string | null;
-        cabinetId?: string;
+        cabinetId?: string | null;
       };
     };
   };
-  /** `GET /tasks/:id` only. */
+  /** `GET /tasks/:id` only; null for a Restricted document. */
   documentVersion?: {
     id: string;
     versionNumber: number;
@@ -764,7 +793,7 @@ export interface TaskDocumentSnapshot {
     ocrStatus?: string;
     uploadedBy: string;
     createdAt: string;
-  };
+  } | null;
 }
 
 /** A `request_changes` revision still waiting on a new version. */

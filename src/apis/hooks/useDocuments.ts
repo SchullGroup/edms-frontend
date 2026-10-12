@@ -5,7 +5,13 @@ import {
   DocumentStatsParams,
   AccessRequestInboxFilters,
 } from '@/apis/services/documents.service';
-import { CreateVersionRequest, Document, DocumentMetadataValueInput } from '@/types/models';
+import {
+  CreateVersionRequest,
+  Document,
+  DocumentAccessKind,
+  DocumentMetadataValueInput,
+} from '@/types/models';
+import { ACCESS_KIND_LABEL } from '@/constants/documentLevels';
 import { useUIStore } from '@/store/useUIStore';
 import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 import { documentFile } from '@/utils/documentFile';
@@ -164,19 +170,35 @@ export function useCheckinDocument() {
   });
 }
 
-/** Any authenticated user may request access to any document by id — 409 if
- *  they already have a pending request on it. */
+/** Any authenticated user may request access to any document by id, one kind
+ *  per call — 409 if a request of that kind is already pending. Each call gets
+ *  its own toast naming the kind, so a two-kind request reports both. */
 export function useRequestDocumentAccess() {
   const { addToast } = useUIStore.getState();
 
   return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
-      documentsService.requestAccess(id, reason),
-    onSuccess: () => {
-      addToast('Access request sent', 'success');
+    mutationFn: ({
+      id,
+      permission,
+      reason,
+    }: {
+      id: string;
+      permission: DocumentAccessKind;
+      reason?: string;
+    }) => documentsService.requestAccess(id, permission, reason),
+    onSuccess: (_, { permission }) => {
+      addToast(`Requested: ${ACCESS_KIND_LABEL[permission]}`, 'success');
     },
-    onError: (err: any) => {
-      addToast(err.response?.data?.message || 'Failed to send access request', 'error');
+    onError: (err: any, { permission }) => {
+      const label = ACCESS_KIND_LABEL[permission];
+      if (err.response?.status === 409) {
+        addToast(`Already pending: ${label}. It's waiting to be reviewed.`, 'info');
+        return;
+      }
+      addToast(
+        `Couldn't request “${label}”: ${err.response?.data?.message || 'something went wrong'}`,
+        'error',
+      );
     },
   });
 }
