@@ -695,6 +695,50 @@ steps need a stage to have more than one other stage available to route to.
 
 ---
 
+## 19a. Phase R — Access requests and restricted documents (`/doc/[id]`, the workflow page, `/admin/access-requests`)
+
+Since edms-backend `3014b89` an access request is for **View access** ("Open the document",
+`view`) or **Action access** ("Act on this document", `route`: act on it in a workflow
+without opening it), and a task lists documents the viewer can't open as **Restricted
+documents**. Run 2026-10-12 against the live API, all passing.
+
+**Test data** (live tenant, created as `client_admin`, safe to archive): documents "TEST –
+restricted access (Confidential)" `78881ccb-02c7-43ad-baab-99de42e0decc` and "TEST –
+restricted access (Internal)" `7aa7d964-efed-4942-bc4b-5ec995965d45` in Finance Vendor
+Invoices; workflow "TEST – restricted access" `646d15bb-b337-42db-9f33-8a807357b711`
+(stage 1 assigned to `tjoel+staff_finance`, stage 2 role supervisor); instance
+`b09c3620-8573-4db4-9243-ce116920f3e2`. Staff hold no `view_confidential`, so the
+Confidential one is restricted for them. To re-run, create a fresh pair the same way.
+
+- [x] **TP-R1.** As `staff_finance`, open the workflow. Two tabs; the restricted one shows a
+      lock and opens straight to the request card; the browser makes no
+      `GET /documents/:id` for it; the title leaves it out; no error.
+- [x] **TP-R2.** Request access from that card: both "Open the document" and "Act on this
+      document" are ticked (staff hold the task). Send: one request per kind, one toast
+      each.
+- [x] **TP-R3.** Send again: one "Already pending: …" toast per kind (409s).
+- [x] **TP-R4.** Open the restricted document's `/doc/[id]` and request access: no tick
+      boxes, the dialog says "Your request will be reviewed and you will be notified of the
+      decision", one `view` request.
+- [x] **TP-R5.** As `client_admin`, `/admin/access-requests` shows both requests with Access
+      "Open" and "Act"; each Grant confirmation describes that kind. Grant only "Act".
+- [x] **TP-R6.** Before the grant, as staff: Delegate and Close are disabled with the
+      reason; Approve offers only the viewable document and notes the one held back.
+      Approving it returns 200; the restricted document stays at the stage in a new task
+      for staff, whose page then disables every action ("You need Action access…").
+- [x] **TP-R7.** After the Action access grant, as staff: the document still can't be
+      opened (`GET /documents/:id` 403), but Approve works (200) and it moves on.
+- [x] **TP-R8.** As `client_admin` (cleared for everything), the workflow page looks as
+      before: real titles, no lock, no note, no hidden-comments line.
+- [x] **TP-R9.** As staff, the activity trail says "Comments and signatures are hidden
+      because this workflow includes documents you can't open"; client admin doesn't see
+      it.
+- [ ] **TP-R10.** Not yet run: someone following the workflow without holding its task
+      gets only "Open the document" pre-ticked; the request dialog won't send with nothing
+      ticked.
+
+---
+
 ## 20. Wrap-up
 
 - [ ] Re-run **TP-A1–A7** once more at the very end using kemi.reviewer (the custom-role
