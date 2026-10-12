@@ -416,7 +416,7 @@ open Confidential documents. The test tenant has been re-seeded (checked 2026-10
 ## Questions for the backend developer (2026-10-12)
 
 Raised while updating the frontend for PR #47 (`3014b89`, "improve routing and access
-controls"). Sent to the backend developer 2026-10-12; answers pending.
+controls"). Sent to the backend developer 2026-10-12; **answered the same day** (below each question).
 
 **Q1. Why are history comments hidden for the whole workflow?**
 If a workflow includes even one document the reader can't open, `GET /workflow-history` now
@@ -426,6 +426,10 @@ comment and signature in the trail. The code comment says free text might mentio
 documents. Is whole-workflow hiding the intended rule? Do signatures need hiding too, since
 a signature isn't free text?
 
+> **Answer:** intended as built. The frontend explains the gap with one line above the
+> trail ("Comments and signatures are hidden because this workflow includes documents you
+> can't open").
+
 **Q2. Where did department assignment come from, and should it include sub-departments?**
 Stages accept `department_id`, alone or with a role. Was this built for tracker item 6.4, or
 requested by someone? The match is exact (`userDepartmentId === assignedDepartmentId`), so a
@@ -434,11 +438,18 @@ should a whole department, sub-departments included, be assigned: an "include
 sub-departments" option? Please confirm role + department means "this role, only within
 this department".
 
+> **Answer:** the backend will change it so that assigning a **parent** department makes the
+> task applicable to every sub-department too. Not built yet. The Designer's department
+> option (tracker 6.4, FE-3) waits until this and Q3 are live.
+
 **Q3. How can the frontend tell whether a department-assigned task is the user's?**
 `/auth/me` and login don't return `departmentId` (see O1), and staff don't hold `user:view`,
 so the frontend can't decide whether a department-assigned task is the user's. Either add
 `departmentId` to `/auth/me` and login, or return a per-task flag (e.g. `canAct`) on
 `GET /tasks/:id` and on the tasks embedded in `GET /workflow-instances/:id`.
+
+> **Answer:** the backend will return `departmentId` (on `/auth/me`; this also closes O1).
+> Not built yet.
 
 **Q4. Should someone still see a workflow after routing it? (DRIFT-22)**
 At `own` scope, `buildInstanceAccessFilter` and `canActorAccessInstance` follow task
@@ -446,3 +457,7 @@ assignment only; the "created one of its documents" clause is gone. A staff memb
 routes their document to a supervisor stage can't see that workflow in their list or open
 it, and the document page offers "Route to workflow" again. Intended? If so, is there
 anything stopping the same document being routed into a second active workflow?
+
+> **Answer:** the logic is correct (intended). Frontend follow-up: explain the empty state on
+> the staff dashboard and the document page's Workflows card (doc 05 backlog 14b). The second
+> half (routing an in-workflow document again) is still unanswered.
