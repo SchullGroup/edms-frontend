@@ -34,6 +34,8 @@ import {
   flattenDepartments,
 } from '@/components/circulars/circularLabels';
 import { fmtDate, fmtDateTime } from '@/utils/helpers';
+import { exportCsv } from '@/utils/exportCsv';
+import { circularsService } from '@/apis/services/circulars.service';
 import type { Circular, CircularRecipient, CircularRecipientFilter } from '@/types/models';
 
 /**
@@ -568,10 +570,12 @@ const RECIPIENT_FILTERS: [CircularRecipientFilter, string][] = [
 ];
 
 function RecipientsReport({ circular: c }: { circular: Circular }) {
+  const { addToast } = useUIStore();
   const [status, setStatus] = useState<CircularRecipientFilter>('all');
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -587,6 +591,58 @@ function RecipientsReport({ circular: c }: { circular: Circular }) {
     page,
     limit: 25,
   });
+
+  // The acknowledgement report as CSV: every recipient matching the current
+  // filter and search, not just the page on screen (the API pages at most 100).
+  const downloadCsv = async () => {
+    setExporting(true);
+    try {
+      const all: CircularRecipient[] = [];
+      for (let p = 1, pages = 1; p <= pages; p++) {
+        const res = await circularsService.getRecipients(c.id, {
+          status,
+          search: query || undefined,
+          page: p,
+          limit: 100,
+        });
+        all.push(...res.data);
+        pages = res.pagination?.totalPages ?? 1;
+      }
+      if (all.length === 0) {
+        addToast('No recipients match, so there is nothing to download', 'info');
+        return;
+      }
+      exportCsv(
+        `${circularReference(c)}_recipients`,
+        all.map((r) => ({
+          name: r.user.name,
+          email: r.user.email,
+          department: r.department?.name ?? '',
+          readAt: r.readAt ? fmtDateTime(r.readAt) : '',
+          acknowledgedAt: r.acknowledgedAt ? fmtDateTime(r.acknowledgedAt) : '',
+          reminders: r.reminderCount,
+          lastRemindedAt: r.lastRemindedAt ? fmtDateTime(r.lastRemindedAt) : '',
+        })),
+        [
+          { key: 'name', label: 'Recipient' },
+          { key: 'email', label: 'Email' },
+          { key: 'department', label: 'Department' },
+          { key: 'readAt', label: 'Read' },
+          ...(c.requiresAcknowledgement
+            ? [
+                { key: 'acknowledgedAt', label: 'Acknowledged' },
+                { key: 'reminders', label: 'Reminders sent' },
+                { key: 'lastRemindedAt', label: 'Last reminded' },
+              ]
+            : []),
+        ],
+      );
+    } catch (err: any) {
+      addToast(err?.response?.data?.message || 'Couldn’t download the recipients', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Acknowledgement filters 422 on a circular that doesn't ask for it.
   const filters = RECIPIENT_FILTERS.filter(
@@ -670,6 +726,14 @@ function RecipientsReport({ circular: c }: { circular: Circular }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={downloadCsv}
+            disabled={exporting}
+            title="Everyone matching the filter and search above, as a CSV file"
+          >
+            <Icon name="download" size={13} /> {exporting ? 'Preparing…' : 'Download CSV'}
+          </button>
         </div>
       </div>
       {isLoading ? (
