@@ -1,6 +1,5 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, userById } from '@/store/useStore';
 import { dueLabel, documentStatusLabel } from '@/utils/helpers';
 import { stageLabel, taskStatusLabel } from '@/utils/supervisor';
 import {
@@ -22,7 +21,6 @@ export const TaskRow = ({
   extraActions?: React.ReactNode;
 }) => {
   const router = useRouter();
-  const { users } = useStore();
   const isTask = !!item.workflowInstance;
   // A task can cover several documents (edms-backend `919d0ef`): its title and
   // urgency come from all of them, its badges from the first.
@@ -45,7 +43,8 @@ export const TaskRow = ({
         ? { text: `${lateDocs} of ${docCount} overdue`, late: true }
         : dueLabel(dueAt)
       : { text: '—', late: false };
-  const owner = doc?.createdBy;
+  // `GET /tasks` sends no document owner, so a task row names its workflow instead.
+  const workflowName = isTask ? item.workflowInstance?.workflowDefinition?.name : null;
   const stage = isTask ? stageLabel(item.stage) : null;
   const docId = doc?.id || item.documentId;
   // A task is worked on its workflow page; a bare document opens its own page.
@@ -72,10 +71,10 @@ export const TaskRow = ({
           {urgency && <UrgBadge level={urgency} />}
           {doc?.confidentiality && <ConfBadge level={doc.confidentiality} />}
           {stage && <span>{stage}</span>}
-          {showAssignee ? (
-            <span>· Assignee</span>
+          {showAssignee && item.assignee?.name ? (
+            <span>· {item.assignee.name}</span>
           ) : (
-            <span>· Owner ID: {owner?.substring(0, 8)}</span>
+            workflowName && <span>· {workflowName}</span>
           )}
         </div>
       </div>

@@ -1,12 +1,12 @@
-import { useStore, userById } from '@/store/useStore';
+import { useStore } from '@/store/useStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { PORTAL_BY_KEY, scopeAtLeast } from '@/lib/permissions';
 import { useUnreadNotificationCount } from '@/apis/hooks/useNotifications';
-import { useApprovalTasks } from '@/apis/hooks/useTasks';
+import { useApprovalTasks, useTasks } from '@/apis/hooks/useTasks';
 import { useCircularInboxSummary } from '@/apis/hooks/useCirculars';
 
 export const useNavigation = () => {
-  const { currentUser, documents, findings } = useStore();
+  const { currentUser, findings } = useStore();
   const { hasPermission, scopeFor, portal } = usePermissions();
   // Reused for "home"/resource-less items below so they can never drift out of sync
   // with the portal-entry criteria in permissions.ts, and so every portal's sidebar
@@ -26,6 +26,13 @@ export const useNavigation = () => {
     { scope: 'all', status: 'pending', page: 1, limit: 1 },
     { enabled: canSeeApprovals },
   );
+  // My Tasks badge: the caller's pending tasks, counted the same way (it used to
+  // count `SEED` documents assigned to them, which never matched the queue).
+  const canSeeTasks = hasPermission('task', 'view');
+  const { data: myTasksData } = useTasks(
+    { scope: 'mine', status: 'pending', page: 1, limit: 1 },
+    { enabled: canSeeTasks },
+  );
   // Circulars waiting on the user's acknowledgement — every user can be a
   // recipient, so this needs no permission.
   const { data: circularSummary } = useCircularInboxSummary({ enabled: !!currentUser });
@@ -33,11 +40,21 @@ export const useNavigation = () => {
 
   if (!me) return null;
 
-  const myOpenTasks = () =>
-    documents.filter((dc) => dc.assignee === me.id && dc.status !== 'Closed').length;
+  const myOpenTasks = () => myTasksData?.pagination?.total ?? 0;
   const unreadCount = () => unreadNotifications;
   const circularsPendingAck = () => circularSummary?.unacknowledged ?? 0;
   const approvalsCount = () => approvalsData?.pagination?.total ?? 0;
+
+  // The access-request inbox is gated on what its API checks — listing needs
+  // `document_access_request:view`, granting `:grant` (the page disables its
+  // buttons without it) — so any portal whose user holds it gets the link,
+  // not just Client Administration.
+  const accessRequestsItem = {
+    route: '/admin/access-requests',
+    label: 'Access Requests',
+    icon: 'key',
+    anyPermissions: ['document_access_request:view'],
+  };
 
   const NAV: Record<string, any> = {
     staff: {
@@ -181,6 +198,7 @@ export const useNavigation = () => {
               // the internal-gating follow-up rather than fixed now.
               anyPermissions: ['delegation:view'],
             },
+            accessRequestsItem,
           ],
         },
         {
@@ -279,6 +297,7 @@ export const useNavigation = () => {
               icon: 'finding',
               anyPermissions: ['audit:view'],
             },
+            accessRequestsItem,
           ],
         },
         {
@@ -452,14 +471,7 @@ export const useNavigation = () => {
               icon: 'list',
               anyPermissions: ['audit:view'],
             },
-            {
-              route: '/admin/access-requests',
-              label: 'Access Requests',
-              icon: 'key',
-              // Approving a request *is* granting access — same privilege-escalation
-              // category as Roles & permissions above, not a contained CRUD page.
-              anyPermissions: ['user:edit'],
-            },
+            accessRequestsItem,
           ],
         },
       ],
@@ -544,6 +556,7 @@ export const useNavigation = () => {
               icon: 'shield',
               anyPermissions: ['audit:view'],
             },
+            accessRequestsItem,
           ],
         },
         {
@@ -623,7 +636,10 @@ export const useNavigation = () => {
     ...filteredNav.sections,
     {
       label: 'Reference',
-      items: [{ route: '/user-stories', label: 'Product Guide', icon: 'flow' }],
+      items: [
+        { route: '/help', label: 'Help', icon: 'info' },
+        { route: '/user-stories', label: 'Product Guide', icon: 'flow' },
+      ],
     },
   ];
 

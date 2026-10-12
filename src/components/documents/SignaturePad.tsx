@@ -12,19 +12,26 @@ interface Props {
   height?: number;
 }
 
+const INK = '#1F3864';
+/** Script faces for a typed signature; system fonts, so nothing is fetched. */
+const SCRIPT_FONT = '"Segoe Script", "Brush Script MT", "Apple Chancery", cursive';
+
 /**
- * Draw-to-sign canvas with an "upload an image instead" fallback. Produces a
- * PNG blob from the drawing, or passes an uploaded PNG/JPEG/WebP straight
- * through. The consumer uploads the blob and sends the resulting URL as the
- * `signature` on an `approve` task action.
+ * Sign by drawing, typing your name, or uploading an image. Drawing and typing
+ * both produce a PNG from a canvas (a typed name is rendered in a script face,
+ * and the preview is the exact image sent); an uploaded PNG/JPEG/WebP passes
+ * straight through. The consumer uploads the blob and sends the resulting URL
+ * as the `signature` on an `approve` task action.
  */
 export function SignaturePad({ onChange, width = 460, height = 160 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const drawing = useRef(false);
   const hasInk = useRef(false);
-  const [mode, setMode] = useState<'draw' | 'file'>('draw');
+  const typedRef = useRef<HTMLCanvasElement>(null);
+  const [mode, setMode] = useState<'draw' | 'type' | 'file'>('draw');
   const [fileName, setFileName] = useState<string | null>(null);
+  const [typed, setTyped] = useState('');
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -33,8 +40,39 @@ export function SignaturePad({ onChange, width = 460, height = 160 }: Props) {
     if (!ctx) return;
     ctx.lineWidth = 2.2;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#1F3864';
+    ctx.strokeStyle = INK;
   }, []);
+
+  // Typed signature: redraw the name, shrinking the font until it fits, and
+  // emit the canvas as the signature image.
+  useEffect(() => {
+    if (mode !== 'type') return;
+    const canvas = typedRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const name = typed.trim();
+    if (!name) {
+      onChange(null);
+      return;
+    }
+    let size = 56;
+    ctx.font = `${size}px ${SCRIPT_FONT}`;
+    while (size > 16 && ctx.measureText(name).width > canvas.width - 40) {
+      size -= 2;
+      ctx.font = `${size}px ${SCRIPT_FONT}`;
+    }
+    ctx.fillStyle = INK;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+    canvas.toBlob((blob) => {
+      if (blob) onChange({ blob, mimeType: 'image/png' });
+    }, 'image/png');
+    // `onChange` is a fresh closure on every parent render; the image depends
+    // only on the text and the mode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typed, mode]);
 
   const pos = (e: React.PointerEvent) => {
     const r = canvasRef.current!.getBoundingClientRect();
@@ -76,6 +114,7 @@ export function SignaturePad({ onChange, width = 460, height = 160 }: Props) {
     if (canvas) canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height);
     hasInk.current = false;
     setFileName(null);
+    setTyped('');
     if (fileRef.current) fileRef.current.value = '';
     onChange(null);
   };
@@ -106,6 +145,16 @@ export function SignaturePad({ onChange, width = 460, height = 160 }: Props) {
           }}
         >
           <Icon name="edit" size={13} /> Draw
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${mode === 'type' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => {
+            setMode('type');
+            clear();
+          }}
+        >
+          Type
         </button>
         <button
           type="button"
@@ -151,6 +200,32 @@ export function SignaturePad({ onChange, width = 460, height = 160 }: Props) {
             cursor: 'crosshair',
           }}
         />
+      ) : mode === 'type' ? (
+        <div>
+          <input
+            className="input mb-2"
+            placeholder="Type your full name"
+            aria-label="Type your name to sign"
+            maxLength={60}
+            value={typed}
+            autoFocus
+            onChange={(e) => setTyped(e.target.value)}
+          />
+          <canvas
+            ref={typedRef}
+            width={width}
+            height={height}
+            aria-label="Signature preview"
+            style={{
+              width: '100%',
+              maxWidth: width,
+              height,
+              border: '1px dashed var(--brand-primary-light)',
+              borderRadius: 6,
+              background: '#f8fafe',
+            }}
+          />
+        </div>
       ) : (
         <div
           className="card card-pad"

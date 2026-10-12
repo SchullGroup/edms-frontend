@@ -7,13 +7,14 @@ import type {
   WorkflowConditionRule,
   WorkflowConditionValue,
   WorkflowStage,
+  WorkflowStageAction,
   WorkflowTransition,
 } from '@/types/models';
 
 // Every option here is a real, distinct value from WorkflowStageAction — no
 // cosmetic "stage type" layer on top of it. A stage can allow more than one
 // (e.g. a decision stage typically wants both approve and reject).
-export const STAGE_ACTIONS = [
+export const STAGE_ACTIONS: { value: WorkflowStageAction; label: string; hint: string }[] = [
   { value: 'review', label: 'Review', hint: 'Marks it reviewed and advances to the next stage' },
   { value: 'approve', label: 'Approve', hint: 'Advances to the next stage' },
   { value: 'reject', label: 'Reject', hint: 'Ends the workflow' },

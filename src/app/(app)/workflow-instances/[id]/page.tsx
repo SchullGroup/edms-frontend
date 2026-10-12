@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
+import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useTask } from '@/apis/hooks/useTasks';
 import { useDocument } from '@/apis/hooks/useDocuments';
@@ -18,8 +20,14 @@ import { Icon } from '@/components/ui/Icons';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { fmtDateTime } from '@/utils/helpers';
-import { instanceTitle, taskDueAt } from '@/utils/workflowDocuments';
-import type { Task, WorkflowInstanceStatus, WorkflowStageAction } from '@/types/models';
+import { documentsLabel, taskDueAt } from '@/utils/workflowDocuments';
+import type {
+  DocumentAccessKind,
+  Task,
+  WorkflowDocumentAccess,
+  WorkflowInstanceStatus,
+  WorkflowStageAction,
+} from '@/types/models';
 
 const STATUS_LABEL: Record<WorkflowInstanceStatus, string> = {
   pending: 'Pending',
@@ -29,6 +37,35 @@ const STATUS_LABEL: Record<WorkflowInstanceStatus, string> = {
 };
 
 const ACTIVE_TASK_STATUSES = ['pending', 'escalated'];
+
+/** One of the documents this page is about, as the viewer is allowed to see it. */
+interface PageDocument {
+  id: string;
+  /** "Restricted document" when restricted: the backend withholds the real one. */
+  title: string;
+  confidentiality: string | null;
+  versionNumber?: number;
+  /** A Restricted document: the viewer can't open it. */
+  restricted: boolean;
+  /** The viewer has Action access: stage actions may include it. */
+  actionable: boolean;
+  /** The kinds of access the viewer may still request for it. */
+  requestable: DocumentAccessKind[];
+}
+
+/** Reads the access the backend reports for a document (edms-backend
+ *  `3014b89`). A response without it predates the change, when every document
+ *  returned was one the viewer could open and act on. */
+function accessFlags(access: WorkflowDocumentAccess | undefined, isLocked?: boolean) {
+  const restricted = isLocked ?? (access ? !access.canView : false);
+  const requestable: DocumentAccessKind[] = [];
+  if (access?.canRequestView ?? restricted) requestable.push('view');
+  // Task documents say outright; workflow documents (shown until the task
+  // loads) don't, but the backend offers Action access whenever a document
+  // isn't actionable, and they mark a Restricted one `canRoute: false`.
+  if (access?.canRequestRoute ?? access?.canRoute === false) requestable.push('route');
+  return { restricted, actionable: access?.canRoute ?? !restricted, requestable };
+}
 
 /**
  * The workflow page — where a workflow's documents are reviewed and its
@@ -56,6 +93,8 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   const { currentUser: me } = useStore();
   const { setPageTitle } = useUIStore();
   const { can } = usePermissions();
+  const { allows } = useConfidentialityClearance();
+  const { promptRequestAccess } = useRequestAccessPrompt();
   const { data: usersData } = useUsers();
   const users = usersData?.data || [];
 
@@ -63,7 +102,8 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
 
   const isMineTask = (t: Pick<Task, 'assigneeId' | 'assignedRole'>) =>
     !!me &&
-    (t.assigneeId === me.id || (!!t.assignedRole?.name && !!me.roles?.includes(t.assignedRole.name)));
+    (t.assigneeId === me.id ||
+      (!!t.assignedRole?.name && !!me.roles?.includes(t.assignedRole.name)));
   // A workflow has no single current stage any more (edms-backend `919d0ef`):
   // its documents move on their own, so several tasks — at different stages, or
   // in parallel branches — can be live at once.
@@ -91,7 +131,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   // full document list.
   const { data: taskDetail } = useTask(focusTask?.id ?? '');
 
-  const documents = taskDetail?.documents?.length
+  const documents: PageDocument[] = taskDetail?.documents?.length
     ? taskDetail.documents.map((s) => {
         const wid = s.workflowDocumentExecution.workflowInstanceDocument;
         return {
@@ -99,21 +139,24 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
           title: wid.document.title,
           confidentiality: wid.document.confidentiality,
           versionNumber: s.documentVersion?.versionNumber,
+          ...accessFlags(s.access),
         };
       })
     : (instance?.documents ?? []).map((d) => ({
         id: d.documentId ?? d.document.id,
         title: d.document.title || 'Document',
-        confidentiality: d.document.confidentiality || 'internal',
+        confidentiality: d.document.confidentiality,
         versionNumber: d.document.currentVersion?.versionNumber,
+        ...accessFlags(d.access, d.isLocked),
       }));
 
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const selected = documents.find((d) => d.id === selectedId) ?? documents[0];
 
   // Only needed to know whether the selected document is viewable (the viewer
-  // itself fetches it too — same query, deduplicated).
-  const { data: selectedDoc } = useDocument(selected?.id ?? '');
+  // itself fetches it too — same query, deduplicated). A Restricted document is
+  // never fetched: it would only 403.
+  const { data: selectedDoc } = useDocument(selected && !selected.restricted ? selected.id : '');
 
   const workflowName = instance?.workflowDefinition?.name || 'Workflow';
   useEffect(() => {
@@ -163,11 +206,20 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
       (a !== 'review' || !arr.includes('approve')) && !(a === 'request_changes' && isFirstStage),
   );
 
+  // Stage actions only ever cover documents the caller has Action access to.
+  // The backend refuses an action that would touch any other; the rest of the
+  // task stays at this stage, in a new task for the same person.
+  const actionableDocuments = documents.filter((d) => d.actionable);
+  const heldBackDocuments = documents.filter((d) => !d.actionable);
+  const heldBack = heldBackDocuments.length;
+  const firstHeldBack = heldBackDocuments[0];
+
   const actions = useWorkflowTaskActions({
     taskId: canAct ? focusTask?.id : undefined,
     stageLabel,
-    documents,
-    selectedDocumentId: selected?.id,
+    documents: actionableDocuments,
+    heldBackDocuments,
+    selectedDocumentId: selected?.actionable ? selected.id : undefined,
     auditTargetId: selected?.id ?? id,
     instanceId: id,
     canAttachDocuments: can('workflow_instance', 'create'),
@@ -180,6 +232,11 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
     users,
     me: { id: me?.id ?? '', name: me?.name ?? '' },
   });
+
+  const accessReason =
+    documents.length === 1
+      ? 'You need Action access to this document before you can act on it.'
+      : 'You need Action access to the documents in this task before you can act on them.';
 
   if (isLoading) return <SkeletonPage charts={2} />;
   if (isError || !instance) {
@@ -203,11 +260,14 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   const canUploadRevision =
     canAct && selectedRevisions.length > 0 && can('document_version', 'create') && !!selectedDoc;
 
+  // `wholeTask` actions always cover every document on the task, so they're
+  // unavailable while any is held back.
   const stageButtons: {
     action: WorkflowStageAction;
     label: string;
     kind: string;
     icon?: string;
+    wholeTask?: boolean;
     run: () => void;
   }[] = [
     { action: 'review', label: 'Mark reviewed', kind: 'btn-secondary', run: actions.actReview },
@@ -217,10 +277,28 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
       kind: 'btn-secondary',
       run: actions.actRequestChanges,
     },
-    { action: 'delegate', label: 'Delegate', kind: 'btn-secondary', run: actions.actDelegate },
-    { action: 'close', label: 'Close workflow', kind: 'btn-secondary', run: actions.actClose },
+    {
+      action: 'delegate',
+      label: 'Delegate',
+      kind: 'btn-secondary',
+      wholeTask: true,
+      run: actions.actDelegate,
+    },
+    {
+      action: 'close',
+      label: 'Close workflow',
+      kind: 'btn-secondary',
+      wholeTask: true,
+      run: actions.actClose,
+    },
     { action: 'reject', label: 'Reject', kind: 'btn-danger', run: actions.actReject },
-    { action: 'approve', label: 'Approve', kind: 'btn-success', icon: 'approve', run: actions.actApprove },
+    {
+      action: 'approve',
+      label: 'Approve',
+      kind: 'btn-success',
+      icon: 'approve',
+      run: actions.actApprove,
+    },
   ];
 
   return (
@@ -233,14 +311,19 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
       <div className="page-head">
         <div style={{ minWidth: 0 }}>
           <div className="page-title" style={{ fontSize: '19px' }}>
-            {instance.documents?.length ? instanceTitle(instance) : workflowName}
+            {/* Restricted documents stay out of the title: it would read
+                "Restricted document". */}
+            {documentsLabel(documents.filter((d) => !d.restricted).map((d) => d.title)) ||
+              workflowName}
           </div>
           <div className="flex gap-2 mt-2 flex-wrap items-center">
             <StatusBadge status={STATUS_LABEL[instance.status]} />
             {selectedDoc?.urgency && <UrgBadge level={selectedDoc.urgency} />}
             <span className="caption">
               {workflowName}
-              {instance.workflowDefinition?.version ? ` v${instance.workflowDefinition.version}` : ''}{' '}
+              {instance.workflowDefinition?.version
+                ? ` v${instance.workflowDefinition.version}`
+                : ''}{' '}
               · {documents.length} document{documents.length === 1 ? '' : 's'}
             </span>
           </div>
@@ -251,27 +334,66 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
       <div className="flex items-center gap-2 flex-wrap mb-2">
         {stageButtons
           .filter((b) => allowedActions.includes(b.action))
-          .map((b) => (
-            <button
-              key={b.action}
-              className={`btn ${b.kind}`}
-              disabled={!canAct}
-              title={!canAct && disabledReason ? disabledReason : b.label}
-              onClick={b.run}
-            >
-              {b.icon && (
-                <>
-                  <Icon name={b.icon} size={14} />{' '}
-                </>
-              )}
-              {b.label}
-            </button>
-          ))}
+          .map((b) => {
+            const blockedReason = !canAct
+              ? disabledReason
+              : actionableDocuments.length === 0
+                ? accessReason
+                : b.wholeTask && heldBack > 0
+                  ? `${b.label} covers every document in this task, and ${heldBack === 1 ? 'one needs' : `${heldBack} need`} Action access first`
+                  : null;
+            return (
+              <button
+                key={b.action}
+                className={`btn ${b.kind}`}
+                disabled={!!blockedReason || !canAct}
+                title={blockedReason || b.label}
+                onClick={b.run}
+              >
+                {b.icon && (
+                  <>
+                    <Icon name={b.icon} size={14} />{' '}
+                  </>
+                )}
+                {b.label}
+              </button>
+            );
+          })}
       </div>
       <div className="caption mb-4">
-        {canAct
-          ? `Your action is needed on “${stageLabel}”${taskDetail && taskDueAt(taskDetail) ? ` — due ${fmtDateTime(taskDueAt(taskDetail)!)}` : ''}.`
-          : disabledReason}
+        {!canAct
+          ? disabledReason
+          : actionableDocuments.length === 0
+            ? accessReason
+            : `Your action is needed on “${stageLabel}”${taskDetail && taskDueAt(taskDetail) ? ` — due ${fmtDateTime(taskDueAt(taskDetail)!)}` : ''}.`}
+        {canAct && heldBack > 0 && actionableDocuments.length > 0 && (
+          <>
+            {' '}
+            {heldBack === 1 ? 'One document needs' : `${heldBack} documents need`} Action access
+            before you can act on {heldBack === 1 ? 'it' : 'them'}, so Delegate and Close are
+            unavailable.
+          </>
+        )}
+        {canAct && firstHeldBack && firstHeldBack.requestable.length > 0 && (
+          <>
+            {' '}
+            <a
+              style={{ cursor: 'pointer' }}
+              onClick={() => {
+                // Show the document the request is about, then ask. The caller
+                // holds the task, so everything still requestable starts ticked.
+                setSelectedId(firstHeldBack.id);
+                promptRequestAccess(
+                  firstHeldBack.id,
+                  firstHeldBack.restricted ? undefined : firstHeldBack.title,
+                  { kinds: firstHeldBack.requestable },
+                );
+              }}
+            >
+              Request access
+            </a>
+          </>
+        )}
       </div>
 
       {pendingRevisions.length > 0 && focusMine && focusActive && (
@@ -280,9 +402,9 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
             <Icon name="edit" size={15} />
           </span>{' '}
           Changes were requested on{' '}
-          {[...new Set(pendingRevisions.map((r) => r.workflowInstanceDocument.document.title))].join(
-            ', ',
-          )}
+          {[
+            ...new Set(pendingRevisions.map((r) => r.workflowInstanceDocument.document.title)),
+          ].join(', ')}
           . Upload a new version of each before moving this stage on.
         </div>
       )}
@@ -297,6 +419,11 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               className={`tab ${d.id === selected?.id ? 'active' : ''}`}
               onClick={() => setSelectedId(d.id)}
             >
+              {d.restricted && (
+                <>
+                  <Icon name="lock" size={12} />{' '}
+                </>
+              )}
               {d.title}
               {revisionsFor(d.id).length > 0 && (
                 <span style={{ color: 'var(--status-pending)' }} title="Changes requested">
@@ -319,14 +446,22 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               documentId={selected.id}
               title={selected.title}
               confidentiality={selected.confidentiality}
+              restricted={selected.restricted}
+              requestKinds={selected.requestable}
+              // The task's holder needs both to finish the task; anyone else
+              // starts with just opening it.
+              requestChecked={
+                focusMine && focusActive
+                  ? selected.requestable
+                  : selected.requestable.filter((k) => k === 'view')
+              }
               viewerId={me.id}
               viewerName={me.name}
             />
           )}
           {selected && selectedDoc && (
             <div className="caption">
-              {selected.versionNumber !== undefined &&
-                `Under review: v${selected.versionNumber}. `}
+              {selected.versionNumber !== undefined && `Under review: v${selected.versionNumber}. `}
               <a style={{ cursor: 'pointer' }} onClick={() => router.push(`/doc/${selected.id}`)}>
                 Open document page
               </a>
@@ -361,13 +496,17 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               documentId={selected.id}
               currentVersionId={selectedDoc.currentVersionId}
               canView={can('document_version', 'view')}
+              canDownload={allows(selectedDoc, 'download')}
               canEdit={false}
               canUploadVersion={canUploadRevision}
               getUploaderName={(userId) => users.find((u) => u.id === userId)?.name || 'User'}
             />
           )}
 
-          <WorkflowActivityPanel workflowInstance={instance} currentStageActorName={currentActorName} />
+          <WorkflowActivityPanel
+            workflowInstance={instance}
+            currentStageActorName={currentActorName}
+          />
         </div>
       </div>
     </div>

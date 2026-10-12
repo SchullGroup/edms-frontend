@@ -58,8 +58,6 @@ interface UploadItem {
   abortUpload?: () => void;
   /** Why the last upload or filing attempt failed; cleared on the next try. */
   error?: string;
-  /** Set when the document filed but its metadata save failed. */
-  metadataError?: string;
 }
 
 /** Fields "Apply to all" can set on every waiting file. Blank = leave as is. */
@@ -74,11 +72,11 @@ interface BatchDefaults {
 interface CardHandle {
   /** Flags the card's missing fields; true when it's ready to file. */
   validate: () => boolean;
-  /** Uploads the file — once; a retry reuses it — and returns the create body. */
+  /** Uploads the file — once; a retry reuses it — and returns the create body,
+   *  metadata included. */
   prepare: () => Promise<UploadDocumentRequest>;
-  /** Once the document exists: saves its metadata and marks the card filed.
-   *  Resolves to why the metadata didn't save, if it didn't. */
-  finish: (doc: { id: string }) => Promise<string | undefined>;
+  /** Once the document exists: marks the card filed. */
+  finish: (doc: { id: string }) => void;
   /** The upload or the filing failed: back to editable, showing why. */
   fail: (message: string) => void;
   apply: (defaults: BatchDefaults) => void;
@@ -88,19 +86,6 @@ interface CardHandle {
 const BATCH_LIMIT = 20;
 /** Files uploaded to storage at the same time during "File all". */
 const UPLOAD_CONCURRENCY = 3;
-
-const CONF_LEVELS = [
-  { label: 'Public', value: 'public' },
-  { label: 'Internal', value: 'internal' },
-  { label: 'Confidential', value: 'confidential' },
-  { label: 'Restricted', value: 'restricted' },
-];
-const URG_LEVELS = [
-  { label: 'Critical', value: 'critical' },
-  { label: 'High', value: 'high' },
-  { label: 'Normal', value: 'normal' },
-  { label: 'Low', value: 'low' },
-];
 
 /** Runs `worker` over `items`, at most `size` at a time. */
 async function runPool<T>(items: T[], size: number, worker: (item: T) => Promise<void>) {
@@ -171,7 +156,7 @@ export default function UploadCapturePage() {
    * then creates the documents in batches of up to 20. A batch is one
    * transaction, so if it fails none of its documents exist and those cards
    * go back to editable; their uploads are kept, so a retry doesn't re-upload.
-   * Metadata is saved per document afterwards — the batch call doesn't take it.
+   * Each document's metadata goes in the same call, so it files with it or not at all.
    */
   const fileAll = async () => {
     const handles = waiting
@@ -192,7 +177,6 @@ export default function UploadCapturePage() {
     const filedDocs: { id: string; title: string }[] = [];
     let filed = 0;
     let notFiled = 0;
-    let metadataFailed = 0;
     try {
       const prepared: { handle: CardHandle; body: UploadDocumentRequest }[] = [];
       await runPool(handles, UPLOAD_CONCURRENCY, async (handle) => {
@@ -210,10 +194,11 @@ export default function UploadCapturePage() {
         const chunk = prepared.slice(i, i + BATCH_LIMIT);
         try {
           const docs = await documentsService.createBatch(chunk.map((c) => c.body));
-          const metadataErrors = await Promise.all(docs.map((d, j) => chunk[j].handle.finish(d)));
+          docs.forEach((d, j) => {
+            chunk[j].handle.finish(d);
+            filedDocs.push({ id: d.id, title: chunk[j].body.title });
+          });
           filed += docs.length;
-          docs.forEach((d, j) => filedDocs.push({ id: d.id, title: chunk[j].body.title }));
-          metadataFailed += metadataErrors.filter(Boolean).length;
         } catch (err: any) {
           notFiled += chunk.length;
           const message = err?.response?.data?.message || err?.message || 'Filing failed';
@@ -226,14 +211,11 @@ export default function UploadCapturePage() {
       if (filedDocs.length > 1) setLastBatch(filedDocs);
     }
 
-    const parts = [`${filed} filed`];
-    if (notFiled) parts.push(`${notFiled} not filed`);
-    if (metadataFailed) parts.push(`${metadataFailed} without their metadata`);
     addToast(
-      notFiled || metadataFailed
-        ? `${parts.join(', ')} — see the highlighted files.`
+      notFiled
+        ? `${filed} filed, ${notFiled} not filed — see the highlighted files.`
         : `${filed} document${filed === 1 ? '' : 's'} filed`,
-      notFiled ? 'error' : metadataFailed ? 'warning' : 'success',
+      notFiled ? 'error' : 'success',
     );
   };
 
@@ -331,21 +313,11 @@ export default function UploadCapturePage() {
           }
           if (file.status === 'filed') {
             return (
-              <div
-                key={file.id}
-                className={`banner ${file.metadataError ? 'warning' : 'success'} mt-4`}
-              >
+              <div key={file.id} className="banner success mt-4">
                 <span>
-                  <Icon name={file.metadataError ? 'alert' : 'check'} size={15} />
+                  <Icon name="check" size={15} />
                 </span>{' '}
-                {file.metadataError ? (
-                  <>
-                    “{file.name}” is filed, but its metadata wasn’t saved: {file.metadataError}.
-                    Open the document to add it.{' '}
-                  </>
-                ) : (
-                  <>Filed successfully — “{file.name}” is now filed. </>
-                )}
+                Filed successfully — “{file.name}” is now filed.{' '}
                 <a
                   onClick={() => router.push(`/doc/${file.docId}`)}
                   style={{ fontWeight: 700, cursor: 'pointer' }}
@@ -375,15 +347,13 @@ export default function UploadCapturePage() {
   );
 }
 
-import { useCabinets, useCabinet } from '@/apis/hooks/useCabinets';
+import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
-import { usePermissions } from '@/hooks/usePermissions';
-import { cabinetAllows, useMyCabinetAccess } from '@/components/cabinets/cabinetAccess';
-import {
-  MetadataFieldInput,
-  isMetadataValueMissing,
-} from '@/components/documents/MetadataFieldInput';
+import { MetadataFieldInput } from '@/components/documents/MetadataFieldInput';
+import { useUploadMetadata } from '@/components/documents/useUploadMetadata';
 import { documentsService } from '@/apis/services/documents.service';
+import { CONF_LEVELS, URG_LEVELS } from '@/constants/documentLevels';
+import { foldersAsPaths } from '@/utils/folders';
 import { calculateChecksum } from '@/apis/services/s3.service';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 
@@ -458,9 +428,9 @@ function BatchBar({
                     ? 'Loading folders…'
                     : 'Choose per file'}
               </option>
-              {folders.map((f: any) => (
+              {foldersAsPaths(folders).map((f: any) => (
                 <option key={f.id} value={f.id}>
-                  {f.name}
+                  {f.path}
                 </option>
               ))}
             </select>
@@ -574,30 +544,11 @@ function IDUCard({
     patchFile({ progress: uploadProgress });
   }, [uploadProgress, file.status, patchFile]);
 
-  // The chosen cabinet's metadata schema (only the single-cabinet GET carries it).
-  // `POST /documents` takes no metadata, so the values are saved by a second call,
-  // `PUT /documents/:id/metadata`, which needs `document_metadata:edit` AND `edit`
-  // on the cabinet — more than uploading does. Without both, the fields are listed
-  // but not offered, since the save would be refused after the file was already in.
-  const { can } = usePermissions();
+  // The chosen cabinet's metadata. The values go in the create call itself, which
+  // needs only what uploading needs, so anyone who can file here can fill them in.
   // `selCab` briefly holds the IDU guess's sample id until real cabinets load.
   const realCabId = cabinets.some((c: any) => c.id === selCab) ? selCab : undefined;
-  const { data: cabinetDetail, isLoading: schemaLoading } = useCabinet(realCabId);
-  const metadataFields = (cabinetDetail?.metadataFields ?? [])
-    .slice()
-    .sort((a, b) => a.displayOrder - b.displayOrder);
-  const myLevel = useMyCabinetAccess(realCabId);
-  const canFillMetadata = can('document_metadata', 'edit') && cabinetAllows(myLevel, 'edit');
-  const [metaValues, setMetaValues] = useState<Record<string, string>>({});
-  useEffect(() => {
-    setMetaValues({});
-  }, [selCab]);
-  // An untouched checkbox reads "No", so a boolean starts as "false".
-  const metaValue = (f: { id: string; fieldType: string }) =>
-    metaValues[f.id] ?? (f.fieldType === 'boolean' ? 'false' : '');
-  const missingMetadata = canFillMetadata
-    ? metadataFields.filter((f) => isMetadataValueMissing(f, metaValue(f)))
-    : [];
+  const meta = useUploadMetadata(realCabId);
 
   const [conf, setConf] = useState('internal');
   const [urg, setUrg] = useState('normal');
@@ -616,8 +567,8 @@ function IDUCard({
       !!title.trim() &&
       !!selCab &&
       !!selFol &&
-      missingMetadata.length === 0 &&
-      !(realCabId && schemaLoading);
+      meta.missing.length === 0 &&
+      !meta.loading;
     if (!ok) setShowErr(true);
     return ok;
   };
@@ -645,34 +596,12 @@ function IDUCard({
       mimeType: resolveUploadMimeType(file.file) ?? file.file.type,
       fileSize: file.file.size,
       checksum: uploaded.current.checksum,
+      metadata: meta.toPayload(),
     };
   };
 
-  // The document is already filed by now, so a metadata failure is reported,
-  // not rolled back.
-  const finish = async (doc: { id: string }) => {
-    let metadataError: string | undefined;
-    const metadata = canFillMetadata
-      ? metadataFields
-          .map((f) => ({ fieldId: f.id, value: metaValue(f) }))
-          .filter((m) => m.value !== '')
-      : [];
-    if (metadata.length > 0) {
-      try {
-        await documentsService.updateMetadata(doc.id, metadata);
-      } catch (err: any) {
-        metadataError = err.response?.data?.message || err.message || 'unknown error';
-      }
-    }
-    patchFile({
-      status: 'filed',
-      docId: doc.id,
-      name: title.trim(),
-      abortUpload: undefined,
-      metadataError,
-    });
-    return metadataError;
-  };
+  const finish = (doc: { id: string }) =>
+    patchFile({ status: 'filed', docId: doc.id, name: title.trim(), abortUpload: undefined });
 
   const fail = (message: string) =>
     patchFile({ status: 'ready', abortUpload: undefined, error: message });
@@ -705,13 +634,8 @@ function IDUCard({
     try {
       const body = await prepare();
       const createdDoc = await documentsService.create(body);
-      const metadataError = await finish(createdDoc);
-      addToast(
-        metadataError
-          ? 'Document filed, but its metadata wasn’t saved'
-          : 'Document filed successfully',
-        metadataError ? 'error' : 'success',
-      );
+      finish(createdDoc);
+      addToast('Document filed successfully', 'success');
     } catch (err: any) {
       const wasAborted = err?.message === 'Upload aborted';
       const message = wasAborted
@@ -807,9 +731,9 @@ function IDUCard({
               <option value="">
                 {foldersLoading ? 'Loading folders…' : '-- Select a folder --'}
               </option>
-              {folders.map((f: any) => (
+              {foldersAsPaths(folders).map((f: any) => (
                 <option key={f.id} value={f.id}>
-                  {f.name}
+                  {f.path}
                 </option>
               ))}
             </select>
@@ -850,44 +774,34 @@ function IDUCard({
           </div>
         </div>
 
-        {metadataFields.length > 0 && (
+        {meta.fields.length > 0 && (
           <div className="mb-4">
             <div className="caption" style={{ fontWeight: 700, marginBottom: '6px' }}>
               CABINET METADATA
             </div>
-            {canFillMetadata ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start [&_.field]:mb-0!">
-                {metadataFields.map((f) => {
-                  const invalid = showErr && isMetadataValueMissing(f, metaValue(f));
-                  return (
-                    <div key={f.id} className="field">
-                      <label>
-                        {f.name} {f.isRequired && <span className="req">*</span>}
-                      </label>
-                      <MetadataFieldInput
-                        field={f}
-                        value={metaValue(f)}
-                        invalid={invalid}
-                        onChange={(v) => setMetaValues((m) => ({ ...m, [f.id]: v }))}
-                      />
-                      {invalid && (
-                        <div className="err" style={{ display: 'block' }}>
-                          {f.name} is required before filing.
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="help">
-                This cabinet has {metadataFields.length} metadata field
-                {metadataFields.length === 1 ? '' : 's'} (
-                {metadataFields.map((f) => f.name).join(', ')}). Filling them in needs permission to
-                edit document metadata and Edit access on this cabinet — someone with both can add
-                them on the document page once it’s filed.
-              </div>
-            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start [&_.field]:mb-0!">
+              {meta.fields.map((f) => {
+                const invalid = showErr && meta.missing.includes(f);
+                return (
+                  <div key={f.id} className="field">
+                    <label>
+                      {f.name} {f.isRequired && <span className="req">*</span>}
+                    </label>
+                    <MetadataFieldInput
+                      field={f}
+                      value={meta.valueOf(f)}
+                      invalid={invalid}
+                      onChange={(v) => meta.setValue(f.id, v)}
+                    />
+                    {invalid && (
+                      <div className="err" style={{ display: 'block' }}>
+                        {f.name} is required before filing.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </fieldset>
@@ -945,7 +859,7 @@ function IDUCard({
           <button
             className="btn btn-primary btn-sm"
             onClick={fileDoc}
-            disabled={batchBusy || (!!selCab && schemaLoading)}
+            disabled={batchBusy || meta.loading}
           >
             Accept & file
           </button>

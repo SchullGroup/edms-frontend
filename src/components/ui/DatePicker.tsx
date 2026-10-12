@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/style.css';
@@ -16,7 +16,10 @@ import { Icon } from '@/components/ui/Icons';
  */
 
 const GAP = 6;
+/** First guess at the popover's height, until it's measured. */
 const POP_HEIGHT = 380;
+/** Space kept between the popover and the viewport edge. */
+const EDGE = 8;
 const MINUTE_STEP = 5;
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -112,6 +115,9 @@ function PickerShell({
 }) {
   const [open, setOpen] = useState(false);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  // Measured, not assumed: a six-week month plus the time row is taller than
+  // the guess, and the month (so the height) can change while it's open.
+  const [popHeight, setPopHeight] = useState(POP_HEIGHT);
   const controlRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
 
@@ -148,13 +154,37 @@ function PickerShell({
     };
   }, [open, syncRect, close]);
 
+  // The popover mounts once the control's rect is known, so re-run then.
+  const positioned = rect !== null;
+  useLayoutEffect(() => {
+    const el = popRef.current;
+    if (!open || !positioned || !el) return;
+    const measure = () => setPopHeight(el.scrollHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [open, positioned]);
+
   let popStyle: React.CSSProperties | undefined;
   if (open && rect && typeof window !== 'undefined') {
-    const flipUp = window.innerHeight - rect.bottom < POP_HEIGHT && rect.top > POP_HEIGHT;
+    const vh = window.innerHeight;
+    const roomBelow = vh - rect.bottom - GAP - EDGE;
+    const roomAbove = rect.top - GAP - EDGE;
+    // Below if it fits, else above if it fits. On a short screen where neither
+    // does, pin it inside the viewport and let it scroll rather than run off.
+    const placement =
+      popHeight <= roomBelow
+        ? { top: rect.bottom + GAP }
+        : popHeight <= roomAbove
+          ? { bottom: vh - rect.top + GAP }
+          : { top: Math.max(EDGE, vh - popHeight - EDGE) };
     popStyle = {
       position: 'fixed',
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - 300)),
-      ...(flipUp ? { bottom: window.innerHeight - rect.top + GAP } : { top: rect.bottom + GAP }),
+      left: Math.max(EDGE, Math.min(rect.left, window.innerWidth - 300)),
+      maxHeight: vh - 2 * EDGE,
+      overflowY: 'auto',
+      ...placement,
     };
   }
 

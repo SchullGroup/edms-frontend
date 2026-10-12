@@ -7,8 +7,8 @@ import { Table, Column } from '@/components/ui/Table';
 import { Icon } from '@/components/ui/Icons';
 
 export default function PlatformSysConfigPage() {
-  const { featureFlags, updateFeatureFlag, auditAction } = useStore();
-  const { setPageTitle, addToast, openConfirm } = useUIStore();
+  const { auditAction } = useStore();
+  const { setPageTitle, addToast } = useUIStore();
 
   useEffect(() => {
     setPageTitle('Platform System Config');
@@ -32,78 +32,6 @@ export default function PlatformSysConfigPage() {
   ];
 
   const hasDegradedService = services.some(s => s.status === 'warn');
-
-  const flagCols: Column<any>[] = [
-    { key: 'name', label: 'Feature', render: f => (
-        <span>
-          <b>{f.name}</b>
-          <div className="caption">{f.desc}</div>
-        </span>
-      ) 
-    },
-    { key: 'stage', label: 'Stage', render: f => {
-        const bgClass = { GA: 'b-status-closed', Beta: 'b-status-in-progress', Preview: 'b-status-pending', Internal: 'b-urg-low' }[f.stage as string] || 'b-urg-low';
-        return <span className={`badge ${bgClass}`}>{f.stage}</span>;
-      } 
-    },
-    { key: 'rollout', label: 'Rollout', render: f => (
-        <div style={{ minWidth: '190px' }}>
-          <div className="flex items-center gap-2">
-            <input 
-              type="range" 
-              min={0} max={100} 
-              value={f.rollout} 
-              style={{ flex: 1, accentColor: 'var(--brand-primary-light)' }} 
-              aria-label={f.name + ' rollout'} 
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                updateFeatureFlag(f.id, { rollout: val });
-              }}
-              onMouseUp={() => {
-                auditAction('FLAG_ROLLOUT', f.id, `${f.name} → ${f.rollout}%`);
-                addToast(`${f.name} rollout set to ${f.rollout}% of tenants`, 'success');
-              }}
-            />
-            <span className="tabular-nums" style={{ fontWeight: 700, width: '40px' }}>{f.rollout}%</span>
-          </div>
-        </div>
-      ) 
-    },
-    { key: 'act', label: '', render: f => (
-        <div className="flex gap-2">
-          {f.rollout < 100 && (
-            <button className="btn btn-secondary btn-sm" onClick={(e) => {
-              e.stopPropagation();
-              openConfirm?.({
-                title: `Promote “${f.name}” to 100%?`,
-                message: 'The feature becomes available to all tenants. Staged rollback remains possible.',
-                confirmLabel: 'Promote to GA',
-                onConfirm: () => {
-                  updateFeatureFlag(f.id, { rollout: 100, stage: 'GA' });
-                  auditAction('FLAG_GA', f.id, f.name + ' promoted to GA');
-                  addToast(f.name + ' is now GA', 'success');
-                }
-              });
-            }}>Promote</button>
-          )}
-          <button className="btn btn-secondary btn-sm" onClick={(e) => {
-            e.stopPropagation();
-            openConfirm?.({
-              title: `Kill-switch “${f.name}”?`,
-              message: 'Immediately disables the feature for all tenants. Use for incidents; the flag stage resets to Internal.',
-              confirmLabel: 'Disable everywhere',
-              danger: true,
-              onConfirm: () => {
-                updateFeatureFlag(f.id, { rollout: 0, stage: 'Internal' });
-                auditAction('FLAG_KILL', f.id, f.name + ' kill-switched');
-                addToast(f.name + ' disabled everywhere', 'warning');
-              }
-            });
-          }}>Kill</button>
-        </div>
-      ) 
-    },
-  ];
 
   const serviceCols: Column<any>[] = [
     { key: 'name', label: 'Service', render: s => (
@@ -148,7 +76,7 @@ export default function PlatformSysConfigPage() {
       <div className="page-head" style={{ marginBottom: '16px' }}>
         <div>
           <div className="page-title">Platform Health & System Config</div>
-          <div className="page-sub">Uptime, background jobs, queues, AI service status, and feature flags.</div>
+          <div className="page-sub">Uptime, background jobs, queues and AI service status.</div>
         </div>
       </div>
 
@@ -186,17 +114,6 @@ export default function PlatformSysConfigPage() {
           </div>
           <Table cols={jobCols} rows={jobs} />
         </div>
-      </div>
-
-      <div className="page-head" style={{ marginTop: '32px', marginBottom: '16px' }}>
-        <div>
-          <div className="page-title">Feature Flags & Rollouts</div>
-          <div className="page-sub">Staged rollouts by percentage of tenants, with promote and kill-switch controls.</div>
-        </div>
-      </div>
-
-      <div className="card">
-        <Table cols={flagCols} rows={featureFlags || []} />
       </div>
     </div>
   );

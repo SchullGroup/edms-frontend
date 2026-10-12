@@ -41,7 +41,7 @@ export function useWorkflowDocumentPositions(
       id: d.id,
       documentId: d.documentId ?? d.document.id,
       title: d.document.title,
-      urgency: d.document.urgency,
+      urgency: d.document.urgency ?? undefined,
       active: (d.executions?.length ? d.executions : (fromHistory.get(d.id) ?? [])).filter(
         isActiveExecution,
       ),

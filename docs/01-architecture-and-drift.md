@@ -853,6 +853,25 @@ revision checked this against:
 | g | **Stale index on edit** | Unchanged — `updateDocument` (title), `updateDocumentMetadata`, and `restoreVersion` never re-enqueue indexing. `search_vector` drifts from the row. Entirely backend-side, independent of the uploader. |
 | h | **New — the dropzone advertises capabilities the validator doesn't have** | `upload/page.tsx`'s dropzone text reads *"PDF, DOCX, XLSX, TIFF, JPG up to 100 MB."* `validateUpload()` accepts none of DOCX/XLSX/TIFF (not in either allowlist — TIFF isn't even in the image one) and caps out at 50 MB for PDF / 10 MB for images, both well under the advertised 100 MB. A user follows the on-screen instructions, picks a 60 MB PDF or any `.docx`, and gets rejected with no indication beforehand that the dropzone's own text was wrong. |
 
+### Viewing a file (2026-10-08)
+
+PDFs are drawn in the browser by pdf.js (`src/components/documents/PdfViewer.tsx`,
+`pdfjs-dist` 6.3.289), which fetches the pre-signed `currentVersion.fileUrl` straight from
+S3. That works because the bucket's CORS answers `Access-Control-Allow-Origin: *` for `GET`
+(and allows a `range` preflight), checked live 2026-10-08. It doesn't expose `Content-Range`,
+so the viewer fetches each file whole (`disableRange`). The viewer reloads only when the
+file's path changes, not when a refetch re-signs the same URL.
+
+pdf.js's worker and the files it loads at runtime (WebAssembly decoders for JBIG2 and
+JPEG 2000 images, standard fonts, character maps, colour profiles) are served from
+`/pdfjs/`. `scripts/copy-pdfjs-assets.mjs` copies them out of `node_modules` at the start of
+`npm run dev` and `npm run build`; `public/pdfjs/` is git-ignored. `proxy.ts`'s matcher
+excludes `/pdfjs/` so those requests don't trigger a backend session check.
+
+Printing renders each page to an image with the watermark drawn in and prints those from a
+hidden frame, after `GET /documents/:id/print` succeeds. Images still render as a plain
+`<img>`; other types show "can't be previewed yet" with Download.
+
 ---
 
 ## 6. State architecture on the frontend
@@ -964,19 +983,21 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents` | ✅ | ✅ |
 | `GET /documents/search` | ✅ | ✅ (misses a document if its OCR job gets stuck at `pending` — see DRIFT-06) |
 | `GET /documents/:id` | ✅ | ✅ — embeds `checkoutLock` + `locker {id,name,email}` since `edms-backend` `b4a3f81` (2026-09-29); before that only `isCheckedOut` came back, so even the lock holder couldn't check the document back in (TEST_PLAN "Things to check") |
-| `POST /documents` | ✅ | ✅ |
-| `POST /documents/batch` (≤ 20, one transaction) | ✅ | 🟨 wired 2026-10-08 — `/upload`'s "File all", in chunks of 20; not verified live. *This row was missing from the matrix* |
+| `POST /documents` | ✅ — since `edms-backend` `dd10017` (2026-10-09) takes `metadata: [{ fieldId, value }]`, checked against the cabinet's fields and saved in the same transaction. A missing **required** field fails the upload (400), so a client that sends no metadata can't file into a cabinet with required fields | ✅ — `metadata` sent from `/upload` and the workflow picker's "Upload from computer" since 2026-10-09. **Verified live 2026-10-09** on `/upload`: a `staff` user (no `document_metadata:edit`) filed with a value, `GET /documents/:id/metadata` returned it, no `PUT` was made. The picker was confirmed by the product owner's testing 2026-10-09 |
+| `POST /documents/batch` (≤ 20, one transaction) | ✅ — each item takes `metadata` too (`dd10017`) | ✅ wired 2026-10-08 — `/upload`'s "File all", in chunks of 20; confirmed in testing 2026-10-08. Each item carries its card's metadata since 2026-10-09, **verified live** (two documents, two values stored). *This row was missing from the matrix* |
 | `POST /documents/versions/batch` (≤ 20) | ✅ | ⚠️ backend only — nothing uploads several new versions at once |
-| `PATCH /documents/:id` | ✅ | ✅ |
+| `PATCH /documents/:id` | ✅ — since `dd10017` (2026-10-09) also moves documents: `cabinetId` changes the cabinet (the folder is cleared unless a folder in the new cabinet is given) and `folderId: null` moves to the cabinet root; a folder from another cabinet is a 400. ⚠️ Edit access is checked only on the **destination** cabinet, so someone with edit on any cabinet can pull a document out of one they can't edit (request doc item 7) | ✅ — also, from 2026-10-08, the document page's "Change classification" dialog (`confidentiality`, `urgency`; 🟨 not verified live). Moves still send only `folderId` within the cabinet: cross-cabinet Move waits on the item 7 fix |
 | `POST /documents/:id/checkout` | ✅ | ✅ |
 | `POST /documents/:id/checkin` | ✅ | ✅ — holder, **or** a `document_lock:delete` holder at `global` scope / `department` scope for the cabinet's department (`canReleaseLock`). Frontend offers that "Force check in" only once the lock is past `expectedReturnAt` (2026-10-02) |
 | `GET /documents/:id/metadata` | ✅ | ✅ |
-| `PUT /documents/:id/metadata` | ✅ | ✅ (cannot clear values — see backend analysis) |
+| `PUT /documents/:id/metadata` | ✅ — re-indexes search after a change since `dd10017` | ✅ (cannot clear values — see backend analysis). Since 2026-10-09 only the document page's metadata editor calls it; uploads send metadata with the create call |
 | `GET /documents/:id/versions` | ✅ | ✅ |
-| `GET /documents/:id/versions/:versionId` | ✅ | ✅ |
+| `GET /documents/:id/versions/:versionId` | ✅ — since `edms-backend` `0dab81a` (2026-10-08) needs `document:download` on top of confidentiality clearance, and is audited as `document.downloaded` | 🟨 **wired 2026-10-08** as the only download path (`useDownloadDocumentVersion`): `/doc/[id]`'s Download, the workflow viewer's Download, and each version's Open in `DocumentVersionsPanel`. Permissions confirmed live on `/auth/me`. ✅ **Clicked through 2026-10-09** (Finance supervisor, `department` scope): Download on `/doc/[id]` and in the workflow viewer each called this route (200) and sent the new tab to the signed S3 URL. *Was marked ✅ before, but nothing called it: the versions panel opened the list's own signed `fileUrl`. Corrected 2026-10-08* |
 | `POST /documents/:id/versions` | ✅ | ✅ |
+| `GET /documents/:id/export`, `GET /documents/:id/print` | ✅ new in `0dab81a` — `document:export` / `document:print` plus clearance; audited as `document.exported` / `document.printed`; return the document like `GET /documents/:id` | ✅ `/print` — wired 2026-10-08 (`usePrintDocument`): the PDF viewer's Print calls it first and only prints if it succeeds; verified in a browser against the live API · ✅ `/export` — wired 2026-10-08 (`useExportDocument`), `/doc/[id]`'s Export button; **clicked through 2026-10-09**: the call returned 200 and the new tab went to the signed S3 URL |
 | `GET/POST /documents/:id/comments`, `/signatures` | ✅ both exist, real endpoints | 🟥 **deliberately unused (reverted 2026-09-18, same day)** — briefly wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel` earlier the same day, then removed: product decision to keep every comment/signature scoped to the workflow trail (`POST /tasks/:id/action`'s `comment`/`approve`'s `signature`) rather than split across a second, task-independent thread. See DRIFT-08's note below and BE-16/BE-17 in `BACKEND_REQUESTS.md` |
-| `GET/POST /documents/:id/access-requests`, `/grant`, `/deny`, admin inbox `GET /documents/access-requests` | ✅ | ✅ wired 2026-09-18 — "Request access" on `/doc/[id]` is real now (was audit-log-only, see BE-1); grant/deny at `/admin/access-requests` (client_admin-only, new page) |
+| `GET/POST /documents/:id/access-requests`, `/grant`, `/deny`, admin inbox `GET /documents/access-requests` | ✅ — since `3014b89` (PR #47, live by 2026-10-12) the POST body **requires** `permission: 'view' \| 'route'`, and a grant is per permission (unique on document + user + permission). A `route` grant lets the user act on the document in a workflow despite its tier; it never allows download/export/print | ✅ **DRIFT-20 fixed 2026-10-12, verified live.** Wired 2026-09-18; from `3014b89` until the fix the frontend posted only `{ reason }` and every request was refused (422 `VALIDATION_ERROR`). `/doc/[id]` asks for View access (`permission: 'view'`); the workflow page's Restricted document card offers "Open the document" and "Act on this document" tick boxes (both pre-ticked for the task's holder) and sends one request per kind, one toast each, a 409 reading "Already pending". `/admin/access-requests` shows the kind (Open / Act) and a kind-specific grant confirmation |
+| — | `DELETE /documents/:id/access-grants/:userId?permission=view\|route` (query required since `3014b89`) | No UI — nothing revokes a document grant |
 | `DELETE /documents/:id` (archive) | ✅ | ✅ wired — "Archive document" in `/doc/[id]`'s overflow menu (`useArchiveDocument`) |
 | `POST /documents/:id/versions/:versionId/restore` | ✅ | ✅ wired — "Restore" in `DocumentVersionsPanel` (`useRestoreDocumentVersion`). Both rows were stale here — caught in passing 2026-09-18, not otherwise part of that day's work |
 
@@ -984,15 +1005,18 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `GET/POST /workflows`, `GET/PATCH /workflows/:id` | ✅ | ✅ |
+| `GET/POST /workflows`, `GET/PATCH /workflows/:id` | ✅ — since `3014b89` a stage may carry `department_id` (alone, or with `role`; never with `user_id`); create, update and publish check that the department exists (422) | ✅ — 🟨 the Designer offers only role or person, so department assignment has no UI yet |
 | `POST /workflows/:id/publish` `/archive` | ✅ | ✅ |
-| `GET /workflow-instances`, `GET /workflow-instances/:id` | ✅ — since `919d0ef` an instance has `documents[]` and no `documentId`/`currentStage`/`stageDueAt`; the list doesn't return per-document executions (DRIFT-19) | ✅ reshaped 2026-10-07 (DRIFT-19), not verified live |
+| `GET /workflow-instances`, `GET /workflow-instances/:id` | ✅ — since `919d0ef` an instance has `documents[]` and no `documentId`/`currentStage`/`stageDueAt`; the list doesn't return per-document executions (DRIFT-19). Since `3014b89`: each document carries `isLocked` + `access`, Restricted documents redacted to that title; and at `own` scope visibility follows task assignment only (direct, role, role + department, department), no longer document ownership (**DRIFT-22**). Attaching to a *pending* workflow is limited to the first-stage assignee or `global` scope | ✅ reshaped 2026-10-07 (DRIFT-19), not verified live. ✅ **DRIFT-21** fixed 2026-10-12: restricted entries render (lock tab, request card, no fetch) and stage actions cover only documents with Action access; verified live |
 | ~~`POST /workflow-instances/start`~~ | now the two-call `POST /workflow-instances` **then** `POST /:instanceId/start`; since `919d0ef` the create body is `{ workflowDefinitionId, documents: [{ documentId, comment? }] }` | ✅ **DRIFT-09 resolved**; body updated 2026-10-07 — documents routed together go into one workflow (DRIFT-19) |
 | `POST /workflow-instances/:id/hold` `/resume` `/close` | ✅ | ✅ |
-| `GET /tasks`, `GET /tasks/:id` | ✅ — since `919d0ef` no `Task.dueAt`; documents come through `documents[].workflowDocumentExecution`, and only `/:id` carries their stage and deadline (DRIFT-19) | ✅ reshaped 2026-10-07, not verified live |
+| `GET /tasks`, `GET /tasks/:id` | ✅ — since `919d0ef` no `Task.dueAt`; documents come through `documents[].workflowDocumentExecution`, and only `/:id` carries their stage and deadline (DRIFT-19). Since `3014b89`: tasks carry `assignedDepartmentId`; `/:id` returns **every** document, each with `access: { canView, canRoute, canRequestView, canRequestRoute }`, and a document the caller can't view comes back as "Restricted document" with null confidentiality, cabinet and version (before, it was left out). Acting on a document above your tier needs a `route` grant | ✅ reshaped 2026-10-07, not verified live. ✅ **DRIFT-21, fixed 2026-10-12** — the workflow page reads `access`, shows Restricted documents as lock tabs with the request card and never fetches them; `ConfBadge`/`UrgBadge` render nothing for a null level. Verified live (staff: no `GET /documents/:id` for the restricted one, no error; client admin: unchanged). Stage actions cover only documents with Action access (`canRoute`) and name them explicitly whenever any is held back; close and delegate (whole-task) are disabled meanwhile. Verified live: approving the viewable document of a two-document task returned 200, the restricted one stayed at the stage in a new task for the same user |
 | `POST /tasks/:id/action` | ✅ | ✅ — `request_changes` sends `documents: [{documentId}]` from the workflow page's document picker since 2026-10-02 (**DRIFT-18** fixed; the field became required in `edms-backend` `5144fc7`). Not yet verified e2e |
 | — | `POST /workflow-instances/:id/documents` `{documentId, comment?}` (`5144fc7`) | ✅ wired — "Mark reviewed" attaches the reviewer's documents through it (`useWorkflowTaskActions`). *This row said "no UI yet"; stale, corrected 2026-10-07* |
 | `PATCH /tasks/:id/reassign` | ✅ | ✅ |
+| `GET /sla/breaches` | ✅ (`workflow_instance:view`) | ✅ wired — staff dashboard Overdue tile, My Tasks, My Performance. *Row missing from this matrix until 2026-10-08* |
+| `GET/PATCH /sla/configuration` | ✅ (`workflow:view` / `workflow:edit`) | ✅ wired 2026-10-08, confirmed in testing 2026-10-08 — `/admin/policies` → Urgency & SLA (`SlaSettingsPanel`). Only changed fields are sent |
+| `GET/POST /sla/holidays`, `DELETE /sla/holidays/:holidayId` | ✅ (`workflow:view` / `workflow:edit`) | ✅ wired 2026-10-08, confirmed in testing 2026-10-08 — same tab, Holidays card |
 | `GET/POST /delegations`, `POST /delegations/:id/end` | ✅ | ✅ wired — `/delegations` (344 lines) exists; this row was stale, caught 2026-09-18 while investigating DRIFT-11 |
 | — | `GET /workflow-history`, `GET /workflow-history/:id` | ✅ wired — the activity trail (`WorkflowHistoryTimeline`), and since 2026-10-07 each document's live stage and deadline (`useWorkflowDocumentPositions`). *This row said "no UI at all"; stale, corrected 2026-10-07* |
 
@@ -1032,35 +1056,33 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 | `GET/POST/PATCH/DELETE /cabinets(/:id)` | ✅ | ✅ |
 | `GET/POST /cabinets/:cabinetId/folders` | ✅ | ✅ |
 | `GET/PATCH/DELETE /folders/:id` | ✅ | ✅ |
-| — | `POST/PATCH/DELETE /cabinets/:id/metadata-fields` | ⚠️ backend only — **no UI** |
-| — | `GET/POST /cabinets/:id/access`, `DELETE /:id/access/:grantId` | ⚠️ backend only — **no UI** |
+| `POST/PATCH/DELETE /cabinets/:id/metadata-fields` | ✅ | ✅ — Cabinet Designer's metadata panel (`/admin/cabinets`) and, since 2026-10-06, the cabinet's **Metadata schema** tab on `/staff/cabinets` |
+| `GET/POST /cabinets/:id/access`, `DELETE /:id/access/:grantId` | ✅ — since `dd10017` (2026-10-09) `POST` refuses (403) a grant to yourself, to a role you hold, or above your own level on the cabinet; admins (`CABINET_ACCESS_BYPASS_ROLES`) are exempt. The grants' `user` is now `{ id, name, email }` only — it used to be the whole row, password hash included (spec item S1) | ✅ — Cabinet Designer's **Access** card and the cabinet's **Access** tab on `/staff/cabinets`. The UI already left out the choices the API now refuses |
 
-The cabinet-access gap is worth calling out twice: `CabinetAccess` is the table that makes
-per-cabinet need-to-know work, the backend exposes full CRUD for it, and **no screen in the
-product can grant or revoke a cabinet permission.** The Cabinet Designer at
-`/admin/cabinets` manages cabinets but not their access grants.
+*These two rows said "backend only — no UI", with a paragraph calling the access gap out
+twice. Both screens have existed since at least 2026-09-21 (see the 2026-09-21 correction in
+§1 and the DRIFT register). Rows corrected 2026-10-09.*
 
 ### Circulars *(wired 2026-10-05)*
 
 Backend `src/modules/circulars/` — 15 routes, two BullMQ workers (delivery fan-out and a
 reconcile/expiry/reminder sweep), and `circular:view|create|publish|withdraw` permissions
 seeded for `client_admin`, `supervisor`, `management` and `internal_auditor`. Frontend:
-`circulars.service.ts` + `useCirculars.ts`. Every row is 🟨 — **built and type/build-checked,
-not verified end to end against a live backend.**
+`circulars.service.ts` + `useCirculars.ts`. Every row is ✅ — built 2026-10-05, *(confirmed by the product owner’s testing, 2026-10-09)*.
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `getInbox` | `GET /circulars/inbox` | 🟨 |
-| `getInboxSummary` | `GET /circulars/inbox/summary` | 🟨 sidebar badge = `unacknowledged` |
-| `getInboxItem` | `GET /circulars/inbox/:id` (first open = read receipt) | 🟨 |
-| `acknowledge` | `POST /circulars/inbox/:id/acknowledge` | 🟨 |
-| `getAll` | `GET /circulars` (`circular:view`) | 🟨 |
-| `getById` | `GET /circulars/:id` | 🟨 |
-| `create` · `update` · `remove` | `POST /circulars` · `PATCH`/`DELETE /circulars/:id` (`circular:create`, drafts only) | 🟨 |
-| `publish` · `cancelSchedule` | `POST /circulars/:id/publish` · `/cancel-schedule` (`circular:publish`) | 🟨 |
-| `withdraw` | `POST /circulars/:id/withdraw` (`circular:withdraw`) | 🟨 |
-| `revise` | `POST /circulars/:id/revisions` (`circular:create`) | 🟨 |
-| `getRecipients` | `GET /circulars/:id/recipients` | 🟨 |
-| `sendReminders` | `POST /circulars/:id/reminders` (`circular:publish`) | 🟨 |
+| `getInbox` | `GET /circulars/inbox` | ✅ |
+| `getInboxSummary` | `GET /circulars/inbox/summary` | ✅ sidebar badge = `unacknowledged` |
+| `getInboxItem` | `GET /circulars/inbox/:id` (first open = read receipt) | ✅ |
+| `acknowledge` | `POST /circulars/inbox/:id/acknowledge` | ✅ |
+| `getAll` | `GET /circulars` (`circular:view`) | ✅ |
+| `getById` | `GET /circulars/:id` | ✅ |
+| `create` · `update` · `remove` | `POST /circulars` · `PATCH`/`DELETE /circulars/:id` (`circular:create`, drafts only) | ✅ |
+| `publish` · `cancelSchedule` | `POST /circulars/:id/publish` · `/cancel-schedule` (`circular:publish`) | ✅ |
+| `withdraw` | `POST /circulars/:id/withdraw` (`circular:withdraw`) | ✅ |
+| `revise` | `POST /circulars/:id/revisions` (`circular:create`) | ✅ |
+| `getRecipients` | `GET /circulars/:id/recipients` | ✅ |
+| `sendReminders` | `POST /circulars/:id/reminders` (`circular:publish`) | ✅ |
 
 Contract notes: list endpoints use the standard paginated envelope; `archived` is sent as
 the string `'true'|'false'` (axios serialises the boolean); a `PATCH` that includes
@@ -1075,7 +1097,7 @@ named people but not role groups. Circular notifications carry `actionUrl: /circ
 
 | Frontend service | Endpoints called | Backend | Status |
 |---|---|---|---|
-| `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 |
+| `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 — since 2026-10-08 only its `watermark` flag is read. Download now follows the `document:download` permission and clearance, so `/admin/policies`' Download and Print toggles change nothing |
 | `branding.service.ts` | none — returns `SEED.branding` | no module, no schema | 🔴 |
 
 **DRIFT-10 (notifications) — ✅ RESOLVED (verified 2026-09-21).**
@@ -1282,15 +1304,24 @@ itself somewhat stale by the time this was fixed. The actual broken set was four
 
 ### 8.3 `top_secret` is settable but unreadable
 
-The backend's Zod schema accepts `top_secret`, but
-`TOP_SECRET_TIER_ROLES` in `access-control.constants.ts` is `[]` **by design**. A document
-uploaded at that tier becomes permanently unreadable by every role including
-`client_admin`. The frontend upload form (`upload/page.tsx` `CONF_LEVELS`) correctly omits
-it — but `PATCH /documents/:id` accepts it, and the doc-detail edit form is driven by
-`usePolicies()` → `SEED.policies.confidentiality`, which **does** include `Top Secret`.
+The backend's Zod schema accepts `top_secret`. Since `edms-backend` `0dab81a` (2026-10-08),
+reading a tier above `internal` needs a permission rather than membership of a role list:
+`document:view_confidential`, `document:view_restricted` or `document:view_top_secret`,
+whose scope narrows it (`department` = documents in the caller's department's cabinets,
+`own` = documents they uploaded). No seeded role holds `view_top_secret`, so a document
+filed at that tier is unreadable until an admin ticks it on some role in `/admin/roles`.
+That is now recoverable, but still a trap.
 
-**Fix:** backend should reject `top_secret` on write until a role is cleared for it, and
-should verify the writer's clearance for whatever tier they assign.
+The frontend copies the backend's check as `isConfidentialityActionAllowed` in
+`src/constants/documentLevels.ts`, fed by `useConfidentialityClearance` (permissions from
+`/auth/me`, department from `GET /users/:id`). The upload form never offers `top_secret`
+(`CONF_LEVELS` omits it). The document page's "Change classification" dialog disables any
+tier the caller couldn't open the document at, and lists Top Secret only for a caller
+cleared for it. The API still accepts any tier on `PATCH /documents/:id`, so the backend
+fix below stands. *(This paragraph used to describe a doc-detail edit form driven by
+`SEED.policies`; no such form existed. Corrected 2026-10-08.)*
+
+**Fix:** backend should verify the writer's clearance for whatever tier they assign.
 
 ### ✅ 8.4 DRIFT-17 — Notification `actionUrl`s used the backend's path vocabulary — **Resolved (frontend, 2026-10-02)**
 
@@ -1311,9 +1342,10 @@ The four path-only mappings are `redirects()` in `next.config.ts`, which run **b
 (307s to the right targets, query string kept). `/tasks/[id]` is a thin lookup page.
 Previously every one of these 404'd.
 
-**Still open:** `/admin/access-requests` is gated on `user:edit`, but the access-requested
-notification goes to the document's **creator**, who usually lacks it and lands on
-`/unauthorized`. There is no per-document review UI. A backend change to target
+**Still open:** `/admin/access-requests` is gated on `document_access_request:view` since
+2026-10-12 (it was `user:edit`, which no access-request route checks). But the
+access-requested notification goes to the document's **creator**, who usually lacks that
+permission and lands on `/unauthorized`. There is no per-document review UI. A backend change to target
 `/doc/:id`, or a per-document requests panel, would close it.
 
 ### 8.5 Date/number types
@@ -1441,8 +1473,11 @@ suspiciously few documents.
 | ID | Severity | Title | Owner | Blast radius |
 |---|---|---|---|---|
 | **DRIFT-14** | 🔴 **Critical** | Workflow definitions are readable only by `client_admin`/`schulltech_admin`, so `staff` and `supervisor` cannot list the workflows they hold `workflow_instance:route` for | Backend | **Document routing is unreachable again.** The picker reports "no published workflows", which is neither true nor the reason. Re-diagnosed 2026-09-21: the hardcoded role list is gone (replaced by real `requirePermission`), but the RBAC seed data that replaced it never re-granted `workflow:view` to non-admin roles |
+| ~~DRIFT-20~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `POST /documents/:id/access-requests` requires `permission: 'view' \| 'route'` since `edms-backend` `3014b89`; `documentsService.requestAccess` sent only `{ reason }` | Frontend | Was: **Request access refused for everyone (422)**, on `/doc/[id]` and the workflow page. Fix: send `view` from the document page; on the workflow page, ask for whichever of `view`/`route` the document's `access` lacks. Show the permission in `/admin/access-requests` |
+| ~~DRIFT-21~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `GET /tasks/:id` and `GET /workflow-instances/:id` now return documents the caller can't see, redacted ("Restricted document", `confidentiality: null`, no version) with an `access` object | Frontend | **The workflow page throws** for anyone whose task holds such a document: the access overlay renders `ConfBadge` with `null`, and `titleCase(null)` calls `.replace` on null. Fix: drive the overlay from `access`/`isLocked`, guard null fields, and keep locked documents out of the action pickers unless `canRoute`. Workflow history also blanks comments, notes and signatures in workflows holding such a document (by design) |
+| **DRIFT-22** | 🟠 Med (found 2026-10-12; **intended**, per the backend developer the same day) | At `own` scope, workflow visibility (`buildInstanceAccessFilter`, `canActorAccessInstance`) follows task assignment only; `3014b89` dropped the "created one of its documents" clause | Backend (decision) | A `staff` user who routes a document to a supervisor stage can't see or open that workflow; `/doc/[id]`'s Workflows card goes empty and offers "Route to workflow" again. Confirmed intended; the frontend follow-up is explaining the empty state (doc 05 backlog 14b) |
 | ~~DRIFT-18~~ | ✅ **Resolved (frontend, 2026-10-02)** | `request_changes` required a `documents` array the frontend didn't send (`5144fc7`, multi-document workflows) | Frontend | Was: "Send back" failed validation for every user. Fixed as part of the doc/workflow page split — the new `/workflow-instances/[id]` asks which of the task's documents need changes. Not yet verified e2e |
-| ~~DRIFT-17~~ | ✅ **Resolved (frontend, 2026-10-02)** | Notification/email `actionUrl`s (`/tasks/:id`, `/workflow-instances/:id`, `/documents/:id…`, `/reset-password`, `/login`) named routes this app doesn't have | Frontend | Was: every notification deep-link and the password-reset email 404'd. One gap left: access-request links go to a `user:edit`-gated page — see [§8.4](#8-contract-shape-drift-same-url-different-meaning) |
+| ~~DRIFT-17~~ | ✅ **Resolved (frontend, 2026-10-02)** | Notification/email `actionUrl`s (`/tasks/:id`, `/workflow-instances/:id`, `/documents/:id…`, `/reset-password`, `/login`) named routes this app doesn't have | Frontend | Was: every notification deep-link and the password-reset email 404'd. One gap left: access-request links go to a page the document's creator usually can't open — see [§8.4](#8-contract-shape-drift-same-url-different-meaning) |
 | ~~DRIFT-16~~ | ✅ **Resolved (frontend, 2026-09-21)** | Frontend route guard (`routes.config.ts`, `PORTALS`) gated `/supervisor` and `/management` on `workflow:route`/`dashboard:view` — retired/fictional keys no role could ever hold | Frontend | Was: real supervisors and management users redirected to `/unauthorized` by the app's own guard, independent of what the backend allowed |
 | ~~DRIFT-11~~ | ✅ **Resolved** | Backend audit module real & auto-writing; `/admin/audit`, `auditor/trail` and `management/compliance` all migrated 2026-09-18 | — | `platform/audit` stays on `SEED` — no cross-tenant `GET /audit` exists, and no platform-level API exists at all to migrate it *to* |
 | ~~DRIFT-15~~ | ✅ **Resolved** | ~~`POST /auth/reset-password` sent `newPassword`/`confirmPassword`~~ — backend wants `password` | Frontend | Was: blocked **every** password reset and invitation acceptance, on every role |
@@ -1464,7 +1499,7 @@ suspiciously few documents.
 | ~~— Cabinet access-grant CRUD has no UI~~ | ✅ **Corrected (2026-09-21) — already built** | `admin/cabinets` has a full "Access" card: grant modal (role/user picker + permission select), grant table, revoke button with confirm. Wired to `useCabinetAccessGrants`/`useGrantCabinetAccess`/`useRevokeCabinetAccess`, which already existed too. This doc's claim was stale, not a real gap | — | — |
 | ~~— Enum casing mismatch~~ | ✅ **Resolved (frontend, 2026-09-22)** | `StatusBadge`/`ConfBadge`/`UrgBadge` now run a shared `titleCase()` (`@/utils/helpers`) on their display text — handles snake_case → words and lowercase → Title Case in one pass, idempotent on already-correct input, so every current and future caller is right regardless of which casing its data source used. Also fixed a real functional bug this uncovered: `search/page.tsx`'s facet filter/count used a naive `charAt(0).toUpperCase() + slice(1)`, which mishandled `'top_secret'` (→ `"Top_secret"`, matching nothing in the Title-Case facet list) — a `top_secret` document could never be found via that filter, and its count always showed 0 | Frontend | Was: badges showed raw lowercase/snake_case text on some pages; `top_secret` documents were invisible to the confidentiality facet specifically |
 | — | 🟡 Low | `roles` has three shapes across endpoints | Both | Defensive shims scattered through components |
-| DRIFT-19 | 🟠 Med | Multi-document workflows (`edms-backend` `919d0ef`): list responses carry no stage or deadline | Both | **Frontend done 2026-10-07, not verified live:** routing sends `documents[]` (one workflow per routed group); types rebuilt (`WorkflowDocumentExecution`); `@/utils/workflowDocuments` derives titles, deadlines and stages; the workflow page and Monitor drawer rebuild each document's position from workflow history; approve/reject/review can act on chosen documents. **Still missing (backend):** deadlines in `GET /tasks` and executions in `GET /workflow-instances`, so task due labels, the Overdue filter (now backed by open SLA breaches), the Monitor's stage/due columns show "—"; and no endpoint over `workflow_sla_outcomes`, so on-time % shows "—". Requested 2026-10-07 |
+| DRIFT-19 | 🟠 Med | Multi-document workflows (`edms-backend` `919d0ef`): list responses carry no stage or deadline | Both | **Frontend done 2026-10-07, confirmed in testing 2026-10-08:** routing sends `documents[]` (one workflow per routed group); types rebuilt (`WorkflowDocumentExecution`); `@/utils/workflowDocuments` derives titles, deadlines and stages; the workflow page and Monitor drawer rebuild each document's position from workflow history; approve/reject/review can act on chosen documents. **Still missing (backend):** deadlines in `GET /tasks` and executions in `GET /workflow-instances`, so task due labels, the Overdue filter (now backed by open SLA breaches), the Monitor's stage/due columns show "—"; and no endpoint over `workflow_sla_outcomes`, so on-time % shows "—". Requested 2026-10-07 |
 | ~~— Duplicate `NEXT_PUBLIC_API_URL` in `.env`~~ | ✅ **Corrected (2026-09-22) — not real, doc was stale** | The user checked the live `.env` directly: one `NEXT_PUBLIC_API_URL` key, no duplicate, no dead `API_URL`/`LOCAL_API_URL`/`STAGING_URL` keys either. See §9. | — | — |
 
 ### Suggested order of attack

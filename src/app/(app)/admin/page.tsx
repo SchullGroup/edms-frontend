@@ -7,7 +7,10 @@ import { useUIStore } from '@/store/useUIStore';
 import { useUsers } from '@/apis/hooks/useUsers';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useWorkflows } from '@/apis/hooks/useWorkflows';
+import { useDepartments } from '@/apis/hooks/useDepartments';
+import { useAccessRequestsInbox } from '@/apis/hooks/useDocuments';
 import { Icon } from '@/components/ui/Icons';
+import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -18,34 +21,56 @@ export default function AdminDashboard() {
     status: 'published',
   });
 
+  const { data: draftsData } = useWorkflows({ status: 'draft' });
+  const { data: departmentsData } = useDepartments();
+  const { data: accessRequestsData } = useAccessRequestsInbox({ status: 'pending', limit: 1 });
+
   const users = usersData?.pagination?.total || 0;
   const cabinets = cabinetsData?.data || [];
   const publishedWorkflows = workflowsData?.pagination?.total || 0;
+  const draftWorkflows = draftsData?.pagination?.total || 0;
+  const departments = departmentsData?.data?.length ?? 0;
+  const pendingAccessRequests = accessRequestsData?.pagination?.total || 0;
+  // Documents can only be filed into a folder, so a cabinet without one can't be used.
+  const cabinetsWithoutFolders = cabinets.filter((c: any) => !(c._count?.folders > 0)).length;
+  const loaded = !!usersData && !!cabinetsData && !!workflowsData && !!departmentsData;
 
   useEffect(() => {
     setPageTitle('Admin Home');
   }, [setPageTitle]);
 
-  // not integrated with backend yet, so hardcoding for now
+  // The tenant setup chain from docs/03 (Phases 2–6), each step checked
+  // against live data.
   const setup = [
-    { label: 'Cabinets & metadata schemas', done: true, to: '/admin/cabinets' },
-    { label: 'Users invited & roles assigned', done: true, to: '/admin/users' },
-    { label: 'Workflows published', done: true, to: '/admin/workflows' },
-    { label: 'Confidentiality & retention policies', done: true, to: '/admin/policies' },
-    { label: 'SSO enrolment (2 users outstanding)', done: false, to: '/admin/users' },
-    { label: 'Branding & email templates', done: false, to: '/admin/branding' },
+    { label: 'Departments set up', done: departments > 0, to: '/admin/departments' },
+    { label: 'Cabinets created', done: cabinets.length > 0, to: '/admin/cabinets' },
+    {
+      label:
+        cabinetsWithoutFolders > 0
+          ? `Folders in every cabinet (${cabinetsWithoutFolders} without one)`
+          : 'Folders in every cabinet',
+      done: cabinets.length > 0 && cabinetsWithoutFolders === 0,
+      to: '/staff/cabinets',
+    },
+    { label: 'Users added and given roles', done: users > 1, to: '/admin/users' },
+    { label: 'A workflow published', done: publishedWorkflows > 0, to: '/admin/workflows' },
   ];
   const pct = Math.round((setup.filter((s) => s.done).length / setup.length) * 100);
 
-  // not integrated with backend yet, so hardcoding for now
   const pendingTasks = [
-    {
-      t: 'Approve workflow change request from D. Adeyemi (Invoice Approval v5 draft)',
+    pendingAccessRequests > 0 && {
+      t: `${pendingAccessRequests} document access request${pendingAccessRequests === 1 ? '' : 's'} waiting for a decision`,
+      to: '/admin/access-requests',
+    },
+    draftWorkflows > 0 && {
+      t: `${draftWorkflows} workflow draft${draftWorkflows === 1 ? '' : 's'} not yet published`,
       to: '/admin/workflows',
     },
-    { t: 'Review 3 stale accounts flagged by audit (FND-2026-011)', to: '/admin/users' },
-    { t: 'Publish Q3 records retention update to Policies', to: '/admin/policies' },
-  ];
+    cabinetsWithoutFolders > 0 && {
+      t: `${cabinetsWithoutFolders} cabinet${cabinetsWithoutFolders === 1 ? ' has' : 's have'} no folders, so nothing can be filed there`,
+      to: '/staff/cabinets',
+    },
+  ].filter(Boolean) as { t: string; to: string }[];
 
   return (
     <div>
@@ -60,7 +85,6 @@ export default function AdminDashboard() {
         <div className="card kpi">
           <div className="kv">{users}</div>
           <div className="kl">Users</div>
-          <div className="kd up">▲ +2 this month</div>
         </div>
         <div className="card kpi">
           <div className="kv">{cabinets.length}</div>
@@ -71,13 +95,8 @@ export default function AdminDashboard() {
           <div className="kl">Published workflows</div>
         </div>
         <div className="card kpi">
-          <div className="kv">812 GB</div>
-          <div className="kl">Storage used of 1 TB</div>
-          <div className="mt-2">
-            <div className="pbar warn">
-              <i style={{ width: '79%' }}></i>
-            </div>
-          </div>
+          <div className="kv">{departments}</div>
+          <div className="kl">Departments</div>
         </div>
       </div>
 
@@ -89,7 +108,7 @@ export default function AdminDashboard() {
               className="tabular-nums"
               style={{ color: pct === 100 ? 'var(--status-closed)' : 'var(--status-pending)' }}
             >
-              {pct}%
+              {loaded ? `${pct}%` : '—'}
             </b>
           </div>
           <div className="card-body">
@@ -122,6 +141,11 @@ export default function AdminDashboard() {
             <span className="h3">Pending configuration tasks</span>
           </div>
           <div className="card-body" style={{ paddingTop: '6px' }}>
+            {pendingTasks.length === 0 && (
+              <p className="caption" style={{ padding: '10px 0' }}>
+                Nothing waiting on you.
+              </p>
+            )}
             {pendingTasks.map((p, i) => (
               <div
                 key={i}
@@ -135,6 +159,9 @@ export default function AdminDashboard() {
             ))}
           </div>
         </div>
+      </div>
+      <div className="mt-4">
+        <QuickAccessCard showActions={false} />
       </div>
     </div>
   );

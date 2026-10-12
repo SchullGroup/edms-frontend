@@ -23,7 +23,7 @@ export function useUpdateBranding() {
     mutationFn: (updates: Partial<Branding>) => brandingService.updateBranding(updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: brandingKeys.details() });
-      addToast('Branding updated successfully', 'success');
+      addToast('Branding saved in this browser — it isn’t shared with other users yet', 'success');
     },
     onError: (err: any) => {
       addToast(err.response?.data?.message || 'Failed to update branding', 'error');

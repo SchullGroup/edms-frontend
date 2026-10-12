@@ -16,7 +16,8 @@ export function exportCsv(filename: string, rows: Record<string, any>[], columns
     }).join(',');
   }).join('\n');
 
-  const csvContent = `${headers}\n${body}`;
+  // The byte-order mark makes Excel read the file as UTF-8 (names with accents).
+  const csvContent = `﻿${headers}\n${body}`;
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
