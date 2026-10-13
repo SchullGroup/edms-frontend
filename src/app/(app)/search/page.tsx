@@ -120,13 +120,13 @@ export default function SearchPage() {
   // searches and filter changes on purpose — it's how documents from different
   // folders and cabinets end up in one workflow.
   const { routeDocuments, canRoute } = useRouteToWorkflow();
-  const [selected, setSelected] = useState<Map<string, { id: string; title: string }>>(
-    () => new Map(),
-  );
-  const toggleSelected = (d: Pick<Document, 'id' | 'title'>, on: boolean) =>
+  const [selected, setSelected] = useState<
+    Map<string, { id: string; title: string; status?: string | null }>
+  >(() => new Map());
+  const toggleSelected = (d: Pick<Document, 'id' | 'title' | 'status'>, on: boolean) =>
     setSelected((cur) => {
       const next = new Map(cur);
-      if (on) next.set(d.id, { id: d.id, title: d.title });
+      if (on) next.set(d.id, { id: d.id, title: d.title, status: d.status });
       else next.delete(d.id);
       return next;
     });
@@ -193,7 +193,7 @@ export default function SearchPage() {
     setSelected((cur) => {
       const next = new Map(cur);
       results.forEach((d) =>
-        on ? next.set(d.id, { id: d.id, title: d.title }) : next.delete(d.id),
+        on ? next.set(d.id, { id: d.id, title: d.title, status: d.status }) : next.delete(d.id),
       );
       return next;
     });

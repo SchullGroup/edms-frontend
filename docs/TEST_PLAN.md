@@ -811,6 +811,30 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
       The Workflows card lists it and the page offers "Open workflow", not "Route to workflow".
       *(Seen on `78881ccb…` 2026-10-13; repeat on a fresh document.)*
 
+## 19e. Phase V — Oversight fixes and Team Performance (2026-10-13)
+
+- [x] **TP-V1.** As `staff_finance`, open any page: no `GET /tasks/approvals` request (it used
+      to 403 on every page). As `supervisor_finance` the Approvals Queue badge still counts.
+      *(Verified 2026-10-13.)*
+- [x] **TP-V2.** As `management_ops`, Compliance Posture: no `GET /audit`; the sensitive-activity
+      panel says the role can't read the audit trail. *(Verified 2026-10-13.)*
+- [x] **TP-V3.** As `supervisor_finance`, Team Performance shows real figures: team SLA %,
+      closed and turnaround for 30 days with the change from the 30 days before, weekly
+      closures vs new work, and one row per team member. Export CSV downloads the table.
+      *(Verified 2026-10-13: 79%, 20 closed, 2.4 d; CSV not re-checked.)*
+- [x] **TP-V4.** As `staff_finance`, open a document in a running workflow you hold no task
+      in. The Workflows card says it's marked as in a running workflow you can't open, and
+      "Route to workflow" isn't offered. *(Verified 2026-10-13 on `487006a2…`, whose status is
+      stale — see backend spec N4.)*
+- [x] **TP-V5.** As `staff_finance`, open a document in a workflow you do hold a task in
+      (`acf67419…`): the card lists it and the page offers "Open workflow". *(Verified.)*
+- [ ] **TP-V6.** On Search or in a cabinet, select a document that's in a running workflow plus
+      one that isn't, and Route to workflow: the dialog says one is left out and routes only
+      the other.
+- [x] **TP-V7.** As `client_admin`, `/admin/audit` names actors beyond the first 20 users (all
+      users are loaded, not one page). *(The tenant has 12 users, so verified only that one
+      `GET /users?limit=100` request replaces the 20-row one.)*
+
 ## 20. Wrap-up
 
 - [ ] Re-run **TP-A1–A7** once more at the very end using kemi.reviewer (the custom-role

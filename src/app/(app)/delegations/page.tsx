@@ -8,7 +8,7 @@ import {
   useCreateDelegation,
   useEndDelegation,
 } from '@/apis/hooks/useDelegations';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useAllUsers } from '@/apis/hooks/useUsers';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -68,7 +68,7 @@ export default function DelegationsPage() {
   const canEndDelegation = can('delegation', 'end');
 
   const { data, isLoading, isError, refetch } = useDelegations({ scope: 'mine', limit: 100 });
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const { data: cabinetsData, isLoading: isLoadingCabinets } = useCabinets();
 
   const createDelegation = useCreateDelegation();
@@ -81,7 +81,7 @@ export default function DelegationsPage() {
   if (!currentUser) return null;
 
   const delegations = data?.data || [];
-  const users = usersData?.data || [];
+  const users = usersData?.items || [];
   const cabinets = cabinetsData?.data || [];
   const cabinetNameById = Object.fromEntries(cabinets.map((c) => [c.id, c.name]));
 

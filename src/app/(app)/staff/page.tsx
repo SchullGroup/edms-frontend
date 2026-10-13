@@ -343,7 +343,7 @@ export default function StaffDashboard() {
               <EmptyState
                 icon="approve"
                 title={`No ${filter?.toLowerCase()} workflows`}
-                message="Workflows you're part of show here."
+                message="Workflows show here while you hold a task in them. Once a document you routed moves on to someone else's stage, it leaves this list; its own page still says it's in a workflow."
               />
             )
           ) : isTasksError ? (

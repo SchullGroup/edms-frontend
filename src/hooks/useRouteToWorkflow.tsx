@@ -9,7 +9,13 @@ import { usePermissions } from '@/hooks/usePermissions';
 export interface RoutableDocument {
   id: string;
   title?: string;
+  /** The document's own status, when the caller has it. `in_progress` and
+   *  `on_hold` mean it's already in a running workflow (the backend keeps the
+   *  two in step), possibly one the user can't see. */
+  status?: string | null;
 }
+
+const IN_WORKFLOW_STATUSES = ['in_progress', 'on_hold'];
 
 /**
  * The single "put this document into a workflow" entry point, shared by the
@@ -33,10 +39,22 @@ export function useRouteToWorkflow() {
 
   const publishedWorkflows = (data?.data || []).filter((w) => w.status === 'published');
 
-  const routeDocuments = (docs: RoutableDocument[], opts?: { onSuccess?: () => void }) => {
-    if (docs.length === 0) return;
+  const routeDocuments = (requested: RoutableDocument[], opts?: { onSuccess?: () => void }) => {
+    if (requested.length === 0) return;
     if (!canRoute) {
       addToast("You don't have permission to route documents to a workflow", 'error');
+      return;
+    }
+    // A document already moving through a workflow isn't routed into another.
+    const alreadyRouted = requested.filter((d) => IN_WORKFLOW_STATUSES.includes(d.status ?? ''));
+    const docs = requested.filter((d) => !alreadyRouted.includes(d));
+    if (docs.length === 0) {
+      addToast(
+        alreadyRouted.length === 1
+          ? 'That document is already in a workflow'
+          : 'Those documents are already in workflows',
+        'error',
+      );
       return;
     }
 
@@ -70,6 +88,13 @@ export function useRouteToWorkflow() {
                     </option>
                   ))}
                 </select>
+                {alreadyRouted.length > 0 && (
+                  <div className="banner info" style={{ marginBottom: 10 }}>
+                    {alreadyRouted.length === 1
+                      ? '1 selected document is already in a workflow and is left out.'
+                      : `${alreadyRouted.length} selected documents are already in workflows and are left out.`}
+                  </div>
+                )}
                 <div className="help">
                   {docs.length > 1 ? `All ${docs.length} documents go into one workflow. ` : ''}
                   The first stage opens immediately and a task is raised for whoever that stage is

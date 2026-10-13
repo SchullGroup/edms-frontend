@@ -5,7 +5,7 @@ import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuditEntries, useExportAuditCsv, useVerifyAuditChain } from '@/apis/hooks/useAudit';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useAllUsers } from '@/apis/hooks/useUsers';
 import { UserPicker } from '@/components/common/UserPicker';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
@@ -43,10 +43,10 @@ export default function TenantAuditPage() {
     isError: isErrorAudit,
     refetch: refetchAudit,
   } = useAuditEntries(filters);
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
 
   const rows = auditData?.data || [];
-  const users = usersData?.data || [];
+  const users = usersData?.items || [];
 
   const exportCsv = useExportAuditCsv();
   const verifyChain = useVerifyAuditChain();

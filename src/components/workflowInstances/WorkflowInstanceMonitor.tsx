@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { usePermissions } from '@/hooks/usePermissions';
+import { scopeAtLeast } from '@/lib/permissions';
 import { useRouter } from 'next/navigation';
 import { useWorkflowInstances } from '@/apis/hooks/useWorkflowInstances';
 import { useWorkflows } from '@/apis/hooks/useWorkflows';
@@ -66,9 +68,12 @@ export function WorkflowInstanceMonitor() {
 
   // `scope: 'all'`: every workflow the viewer's scope allows. Without it the
   // API lists only workflows the viewer holds a task in, which left this
-  // monitor empty for a client admin.
+  // monitor empty for a client admin. Only for oversight (`workflow_instance:
+  // view` wider than `own`): the API refuses `all` to anyone else (403).
+  const { scopeFor } = usePermissions();
+  const hasOversight = scopeAtLeast(scopeFor('workflow_instance', 'view'), 'department');
   const { data, isLoading } = useWorkflowInstances({
-    scope: 'all',
+    scope: hasOversight ? 'all' : 'mine',
     page,
     limit: PAGE_SIZE,
     ...(status ? { status } : {}),
