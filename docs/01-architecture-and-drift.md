@@ -1043,6 +1043,7 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 | Frontend call | Backend route | Status |
 |---|---|---|
 | `GET/POST /users`, `GET/PATCH/DELETE /users/:id` | ✅ | ✅ |
+| `GET /users?search=` (name or email, case-insensitive; backend PR #48) | ✅ | ✅ wired 2026-10-13: `/admin/users` search box, and `UserPicker` (Delegations "Delegate to", the actor filter on `/admin/audit` and `/auditor/trail`). Results stay inside the caller's `user:view` scope |
 | `POST /users/:id/roles`, `DELETE /users/:id/roles/:roleId` | ✅ | ✅ |
 | `POST /users/:id/invitation` | ✅ | ✅ wired 2026-09-18 — "Resend invite" button, shown for active users with no `lastLoginAt` |
 | `GET/POST /roles`, `GET/PATCH/DELETE /roles/:id` | ✅ | ✅ |

@@ -4,6 +4,9 @@ import { User, PaginatedResponse, ApiResponse } from '@/types/models';
 export interface UserFilters {
   departmentId?: string;
   status?: 'active' | 'inactive' | 'suspended';
+  /** Case-insensitive substring match on name or email (backend PR #48). Still
+   *  narrowed by the caller's `user:view` scope. Must be non-empty if sent. */
+  search?: string;
   page?: number;
   limit?: number;
 }
