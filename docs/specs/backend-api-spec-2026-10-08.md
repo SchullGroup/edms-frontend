@@ -461,3 +461,31 @@ anything stopping the same document being routed into a second active workflow?
 > **Answer:** the logic is correct (intended). Frontend follow-up: explain the empty state on
 > the staff dashboard and the document page's Workflows card (doc 05 backlog 14b). The second
 > half (routing an in-workflow document again) is still unanswered.
+
+---
+
+## Notes on PR #49 (2026-10-13)
+
+The frontend now uses PR #49 (pending users, the suspended-login message, the hidden
+`schulltech_admin` role, AI summaries). Three things for the backend developer:
+
+### N1. The summary is readable without its audit row (DRIFT-23)
+
+`GET /documents/:id/summary` writes `document.summary_viewed`, but `GET /documents/:id`
+returns the same text on `currentVersion.aiSummary` with no such row. If the summary audit
+should be complete, leave `aiSummary`, `summaryStatus` and `summaryGeneratedAt` out of the
+document response. The frontend reads the summary only through `/summary`.
+
+### N2. A failed summary can't be retried
+
+`getDocumentSummary` queues a summary only when `summaryStatus` is `pending`. After the job's
+three attempts fail, the version stays `failed` for good. Re-queue `failed` on request (rate
+limited), or add `POST /documents/:id/summary`. The frontend shows "The summary couldn't be
+written" with a "Check again" that only re-reads the status.
+
+### N3. Login says whether an email belongs to a suspended account (security)
+
+`login` checks `status` before the password, so a wrong password for a suspended account
+returns 403 "Account has been suspended" instead of 401. Anyone can learn which addresses are
+suspended accounts. (The inactive case already leaked "Account is not active".) Check the
+password first, and give the status message only to someone who got it right.

@@ -33,6 +33,7 @@ import { documentFile } from '@/utils/documentFile';
 import { DocumentViewerPanel } from '@/components/documents/DocumentViewerPanel';
 import { DocumentDetailsPanel } from '@/components/documents/DocumentDetailsPanel';
 import { DocumentVersionsPanel } from '@/components/documents/DocumentVersionsPanel';
+import { DocumentSummaryPanel } from '@/components/documents/DocumentSummaryPanel';
 import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/components/documents/types';
 import type { WorkflowInstanceStatus } from '@/types/models';
 import { Skeleton, SkeletonText } from '@/components/common/Skeleton';
@@ -559,6 +560,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               !lockedByOther
             }
           />
+
+          <DocumentSummaryPanel documentId={doc.id} />
 
           {/* New versions are only uploaded on the workflow page, in answer to
               a "Request changes" — never here, so a file can't be swapped

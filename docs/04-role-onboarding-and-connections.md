@@ -240,7 +240,7 @@ This must be done in order; each step produces the input for the next.
 | 4 | **Delegate each cabinet** — grant its manager (a role or user) `upload`/`edit`/`delete` on it | `/admin/cabinets` → Access card | `POST /cabinets/:id/access` | ✅ (*was "⛔ no UI" here — stale since 2026-09-18, corrected 2026-10-06*) |
 | 5 | Define cabinet metadata fields | `/admin/cabinets` → Metadata schema card | `POST /cabinets/:id/metadata-fields` | ✅ (*same stale "⛔ no UI", corrected 2026-10-06*) |
 | 6 | Build folder trees — usually by the cabinet's manager, not the admin | `/staff/cabinets` | `POST /cabinets/:id/folders` | 🟨 moved here from `/admin/cabinets` 2026-10-06, not yet verified live |
-| 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles`, `POST /users/:id/invitation` | 🟨 new users get a hardcoded default password, not an emailed invite; **resending** an invite (for existing active users) is wired |
+| 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles`, `POST /users/:id/invitation` | ✅ "Invite user" emails a set-password link; the user is **Pending** until they use it, then Active (PR #49). Resend invite is offered for pending users and for active users who never signed in |
 | 8 | **Design and publish workflows** | `/admin/workflows` | `POST /workflows`, `/publish` | 🟨 **no authorization** |
 | 9 | Set retention and confidentiality policy | `/admin/policies` | — | 🟥 `SEED.policies` |
 | 10 | Apply branding | `/admin/branding` | — | 🟥 `SEED.branding` |
@@ -294,9 +294,9 @@ consistently fails.
    they are responsible for.
 3. ⛔ **The role matrix editor writes to localStorage**, so permission changes appear to
    work and silently don't.
-4. ⛔ **New-user creation still hardcodes a default password** rather than emailing a real
-   invite — they hand-communicate every initial password. (Resending an invite to an
-   already-created active user *is* wired, via `POST /users/:id/invitation`.)
+4. ✅ ~~New-user creation hardcodes a default password.~~ **Corrected 2026-10-13:** creation
+   has emailed an invitation since 2026-09-18 (no password is sent). Since PR #49 the user
+   shows as **Pending** until they set their password.
 5. 🟥 **Branding and policies reset on cache clear.** (Circulars no longer do — they're
    server state since 2026-10-05.)
 6. ✅ ~~Their audit view is fabricated data.~~ **Fixed 2026-09-18** — `/admin/audit` reads
@@ -702,11 +702,10 @@ credentials.
 assignment and removal, deactivation.
 
 **Broken:**
-- ⛔ **No emailed invite on initial creation.** The admin sets a hardcoded default
-  password and communicates it personally. (`POST /users/:id/invitation` *resends* an
-  invite for an already-created active user — wired 2026-09-18 — but creation itself
-  still doesn't trigger one.)
-- ⛔ **No forced change on first login**, so the admin permanently knows it.
+- ✅ ~~No emailed invite on initial creation.~~ **Corrected 2026-10-13:** `POST /users`
+  without a password emails a set-password link (since 2026-09-18). Since PR #49 the user
+  is `pending` until they accept, and `/admin/users` shows that.
+- ✅ ~~No forced change on first login.~~ Moot: the admin never knows the password.
 - ✅ ~~No password reset.~~ **Exists** — `POST /auth/forgot-password` → `/set-password`;
   was broken by a field-name bug (DRIFT-15) until fixed 2026-09-18.
 - ⛔ **No rate limiting on login** — unlimited guessing against known credentials.
@@ -714,9 +713,7 @@ assignment and removal, deactivation.
   fails closed from `department` to `own` scope. They see only their own documents and
   nobody is told why.
 
-**To fix:** make new-user creation call the invite/reset infrastructure that already
-exists (`POST /auth/reset-password` + emailed token, `/set-password` page) instead of
-setting a hardcoded default password, and add `express-rate-limit` on login.
+**To fix:** add `express-rate-limit` on login. (The invite half of this line is done.)
 
 ---
 

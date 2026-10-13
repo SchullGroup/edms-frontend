@@ -19,8 +19,22 @@ import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
 import { SkeletonTable } from '@/components/common/Skeleton';
+import { fmtDate } from '@/utils/helpers';
 
 const USERS_PAGE_SIZE = 10;
+
+// `pending` = invited, no password set yet; accepting the invitation makes
+// them active (edms-backend PR #49).
+const STATUS_LABEL: Record<string, string> = {
+  pending: 'Pending',
+  active: 'Active',
+  inactive: 'Inactive',
+  suspended: 'Suspended',
+};
+const STATUS_BADGE: Record<string, string> = {
+  Active: 'b-status-closed',
+  Pending: 'b-status-pending',
+};
 
 export default function UsersPage() {
   const { auditAction } = useStore();
@@ -31,7 +45,9 @@ export default function UsersPage() {
 
   const [page, setPage] = useState(1);
   const [departmentFilter, setDepartmentFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'inactive' | 'suspended'>('');
+  const [statusFilter, setStatusFilter] = useState<
+    '' | 'pending' | 'active' | 'inactive' | 'suspended'
+  >('');
   const [search, setSearch] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -77,7 +93,7 @@ export default function UsersPage() {
     ...u,
     roleLabel: roleLabel(u),
     dept: departmentName(u.departmentId, departmentIndex),
-    status: u.status === 'active' ? 'Active' : u.status === 'suspended' ? 'Suspended' : 'Inactive',
+    status: STATUS_LABEL[u.status] ?? 'Inactive',
   }));
 
   useEffect(() => {
@@ -289,8 +305,13 @@ export default function UsersPage() {
       key: 'status',
       label: 'Status',
       render: (u) => (
-        <span className={`badge ${u.status === 'Active' ? 'b-status-closed' : 'b-status-overdue'}`}>
-          {u.status}
+        <span>
+          <span className={`badge ${STATUS_BADGE[u.status] ?? 'b-status-overdue'}`}>{u.status}</span>
+          {u.status === 'Pending' && u.invitedAt && (
+            <div className="caption mt-1" title="Waiting for them to set a password from the email">
+              Invited {fmtDate(u.invitedAt)}
+            </div>
+          )}
         </span>
       ),
     },
@@ -310,18 +331,22 @@ export default function UsersPage() {
           >
             Edit
           </button>
-          <button
-            className="btn btn-secondary btn-sm"
-            disabled={!canEditUser}
-            title={!canEditUser ? "You don't have permission to edit users" : undefined}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleToggleStatus(u);
-            }}
-          >
-            {u.status === 'Active' ? 'Suspend' : 'Activate'}
-          </button>
-          {u.status === 'Active' && !u.lastLoginAt && (
+          {/* A pending user becomes active by accepting the invitation, not
+              from here: activating them would leave an account with no password. */}
+          {u.status !== 'Pending' && (
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={!canEditUser}
+              title={!canEditUser ? "You don't have permission to edit users" : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleStatus(u);
+              }}
+            >
+              {u.status === 'Active' ? 'Suspend' : 'Activate'}
+            </button>
+          )}
+          {(u.status === 'Pending' || (u.status === 'Active' && !u.lastLoginAt)) && (
             <button
               className="btn btn-secondary btn-sm"
               disabled={resendInvitation.isPending || !canCreateUser}
@@ -365,7 +390,9 @@ export default function UsersPage() {
 
       <div className="card">
         <div className="card-head">
-          <span className="h3">{usersData?.pagination?.total ?? 0} users</span>
+          <span className="h3">
+            {usersData?.pagination?.total ?? 0} user{usersData?.pagination?.total === 1 ? '' : 's'}
+          </span>
           <div className="flex items-center gap-2 flex-wrap">
             <input
               className="input"
@@ -404,6 +431,7 @@ export default function UsersPage() {
               }}
             >
               <option value="">--Select Status--</option>
+              <option value="pending">Pending</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
               <option value="suspended">Suspended</option>

@@ -42,7 +42,11 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  status: 'active' | 'inactive' | 'suspended';
+  /** `pending` = invited by email, no password set yet; accepting the
+   *  invitation makes them `active` (edms-backend PR #49). */
+  status: 'pending' | 'active' | 'inactive' | 'suspended';
+  /** First invitation email; null when an admin set the password. */
+  invitedAt?: string | null;
   departmentId?: string | null;
   roles?: { id: string; name: string; description?: string | null }[];
   /** What `GET /users` actually returns — the join rows, not a flat `roles` array. */
@@ -163,8 +167,28 @@ export interface DocumentVersion {
   checksum: string;
   ocrStatus: 'pending' | 'processing' | 'completed' | 'failed';
   ocrText?: string | null;
+  /** Also on `GET /documents/:id`'s `currentVersion`, but read it through
+   *  `GET /documents/:id/summary`: that call is audited and queues summaries
+   *  for versions uploaded before the feature existed. */
+  aiSummary?: string | null;
+  summaryStatus?: DocumentSummaryStatus;
+  summaryGeneratedAt?: string | null;
   uploadedBy: string;
   createdAt: string;
+}
+
+export type DocumentSummaryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
+/** `GET /documents/:id/summary`: the AI summary of the current version,
+ *  generated in the background once OCR completes. */
+export interface DocumentSummary {
+  documentId: string;
+  versionId: string;
+  versionNumber: number;
+  ocrStatus: DocumentVersion['ocrStatus'];
+  summaryStatus: DocumentSummaryStatus;
+  summary: string | null;
+  generatedAt: string | null;
 }
 
 /** A search the user saved on `/search`: the query text plus at most one

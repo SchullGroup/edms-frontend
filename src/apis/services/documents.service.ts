@@ -4,6 +4,7 @@ import {
   PaginatedResponse,
   ApiResponse,
   DocumentVersion,
+  DocumentSummary,
   CheckoutLock,
   DocumentMetadataField,
   DocumentMetadataValueInput,
@@ -145,6 +146,12 @@ export const documentsService = {
 
   printDocument: async (id: string): Promise<Document> => {
     const response = await apiClient.get<ApiResponse<Document>>(`/documents/${id}/print`);
+    return response.data.data;
+  },
+
+  // Audited as `document.summary_viewed`, so callers should poll sparingly.
+  getSummary: async (id: string): Promise<DocumentSummary> => {
+    const response = await apiClient.get<ApiResponse<DocumentSummary>>(`/documents/${id}/summary`);
     return response.data.data;
   },
 

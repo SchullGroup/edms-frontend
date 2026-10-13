@@ -103,9 +103,14 @@ export function useCreateUser() {
 
   return useMutation({
     mutationFn: (data: any) => usersService.create(data),
-    onSuccess: () => {
+    // `invited`: the backend emailed a set-password link and the user is
+    // `pending` until they use it.
+    onSuccess: (user: User & { invited?: boolean }) => {
       queryClient.invalidateQueries({ queryKey: userKeys.lists() });
-      addToast('User created successfully', 'success');
+      addToast(
+        user?.invited ? `Invitation sent to ${user.email}` : 'User created successfully',
+        'success',
+      );
     },
     onError: (err: any) => {
       addToast(err.response?.data?.message || 'Failed to create user', 'error');
@@ -185,11 +190,14 @@ export function useRemoveUserRole() {
 
 /** `POST /users/:id/invitation` — resends the set-password email. */
 export function useResendInvitation() {
+  const queryClient = useQueryClient();
   const { addToast } = useUIStore.getState();
 
   return useMutation({
     mutationFn: (id: string) => usersService.resendInvitation(id),
     onSuccess: (data) => {
+      // The first emailed invitation also records `invitedAt`.
+      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
       addToast(`Invitation resent to ${data.email}`, 'success');
     },
     onError: (err: any) => {

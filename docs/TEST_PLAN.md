@@ -766,6 +766,31 @@ still limited to the caller's `user:view` scope.
       unread notification (up to 7), then the notifications. *(Verified 2026-10-13 with the
       request slowed: 4 unread → 4 placeholder rows.)*
 
+## 19c. Phase T — Pending users and AI summaries (backend PR #49)
+
+PR #49: an invited user is `pending` until they set a password; suspended users are told so
+at login; `schulltech_admin` is hidden from the roles API; documents get an AI summary.
+
+- [x] **TP-T1.** As `client_admin`, `/admin/users`: an invited user who hasn't set a
+      password shows **Pending** with "Invited <date>", **Edit** and **Resend invite**, and no
+      Activate. The status filter has Pending. *(Verified 2026-10-13 on Seye Onigbinde.
+      Resend invite not clicked: it emails a real person.)*
+- [ ] **TP-T2.** Invite a test address. The toast reads "Invitation sent to …" and the row
+      is Pending. Open the emailed link, set a password: the row turns Active and the person
+      can sign in.
+- [x] **TP-T3.** Sign in as a suspended user (`muyanna+supervisor-ops`, any password). The
+      error reads "Account has been suspended". *(Verified 2026-10-13.)*
+- [x] **TP-T4.** Open a document whose summary is complete (`7aa7d964…`). The **AI summary**
+      card shows an opening sentence, bullets, and "Written by AI from version N on …".
+      *(Verified 2026-10-13.)*
+- [x] **TP-T5.** Open a document never summarized before (an older upload). The card says
+      "Writing the summary…", then shows it without a reload (checks every 10 s for up to a
+      minute; "Check again" after that). *(Verified 2026-10-13 on `e70fc2a3…`: one check.)*
+- [ ] **TP-T6.** A file with no readable text (e.g. a blank scan) says "No summary: no
+      readable text was found in this file." Not run: no such file in the test tenant.
+- [ ] **TP-T7.** `/admin/roles` and the invite modal's role list don't offer
+      `schulltech_admin`. *(The API was checked 2026-10-13; the screens weren't.)*
+
 ## 20. Wrap-up
 
 - [ ] Re-run **TP-A1–A7** once more at the very end using kemi.reviewer (the custom-role
