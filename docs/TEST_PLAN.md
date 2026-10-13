@@ -834,6 +834,23 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
 - [x] **TP-V7.** As `client_admin`, `/admin/audit` names actors beyond the first 20 users (all
       users are loaded, not one page). *(The tenant has 12 users, so verified only that one
       `GET /users?limit=100` request replaces the 20-row one.)*
+- [x] **TP-V8.** As `staff_finance`, type `/supervisor/approvals`, `/supervisor/instances` and
+      `/supervisor/performance` into the address bar: all go to `/unauthorized`. As
+      `supervisor_finance` and `client_admin` they open. *(Verified 2026-10-13.)*
+
+## 19f. Phase W — Department-only stages (2026-10-13)
+
+- [x] **TP-W1.** As `client_admin`, Workflow Designer → a draft workflow → a stage → Assign to →
+      **Department** → "Operations › Finance" → Save changes. The canvas node reads "Finance ·
+      24h" and the stored stage has `department_id` and no `role`. *(Verified on "TEST –
+      department stage", `6aaf3f94…`.)*
+- [x] **TP-W2.** Publish it and route a document. As `staff_finance` and `supervisor_finance`
+      (both in Finance) the workflow page offers Approve/Reject; as `client_admin` (Administrative)
+      they're disabled, titled "Assigned to Finance"; `staff_hr` can't open the workflow.
+      *(Verified on instance `bdda387f…` with "New-Memo"; rejected as `staff_finance` through
+      the API to confirm the backend accepts it.)*
+- [ ] **TP-W3.** Assign a stage to "Operations" (Finance's parent) and route: Finance users
+      should **not** get it yet. Expected until spec Q2 lands; re-test then.
 
 ## 20. Wrap-up
 

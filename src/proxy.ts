@@ -140,6 +140,10 @@ export async function proxy(req: NextRequest) {
   const { matched, allowed } = evaluateRouteAccess(pathname, {
     roles: user.roles ?? [],
     permissions,
+    // `/auth/me` returns `"resource:action:scope"`, which `minScope` rules need.
+    scopedPermissions: (user.permissions ?? []).filter(
+      (p: unknown): p is string => typeof p === 'string',
+    ),
   });
 
   if (matched && !allowed) {

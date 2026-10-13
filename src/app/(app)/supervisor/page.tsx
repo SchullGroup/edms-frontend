@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import { useDepartmentNames } from '@/apis/hooks/useDepartments';
 import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks, useReassignTask } from '@/apis/hooks/useTasks';
@@ -20,7 +21,7 @@ import { StatusBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
 import { Task, WorkflowTeamStatusMember } from '@/types/models';
 import { taskPrimaryDocument, taskTitle } from '@/utils/workflowDocuments';
-import { isOverdue } from '@/utils/supervisor';
+import { isOverdue, taskHolderLabel } from '@/utils/supervisor';
 import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
 
 export default function SupervisorDashboard() {
@@ -32,6 +33,7 @@ export default function SupervisorDashboard() {
   const { data: members, isLoading: isLoadingMatrix } = useTeamStatusMatrix();
   const { data: byCabinetData, isLoading: isLoadingByCabinet } = useOpenItemsByCabinet();
   const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
+  const departmentName = useDepartmentNames();
 
   const users = usersData?.items || [];
   // Reassign targets: active users in the reassigner's own department only.
@@ -89,7 +91,7 @@ export default function SupervisorDashboard() {
             <input
               className="input"
               disabled
-              value={t.assignee?.name || t.assignedRole?.name || 'Unassigned'}
+              value={taskHolderLabel(t, departmentName, 'Unassigned')}
             />
           </div>
           <div className="field mb-3">
@@ -127,7 +129,7 @@ export default function SupervisorDashboard() {
               addToast('Please select a new assignee', 'error');
               return false;
             }
-            const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
+            const prevName = taskHolderLabel(t, departmentName, 'previous assignee');
             const newUser = users.find((u) => u.id === newAssignee);
 
             return reassignTask

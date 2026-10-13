@@ -59,6 +59,9 @@ export const AppShell = ({ children }: AppShellProps) => {
       const { matched, allowed } = evaluateRouteAccess(pathname, {
         roles: currentUser.roles ?? [],
         permissions: granted,
+        scopedPermissions: (currentUser.permissions ?? []).filter(
+          (p): p is string => typeof p === 'string',
+        ),
       });
       if (matched && !allowed) {
         router.replace('/unauthorized');
