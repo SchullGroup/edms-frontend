@@ -11,6 +11,7 @@ import {
   useArchiveDocument,
 } from '@/apis/hooks/useDocuments';
 import { usePermissions } from '@/hooks/usePermissions';
+import { scopeAtLeast } from '@/lib/permissions';
 import { cabinetAllows, useMyCabinetAccess } from '@/components/cabinets/cabinetAccess';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
 import { useConfidentialityPolicy } from '@/hooks/useConfidentialityPolicy';
@@ -22,7 +23,7 @@ import {
   usePrintDocument,
 } from '@/apis/hooks/useDocuments';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useAllUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useWorkflowInstances } from '@/apis/hooks/useWorkflowInstances';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
@@ -61,10 +62,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
   const { data: cabinetsData, isLoading: isLoadingCabs } = useCabinets();
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const { policyFor, isLoading: isLoadingPolicies } = useConfidentialityPolicy();
   const cabinets = cabinetsData?.data || [];
-  const users = usersData?.data || [];
+  const users = usersData?.items || [];
 
   const { can, scopeFor } = usePermissions();
   const archiveDocument = useArchiveDocument();
@@ -101,20 +102,35 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     : null;
 
   // Every workflow this document has been routed into, newest first. A
-  // document can be routed more than once, so this is a list. `scope: 'all'`
-  // so an admin or supervisor sees workflows they hold no task in (the API
-  // still limits it to their scope).
+  // document can be routed more than once, so this is a list. With oversight
+  // (`workflow_instance:view` wider than `own`) ask for `scope: 'all'`, so an
+  // admin or supervisor sees workflows they hold no task in; anyone else must
+  // ask for `mine` — the API refuses `all` to them with a 403.
+  const hasInstanceOversight = scopeAtLeast(scopeFor('workflow_instance', 'view'), 'department');
   const { data: instancesData, isLoading: isLoadingInstances } = useWorkflowInstances(
-    { documentId: doc?.id, scope: 'all' },
+    { documentId: doc?.id, scope: hasInstanceOversight ? 'all' : 'mine' },
     { enabled: !!doc?.id },
   );
   const workflows = [...(instancesData?.data || [])].sort(
     (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
   );
   const activeWorkflow = workflows.find((w) => w.status !== 'closed');
+  // In a running workflow the viewer can't see. The backend keeps a document's
+  // status in step with its workflow (`in_progress`, `on_hold`, then `closed`),
+  // but lists workflows only to people they're visible to: someone at `own`
+  // scope sees a workflow only while they hold a task in it (DRIFT-22, intended).
+  // So a staff member who routed this document to a later stage gets no
+  // workflow back, yet the document is still in one. Not applied with
+  // oversight: those users see every workflow, and a document's status can be
+  // left stale after its workflow closes.
+  const inHiddenWorkflow =
+    !hasInstanceOversight &&
+    !isLoadingInstances &&
+    !activeWorkflow &&
+    (doc?.status === 'in_progress' || doc?.status === 'on_hold');
   // Only offer routing once we know nothing is running — otherwise the CTA
   // flashes on every load before the instance list resolves.
-  const canRoute = !isLoadingInstances && !activeWorkflow;
+  const canRoute = !isLoadingInstances && !activeWorkflow && !inHiddenWorkflow;
 
   const { data: activeCabFoldersData } = useCabinetFolders(doc?.cabinetId);
   const folderLabel = doc?.folderId
@@ -576,7 +592,11 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             canView={can('document_version', 'view')}
             canDownload={canDownload}
             canEdit={
-              can('document_version', 'restore') && !closed && !lockedByOther && !activeWorkflow
+              can('document_version', 'restore') &&
+              !closed &&
+              !lockedByOther &&
+              !activeWorkflow &&
+              !inHiddenWorkflow
             }
             canUploadVersion={false}
             getUploaderName={(userId) => userById(users, userId)?.name || 'User'}
@@ -589,7 +609,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             <div className="card-body">
               {isLoadingInstances ? (
                 <SkeletonText lines={2} />
-              ) : workflows.length === 0 ? (
+              ) : workflows.length === 0 && !inHiddenWorkflow ? (
                 <div className="caption">
                   Not in any workflow — nobody has been asked to act on it.
                 </div>
@@ -609,6 +629,13 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                       <StatusBadge status={WORKFLOW_STATUS_LABEL[w.status]} />
                     </button>
                   ))}
+                  {inHiddenWorkflow && (
+                    <div className="caption">
+                      This document is marked as {doc.status === 'on_hold' ? 'on hold in' : 'in'}{' '}
+                      a running workflow you can&apos;t open: it has probably moved on to a stage
+                      you&apos;re not part of. A supervisor or administrator can see where it is.
+                    </div>
+                  )}
                 </div>
               )}
             </div>

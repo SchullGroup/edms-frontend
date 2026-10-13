@@ -45,10 +45,11 @@ export const realAuditKeys = {
 };
 
 /** `GET /audit` — the real, hash-chained trail. Requires `audit:view`. */
-export function useAuditEntries(filters: AuditFilters = {}) {
+export function useAuditEntries(filters: AuditFilters = {}, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: realAuditKeys.list(filters),
     queryFn: () => auditService.search(filters),
+    enabled: options?.enabled ?? true,
   });
 }
 

@@ -491,3 +491,27 @@ that button should call the trigger.
 `login` checks `status` before the password, so a wrong password for a suspended account
 returns 403 "Account has been suspended" instead of 401, revealing which addresses are
 suspended accounts. Deferred by the product owner (2026-10-13): not a concern for now.
+
+### N4. A document's status can stay `in_progress` after its workflow closes
+
+`updateAttachedDocumentStatusesByWorkflowDocumentStatus(..., 'closed', 'closed')` closes only
+documents whose workflow-instance-document is already `closed`. A document still `pending` in
+the workflow when it closes keeps `status: 'in_progress'`. Live example: `487006a2…` ("INV 2026
+1839 invoice") is `in_progress`, but its two workflows are closed (in `3206942d…` it was
+`pending`). The frontend reads `in_progress`/`on_hold` as "in a running workflow" to explain
+workflows a staff member can't see (DRIFT-22) and to keep such documents out of a second
+routing, so a stale status blocks staff from routing that document again. Close every attached
+document when the workflow closes (or set it back to its pre-workflow status).
+
+### Q5. Should management read the audit trail?
+
+`/management/compliance` has a "Sensitive activity" panel over `GET /audit`, but the seeded
+`management` role has no `audit:view`, so it 403s. Since 2026-10-13 the panel says the role
+can't read the trail. Either give `management` `audit:view` (department or global), or the panel
+can go. Question for the PM.
+
+### Q4 (still open). Can a document be routed into a second running workflow?
+
+The frontend now leaves documents whose status is `in_progress`/`on_hold` out of routing. Does
+`POST /workflow-instances` (+ start) refuse a document already in a running workflow?
+

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useBottlenecksAgeing } from '@/apis/hooks/useWorkflowInstances';
 import { useReassignTask } from '@/apis/hooks/useTasks';
-import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
+import { useAllUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTable } from '@/components/common/Skeleton';
@@ -31,8 +31,8 @@ export default function BottlenecksPage() {
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError, refetch } = useBottlenecksAgeing({ page, limit: PAGE_SIZE });
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
-  const users = usersData?.data || [];
+  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
+  const users = usersData?.items || [];
   // Reassign targets: active users in the reassigner's own department only.
   const { users: colleagues } = useDepartmentColleagues();
 

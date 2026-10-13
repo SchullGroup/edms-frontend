@@ -434,7 +434,7 @@ The two task constants — not the permission table — are what actually make s
 | 6 | Check team workload | `/supervisor/workload` | 🟨 works, but walks all pages client-side |
 | 7 | Reassign an overloaded person's task | `PATCH /tasks/:id/reassign` | ✅ |
 | 8 | Review exceptions | `/supervisor/exceptions` | 🟨 |
-| 9 | Review team performance | `/supervisor/performance` | 🟥 86 lines, no data source |
+| 9 | Review team performance | `/supervisor/performance` | ✅ real since 2026-10-13: on-time %, closures and turnaround per member over 30 days, from SLA outcomes and the team's tasks |
 
 ### First week
 
@@ -456,7 +456,7 @@ The two task constants — not the permission table — are what actually make s
 morning   → /supervisor/approvals   clear the queue      ✅
           → /supervisor/bottlenecks check ageing         🟨 breaches always 0
 weekly    → /supervisor/workload    rebalance            🟨 slow, client-side
-          → /supervisor/performance review the team      🟥 no data
+          → /supervisor/performance review the team      ✅ real (2026-10-13)
 ad hoc    → reassign                                     ✅
           → delegate before leave                        ⛔ impossible
 ```
@@ -483,7 +483,7 @@ being the approval bottleneck, this is the most consequential missing screen in 
 4. 🟨 **Bottlenecks recomputes ageing** instead of reading the real `SlaBreach` table
 5. 🟨 **Workload view walks up to 50 pages** client-side to compute counts
 6. ⛔ **No document download** for offline review
-7. 🟥 **`/supervisor/performance` has no data source**
+7. ✅ ~~**`/supervisor/performance` has no data source**~~ — real since 2026-10-13
 
 ---
 
@@ -522,7 +522,7 @@ nothing.
 | 1 | Log in, land on Organization Overview | `/management` | 🟨 real data, client-side aggregation |
 | 2 | Compare departments | `/management/departments` | 🟨 same |
 | 3 | Review trends | `/management/trends` | 🟨 same |
-| 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED` |
+| 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED`; the sensitive-activity panel needs `audit:view`, which `management` doesn't hold, so it says so (2026-10-13) |
 | 5 | Review performance | `/management/performance` | 🟨 43-line thin page |
 | 6 | Review findings | `/management/findings` | 🟥 re-export of `/auditor/findings` |
 | 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
