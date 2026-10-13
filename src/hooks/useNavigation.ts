@@ -213,7 +213,10 @@ export const useNavigation = () => {
               route: '/supervisor/performance',
               label: 'Team Performance',
               icon: 'trend',
-              anyPermissions: ['task:view', 'workflow_instance:view'],
+              // Exactly what the page's calls need: `task:view` on all three
+              // (SLA outcomes, the team's tasks, the workload roster), and the
+              // latter two refuse anything below department scope.
+              anyPermissions: [{ resource: 'task', action: 'view', minScope: 'department' }],
             },
             {
               route: '/supervisor/exceptions',

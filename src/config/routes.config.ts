@@ -228,10 +228,13 @@ export const routeConfig: RouteRule[] = [
     matchType: 'prefix',
     anyPermissions: ['task:action'],
   },
+  // Team Performance reads `GET /sla/outcomes/summary`, `GET /tasks?scope=all` and
+  // `GET /tasks/workload`: all `task:view`, and the last two 403 below department
+  // scope. So any role holding `task:view` at department or wider opens it.
   {
     path: '/supervisor/performance',
     matchType: 'prefix',
-    anyPermissions: ['task:view', 'workflow_instance:view'],
+    anyPermissions: [{ resource: 'task', action: 'view', minScope: 'department' }],
   },
   {
     path: '/supervisor/exceptions',

@@ -533,7 +533,9 @@ known scope (the role-based approximation before `/auth/me` answers) passes, so 
 bounced on first paint; the API still enforces the scope. Used by `/supervisor/approvals`
 (`task:action` + `task:view` at department, since `GET /tasks/approvals` 403s at `own`) and the
 Workflow Monitor (`/supervisor/instances`, `/admin/workflows/instances`: `workflow_instance:view`
-at department). Verified live: `staff_finance` is sent to `/unauthorized` from both (Approvals
+at department), and Team Performance (`/supervisor/performance`: `task:view` at department, which
+all three of its calls need; it used to accept `task:view` at any scope or
+`workflow_instance:view`). Verified live: `staff_finance` is sent to `/unauthorized` from both (Approvals
 used to let them in); the Finance supervisor and client admin open both.
 
 *Original finding, for history:*

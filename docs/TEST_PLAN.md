@@ -834,9 +834,9 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
 - [x] **TP-V7.** As `client_admin`, `/admin/audit` names actors beyond the first 20 users (all
       users are loaded, not one page). *(The tenant has 12 users, so verified only that one
       `GET /users?limit=100` request replaces the 20-row one.)*
-- [x] **TP-V8.** As `staff_finance`, type `/supervisor/approvals` and `/supervisor/instances` into
-      the address bar: both go to `/unauthorized`. As `supervisor_finance` and `client_admin`
-      they open. *(Verified 2026-10-13.)*
+- [x] **TP-V8.** As `staff_finance`, type `/supervisor/approvals`, `/supervisor/instances` and
+      `/supervisor/performance` into the address bar: all go to `/unauthorized`. As
+      `supervisor_finance` and `client_admin` they open. *(Verified 2026-10-13.)*
 
 ## 20. Wrap-up
 
