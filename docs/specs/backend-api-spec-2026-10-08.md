@@ -490,8 +490,9 @@ so the frontend can't decide whether a department-assigned task is the user's. E
 `GET /tasks/:id` and on the tasks embedded in `GET /workflow-instances/:id`.
 
 > **Answer:** the backend will return `departmentId` (on `/auth/me`; this also closes O1).
-> **Built** in PR #50 (live 2026-10-13); the frontend reads it from `/auth/me`. FE-3 still
-> waits for Q2 (sub-departments).
+> **Built** in PR #50 (live 2026-10-13); the frontend reads it from `/auth/me`. FE-3 is
+> built for department-only stages (2026-10-13), matching exactly as the backend does today;
+> role + department and sub-departments wait for Q2.
 
 **Q4. Should someone still see a workflow after routing it? (DRIFT-22)**
 At `own` scope, `buildInstanceAccessFilter` and `canActorAccessInstance` follow task

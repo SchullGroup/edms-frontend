@@ -4,6 +4,8 @@ import { STAGE_ACTIONS } from './constants';
 import { Combobox } from '@/components/ui/Combobox';
 import type { WorkflowStageAction } from '@/types/models';
 
+export type AssigneeMode = 'role' | 'person' | 'department';
+
 export interface StagePropertiesPanelProps {
   selectedStage: any | null;
   saving: boolean;
@@ -12,11 +14,18 @@ export interface StagePropertiesPanelProps {
   onNameChange: (name: string) => void;
   actionsDraft: WorkflowStageAction[];
   onToggleAction: (action: WorkflowStageAction) => void;
-  assigneeMode: 'role' | 'person';
-  onAssigneeModeChange: (mode: 'role' | 'person') => void;
+  assigneeMode: AssigneeMode;
+  onAssigneeModeChange: (mode: AssigneeMode) => void;
   roles: { id: string; name: string }[];
   roleDraft: string;
   onRoleChange: (role: string) => void;
+  /** Flattened, with `label` showing the path ("Operations › Finance"). */
+  departments: { id: string; name: string; label: string }[];
+  departmentDraft: string;
+  onDepartmentChange: (departmentId: string) => void;
+  /** Name of the department a role stage is also limited to, when it was set
+   *  outside the Designer (role + department isn't offered here yet). */
+  roleDepartmentName?: string | null;
   users: { id: string; name: string; email?: string }[];
   userDraft: string;
   onUserChange: (userId: string) => void;
@@ -47,6 +56,10 @@ export function StagePropertiesPanel({
   roles,
   roleDraft,
   onRoleChange,
+  departments,
+  departmentDraft,
+  onDepartmentChange,
+  roleDepartmentName,
   users,
   userDraft,
   onUserChange,
@@ -113,22 +126,52 @@ export function StagePropertiesPanel({
 
           <div className="field">
             <label>Assign to</label>
-            <div className="seg" role="group" aria-label="Assign by role or person" style={{ marginBottom: '8px' }}>
+            <div className="seg" role="group" aria-label="Assign by role, person or department" style={{ marginBottom: '8px' }}>
               <button type="button" className={assigneeMode === 'role' ? 'active' : ''} onClick={() => onAssigneeModeChange('role')}>
-                A role
+                Role
               </button>
               <button type="button" className={assigneeMode === 'person' ? 'active' : ''} onClick={() => onAssigneeModeChange('person')}>
-                A specific person
+                Person
+              </button>
+              <button type="button" className={assigneeMode === 'department' ? 'active' : ''} onClick={() => onAssigneeModeChange('department')}>
+                Department
               </button>
             </div>
             {assigneeMode === 'role' ? (
-              <select className="input" value={roleDraft} onChange={(e) => onRoleChange(e.target.value)}>
-                {(roles || []).map((r) => (
-                  <option key={r.id} value={r.name}>
-                    {r.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select className="input" value={roleDraft} onChange={(e) => onRoleChange(e.target.value)}>
+                  {(roles || []).map((r) => (
+                    <option key={r.id} value={r.name}>
+                      {r.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </option>
+                  ))}
+                </select>
+                {roleDepartmentName && (
+                  <div className="help">
+                    Only people with this role in {roleDepartmentName}. That limit was set outside the
+                    Designer and is kept when you save.
+                  </div>
+                )}
+              </>
+            ) : assigneeMode === 'department' ? (
+              <>
+                <select
+                  className="input"
+                  aria-label="Department"
+                  value={departmentDraft}
+                  onChange={(e) => onDepartmentChange(e.target.value)}
+                >
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="help">
+                  Anyone in this department can pick the task up, whatever their role. Only people
+                  directly in it: its sub-departments aren&apos;t included yet.
+                </div>
+              </>
             ) : (
               <Combobox
                 options={users.map((u) => ({ value: u.id, label: u.name, hint: u.email }))}

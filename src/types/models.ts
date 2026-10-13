@@ -375,8 +375,12 @@ export type WorkflowStageAction =
 export interface WorkflowStage {
   id: string;
   name: string;
+  /** Exactly one assignment: `user_id`; `role`; `department_id` (anyone whose
+   *  department is exactly this one — sub-departments aren't included yet);
+   *  or `role` + `department_id` (not offered in the Designer yet). */
   role?: string;
   user_id?: string;
+  department_id?: string;
   sla_hours: number;
   actions?: WorkflowStageAction[];
 }
@@ -767,6 +771,9 @@ export interface Task {
   stage: string;
   assigneeId?: string | null;
   assignedRoleId?: string | null;
+  /** Set for a department-assigned stage, alone or with a role (edms-backend
+   *  `3014b89`). Matched exactly: sub-departments aren't included yet. */
+  assignedDepartmentId?: string | null;
   action?: string | null;
   status: TaskStatus;
   completedAt?: string | null;
