@@ -19,7 +19,7 @@ import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
 import { SkeletonTable } from '@/components/common/Skeleton';
-import { fmtDate } from '@/utils/helpers';
+import { fmtDate, fmtDateTime } from '@/utils/helpers';
 
 const USERS_PAGE_SIZE = 10;
 
@@ -94,6 +94,8 @@ export default function UsersPage() {
     roleLabel: roleLabel(u),
     dept: departmentName(u.departmentId, departmentIndex),
     status: STATUS_LABEL[u.status] ?? 'Inactive',
+    // '' rather than null so "never signed in" sorts together, before any date.
+    lastLogin: u.lastLoginAt ?? '',
   }));
 
   useEffect(() => {
@@ -302,13 +304,40 @@ export default function UsersPage() {
     { key: 'roleLabel', label: 'Roles', sortable: true },
     { key: 'dept', label: 'Department' },
     {
+      key: 'lastLogin',
+      label: 'Last login',
+      sortable: true,
+      render: (u) =>
+        u.lastLoginAt ? (
+          <span title={fmtDateTime(u.lastLoginAt)} style={{ whiteSpace: 'nowrap' }}>
+            {fmtDate(u.lastLoginAt)}
+          </span>
+        ) : (
+          <span className="caption">Never</span>
+        ),
+    },
+    {
+      key: 'createdAt',
+      label: 'Created',
+      sortable: true,
+      render: (u) => (
+        <span title={fmtDateTime(u.createdAt)} style={{ whiteSpace: 'nowrap' }}>
+          {fmtDate(u.createdAt)}
+        </span>
+      ),
+    },
+    {
       key: 'status',
       label: 'Status',
       render: (u) => (
         <span>
           <span className={`badge ${STATUS_BADGE[u.status] ?? 'b-status-overdue'}`}>{u.status}</span>
           {u.status === 'Pending' && u.invitedAt && (
-            <div className="caption mt-1" title="Waiting for them to set a password from the email">
+            <div
+              className="caption mt-1"
+              style={{ whiteSpace: 'nowrap' }}
+              title="Waiting for them to set a password from the email"
+            >
               Invited {fmtDate(u.invitedAt)}
             </div>
           )}
@@ -439,7 +468,7 @@ export default function UsersPage() {
           </div>
         </div>
         {isLoading ? (
-          <SkeletonTable columns={['Name', 'Roles', 'Department', 'Status', '']} rows={8} />
+          <SkeletonTable columns={['Name', 'Roles', 'Department', 'Last login', 'Created', 'Status', '']} rows={8} />
         ) : (
           <>
             <Table cols={userCols} rows={users} />

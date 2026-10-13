@@ -467,25 +467,18 @@ anything stopping the same document being routed into a second active workflow?
 ## Notes on PR #49 (2026-10-13)
 
 The frontend now uses PR #49 (pending users, the suspended-login message, the hidden
-`schulltech_admin` role, AI summaries). Three things for the backend developer:
+`schulltech_admin` role, AI summaries).
 
-### N1. The summary is readable without its audit row (DRIFT-23)
-
-`GET /documents/:id/summary` writes `document.summary_viewed`, but `GET /documents/:id`
-returns the same text on `currentVersion.aiSummary` with no such row. If the summary audit
-should be complete, leave `aiSummary`, `summaryStatus` and `summaryGeneratedAt` out of the
-document response. The frontend reads the summary only through `/summary`.
-
-### N2. A failed summary can't be retried
+### N2. A failed summary can't be retried — **in the works**
 
 `getDocumentSummary` queues a summary only when `summaryStatus` is `pending`. After the job's
-three attempts fail, the version stays `failed` for good. Re-queue `failed` on request (rate
-limited), or add `POST /documents/:id/summary`. The frontend shows "The summary couldn't be
-written" with a "Check again" that only re-reads the status.
+three attempts fail, the version stays `failed` for good. The backend developer confirmed
+(2026-10-13) that a summary trigger is being built. Until it's live, the frontend shows "The
+summary couldn't be written" with a "Check again" that only re-reads the status; once it is,
+that button should call the trigger.
 
-### N3. Login says whether an email belongs to a suspended account (security)
+### N3. Login says whether an email belongs to a suspended account — **deferred**
 
 `login` checks `status` before the password, so a wrong password for a suspended account
-returns 403 "Account has been suspended" instead of 401. Anyone can learn which addresses are
-suspended accounts. (The inactive case already leaked "Account is not active".) Check the
-password first, and give the status message only to someone who got it right.
+returns 403 "Account has been suspended" instead of 401, revealing which addresses are
+suspended accounts. Deferred by the product owner (2026-10-13): not a concern for now.
