@@ -32,12 +32,24 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'inactive' | 'suspended'>('');
+  const [search, setSearch] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Debounce the search box so each keystroke isn't a request.
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setSearchTerm(search.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [search]);
 
   const { data: usersData, isLoading } = useUsers({
     page,
     limit: USERS_PAGE_SIZE,
     departmentId: departmentFilter || undefined,
     status: statusFilter || undefined,
+    search: searchTerm || undefined,
   });
   const rawUsers = usersData?.data || [];
 
@@ -354,7 +366,16 @@ export default function UsersPage() {
       <div className="card">
         <div className="card-head">
           <span className="h3">{usersData?.pagination?.total ?? 0} users</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              className="input"
+              style={{ width: 220, height: '32px' }}
+              type="search"
+              placeholder="Search name or email…"
+              aria-label="Search users by name or email"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
             <select
               className="input"
               style={{ width: 'auto', height: '32px' }}

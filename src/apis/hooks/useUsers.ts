@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { usersService, UserFilters } from '@/apis/services/users.service';
 import { User } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
@@ -27,6 +27,29 @@ export function useUsers(filters: UserFilters = {}) {
   return useQuery({
     queryKey: userKeys.list(filters),
     queryFn: () => usersService.getAll(filters),
+    // Paging, filtering or searching keeps the current rows up until the next
+    // page arrives, rather than dropping back to the loading skeleton.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * One page of users matching `search` (name or email), for type-ahead pickers.
+ * An empty `search` lists the first page. Deliberately no `placeholderData`: a
+ * picker must not offer the previous search's people as clickable results for
+ * the new one.
+ */
+export function useUserSearch(
+  search: string,
+  filters: Omit<UserFilters, 'search' | 'page'> = {},
+  options?: { enabled?: boolean },
+) {
+  const term = search.trim();
+  const params: UserFilters = { ...filters, page: 1, ...(term ? { search: term } : {}) };
+  return useQuery({
+    queryKey: userKeys.list(params),
+    queryFn: () => usersService.getAll(params),
+    enabled: options?.enabled ?? true,
   });
 }
 

@@ -744,6 +744,28 @@ Confidential one is restricted for them. To re-run, create a fresh pair the same
 
 ---
 
+## 19b. Phase S — Searching for people (`GET /users?search=`)
+
+Backend PR #48 added `search` to `GET /users`: a case-insensitive match on name or email,
+still limited to the caller's `user:view` scope.
+
+- [x] **TP-S1.** As `client_admin`, `/admin/users`: type "supervisor" in the search box.
+      The count drops from every user to the supervisors only, and the table goes back to
+      page 1. A term matching nobody shows "No records match the current filters."
+      *(Verified 2026-10-13: 12 → 3.)*
+- [x] **TP-S2.** `/admin/audit` → "All actors": type "finance". "Searching…" shows until
+      results arrive, then only matching people are offered. Picking one filters the trail
+      to them. Picking "All actors" clears it. *(Verified 2026-10-13.)*
+- [x] **TP-S3.** As `supervisor_finance`, `/delegations` → New delegation → "Delegate to":
+      only active colleagues in your scope are offered, never yourself. Typing narrows the
+      list. *(Verified 2026-10-13: Finance Staff User offered and picked.)*
+- [ ] **TP-S4.** As `internal_auditor`, `/auditor/trail` → actor filter. Expected today:
+      "Couldn't load people." (auditor has no `user:view`; seed gap in the handoff). Re-test
+      once the backend grants it.
+- [x] **TP-S5.** Open the bell. While the list loads it shows grey placeholder rows, one per
+      unread notification (up to 7), then the notifications. *(Verified 2026-10-13 with the
+      request slowed: 4 unread → 4 placeholder rows.)*
+
 ## 20. Wrap-up
 
 - [ ] Re-run **TP-A1–A7** once more at the very end using kemi.reviewer (the custom-role
