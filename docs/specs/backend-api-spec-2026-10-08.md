@@ -27,6 +27,7 @@ direct ask.
 | D6 | All filters on full-text search | `GET /documents/search` | P2 | S |
 | O1 | ✅ ~~`departmentId` on the signed-in user~~ done: on `/auth/me` in PR #50 (live 2026-10-13), adopted by the frontend; login still lacks it (unmerged `feat/frontend-spec-items`) | `POST /auth/login`, `GET /auth/me` | P1 | XS |
 | O2 | Limit departments to one level of nesting | `POST /departments`, `PATCH /departments/:id` | P2 | XS |
+| O3 | Return people's names alongside their ids | `GET /audit`, documents, versions, signatures, `GET /delegations` | P1 | S |
 | T1 | Optional signature on the review action | `POST /tasks/:id/action` | P2 | XS |
 | I1 | Keep OCR word positions | OCR worker + new read endpoint | P2 | M |
 | I2 | Office/email previews, text extraction, ZIP intake | upload pipeline | P2 | L |
@@ -319,6 +320,38 @@ fewer options in the UI than the API would allow.
 **Done when** creating a third-level department returns 400.
 
 ---
+
+### O3. Return people's names alongside their ids
+
+**Problem.** Several responses give a person only as an id, so the frontend looks the name up
+through `GET /users`. Staff and the auditor have no `user:view`, so the lookup 403s and they see
+"Unknown" or "User". To name everyone, the frontend loads every page of `GET /users` on those
+pages (since 2026-10-13; it read one 20-row page before, so anyone after the 20th showed as an
+id). Fine for 12 users, dozens of requests for a large tenant. `?search=` doesn't help: it
+matches name/email text, not ids.
+
+**Change.** Next to each id field, also return the person as `{ id, name, email }`, as
+`checkoutLock.locker` already does on `GET /documents/:id`. Keep the id fields.
+
+| Response | Id field today | Add |
+|---|---|---|
+| `GET /audit`, `GET /audit/:id` | `actorId` | `actor` (null when `actorType` is `system`) |
+| `GET /documents`, `GET /documents/:id`, `GET /documents/search`, cabinet document lists | `createdBy` | `creator` |
+| `GET /documents/:id/versions`, and `currentVersion` on `GET /documents/:id` | `uploadedBy` | `uploader` |
+| `GET /documents/:id` → `signatures[]` | `userId` | `user` |
+| `GET /delegations` | `delegatorId`, `delegateId` | `delegator`, `delegate` |
+
+Return them regardless of `user:view`: a name on a record the caller can already see isn't a
+user-directory read.
+
+**Alternative** if that's too much work: `GET /users?ids=<id>,<id>,…` returning just those users
+(max 100), so the frontend makes one request per page. Embedding is better: nothing extra to
+fetch, and staff see names without `user:view`.
+
+**Done when** those responses carry the objects above. The frontend then reads them and stops
+loading the whole user list on these pages (`useAllUsers` in `/admin/audit`, `/auditor/trail`,
+`/management/compliance`, `/doc/[id]`, `/workflow-instances/[id]`, `/staff/cabinets`,
+`/delegations`).
 
 ## Tasks
 
