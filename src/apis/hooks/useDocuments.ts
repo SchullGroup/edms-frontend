@@ -1,3 +1,4 @@
+import { useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   documentsService,
@@ -24,6 +25,9 @@ export const documentKeys = {
   detail: (id: string) => [...documentKeys.details(), id] as const,
   metadata: (id: string) => [...documentKeys.detail(id), 'metadata'] as const,
   versions: (id: string) => [...documentKeys.detail(id), 'versions'] as const,
+  /** Outside `documents` on purpose: each fetch is audited, so broad
+   *  `['documents']` or detail invalidations must not refetch it. */
+  summary: (id: string) => ['document-summary', id] as const,
   accessRequests: (id: string) => [...documentKeys.detail(id), 'access-requests'] as const,
 };
 
@@ -108,6 +112,44 @@ export function useDocumentVersions(id: string) {
     queryFn: () => documentsService.getVersions(id),
     enabled: !!id,
   });
+}
+
+const SUMMARY_POLL_MS = 10_000;
+/** Each fetch writes an audit row, so polling stops after a minute. */
+const SUMMARY_POLL_WINDOW_MS = 60_000;
+
+/**
+ * The AI summary of the document's current version. While it is still being
+ * written it polls every 10 s for up to a minute per version; after that,
+ * `checkAgain` fetches once more and reopens the window. Adding or restoring a
+ * version invalidates it, since the summary follows the current version.
+ */
+export function useDocumentSummary(id: string, options?: { enabled?: boolean }) {
+  const pollStart = useRef<{ versionId: string; at: number } | null>(null);
+  const query = useQuery({
+    queryKey: documentKeys.summary(id),
+    queryFn: () => documentsService.getSummary(id),
+    enabled: !!id && (options?.enabled ?? true),
+    retry: false,
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      const inProgress =
+        !!data &&
+        (data.summaryStatus === 'pending' || data.summaryStatus === 'processing') &&
+        data.ocrStatus !== 'failed';
+      if (!data || !inProgress) return false;
+      if (pollStart.current?.versionId !== data.versionId) {
+        pollStart.current = { versionId: data.versionId, at: Date.now() };
+      }
+      return Date.now() - pollStart.current.at < SUMMARY_POLL_WINDOW_MS ? SUMMARY_POLL_MS : false;
+    },
+  });
+  const { refetch } = query;
+  const checkAgain = useCallback(() => {
+    pollStart.current = null;
+    return refetch();
+  }, [refetch]);
+  return { ...query, checkAgain };
 }
 
 export function useDocumentVersion(id: string, versionId: string) {
@@ -299,6 +341,7 @@ export function useAddDocumentVersion() {
       documentsService.addVersion(id, data),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: documentKeys.versions(id) });
+      queryClient.invalidateQueries({ queryKey: documentKeys.summary(id) });
       queryClient.invalidateQueries({ queryKey: documentKeys.detail(id) });
       // A new version resolves any pending `request_changes` revision on this
       // document, which shows on the task (`pendingDocumentRevisions`).
@@ -404,6 +447,7 @@ export function useRestoreDocumentVersion() {
       documentsService.restoreVersion(id, versionId),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: documentKeys.versions(id) });
+      queryClient.invalidateQueries({ queryKey: documentKeys.summary(id) });
       queryClient.invalidateQueries({ queryKey: documentKeys.detail(id) });
       addToast('Version restored', 'success');
     },

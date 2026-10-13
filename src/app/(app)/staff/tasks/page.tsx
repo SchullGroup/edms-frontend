@@ -48,8 +48,8 @@ export default function MyTasksPage() {
     refetch,
   } = useTasks(backendFilters);
   const tasks = tasksData?.data || [];
-  // `GET /tasks` carries no deadlines (edms-backend `919d0ef`), so Overdue also
-  // counts tasks with an open SLA breach — the same source as the dashboard tile.
+  // Overdue = past a document's deadline (on `GET /tasks` since edms-backend
+  // PR #50) or holding an open SLA breach, the same source as the dashboard tile.
   const { data: slaBreaches } = useSlaBreaches({ scope: 'mine', status: 'open', limit: 100 });
   const breachedTaskIds = new Set((slaBreaches?.data ?? []).map((b) => b.taskId));
 

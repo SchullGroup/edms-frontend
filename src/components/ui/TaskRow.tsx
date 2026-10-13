@@ -1,7 +1,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { dueLabel, documentStatusLabel } from '@/utils/helpers';
-import { stageLabel, taskStatusLabel } from '@/utils/supervisor';
+import { isActiveTask, stageLabel, taskStatusLabel } from '@/utils/supervisor';
 import {
   overdueDocumentCount,
   taskDueAt,
@@ -30,11 +30,13 @@ export const TaskRow = ({
 
   const eff = isTask ? taskStatusLabel(item) : documentStatusLabel(doc);
 
-  // A task's deadline is the earliest of its documents'. `GET /tasks` doesn't
-  // return deadlines yet, so a list row usually shows "—" — not "No due date",
-  // which would be wrong. A bare document has no deadline anywhere.
-  const dueAt = isTask ? taskDueAt(item) : null;
-  const lateDocs = isTask ? overdueDocumentCount(item) : 0;
+  // A task's deadline is the earliest of its documents' (`GET /tasks` carries
+  // them since edms-backend PR #50); "—" when none has one. Only an open task
+  // has one: once it's done, its documents' deadlines belong to whichever stage
+  // they've moved on to. A bare document has no deadline anywhere.
+  const open = isTask && isActiveTask(item);
+  const dueAt = open ? taskDueAt(item) : null;
+  const lateDocs = open ? overdueDocumentCount(item) : 0;
   const docCount = isTask ? (item.documents?.length ?? 0) : 0;
   const due = !isTask
     ? { text: 'N/A', late: false }

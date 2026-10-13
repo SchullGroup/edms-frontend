@@ -17,6 +17,10 @@ export interface WorkflowInstanceFilters {
   status?: 'pending' | 'in_progress' | 'on_hold' | 'closed';
   documentId?: string;
   workflowDefinitionId?: string;
+  /** Defaults to `mine`: only workflows the caller has a task in. `all` widens
+   *  to everything the caller's `workflow_instance:view` scope allows
+   *  (department or global); at `own` scope it's the same as `mine`. */
+  scope?: 'mine' | 'all';
 }
 
 export interface WorkflowInstanceStatsParams {
