@@ -143,6 +143,8 @@ Two claims in an earlier draft were wrong and have been corrected in place:
 above was found; and the three "7-line stub" pages are **re-exports**, one of which
 (`/platform/flags`) renders the wrong screen entirely.
 
+**Corrected 2026-10-13:** docs 03 (Phase 5) and 04 (Bola's journey, step 7 and the identity section) still said new users got a hardcoded default password and there was no invite flow. `POST /users` without a password has emailed a set-password link since 2026-09-18, and since PR #49 the user is `pending` until they use it. Found while wiring PR #49.
+
 **Correction (2026-09-10).** Doc 05 stated `/admin/users` "writes the role matrix to
 `SEED`" and listed `useRole`/`useUpdateRole`/`useDeleteRole` etc. as dead — both were
 stale. The matrix already used `PUT /roles/{id}/permissions` via `useSetRolePermissions`;

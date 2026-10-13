@@ -240,7 +240,7 @@ This must be done in order; each step produces the input for the next.
 | 4 | **Delegate each cabinet** — grant its manager (a role or user) `upload`/`edit`/`delete` on it | `/admin/cabinets` → Access card | `POST /cabinets/:id/access` | ✅ (*was "⛔ no UI" here — stale since 2026-09-18, corrected 2026-10-06*) |
 | 5 | Define cabinet metadata fields | `/admin/cabinets` → Metadata schema card | `POST /cabinets/:id/metadata-fields` | ✅ (*same stale "⛔ no UI", corrected 2026-10-06*) |
 | 6 | Build folder trees — usually by the cabinet's manager, not the admin | `/staff/cabinets` | `POST /cabinets/:id/folders` | 🟨 moved here from `/admin/cabinets` 2026-10-06, not yet verified live |
-| 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles`, `POST /users/:id/invitation` | 🟨 new users get a hardcoded default password, not an emailed invite; **resending** an invite (for existing active users) is wired |
+| 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles`, `POST /users/:id/invitation` | ✅ "Invite user" emails a set-password link; the user is **Pending** until they use it, then Active (PR #49). Resend invite is offered for pending users and for active users who never signed in |
 | 8 | **Design and publish workflows** | `/admin/workflows` | `POST /workflows`, `/publish` | 🟨 **no authorization** |
 | 9 | Set retention and confidentiality policy | `/admin/policies` | — | 🟥 `SEED.policies` |
 | 10 | Apply branding | `/admin/branding` | — | 🟥 `SEED.branding` |
@@ -294,9 +294,9 @@ consistently fails.
    they are responsible for.
 3. ⛔ **The role matrix editor writes to localStorage**, so permission changes appear to
    work and silently don't.
-4. ⛔ **New-user creation still hardcodes a default password** rather than emailing a real
-   invite — they hand-communicate every initial password. (Resending an invite to an
-   already-created active user *is* wired, via `POST /users/:id/invitation`.)
+4. ✅ ~~New-user creation hardcodes a default password.~~ **Corrected 2026-10-13:** creation
+   has emailed an invitation since 2026-09-18 (no password is sent). Since PR #49 the user
+   shows as **Pending** until they set their password.
 5. 🟥 **Branding and policies reset on cache clear.** (Circulars no longer do — they're
    server state since 2026-10-05.)
 6. ✅ ~~Their audit view is fabricated data.~~ **Fixed 2026-09-18** — `/admin/audit` reads
@@ -434,7 +434,7 @@ The two task constants — not the permission table — are what actually make s
 | 6 | Check team workload | `/supervisor/workload` | 🟨 works, but walks all pages client-side |
 | 7 | Reassign an overloaded person's task | `PATCH /tasks/:id/reassign` | ✅ |
 | 8 | Review exceptions | `/supervisor/exceptions` | 🟨 |
-| 9 | Review team performance | `/supervisor/performance` | 🟥 86 lines, no data source |
+| 9 | Review team performance | `/supervisor/performance` | ✅ real since 2026-10-13: on-time %, closures and turnaround per member over 30 days, from SLA outcomes and the team's tasks |
 
 ### First week
 
@@ -456,7 +456,7 @@ The two task constants — not the permission table — are what actually make s
 morning   → /supervisor/approvals   clear the queue      ✅
           → /supervisor/bottlenecks check ageing         🟨 breaches always 0
 weekly    → /supervisor/workload    rebalance            🟨 slow, client-side
-          → /supervisor/performance review the team      🟥 no data
+          → /supervisor/performance review the team      ✅ real (2026-10-13)
 ad hoc    → reassign                                     ✅
           → delegate before leave                        ⛔ impossible
 ```
@@ -483,7 +483,7 @@ being the approval bottleneck, this is the most consequential missing screen in 
 4. 🟨 **Bottlenecks recomputes ageing** instead of reading the real `SlaBreach` table
 5. 🟨 **Workload view walks up to 50 pages** client-side to compute counts
 6. ⛔ **No document download** for offline review
-7. 🟥 **`/supervisor/performance` has no data source**
+7. ✅ ~~**`/supervisor/performance` has no data source**~~ — real since 2026-10-13
 
 ---
 
@@ -522,7 +522,7 @@ nothing.
 | 1 | Log in, land on Organization Overview | `/management` | 🟨 real data, client-side aggregation |
 | 2 | Compare departments | `/management/departments` | 🟨 same |
 | 3 | Review trends | `/management/trends` | 🟨 same |
-| 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED` |
+| 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED`; the sensitive-activity panel needs `audit:view`, which `management` doesn't hold, so it says so (2026-10-13) |
 | 5 | Review performance | `/management/performance` | 🟨 43-line thin page |
 | 6 | Review findings | `/management/findings` | 🟥 re-export of `/auditor/findings` |
 | 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
@@ -702,11 +702,10 @@ credentials.
 assignment and removal, deactivation.
 
 **Broken:**
-- ⛔ **No emailed invite on initial creation.** The admin sets a hardcoded default
-  password and communicates it personally. (`POST /users/:id/invitation` *resends* an
-  invite for an already-created active user — wired 2026-09-18 — but creation itself
-  still doesn't trigger one.)
-- ⛔ **No forced change on first login**, so the admin permanently knows it.
+- ✅ ~~No emailed invite on initial creation.~~ **Corrected 2026-10-13:** `POST /users`
+  without a password emails a set-password link (since 2026-09-18). Since PR #49 the user
+  is `pending` until they accept, and `/admin/users` shows that.
+- ✅ ~~No forced change on first login.~~ Moot: the admin never knows the password.
 - ✅ ~~No password reset.~~ **Exists** — `POST /auth/forgot-password` → `/set-password`;
   was broken by a field-name bug (DRIFT-15) until fixed 2026-09-18.
 - ⛔ **No rate limiting on login** — unlimited guessing against known credentials.
@@ -714,9 +713,7 @@ assignment and removal, deactivation.
   fails closed from `department` to `own` scope. They see only their own documents and
   nobody is told why.
 
-**To fix:** make new-user creation call the invite/reset infrastructure that already
-exists (`POST /auth/reset-password` + emailed token, `/set-password` page) instead of
-setting a hardcoded default password, and add `express-rate-limit` on login.
+**To fix:** add `express-rate-limit` on login. (The invite half of this line is done.)
 
 ---
 

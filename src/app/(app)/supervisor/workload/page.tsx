@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useUIStore } from '@/store/useUIStore';
 import { useTaskWorkload, useTasks, useReassignTask } from '@/apis/hooks/useTasks';
-import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
+import { useAllUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTable, SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -24,8 +24,8 @@ export default function WorkloadPage() {
     isError: isWorkloadError,
     refetch: refetchWorkload,
   } = useTaskWorkload();
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
-  const users = usersData?.data || [];
+  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
+  const users = usersData?.items || [];
   // Reassign targets: active users in the reassigner's own department only.
   const { users: colleagues } = useDepartmentColleagues();
 

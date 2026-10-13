@@ -6,7 +6,7 @@ import { cabById, userById, useStore } from '@/store/useStore';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useDocuments, useAllDocuments } from '@/apis/hooks/useDocuments';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useAllUsers } from '@/apis/hooks/useUsers';
 import { documentsService } from '@/apis/services/documents.service';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -46,8 +46,8 @@ export default function CabinetBrowserPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { data: usersData } = useUsers();
-  const users = usersData?.data || [];
+  const { data: usersData } = useAllUsers();
+  const users = usersData?.items || [];
   const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
   const { auditAction } = useStore();
   const { can } = usePermissions();
@@ -285,7 +285,7 @@ export default function CabinetBrowserPage() {
 
   const handleRouteModal = () =>
     routeDocuments(
-      selected.map((d) => ({ id: d.id, title: d.title })),
+      selected.map((d) => ({ id: d.id, title: d.title, status: d.status })),
       { onSuccess: () => setSelected([]) },
     );
 
