@@ -19,9 +19,12 @@ export const useNavigation = () => {
   // Real count for the Approvals Queue badge — previously read the SEED
   // `documents` array filtered on a hardcoded `u-david`, which was never real
   // data. `limit: 1` keeps the payload minimal; `pagination.total` still gives
-  // the accurate count. Gated on `task:action` (the item's own permission) so
-  // this request isn't fired for users who'd never see the item anyway.
-  const canSeeApprovals = hasPermission('task', 'action');
+  // the accurate count. Gated like the item itself: `task:action`, plus a
+  // `task:view` scope wider than `own`, because `GET /tasks/approvals` refuses
+  // anyone without oversight (403 `TASK_APPROVAL_QUEUE_FORBIDDEN`). Gating on
+  // `task:action` alone fired it, and a 403, on every page for staff.
+  const canSeeApprovals =
+    hasPermission('task', 'action') && scopeAtLeast(scopeFor('task', 'view'), 'department');
   const { data: approvalsData } = useApprovalTasks(
     { scope: 'all', status: 'pending', page: 1, limit: 1 },
     { enabled: canSeeApprovals },
@@ -152,10 +155,13 @@ export const useNavigation = () => {
               label: 'Approvals Queue',
               icon: 'approve',
               badge: approvalsCount,
-              // Gated on the action, not the view — the whole point of this page is
-              // acting on approvals, and there's little value in seeing a queue you
-              // can't act on (no internal gating on the Approve/Reject buttons yet).
-              anyPermissions: ['task:action'],
+              // Gated on the action — the whole point of this page is acting on
+              // approvals — and on oversight: the API serves the queue only to a
+              // `task:view` scope wider than `own`.
+              permissions: [
+                'task:action',
+                { resource: 'task', action: 'view', minScope: 'department' },
+              ],
             },
             {
               route: '/supervisor/instances',

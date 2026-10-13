@@ -12,11 +12,11 @@ import type {
  * deadline. Neither a workflow nor a task has a single stage or due date any
  * more, so every page asks these helpers instead of reading fields directly.
  *
- * Deadlines are only in some responses today: `GET /tasks/:id` and workflow
- * history carry them; `GET /tasks` and `GET /workflow-instances` don't yet
- * (requested from the backend). Every deadline helper returns null when the
- * data isn't there, so pages show "—" rather than a wrong answer, and fill in
- * on their own once those list responses include it.
+ * Deadlines: `GET /tasks/:id` and workflow history always carried them;
+ * `GET /tasks`, `GET /tasks/approvals` and `GET /workflow-instances` have since
+ * edms-backend PR #50 (per-document `currentStage`, `status`, `stageDueAt`).
+ * Every deadline helper still returns null when the data isn't there, so a
+ * page shows "—" rather than a wrong answer.
  */
 
 const ACTIVE_EXECUTION_STATUSES: readonly WorkflowExecutionStatus[] = [
@@ -79,7 +79,7 @@ export function taskUrgency(task: Pick<Task, 'documents'>): string | undefined {
 }
 
 /** A task's deadline: the earliest `stageDueAt` among its documents still in
- *  progress. Null when unknown — `GET /tasks` doesn't return deadlines yet. */
+ *  progress. Null when none has one. */
 export function taskDueAt(task: Pick<Task, 'documents'>): string | null {
   return earliest(
     (task.documents ?? [])
@@ -106,8 +106,8 @@ export function instanceTitle(instance: Pick<WorkflowInstance, 'documents'>): st
   );
 }
 
-/** Every document execution still moving — empty until the list response
- *  includes executions (requested from the backend). */
+/** Every document execution still moving (`GET /workflow-instances` lists
+ *  them per document since edms-backend PR #50). */
 export function instanceActiveExecutions(instance: Pick<WorkflowInstance, 'documents'>) {
   return (instance.documents ?? []).flatMap((d) => (d.executions ?? []).filter(isActiveExecution));
 }

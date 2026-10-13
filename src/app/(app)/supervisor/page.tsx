@@ -8,7 +8,7 @@ import {
   useTeamStatusMatrix,
   useOpenItemsByCabinet,
 } from '@/apis/hooks/useWorkflowInstances';
-import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
+import { useAllUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonPage, SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -31,9 +31,9 @@ export default function SupervisorDashboard() {
   // own department automatically. See the Workflow Module API guide §4.
   const { data: members, isLoading: isLoadingMatrix } = useTeamStatusMatrix();
   const { data: byCabinetData, isLoading: isLoadingByCabinet } = useOpenItemsByCabinet();
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
 
-  const users = usersData?.data || [];
+  const users = usersData?.items || [];
   // Reassign targets: active users in the reassigner's own department only.
   const { users: colleagues } = useDepartmentColleagues();
   const byCabinet = byCabinetData?.cabinets || [];

@@ -9,7 +9,7 @@ import {
   useWorkflowInstanceStatusCounts,
   useWorkflowInstances,
 } from '@/apis/hooks/useWorkflowInstances';
-import { useSlaBreaches } from '@/apis/hooks/useSla';
+import { lastDaysRange, useSlaBreaches, useSlaOutcomeSummary } from '@/apis/hooks/useSla';
 import { useNotifications, useMarkNotificationRead } from '@/apis/hooks/useNotifications';
 import {
   isUnread,
@@ -94,10 +94,15 @@ export default function StaffDashboard() {
   // guide, §5.2) — a different lens from the task list below. `inProgress`
   // already includes on_hold; don't add it again.
   const { data: statusCounts } = useWorkflowInstanceStatusCounts('mine');
-  // Persisted SLA breach events, not ad-hoc deadline math. They also drive the
-  // Overdue filter: `GET /tasks` carries no deadlines (edms-backend `919d0ef`),
-  // but each open breach names its task.
+  // Persisted SLA breach events drive the Overdue tile and filter: each open
+  // breach names its task. (Task rows also show each document's own deadline,
+  // which `GET /tasks` has carried since edms-backend PR #50.)
   const { data: slaBreaches } = useSlaBreaches({ scope: 'mine', status: 'open', limit: 100 });
+  // My stage results over the last 30 days, on time or late (PR #50).
+  const { data: slaOutcomes } = useSlaOutcomeSummary(
+    { ...lastDaysRange(30), userId: currentUser?.id },
+    { enabled: !!currentUser },
+  );
   const breachedTaskIds = new Set((slaBreaches?.data ?? []).map((b) => b.taskId));
   // The Pending / In Progress / Closed tiles count workflows, so clicking one lists
   // those workflows (same `mine` scope as the counts). In Progress includes on hold.
@@ -155,9 +160,10 @@ export default function StaffDashboard() {
   // `/notifications` is already scoped to the authenticated user server-side.
   const myNotifs = notifications;
 
-  // Same calc as staff/performance. SLA compliance has no source since tasks
-  // lost their due date (edms-backend `919d0ef`) — on-time results are recorded
-  // server-side, and an endpoint over them is requested — so it shows "—".
+  // Same calc as staff/performance. SLA compliance is the share of my stage
+  // results in the last 30 days that were on time; "—" with none to measure.
+  const slaCompliance =
+    slaOutcomes && slaOutcomes.total > 0 ? Math.round(slaOutcomes.onTimeRate * 100) : null;
   const closedTasks = mine.filter((t) => t.status === 'completed');
   const turnarounds = closedTasks.map(turnaroundDays).filter((d): d is number => d !== null);
   const avgTurnaround = turnarounds.length
@@ -270,7 +276,11 @@ export default function StaffDashboard() {
             </div>
             <div className="card-body">
               <div className="ring-wrap">
-                <Donut value={null} label="SLA compliance" color="var(--status-closed)" />
+                <Donut
+                  value={slaCompliance}
+                  label="SLA compliance (30d)"
+                  color="var(--status-closed)"
+                />
                 <div style={{ flex: 1 }}>
                   <div className="metric-li">
                     <span>Avg turnaround</span>
@@ -333,7 +343,7 @@ export default function StaffDashboard() {
               <EmptyState
                 icon="approve"
                 title={`No ${filter?.toLowerCase()} workflows`}
-                message="Workflows you're part of show here."
+                message="Workflows show here while you hold a task in them. Once a document you routed moves on to someone else's stage, it leaves this list; its own page still says it's in a workflow."
               />
             )
           ) : isTasksError ? (

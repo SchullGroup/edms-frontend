@@ -8,7 +8,7 @@ import {
   useCreateDelegation,
   useEndDelegation,
 } from '@/apis/hooks/useDelegations';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useAllUsers } from '@/apis/hooks/useUsers';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -17,8 +17,9 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { fmtDateTime } from '@/utils/helpers';
-import { Cabinet, Delegation, User } from '@/types/models';
+import { Cabinet, Delegation } from '@/types/models';
 import { DateTimeField, todayStr } from '@/components/ui/DatePicker';
+import { UserPicker } from '@/components/common/UserPicker';
 
 /** A delegation is active only while `isActive` AND the current time falls
  *  inside its window — the backend flips `isActive` off once it ends, but a
@@ -67,7 +68,7 @@ export default function DelegationsPage() {
   const canEndDelegation = can('delegation', 'end');
 
   const { data, isLoading, isError, refetch } = useDelegations({ scope: 'mine', limit: 100 });
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const { data: cabinetsData, isLoading: isLoadingCabinets } = useCabinets();
 
   const createDelegation = useCreateDelegation();
@@ -80,7 +81,7 @@ export default function DelegationsPage() {
   if (!currentUser) return null;
 
   const delegations = data?.data || [];
-  const users = usersData?.data || [];
+  const users = usersData?.items || [];
   const cabinets = cabinetsData?.data || [];
   const cabinetNameById = Object.fromEntries(cabinets.map((c) => [c.id, c.name]));
 
@@ -103,7 +104,7 @@ export default function DelegationsPage() {
       title: 'New out-of-office delegation',
       body: (
         <DelegationForm
-          users={users.filter((u) => u.status === 'active' && u.id !== currentUser.id)}
+          currentUserId={currentUser.id}
           cabinets={cabinets}
           formRef={formRef}
         />
@@ -259,14 +260,15 @@ export default function DelegationsPage() {
  * component) can read the current values without a submit handler of its own.
  */
 function DelegationForm({
-  users,
+  currentUserId,
   cabinets,
   formRef,
 }: {
-  users: User[];
+  currentUserId: string;
   cabinets: Cabinet[];
   formRef: { current: DelegationFormValues };
 }) {
+  const [delegateId, setDelegateId] = useState('');
   const [scopeMode, setScopeMode] = useState<'all' | 'cabinets'>('all');
   const [selectedCabinets, setSelectedCabinets] = useState<Set<string>>(new Set());
 
@@ -290,14 +292,17 @@ function DelegationForm({
         <label>
           Delegate to <span className="req">*</span>
         </label>
-        <select className="input" onChange={(e) => commit({ delegateId: e.target.value })}>
-          <option value="">Select a colleague...</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name}
-            </option>
-          ))}
-        </select>
+        <UserPicker
+          value={delegateId}
+          onChange={(id) => {
+            setDelegateId(id);
+            commit({ delegateId: id });
+          }}
+          filters={{ status: 'active' }}
+          excludeIds={[currentUserId]}
+          placeholder="Select a colleague…"
+          ariaLabel="Delegate to"
+        />
       </div>
       <div className="flex gap-3 mb-3">
         <div className="field" style={{ flex: 1 }}>

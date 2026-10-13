@@ -1,8 +1,8 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { usersService, UserFilters } from '@/apis/services/users.service';
 import { User } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
-import { useStore } from '@/store/useStore';
+import { useMyDepartmentId } from '@/hooks/useMyDepartmentId';
 
 // Scope policy (not yet enforced — tracked as part of the internal write/scope
 // gating follow-up, see the sidebar permission work): `useUsers`/`useAllUsers`
@@ -27,6 +27,29 @@ export function useUsers(filters: UserFilters = {}) {
   return useQuery({
     queryKey: userKeys.list(filters),
     queryFn: () => usersService.getAll(filters),
+    // Paging, filtering or searching keeps the current rows up until the next
+    // page arrives, rather than dropping back to the loading skeleton.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * One page of users matching `search` (name or email), for type-ahead pickers.
+ * An empty `search` lists the first page. Deliberately no `placeholderData`: a
+ * picker must not offer the previous search's people as clickable results for
+ * the new one.
+ */
+export function useUserSearch(
+  search: string,
+  filters: Omit<UserFilters, 'search' | 'page'> = {},
+  options?: { enabled?: boolean },
+) {
+  const term = search.trim();
+  const params: UserFilters = { ...filters, page: 1, ...(term ? { search: term } : {}) };
+  return useQuery({
+    queryKey: userKeys.list(params),
+    queryFn: () => usersService.getAll(params),
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -46,14 +69,12 @@ export function useAllUsers(
 /**
  * Active users in the signed-in user's own department — the only valid targets
  * for a reassign (the backend 403s `TASK_REASSIGN_DEPARTMENT_FORBIDDEN` for a
- * department-scoped reassigner picking anyone outside it). `/auth/me` doesn't
- * return `departmentId`, so it's read from the user's own `GET /users/:id`
- * record. A user with no department gets an empty list, not the whole tenant.
+ * department-scoped reassigner picking anyone outside it). The department comes
+ * from `/auth/me` (`useMyDepartmentId`). A user with no department gets an
+ * empty list, not the whole tenant.
  */
 export function useDepartmentColleagues() {
-  const meId = useStore((s) => s.currentUser?.id) ?? '';
-  const { data: me, isLoading: isLoadingMe } = useUser(meId);
-  const departmentId = me?.departmentId ?? null;
+  const { departmentId, known } = useMyDepartmentId();
   const { data, isLoading: isLoadingUsers } = useAllUsers(
     { departmentId: departmentId ?? undefined, status: 'active' },
     { enabled: !!departmentId },
@@ -62,7 +83,7 @@ export function useDepartmentColleagues() {
   return {
     users: departmentId ? (data?.items ?? []) : [],
     departmentId,
-    isLoading: isLoadingMe || (!!departmentId && isLoadingUsers),
+    isLoading: !known || (!!departmentId && isLoadingUsers),
   };
 }
 
@@ -80,9 +101,14 @@ export function useCreateUser() {
 
   return useMutation({
     mutationFn: (data: any) => usersService.create(data),
-    onSuccess: () => {
+    // `invited`: the backend emailed a set-password link and the user is
+    // `pending` until they use it.
+    onSuccess: (user: User & { invited?: boolean }) => {
       queryClient.invalidateQueries({ queryKey: userKeys.lists() });
-      addToast('User created successfully', 'success');
+      addToast(
+        user?.invited ? `Invitation sent to ${user.email}` : 'User created successfully',
+        'success',
+      );
     },
     onError: (err: any) => {
       addToast(err.response?.data?.message || 'Failed to create user', 'error');
@@ -162,11 +188,14 @@ export function useRemoveUserRole() {
 
 /** `POST /users/:id/invitation` — resends the set-password email. */
 export function useResendInvitation() {
+  const queryClient = useQueryClient();
   const { addToast } = useUIStore.getState();
 
   return useMutation({
     mutationFn: (id: string) => usersService.resendInvitation(id),
     onSuccess: (data) => {
+      // The first emailed invitation also records `invitedAt`.
+      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
       addToast(`Invitation resent to ${data.email}`, 'success');
     },
     onError: (err: any) => {

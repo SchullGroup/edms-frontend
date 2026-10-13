@@ -49,3 +49,5 @@ next-env.d.ts
 # custom files for local development
 GLOSSARY.md
 .scratch
+CLAUDE.local.md
+docs/agents/

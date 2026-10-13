@@ -7,6 +7,7 @@ import { useStore } from '@/store/useStore';
 import { useNavigation } from '@/hooks/useNavigation';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
+import { SkeletonNotifRows } from '@/components/common/Skeleton';
 import { useUIStore } from '@/store/useUIStore';
 import { PORTAL_BY_KEY, type PortalKey } from '@/lib/permissions';
 import {
@@ -45,7 +46,12 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
   // Only fetched while the menu is open — the badge alone runs off the count endpoint.
   // Capped to the 7 most recent unread; "View all notifications" is the escape
   // hatch to the full (read + unread, paginated) list rather than growing this menu.
-  const { data: notifData } = useNotifications(
+  const {
+    data: notifData,
+    isLoading: isLoadingNotifs,
+    isError: isNotifError,
+    refetch: refetchNotifs,
+  } = useNotifications(
     { limit: 7, channel: 'in_app', unreadOnly: true },
     { enabled: notifOpen },
   );
@@ -153,7 +159,7 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
         </button>
 
         {notifOpen && (
-          <div className="menu" style={{ width: '340px' }}>
+          <div className="menu" style={{ width: '340px' }} aria-busy={isLoadingNotifs}>
             <div className="flex justify-between items-center" style={{ padding: '8px 10px' }}>
               <span className="menu-head" style={{ padding: 0 }}>
                 Notifications
@@ -166,7 +172,17 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
                 Mark all read
               </button>
             </div>
-            {myNotifs.length > 0 ? (
+            {isLoadingNotifs ? (
+              // One row per unread notification the menu will show (it caps at 7).
+              <SkeletonNotifRows rows={Math.min(Math.max(unreadCount, 1), 7)} />
+            ) : isNotifError ? (
+              <div className="empty" style={{ padding: '22px' }}>
+                Couldn&apos;t load notifications.{' '}
+                <button className="btn btn-ghost btn-sm" onClick={() => refetchNotifs()}>
+                  Try again
+                </button>
+              </div>
+            ) : myNotifs.length > 0 ? (
               myNotifs.map((n) => (
                 <div
                   key={n.id}
