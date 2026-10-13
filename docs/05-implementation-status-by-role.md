@@ -125,17 +125,17 @@ Every classification below was verified by inspecting what each page destructure
 | Dashboard | Pages | ✅ Live | 🟨 Partial / Hybrid | 🟥 Mock | ↪️ / static | Verdict |
 |---|---:|---:|---:|---:|---:|---|
 | Staff Workspace | 4 | 4 | — | — | — | **Strongest.** Real data throughout. |
-| Supervisor Console | 7 | 3 | 2 | 2 | — | Approvals, ageing and the Workflow Monitor real; exceptions/performance fixture. |
+| Supervisor Console | 7 | 4 | 1 | 2 | — | Approvals, ageing and the Workflow Monitor real; exceptions/performance fixture. |
 | Management Portal | 7 | 5 | 1 | 1 | — | The only fully API-driven pages — and the ones that don't scale. |
 | Client Administration | 12 | 7 | 2 | 1 | 2 | Structure real; branding mock, policies Hybrid (SLA tab real). `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
 | Audit & Compliance | 4 | 1 | 1 | 2 | — | Trail real; dashboard and findings fixture. |
 | Platform Admin | 6 | — | — | 6 | — | Mock by design (Phase 2). |
 | Shared | 18 | 9 | 5 | — | 4 | Login, upload, search, circulars and the workflow page live; delegations, notifications and the password pages 🟨 not re-verified; `/doc/[id]` Hybrid. |
-| **Total** | **58** | **29** | **11** | **12** | **6** | |
+| **Total** | **58** | **30** | **10** | **12** | **6** | |
 
 *(Re-tallied 2026-10-08 from each page's row in this doc: all 57 `page.tsx` files. Later the
 same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → 🟨, and `/help`
-(static) was added, making 58.)*
+(static) was added, making 58. 2026-10-13: `/supervisor/instances` 🟨 → ✅.)*
 
 *Confirmed by the product owner's own testing, 2026-10-08:* the admin setup checklist, the SLA
 settings, sub-folders, batch upload ("File all") and multi-document workflows. Page markers
@@ -255,10 +255,10 @@ shared — see [Shared pages](#shared-pages-used-by-multiple-roles).*
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
-| `/staff` | 417 | `currentUser`, `recentDocuments`, `pinnedDocuments`, `savedSearches` (per-user browser state, not `SEED`) | `useTasks`, `useWorkflowInstanceStatusCounts`, `useWorkflowInstances`, `useSlaBreaches`, `useNotifications` ✅ | ✅ Live — **2026-10-08 (confirmed by the product owner’s testing, 2026-10-12):** the Pending / In Progress / Closed tiles count workflows, and clicking one now lists those workflows (`GET /workflow-instances?status=`, `mine` scope; In Progress adds `on_hold`), each opening its workflow page. Before, a click filtered the *task* list, so Closed was always empty. Overdue still filters tasks by open SLA breach. "Closed (30d)" relabelled "Closed": the count isn't limited to 30 days. "View all" goes to My Tasks, not Search. *(The "notification panel dead" note was stale: notifications are wired.)* **Quick access card (2026-10-08, 🟨 not verified live):** action buttons, pinned and recently opened documents, saved searches — kept per user in the browser, since the API has no favourites or view history |
-| `/staff/tasks` | 162 | `currentUser` | `useTasks` ✅ | ✅ Live |
+| `/staff` | 427 | `currentUser`, `recentDocuments`, `pinnedDocuments`, `savedSearches` (per-user browser state, not `SEED`) | `useTasks`, `useWorkflowInstanceStatusCounts`, `useWorkflowInstances`, `useSlaBreaches`, `useNotifications` ✅ | ✅ Live — **2026-10-08 (confirmed by the product owner’s testing, 2026-10-12):** the Pending / In Progress / Closed tiles count workflows, and clicking one now lists those workflows (`GET /workflow-instances?status=`, `mine` scope; In Progress adds `on_hold`), each opening its workflow page. Before, a click filtered the *task* list, so Closed was always empty. Overdue still filters tasks by open SLA breach. "Closed (30d)" relabelled "Closed": the count isn't limited to 30 days. "View all" goes to My Tasks, not Search. *(The "notification panel dead" note was stale: notifications are wired.)* **Quick access card (2026-10-08, 🟨 not verified live):** action buttons, pinned and recently opened documents, saved searches — kept per user in the browser, since the API has no favourites or view history **SLA compliance (2026-10-13, verified live):** the donut reads `GET /sla/outcomes/summary` for the last 30 days ("—" with no results) |
+| `/staff/tasks` | 160 | `currentUser` | `useTasks` ✅ | ✅ Live — **2026-10-13 (verified live):** rows show each open task's deadline and "Overdue" past it (PR #50); documents the user can't open show as "Restricted document" |
 | `/staff/cabinets` | 821 | `auditAction` only | `useCabinets`, `useCabinet`, `useCabinetFolders`, `useDocuments`, `useUsers` ✅ · folder create/rename/delete, `documentsService.update` (move), metadata-field + access-grant hooks via the shared `components/cabinets/` cards | ✅ Live — cabinet management added 2026-10-06 (see below), tested end to end by the user 2026-10-08. **Sub-folders 2026-10-08 (confirmed by the product owner's testing 2026-10-08 and 2026-10-09):** the tree nests folders by `parentId`, an open folder lists its sub-folders and offers **+ New sub-folder**, breadcrumbs show the full path, and a folder with sub-folders can't be deleted (the API would orphan them). Folder pickers on Move, `/upload` and the workflow document picker show paths ("Finance / Invoices"), as does the `/doc/[id]` breadcrumb. *Uploader names come from `useUsers`, not `SEED.USERS` as this row used to say — corrected 2026-10-06* |
-| `/staff/performance` | 215 | `currentUser` | `useTasks`, `useSlaBreaches` ✅ | ✅ Live — **2026-10-08:** the hard-coded "Rework rate 4.2%" and "-0.4 d vs last period" are gone; it shows **Changes requested** (share of the user's completed tasks closed with `request_changes`, from `Task.action`). SLA compliance stays "—" (DRIFT-19) |
+| `/staff/performance` | 225 | `currentUser` | `useTasks`, `useSlaBreaches`, `useSlaOutcomeSummary` ✅ | ✅ Live — **2026-10-08:** the hard-coded "Rework rate 4.2%" and "-0.4 d vs last period" are gone; it shows **Changes requested** (share of the user's completed tasks closed with `request_changes`, from `Task.action`). SLA compliance stays "—" (DRIFT-19) **On-time figures (2026-10-13, verified live):** SLA compliance, On time and Breached come from `GET /sla/outcomes/summary` (last 30 days); were "—" |
 
 ### APIs wired ✅
 
@@ -372,7 +372,7 @@ destination (request doc item 7).
 | `/supervisor/workload` | 191 | `currentUser` | `useDocuments`, `useUsers` ✅ | ✅ Live |
 | `/supervisor/exceptions` | 73 | — | **inline `useState` array** | 🟥 Mock |
 | `/supervisor/performance` | 86 | — | **none** | 🟥 Mock |
-| `/supervisor/instances` | 15 | — | `WorkflowInstanceMonitor` → `useWorkflowInstances`, `useWorkflows`, `useWorkflowInstanceLifecycle` ✅ | 🟨 Partial — the Workflow Monitor (hold / resume / close). Stage, due and SLA % columns show "—" until `GET /workflow-instances` carries executions (DRIFT-19). *Classified 2026-10-08* |
+| `/supervisor/instances` | 15 | — | `WorkflowInstanceMonitor` → `useWorkflowInstances`, `useWorkflows`, `useWorkflowInstanceLifecycle` ✅ | ✅ Live — the Workflow Monitor (hold / resume / close). **2026-10-13, verified live:** Current stage and Next due fill from the executions `GET /workflow-instances` returns since PR #50, with an "N of the M shown have passed the stage SLA" banner; it now sends `scope=all`, without which a client admin saw no workflows and a supervisor only their own. *Was 🟨 Partial* |
 
 ### APIs wired ✅
 

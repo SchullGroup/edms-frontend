@@ -791,6 +791,26 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
 - [ ] **TP-T7.** `/admin/roles` and the invite modal's role list don't offer
       `schulltech_admin`. *(The API was checked 2026-10-13; the screens weren't.)*
 
+## 19d. Phase U — Deadlines in lists and on-time results (backend PR #50)
+
+- [x] **TP-U1.** As `staff_finance`, My Tasks: an open task past its deadline shows "Overdue"
+      and "Nd overdue"; an open task within it shows "Due in Nd"; a closed task shows "—".
+      *(Verified 2026-10-13.)*
+- [x] **TP-U2.** Same user: a task holding a document you can't open lists it as "Restricted
+      document" and the page doesn't break. *(Verified 2026-10-13.)*
+- [x] **TP-U3.** Same user: the dashboard's "SLA compliance (30d)" and My Performance show the
+      on-time share of your stage results over the last 30 days, with On time and Breached
+      counts. *(Verified 2026-10-13: 88%, 7 on time, 1 breached.)*
+- [x] **TP-U4.** As `client_admin`, Workflow Monitor → In progress lists every in-progress
+      workflow (not only ones you hold a task in), with Current stage and Next due filled in.
+      *(Verified 2026-10-13: 4 rows, 2 past the stage SLA. It was empty before.)*
+- [x] **TP-U5.** As `supervisor_finance`, Approvals Queue → Reassign lists your department's
+      colleagues; no `GET /users/<your id>` is made (the department comes from `/auth/me`).
+      *(Verified 2026-10-13.)*
+- [ ] **TP-U6.** As `client_admin`, open a document that's in a workflow you hold no task in.
+      The Workflows card lists it and the page offers "Open workflow", not "Route to workflow".
+      *(Seen on `78881ccb…` 2026-10-13; repeat on a fresh document.)*
+
 ## 20. Wrap-up
 
 - [ ] Re-run **TP-A1–A7** once more at the very end using kemi.reviewer (the custom-role

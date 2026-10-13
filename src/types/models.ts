@@ -36,6 +36,10 @@ export interface AuthUser {
   status: 'active' | 'inactive' | 'suspended';
   roles: string[];
   permissions?: PermissionType[];
+  /** From `GET /auth/me` (edms-backend PR #50); login doesn't return it yet,
+   *  so it's `undefined` until AppShell's `/auth/me` call lands. `null` means
+   *  the user has no department. Read it with `useMyDepartmentId`. */
+  departmentId?: string | null;
 }
 
 export interface User {
@@ -524,7 +528,8 @@ export interface WorkflowInstanceDocument {
       createdAt: string;
     } | null;
   };
-  /** Not returned yet — requested from the backend on the instance list. */
+  /** The document's active executions; on `GET /workflow-instances` since
+   *  edms-backend PR #50. */
   executions?: WorkflowDocumentExecution[];
 }
 
@@ -887,6 +892,26 @@ export type TaskActionRequest =
 export interface ReassignTaskRequest {
   assigneeId: string;
   note?: string;
+}
+
+/** `data` of `GET /sla/outcomes/summary` (edms-backend PR #50): completed
+ *  stage results from `workflow_sla_outcomes`, on time or late, over a date
+ *  range. At `own` scope the backend limits it to the caller's own results. */
+export interface SlaOutcomeSummary {
+  total: number;
+  onTime: number;
+  late: number;
+  /** 0 to 1, three decimals; 0 when `total` is 0. */
+  onTimeRate: number;
+  /** Empty unless `groupBy` was sent. `key` is the user, department or stage. */
+  groups: {
+    key: string | null;
+    label: string;
+    total: number;
+    onTime: number;
+    late: number;
+    onTimeRate: number;
+  }[];
 }
 
 /** `data` shape of `GET /tasks/stats` — completed-task SLA rollup by department. */

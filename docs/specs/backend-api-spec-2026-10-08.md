@@ -16,16 +16,16 @@ direct ask.
 | S1 | Stop returning users' password hashes | `GET /cabinets/:id`, cabinet access lists | **P0 security** | XS |
 | S2 | Only hand a download URL to callers with `document:download` | `GET /documents/:id`, `GET /documents`, version list, `/export`, `/print` | **P0 security** | M |
 | S3 | Enforce grant rules on cabinet access | `POST /cabinets/:id/access` | **P0 security** | S |
-| W1 | Per-document stage, status and due date in task lists | `GET /tasks`, `GET /tasks/approvals` | P1 | XS |
-| W2 | Per-document executions in the workflow instance list | `GET /workflow-instances` | P1 | XS |
-| W3 | On-time reporting endpoint | new `GET /sla/outcomes/summary` | P1 | M |
+| W1 | ✅ ~~Per-document stage, status and due date in task lists~~ done: PR #50 (live 2026-10-13); also `sort` and `overdue` filters | `GET /tasks`, `GET /tasks/approvals` | P1 | XS |
+| W2 | ✅ ~~Per-document executions in the workflow instance list~~ done: PR #50 (live 2026-10-13) | `GET /workflow-instances` | P1 | XS |
+| W3 | ✅ ~~On-time reporting endpoint~~ done: PR #50 (live 2026-10-13): `GET /sla/outcomes/summary`, wired on the staff dashboard and My Performance | new `GET /sla/outcomes/summary` | P1 | M |
 | D1 | Accept metadata on upload | `POST /documents`, `POST /documents/batch` | P1 | S |
 | D2 | Let a metadata value be cleared | `PUT /documents/:id/metadata` | P2 | XS |
 | D3 | Re-index search when a document changes | metadata, title, restore | P1 | S |
 | D4 | Move documents between cabinets and to the cabinet root | `PATCH /documents/:id` | P2 | S |
 | D5 | `departmentId` filter on lists | `GET /documents`, `GET /workflow-instances` | P2 | S |
 | D6 | All filters on full-text search | `GET /documents/search` | P2 | S |
-| O1 | `departmentId` on the signed-in user | `POST /auth/login`, `GET /auth/me` | P1 | XS |
+| O1 | ✅ ~~`departmentId` on the signed-in user~~ done: on `/auth/me` in PR #50 (live 2026-10-13), adopted by the frontend; login still lacks it (unmerged `feat/frontend-spec-items`) | `POST /auth/login`, `GET /auth/me` | P1 | XS |
 | O2 | Limit departments to one level of nesting | `POST /departments`, `PATCH /departments/:id` | P2 | XS |
 | T1 | Optional signature on the review action | `POST /tasks/:id/action` | P2 | XS |
 | I1 | Keep OCR word positions | OCR worker + new read endpoint | P2 | M |
@@ -116,7 +116,9 @@ anything.
 Since `919d0ef` the list endpoints return no stage or deadline, so the frontend cannot show due
 dates, overdue filters, the Workflow Monitor's Stage/Due columns, or on-time rates.
 
-### W1. Per-document stage, status and due date in task lists
+### W1. Per-document stage, status and due date in task lists — ✅ **Done**
+
+> PR #50 (live 2026-10-13); also `sort` and `overdue` filters.
 
 **Problem.** `Task.dueAt` is gone; deadlines live on `WorkflowDocumentExecution.stageDueAt`.
 `workflowTaskListInclude` (`tasks.repository.ts` line 19) selects only the execution `id`, so
@@ -138,7 +140,9 @@ so the frontend can only sort or filter the page it holds:
 
 **Done when** `GET /tasks?limit=1` returns `documents[].workflowDocumentExecution.stageDueAt`.
 
-### W2. Per-document executions in the workflow instance list
+### W2. Per-document executions in the workflow instance list — ✅ **Done**
+
+> PR #50 (live 2026-10-13).
 
 **Problem.** `WorkflowInstance` no longer has `currentStage` or `stageDueAt`. `listInstances`
 (`instances.repository.ts` line 16) selects each document's `id`, `status` and dates, but no
@@ -158,7 +162,9 @@ are cheap. Not needed on `GET /workflow-instances/:id`.
 
 **Done when** `GET /workflow-instances?limit=1` returns `documents[].executions[].stageDueAt`.
 
-### W3. On-time reporting endpoint
+### W3. On-time reporting endpoint — ✅ **Done**
+
+> PR #50 (live 2026-10-13): `GET /sla/outcomes/summary`, wired on the staff dashboard and My Performance.
 
 **Problem.** The frontend computed on-time % from `Task.completedAt` vs `Task.dueAt`; `dueAt` is
 gone. `WorkflowSlaOutcome` (`workflow.prisma` line 242) records one row per completed execution
@@ -288,7 +294,9 @@ as `ListDocumentsQuerySchema`, applied in the same query.
 
 ## Users and organisation
 
-### O1. `departmentId` on the signed-in user
+### O1. `departmentId` on the signed-in user — ✅ **Done**
+
+> On `/auth/me` in PR #50 (live 2026-10-13), adopted by the frontend; login still lacks it (unmerged `feat/frontend-spec-items`).
 
 **Problem.** Login and `/auth/me` (the user object built in `auth.service.ts` around line 298)
 carry no `departmentId`. The frontend makes an extra `GET /users/:id` to learn it, which needs
@@ -449,7 +457,8 @@ so the frontend can't decide whether a department-assigned task is the user's. E
 `GET /tasks/:id` and on the tasks embedded in `GET /workflow-instances/:id`.
 
 > **Answer:** the backend will return `departmentId` (on `/auth/me`; this also closes O1).
-> Not built yet.
+> **Built** in PR #50 (live 2026-10-13); the frontend reads it from `/auth/me`. FE-3 still
+> waits for Q2 (sub-departments).
 
 **Q4. Should someone still see a workflow after routing it? (DRIFT-22)**
 At `own` scope, `buildInstanceAccessFilter` and `canActorAccessInstance` follow task

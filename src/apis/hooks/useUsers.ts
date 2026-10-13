@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { usersService, UserFilters } from '@/apis/services/users.service';
 import { User } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
-import { useStore } from '@/store/useStore';
+import { useMyDepartmentId } from '@/hooks/useMyDepartmentId';
 
 // Scope policy (not yet enforced — tracked as part of the internal write/scope
 // gating follow-up, see the sidebar permission work): `useUsers`/`useAllUsers`
@@ -69,14 +69,12 @@ export function useAllUsers(
 /**
  * Active users in the signed-in user's own department — the only valid targets
  * for a reassign (the backend 403s `TASK_REASSIGN_DEPARTMENT_FORBIDDEN` for a
- * department-scoped reassigner picking anyone outside it). `/auth/me` doesn't
- * return `departmentId`, so it's read from the user's own `GET /users/:id`
- * record. A user with no department gets an empty list, not the whole tenant.
+ * department-scoped reassigner picking anyone outside it). The department comes
+ * from `/auth/me` (`useMyDepartmentId`). A user with no department gets an
+ * empty list, not the whole tenant.
  */
 export function useDepartmentColleagues() {
-  const meId = useStore((s) => s.currentUser?.id) ?? '';
-  const { data: me, isLoading: isLoadingMe } = useUser(meId);
-  const departmentId = me?.departmentId ?? null;
+  const { departmentId, known } = useMyDepartmentId();
   const { data, isLoading: isLoadingUsers } = useAllUsers(
     { departmentId: departmentId ?? undefined, status: 'active' },
     { enabled: !!departmentId },
@@ -85,7 +83,7 @@ export function useDepartmentColleagues() {
   return {
     users: departmentId ? (data?.items ?? []) : [],
     departmentId,
-    isLoading: isLoadingMe || (!!departmentId && isLoadingUsers),
+    isLoading: !known || (!!departmentId && isLoadingUsers),
   };
 }
 

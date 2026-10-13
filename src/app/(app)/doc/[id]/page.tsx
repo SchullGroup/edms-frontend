@@ -101,9 +101,11 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     : null;
 
   // Every workflow this document has been routed into, newest first. A
-  // document can be routed more than once, so this is a list.
+  // document can be routed more than once, so this is a list. `scope: 'all'`
+  // so an admin or supervisor sees workflows they hold no task in (the API
+  // still limits it to their scope).
   const { data: instancesData, isLoading: isLoadingInstances } = useWorkflowInstances(
-    { documentId: doc?.id },
+    { documentId: doc?.id, scope: 'all' },
     { enabled: !!doc?.id },
   );
   const workflows = [...(instancesData?.data || [])].sort(
@@ -194,7 +196,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   // cabinet belongs to the releaser's department. Offered only once the lock is
   // overdue — before that, the holder is still within the time they asked for.
   const lockReleaseScope = scopeFor('document_lock', 'delete');
-  const myDepartmentId = userById(users, me.id)?.departmentId ?? null;
+  // From `/auth/me` (edms-backend PR #50), kept on the store's current user.
+  const myDepartmentId = me.departmentId ?? null;
   const cabinetDepartmentId = cabById(cabinets, doc.cabinetId)?.departmentId ?? null;
   const canForceCheckin =
     lockedByOther &&
