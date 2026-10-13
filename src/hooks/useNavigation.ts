@@ -171,9 +171,8 @@ export const useNavigation = () => {
               // view — "Monitor" implies oversight across a set of instances beyond
               // your own, so own-scoped view alone (`scopeAtLeast(..., 'department')`
               // accepts 'department' or 'global', rejects 'own' and null) shouldn't
-              // surface this. Route stays at plain workflow_instance:view (any scope)
-              // since routes.config.ts isn't scope-aware — same pattern as Users/
-              // Cabinet Designer.
+              // surface this. The route rule in routes.config.ts carries the same
+              // `minScope`.
               anyPermissions: [
                 { resource: 'workflow_instance', action: 'view', minScope: 'department' },
               ],

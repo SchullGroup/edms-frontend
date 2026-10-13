@@ -525,6 +525,17 @@ all actions". The portal shell a user lands in is chosen by `resolvePortal()` â€
 name for the six built-ins (their permission sets overlap too much to disambiguate),
 by entry permission for custom roles.
 
+**Scope floors on routes (2026-10-13).** A rule's permission may carry a `minScope`
+(`{ resource, action, minScope }`), as sidebar items already could: `evaluateRouteAccess`
+then also requires the grant at that scope or wider, read from the raw
+`"resource:action:scope"` keys (`/auth/me` in the proxy, the store in AppShell). A grant with no
+known scope (the role-based approximation before `/auth/me` answers) passes, so nobody is
+bounced on first paint; the API still enforces the scope. Used by `/supervisor/approvals`
+(`task:action` + `task:view` at department, since `GET /tasks/approvals` 403s at `own`) and the
+Workflow Monitor (`/supervisor/instances`, `/admin/workflows/instances`: `workflow_instance:view`
+at department). Verified live: `staff_finance` is sent to `/unauthorized` from both (Approvals
+used to let them in); the Finance supervisor and client admin open both.
+
 *Original finding, for history:*
 
 `usePermissions.ts:26-31` grants `client_admin` **everything** except `resource === 'platform'`.

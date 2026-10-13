@@ -27,6 +27,10 @@ export type PermissionType =
   | {
       resource: string;
       action: string;
+      /** A scope floor: the grant must be held at this scope or wider. Used by
+       *  sidebar items and route rules; the backend still enforces the real
+       *  scope on the data. */
+      minScope?: 'own' | 'department' | 'global';
     };
 
 export interface AuthUser {
