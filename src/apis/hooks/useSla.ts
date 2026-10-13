@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { slaService, SlaBreachFilters } from '../services/sla.service';
+import { slaService, SlaBreachFilters, SlaOutcomeSummaryFilters } from '../services/sla.service';
 import { useUIStore } from '@/store/useUIStore';
 import type { SlaConfigurationUpdate } from '@/types/models';
 
@@ -8,7 +8,26 @@ export const slaKeys = {
   list: (params?: SlaBreachFilters) => [...slaKeys.all, params ?? {}] as const,
   configuration: ['sla', 'configuration'] as const,
   holidays: ['sla', 'holidays'] as const,
+  outcomes: (params: SlaOutcomeSummaryFilters) => ['sla', 'outcomes', params] as const,
 };
+
+/** The last `days` days up to today, as `GET /sla/outcomes/summary` dates (UTC). */
+export function lastDaysRange(days: number): { from: string; to: string } {
+  const to = new Date();
+  const from = new Date(to.getTime() - (days - 1) * 86400000);
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
+
+/** On-time vs late stage results over a date range. */
+export const useSlaOutcomeSummary = (
+  params: SlaOutcomeSummaryFilters,
+  options?: { enabled?: boolean },
+) =>
+  useQuery({
+    queryKey: slaKeys.outcomes(params),
+    queryFn: () => slaService.getOutcomeSummary(params),
+    enabled: options?.enabled ?? true,
+  });
 
 /** Persisted SLA warning/escalation events. `scope: 'mine'` for a staff
  *  member's own; `scope: 'all'` for a supervisor/team view. */

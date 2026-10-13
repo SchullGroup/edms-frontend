@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { usePermissions } from '@/hooks/usePermissions';
+import { scopeAtLeast } from '@/lib/permissions';
 import { useRouter } from 'next/navigation';
 import { useWorkflowInstances } from '@/apis/hooks/useWorkflowInstances';
 import { useWorkflows } from '@/apis/hooks/useWorkflows';
@@ -64,7 +66,14 @@ export function WorkflowInstanceMonitor() {
   const { data: workflowsData } = useWorkflows({ limit: 100 });
   const workflows = workflowsData?.data || [];
 
+  // `scope: 'all'`: every workflow the viewer's scope allows. Without it the
+  // API lists only workflows the viewer holds a task in, which left this
+  // monitor empty for a client admin. Only for oversight (`workflow_instance:
+  // view` wider than `own`): the API refuses `all` to anyone else (403).
+  const { scopeFor } = usePermissions();
+  const hasOversight = scopeAtLeast(scopeFor('workflow_instance', 'view'), 'department');
   const { data, isLoading } = useWorkflowInstances({
+    scope: hasOversight ? 'all' : 'mine',
     page,
     limit: PAGE_SIZE,
     ...(status ? { status } : {}),
@@ -75,11 +84,10 @@ export function WorkflowInstanceMonitor() {
   const pagination = data?.pagination;
 
   // Each document moves through the stages on its own (edms-backend `919d0ef`),
-  // so a row shows every stage its documents sit at, and the nearest deadline.
-  // The list response doesn't return per-document positions yet (requested from
-  // the backend), so until it does these columns show "—"; the drawer rebuilds
-  // them from the workflow's history. Stage ids resolve to names through the
-  // definitions the workflows list already gives us.
+  // so a row shows every stage its documents sit at, and the nearest deadline,
+  // from the per-document executions the list returns (edms-backend PR #50).
+  // Stage ids resolve to names through the definitions the workflows list
+  // already gives us.
   const definitionOf = (id: string) => workflows.find((w) => w.id === id);
   const stageNameOf = (instance: WorkflowInstance) => {
     if (instance.status === 'closed') return '—';

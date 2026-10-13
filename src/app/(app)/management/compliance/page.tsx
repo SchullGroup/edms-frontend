@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useStore, userById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useAuditEntries } from '@/apis/hooks/useAudit';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useAllUsers } from '@/apis/hooks/useUsers';
+import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import { HBarChart } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
@@ -32,14 +33,18 @@ const SENSITIVE_ACTIONS = [
 export default function CompliancePosturePage() {
   const router = useRouter();
   const { findings } = useStore();
+  const { can } = usePermissions();
+  // `GET /audit` needs `audit:view`, which the seeded management role doesn't
+  // hold; without it the panel says so instead of firing a request that 403s.
+  const canViewAudit = can('audit', 'view');
 
-  const { data: auditData, isLoading: isLoadingAudit } = useAuditEntries({
-    limit: 100,
-    page: 1,
-  });
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const { data: auditData, isLoading: isLoadingAudit } = useAuditEntries(
+    { limit: 100, page: 1 },
+    { enabled: canViewAudit },
+  );
+  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const audit = auditData?.data || [];
-  const users = usersData?.data || [];
+  const users = usersData?.items || [];
 
   const { setPageTitle } = useUIStore();
 
@@ -148,7 +153,12 @@ export default function CompliancePosturePage() {
             <span className="h3">Sensitive activity (live audit feed)</span>
           </div>
           <div className="card-body" style={{ paddingTop: '4px' }}>
-            {sens.length > 0 ? (
+            {!canViewAudit ? (
+              <p className="muted">
+                Your role can&apos;t read the audit trail, so sensitive activity isn&apos;t shown
+                here. An administrator can add Audit · View to your role.
+              </p>
+            ) : sens.length > 0 ? (
               sens.map((a) => (
                 <div key={a.id} className="meta-row">
                   <span className="k">

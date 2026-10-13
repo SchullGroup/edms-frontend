@@ -3,7 +3,10 @@ import { User, PaginatedResponse, ApiResponse } from '@/types/models';
 
 export interface UserFilters {
   departmentId?: string;
-  status?: 'active' | 'inactive' | 'suspended';
+  status?: 'pending' | 'active' | 'inactive' | 'suspended';
+  /** Case-insensitive substring match on name or email (backend PR #48). Still
+   *  narrowed by the caller's `user:view` scope. Must be non-empty if sent. */
+  search?: string;
   page?: number;
   limit?: number;
 }
@@ -91,8 +94,8 @@ export const usersService = {
 
   /**
    * Issues a fresh set-password link and emails it to the user; any link sent
-   * previously stops working. Backend rejects with 409 if the user isn't
-   * `active` and 502 if the email itself fails to send.
+   * previously stops working. Backend rejects with 409 unless the user is
+   * `pending` or `active`, and 502 if the email itself fails to send.
    */
   resendInvitation: async (id: string): Promise<{ id: string; email: string; invited: boolean }> => {
     const response = await apiClient.post<ApiResponse<{ id: string; email: string; invited: boolean }>>(

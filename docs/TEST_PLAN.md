@@ -744,6 +744,97 @@ Confidential one is restricted for them. To re-run, create a fresh pair the same
 
 ---
 
+## 19b. Phase S — Searching for people (`GET /users?search=`)
+
+Backend PR #48 added `search` to `GET /users`: a case-insensitive match on name or email,
+still limited to the caller's `user:view` scope.
+
+- [x] **TP-S1.** As `client_admin`, `/admin/users`: type "supervisor" in the search box.
+      The count drops from every user to the supervisors only, and the table goes back to
+      page 1. A term matching nobody shows "No records match the current filters."
+      *(Verified 2026-10-13: 12 → 3.)*
+- [x] **TP-S2.** `/admin/audit` → "All actors": type "finance". "Searching…" shows until
+      results arrive, then only matching people are offered. Picking one filters the trail
+      to them. Picking "All actors" clears it. *(Verified 2026-10-13.)*
+- [x] **TP-S3.** As `supervisor_finance`, `/delegations` → New delegation → "Delegate to":
+      only active colleagues in your scope are offered, never yourself. Typing narrows the
+      list. *(Verified 2026-10-13: Finance Staff User offered and picked.)*
+- [ ] **TP-S4.** As `internal_auditor`, `/auditor/trail` → actor filter. Expected today:
+      "Couldn't load people." (auditor has no `user:view`; seed gap in the handoff). Re-test
+      once the backend grants it.
+- [x] **TP-S5.** Open the bell. While the list loads it shows grey placeholder rows, one per
+      unread notification (up to 7), then the notifications. *(Verified 2026-10-13 with the
+      request slowed: 4 unread → 4 placeholder rows.)*
+
+## 19c. Phase T — Pending users and AI summaries (backend PR #49)
+
+PR #49: an invited user is `pending` until they set a password; suspended users are told so
+at login; `schulltech_admin` is hidden from the roles API; documents get an AI summary.
+
+- [x] **TP-T1.** As `client_admin`, `/admin/users`: an invited user who hasn't set a
+      password shows **Pending** with "Invited <date>", **Edit** and **Resend invite**, and no
+      Activate. The status filter has Pending. *(Verified 2026-10-13 on Seye Onigbinde.
+      Resend invite not clicked: it emails a real person.)*
+- [ ] **TP-T2.** Invite a test address. The toast reads "Invitation sent to …" and the row
+      is Pending. Open the emailed link, set a password: the row turns Active and the person
+      can sign in.
+- [x] **TP-T3.** Sign in as a suspended user (`muyanna+supervisor-ops`, any password). The
+      error reads "Account has been suspended". *(Verified 2026-10-13.)*
+- [x] **TP-T4.** Open a document whose summary is complete (`7aa7d964…`). The **AI summary**
+      card shows an opening sentence, bullets, and "Written by AI from version N on …".
+      *(Verified 2026-10-13.)*
+- [x] **TP-T5.** Open a document never summarized before (an older upload). The card says
+      "Writing the summary…", then shows it without a reload (checks every 10 s for up to a
+      minute; "Check again" after that). *(Verified 2026-10-13 on `e70fc2a3…`: one check.)*
+- [ ] **TP-T6.** A file with no readable text (e.g. a blank scan) says "No summary: no
+      readable text was found in this file." Not run: no such file in the test tenant.
+- [ ] **TP-T7.** `/admin/roles` and the invite modal's role list don't offer
+      `schulltech_admin`. *(The API was checked 2026-10-13; the screens weren't.)*
+
+## 19d. Phase U — Deadlines in lists and on-time results (backend PR #50)
+
+- [x] **TP-U1.** As `staff_finance`, My Tasks: an open task past its deadline shows "Overdue"
+      and "Nd overdue"; an open task within it shows "Due in Nd"; a closed task shows "—".
+      *(Verified 2026-10-13.)*
+- [x] **TP-U2.** Same user: a task holding a document you can't open lists it as "Restricted
+      document" and the page doesn't break. *(Verified 2026-10-13.)*
+- [x] **TP-U3.** Same user: the dashboard's "SLA compliance (30d)" and My Performance show the
+      on-time share of your stage results over the last 30 days, with On time and Breached
+      counts. *(Verified 2026-10-13: 88%, 7 on time, 1 breached.)*
+- [x] **TP-U4.** As `client_admin`, Workflow Monitor → In progress lists every in-progress
+      workflow (not only ones you hold a task in), with Current stage and Next due filled in.
+      *(Verified 2026-10-13: 4 rows, 2 past the stage SLA. It was empty before.)*
+- [x] **TP-U5.** As `supervisor_finance`, Approvals Queue → Reassign lists your department's
+      colleagues; no `GET /users/<your id>` is made (the department comes from `/auth/me`).
+      *(Verified 2026-10-13.)*
+- [ ] **TP-U6.** As `client_admin`, open a document that's in a workflow you hold no task in.
+      The Workflows card lists it and the page offers "Open workflow", not "Route to workflow".
+      *(Seen on `78881ccb…` 2026-10-13; repeat on a fresh document.)*
+
+## 19e. Phase V — Oversight fixes and Team Performance (2026-10-13)
+
+- [x] **TP-V1.** As `staff_finance`, open any page: no `GET /tasks/approvals` request (it used
+      to 403 on every page). As `supervisor_finance` the Approvals Queue badge still counts.
+      *(Verified 2026-10-13.)*
+- [x] **TP-V2.** As `management_ops`, Compliance Posture: no `GET /audit`; the sensitive-activity
+      panel says the role can't read the audit trail. *(Verified 2026-10-13.)*
+- [x] **TP-V3.** As `supervisor_finance`, Team Performance shows real figures: team SLA %,
+      closed and turnaround for 30 days with the change from the 30 days before, weekly
+      closures vs new work, and one row per team member. Export CSV downloads the table.
+      *(Verified 2026-10-13: 79%, 20 closed, 2.4 d; CSV not re-checked.)*
+- [x] **TP-V4.** As `staff_finance`, open a document in a running workflow you hold no task
+      in. The Workflows card says it's marked as in a running workflow you can't open, and
+      "Route to workflow" isn't offered. *(Verified 2026-10-13 on `487006a2…`, whose status is
+      stale — see backend spec N4.)*
+- [x] **TP-V5.** As `staff_finance`, open a document in a workflow you do hold a task in
+      (`acf67419…`): the card lists it and the page offers "Open workflow". *(Verified.)*
+- [ ] **TP-V6.** On Search or in a cabinet, select a document that's in a running workflow plus
+      one that isn't, and Route to workflow: the dialog says one is left out and routes only
+      the other.
+- [x] **TP-V7.** As `client_admin`, `/admin/audit` names actors beyond the first 20 users (all
+      users are loaded, not one page). *(The tenant has 12 users, so verified only that one
+      `GET /users?limit=100` request replaces the 20-row one.)*
+
 ## 20. Wrap-up
 
 - [ ] Re-run **TP-A1–A7** once more at the very end using kemi.reviewer (the custom-role

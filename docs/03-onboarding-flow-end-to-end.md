@@ -93,7 +93,7 @@ PHASE 4   Client Admin  ·  ⛔ NO UI
           ─────────────────────────────────────────────────────────────────
                                     │  produces: CabinetAccess grants
                                     ▼
-PHASE 5   Client Admin  ·  🟨 PARTIAL (no invite flow)
+PHASE 5   Client Admin  ·  🟨 PARTIAL (no login rate limit)
           Create users → assign department → assign roles
           ─────────────────────────────────────────────────────────────────
                                     │  produces: user accounts
@@ -417,19 +417,19 @@ access to everything.** These two fixes must ship together.
 
 **Actor:** Bola
 **Screen:** `/admin/users` (423 lines, fully wired)
-**Status:** 🟨 **Works, but there is no invite flow**
+**Status:** 🟨 **Works; emailed invitations since 2026-09-18, no login rate limit** *(corrected 2026-10-13: this said there was no invite flow)*
 
 ### Steps
 
 | # | Action | API | Status |
 |---|---|---|---|
-| 5.1 | Create the user | `POST /users` `{email, name, password, departmentId, roleIds}` | ✅ bcrypt-hashed; department and role existence validated |
+| 5.1 | Invite the user | `POST /users` `{email, name, departmentId, roleIds}` (no password) | ✅ emails a set-password link; the user is `pending` until they use it, then `active` (PR #49). Department and roles validated; `schulltech_admin` can't be given |
 | 5.2 | Assign additional roles | `POST /users/:id/roles` `{roleIds}` | ✅ |
 | 5.3 | Remove a role | `DELETE /users/:id/roles/:roleId` | ✅ |
 | 5.4 | Deactivate | `PATCH /users/:id` `{status:'inactive'}` | ✅ — login then returns 403 `ACCOUNT_INACTIVE` |
-| 5.5 | **Send an invitation** | — | ⛔ **does not exist** |
-| 5.6 | **Force password change on first login** | — | ⛔ |
-| 5.7 | **Self-service password reset** | — | ⛔ |
+| 5.5 | Resend an invitation | `POST /users/:id/invitation` | ✅ pending or active users; "Resend invite" on `/admin/users` |
+| 5.6 | Force password change on first login | — | Moot: invited users choose their own |
+| 5.7 | Self-service password reset | `POST /auth/forgot-password` → `/set-password` | ✅ |
 
 ### The credential-handling problem
 
@@ -774,7 +774,7 @@ Phase 1  Bootstrap roles/perms   ✅            → ⚠️ MUST run `npx prisma 
 Phase 2  Departments             ✅
 Phase 3  Cabinets + folders      ✅            → ⛔ no metadata designer
 Phase 4  Cabinet access grants   ⛔ NO UI      → and not enforced on reads
-Phase 5  Users                   🟨            → ⛔ no invite, no reset, no rate limit
+Phase 5  Users                   🟨            → ⛔ no login rate limit (invite + reset exist)
 Phase 6  Workflows               ✅            → ✅ authorization FIXED 09-04
                                                → ⛔ but staff/supervisor can no
                                                  longer READ definitions (DRIFT-14)

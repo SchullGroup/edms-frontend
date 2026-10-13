@@ -20,8 +20,8 @@ export function isActiveTask(task: Task): boolean {
   return (ACTIVE_TASK_STATUSES as readonly string[]).includes(task.status);
 }
 
-/** False when the task's deadline isn't known — `GET /tasks` doesn't return
- *  deadlines yet, only `GET /tasks/:id` does. */
+/** Past the earliest deadline among its active documents. False when no
+ *  deadline is known. */
 export function isOverdue(task: Task, now: number = Date.now()): boolean {
   const due = taskDueAt(task);
   return isActiveTask(task) && !!due && Date.parse(due) < now;

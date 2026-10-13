@@ -6,6 +6,7 @@ import {
   SlaConfiguration,
   SlaConfigurationUpdate,
   SlaHoliday,
+  SlaOutcomeSummary,
 } from '@/types/models';
 
 /** Mirrors `GET /sla/breaches`'s query schema. */
@@ -25,7 +26,26 @@ export interface SlaBreachFilters {
   scope?: 'mine' | 'all';
 }
 
+/** Mirrors `GET /sla/outcomes/summary`'s query schema. Dates are `YYYY-MM-DD`,
+ *  both days included, in UTC. */
+export interface SlaOutcomeSummaryFilters {
+  from: string;
+  to: string;
+  groupBy?: 'user' | 'department' | 'stage';
+  departmentId?: string;
+  userId?: string;
+}
+
 export const slaService = {
+  /** On-time vs late stage results (needs `task:view`). */
+  getOutcomeSummary: async (params: SlaOutcomeSummaryFilters): Promise<SlaOutcomeSummary> => {
+    const response = await apiClient.get<ApiResponse<SlaOutcomeSummary>>(
+      '/sla/outcomes/summary',
+      { params },
+    );
+    return response.data.data;
+  },
+
   /**
    * Persisted SLA warning/escalation events. Distinct from the current
    * bottleneck/SLA state computed by `bottlenecks-ageing` — the two totals

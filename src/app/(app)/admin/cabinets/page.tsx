@@ -14,7 +14,7 @@ import {
 } from '@/apis/hooks/useCabinets';
 import { useCreateFolder } from '@/apis/hooks/useFolders';
 import { useDepartments } from '@/apis/hooks/useDepartments';
-import { useUser } from '@/apis/hooks/useUsers';
+import { useMyDepartmentId } from '@/hooks/useMyDepartmentId';
 import { Skeleton, SkeletonTable, SkeletonTreeRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { CabinetSchemaCard } from '@/components/cabinets/CabinetSchemaCard';
@@ -41,8 +41,7 @@ export default function CabinetDesignerPage() {
   const canCreateCabinet = can('cabinet', 'create');
   const canEditCabinet = can('cabinet', 'edit');
   const canDeleteCabinet = can('cabinet', 'delete');
-  const { data: me } = useUser(currentUser?.id || '');
-  const myDepartmentId = me?.departmentId ?? null;
+  const { departmentId: myDepartmentId } = useMyDepartmentId();
 
   const cabinets = useMemo(
     () =>

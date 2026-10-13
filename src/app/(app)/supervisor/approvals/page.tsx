@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useUIStore } from '@/store/useUIStore';
 import { useApprovalTasks, useReassignTask } from '@/apis/hooks/useTasks';
-import { useUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
+import { useAllUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -29,10 +29,10 @@ export default function ApprovalsQueuePage() {
     isError: isTasksError,
     refetch: refetchTasks,
   } = useApprovalTasks({ scope: 'all', status: tab, page, limit: PAGE_SIZE });
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const tasks = tasksData?.data || [];
   const pagination = tasksData?.pagination;
-  const users = usersData?.data || [];
+  const users = usersData?.items || [];
   // Reassign targets: active users in the reassigner's own department only.
   const { users: colleagues } = useDepartmentColleagues();
 

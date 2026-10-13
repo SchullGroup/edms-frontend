@@ -36,13 +36,21 @@ export interface AuthUser {
   status: 'active' | 'inactive' | 'suspended';
   roles: string[];
   permissions?: PermissionType[];
+  /** From `GET /auth/me` (edms-backend PR #50); login doesn't return it yet,
+   *  so it's `undefined` until AppShell's `/auth/me` call lands. `null` means
+   *  the user has no department. Read it with `useMyDepartmentId`. */
+  departmentId?: string | null;
 }
 
 export interface User {
   id: string;
   email: string;
   name: string;
-  status: 'active' | 'inactive' | 'suspended';
+  /** `pending` = invited by email, no password set yet; accepting the
+   *  invitation makes them `active` (edms-backend PR #49). */
+  status: 'pending' | 'active' | 'inactive' | 'suspended';
+  /** First invitation email; null when an admin set the password. */
+  invitedAt?: string | null;
   departmentId?: string | null;
   roles?: { id: string; name: string; description?: string | null }[];
   /** What `GET /users` actually returns — the join rows, not a flat `roles` array. */
@@ -163,8 +171,28 @@ export interface DocumentVersion {
   checksum: string;
   ocrStatus: 'pending' | 'processing' | 'completed' | 'failed';
   ocrText?: string | null;
+  /** Also on `GET /documents/:id`'s `currentVersion`, but read it through
+   *  `GET /documents/:id/summary`: that call is audited and queues summaries
+   *  for versions uploaded before the feature existed. */
+  aiSummary?: string | null;
+  summaryStatus?: DocumentSummaryStatus;
+  summaryGeneratedAt?: string | null;
   uploadedBy: string;
   createdAt: string;
+}
+
+export type DocumentSummaryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
+/** `GET /documents/:id/summary`: the AI summary of the current version,
+ *  generated in the background once OCR completes. */
+export interface DocumentSummary {
+  documentId: string;
+  versionId: string;
+  versionNumber: number;
+  ocrStatus: DocumentVersion['ocrStatus'];
+  summaryStatus: DocumentSummaryStatus;
+  summary: string | null;
+  generatedAt: string | null;
 }
 
 /** A search the user saved on `/search`: the query text plus at most one
@@ -500,7 +528,8 @@ export interface WorkflowInstanceDocument {
       createdAt: string;
     } | null;
   };
-  /** Not returned yet — requested from the backend on the instance list. */
+  /** The document's active executions; on `GET /workflow-instances` since
+   *  edms-backend PR #50. */
   executions?: WorkflowDocumentExecution[];
 }
 
@@ -863,6 +892,26 @@ export type TaskActionRequest =
 export interface ReassignTaskRequest {
   assigneeId: string;
   note?: string;
+}
+
+/** `data` of `GET /sla/outcomes/summary` (edms-backend PR #50): completed
+ *  stage results from `workflow_sla_outcomes`, on time or late, over a date
+ *  range. At `own` scope the backend limits it to the caller's own results. */
+export interface SlaOutcomeSummary {
+  total: number;
+  onTime: number;
+  late: number;
+  /** 0 to 1, three decimals; 0 when `total` is 0. */
+  onTimeRate: number;
+  /** Empty unless `groupBy` was sent. `key` is the user, department or stage. */
+  groups: {
+    key: string | null;
+    label: string;
+    total: number;
+    onTime: number;
+    late: number;
+    onTimeRate: number;
+  }[];
 }
 
 /** `data` shape of `GET /tasks/stats` — completed-task SLA rollup by department. */

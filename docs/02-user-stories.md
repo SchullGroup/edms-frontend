@@ -480,6 +480,9 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
       `/admin/users` already read the object shape correctly. Tier casing is now
       normalised too — fixtures say `Top Secret`, the backend sends `top_secret`.
 - [x] Checkout / check-in from this screen
+- [x] **AI summary of the current version (2026-10-13, verified live)** — `GET /documents/:id/summary`
+      (Gemini, written after OCR). The card says when it's still being written, when the file has no
+      readable text, and when OCR or the summary failed
 - [x] Edit title, type, folder, confidentiality, urgency, status
 - [x] Workflow stage rail + activity trail from live `GET /workflow-history` (since the
       `feature/management` merge)

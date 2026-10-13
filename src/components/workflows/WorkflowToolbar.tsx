@@ -175,6 +175,15 @@ export function WorkflowToolbar({
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={onCreateNew}
+            disabled={creating || !canCreate}
+            title={!canCreate ? "You don't have permission to create workflows" : undefined}
+          >
+            <Icon name="plus" size={15} /> New workflow
+          </button>
+          <button
             className="btn btn-primary btn-sm"
             onClick={onPublish}
             disabled={publishing || workflow.status === 'published' || !canPublish}
@@ -210,18 +219,6 @@ export function WorkflowToolbar({
                   }}
                   role="menu"
                 >
-                  <button
-                    className="menu-item"
-                    role="menuitem"
-                    disabled={creating || !canCreate}
-                    title={!canCreate ? "You don't have permission to create workflows" : undefined}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onCreateNew();
-                    }}
-                  >
-                    <Icon name="plus" size={15} /> New workflow
-                  </button>
                   <button
                     className="menu-item"
                     role="menuitem"

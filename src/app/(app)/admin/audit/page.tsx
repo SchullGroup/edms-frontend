@@ -5,7 +5,8 @@ import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuditEntries, useExportAuditCsv, useVerifyAuditChain } from '@/apis/hooks/useAudit';
-import { useUsers } from '@/apis/hooks/useUsers';
+import { useAllUsers } from '@/apis/hooks/useUsers';
+import { UserPicker } from '@/components/common/UserPicker';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { AuditEntry } from '@/types/models';
@@ -42,10 +43,10 @@ export default function TenantAuditPage() {
     isError: isErrorAudit,
     refetch: refetchAudit,
   } = useAuditEntries(filters);
-  const { data: usersData, isLoading: isLoadingUsers } = useUsers();
+  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
 
   const rows = auditData?.data || [];
-  const users = usersData?.data || [];
+  const users = usersData?.items || [];
 
   const exportCsv = useExportAuditCsv();
   const verifyChain = useVerifyAuditChain();
@@ -146,23 +147,18 @@ export default function TenantAuditPage() {
               setPage(1);
             }}
           />
-          <select
-            className="input"
-            style={{ width: 'auto', height: '32px' }}
-            aria-label="Filter by actor"
-            value={actorId}
-            onChange={(e) => {
-              setActorId(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All actors</option>
-            {users.map((u: any) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+          <div style={{ width: 200 }}>
+            <UserPicker
+              value={actorId}
+              onChange={(id) => {
+                setActorId(id);
+                setPage(1);
+              }}
+              allLabel="All actors"
+              ariaLabel="Filter by actor"
+              controlStyle={{ height: 32 }}
+            />
+          </div>
           <DateField
             compact
             aria-label="From date"

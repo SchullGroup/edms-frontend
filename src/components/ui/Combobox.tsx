@@ -22,9 +22,24 @@ interface ComboboxProps {
   searchPlaceholder?: string;
   disabled?: boolean;
   emptyText?: string;
+  /**
+   * Server-side search. When set, every change to the search box is reported
+   * here and `options` are shown as given — the caller has already filtered them.
+   */
+  onQueryChange?: (query: string) => void;
+  /** Shows "Searching…" in place of the empty text while results load. */
+  loading?: boolean;
+  /** Labels for selected values that aren't in `options` (a server search that
+   *  no longer contains the pick). Never listed. */
+  knownOptions?: ComboboxOption[];
+  /** A note under the list, e.g. that results are capped. */
+  footer?: React.ReactNode;
+  ariaLabel?: string;
+  controlStyle?: React.CSSProperties;
 }
 
 const GAP = 6;
+const MIN_POP_WIDTH = 280;
 
 /**
  * Search + select control. In single mode `value`/`onChange` deal in a plain
@@ -45,43 +60,64 @@ export function Combobox({
   searchPlaceholder = 'Search…',
   disabled = false,
   emptyText = 'No matches',
+  onQueryChange,
+  loading = false,
+  knownOptions,
+  footer,
+  ariaLabel,
+  controlStyle,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
+  const [query, setQueryState] = useState('');
+  const onQueryChangeRef = useRef(onQueryChange);
+  useEffect(() => {
+    onQueryChangeRef.current = onQueryChange;
+  }, [onQueryChange]);
+  const setQuery = useCallback((q: string) => {
+    setQueryState(q);
+    onQueryChangeRef.current?.(q);
+  }, []);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const controlRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
 
+  // An option whose value is '' (e.g. "All actors") is a real choice, shown as
+  // selected rather than as the placeholder.
+  const hasEmptyOption = [...options, ...(knownOptions ?? [])].some((o) => o.value === '');
   const selectedValues = useMemo(
     () =>
       multiple
         ? Array.isArray(value)
           ? value
           : []
-        : value
+        : value || hasEmptyOption
           ? [value as string]
           : [],
-    [value, multiple],
+    [value, multiple, hasEmptyOption],
   );
 
   const selectedOptions = useMemo(
     () =>
       selectedValues
-        .map((v) => options.find((o) => o.value === v))
+        .map(
+          (v) =>
+            options.find((o) => o.value === v) ?? knownOptions?.find((o) => o.value === v),
+        )
         .filter(Boolean) as ComboboxOption[],
-    [selectedValues, options],
+    [selectedValues, options, knownOptions],
   );
 
+  const serverSearch = !!onQueryChange;
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return options;
+    if (!q || serverSearch) return options;
     return options.filter(
       (o) =>
         o.label.toLowerCase().includes(q) ||
         (o.hint ? o.hint.toLowerCase().includes(q) : false),
     );
-  }, [options, query]);
+  }, [options, query, serverSearch]);
 
   const syncRect = useCallback(() => {
     if (controlRef.current) setRect(controlRef.current.getBoundingClientRect());
@@ -90,7 +126,7 @@ export function Combobox({
   const close = useCallback(() => {
     setOpen(false);
     setQuery('');
-  }, []);
+  }, [setQuery]);
 
   useEffect(() => {
     if (!open) return;
@@ -147,10 +183,13 @@ export function Combobox({
     const spaceAbove = rect.top;
     const flipUp = spaceBelow < 260 && spaceAbove > spaceBelow;
     const maxHeight = Math.max(160, (flipUp ? spaceAbove : spaceBelow) - GAP - 12);
+    // A compact toolbar control still gets a popover wide enough to read names
+    // and emails; it shifts left rather than run off the viewport.
+    const width = Math.max(rect.width, MIN_POP_WIDTH);
     popStyle = {
       position: 'fixed',
-      left: rect.left,
-      width: rect.width,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+      width,
       maxHeight,
       ...(flipUp
         ? { bottom: window.innerHeight - rect.top + GAP }
@@ -164,6 +203,8 @@ export function Combobox({
         type="button"
         ref={controlRef}
         className="combobox-control input"
+        style={controlStyle}
+        aria-label={ariaLabel ? `${ariaLabel}: ${summary}` : undefined}
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
@@ -207,7 +248,9 @@ export function Combobox({
               />
             </div>
             <div className="combobox-list">
-              {filtered.length === 0 && <div className="combobox-empty">{emptyText}</div>}
+              {filtered.length === 0 && (
+                <div className="combobox-empty">{loading ? 'Searching…' : emptyText}</div>
+              )}
               {filtered.map((o) => {
                 const isSel = selectedValues.includes(o.value);
                 return (
@@ -230,6 +273,7 @@ export function Combobox({
                 );
               })}
             </div>
+            {footer && <div className="combobox-footer">{footer}</div>}
           </div>,
           document.body,
         )}

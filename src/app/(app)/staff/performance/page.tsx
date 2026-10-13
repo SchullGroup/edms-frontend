@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
-import { useSlaBreaches } from '@/apis/hooks/useSla';
+import { lastDaysRange, useSlaBreaches, useSlaOutcomeSummary } from '@/apis/hooks/useSla';
 import { changesRequestedRate, turnaroundDays } from '@/utils/supervisor';
 import { exportCsv } from '@/utils/exportCsv';
 import { LineChart, DonutChart } from '@/components/ui/Charts';
@@ -22,18 +22,25 @@ export default function MyPerformancePage() {
 
   const { data: tasksData, isLoading: tasksLoading } = useTasks({ scope: 'mine' });
   const { data: openBreaches } = useSlaBreaches({ scope: 'mine', status: 'open', limit: 1 });
+  // My stage results over the last 30 days, on time or late (edms-backend PR #50).
+  const { data: slaOutcomes, isLoading: outcomesLoading } = useSlaOutcomeSummary(
+    { ...lastDaysRange(30), userId: currentUser?.id },
+    { enabled: !!currentUser },
+  );
 
   if (!currentUser) return null;
 
   const tasks = tasksData?.data || [];
 
-  // On-time figures have no source since tasks lost their due date (edms-backend
-  // `919d0ef`): the backend records each result in `workflow_sla_outcomes`, and
-  // an endpoint over it is requested. Until then they show "—", not a made-up 100%.
+  // On-time figures come from `GET /sla/outcomes/summary`: each stage result I
+  // completed in the last 30 days, on time or late. With none, "—", not 100%.
   const closedTasks = tasks.filter((t: any) => t.status === 'completed');
-  const slaCompliance: number | null = null;
-  const onTime: number | null = null;
-  const breached: number | null = null;
+  const hasOutcomes = !!slaOutcomes && slaOutcomes.total > 0;
+  const slaCompliance: number | null = hasOutcomes
+    ? Math.round(slaOutcomes.onTimeRate * 100)
+    : null;
+  const onTime: number | null = slaOutcomes ? slaOutcomes.onTime : null;
+  const breached: number | null = slaOutcomes ? slaOutcomes.late : null;
   // Open SLA breach events — the one live "late" signal per task.
   const atRiskNow = openBreaches?.pagination.total ?? 0;
 
@@ -78,7 +85,10 @@ export default function MyPerformancePage() {
     {
       value: slaCompliance === null ? '—' : `${slaCompliance}%`,
       label: 'SLA compliance',
-      delta: slaCompliance === null ? 'not reported yet' : 'vs last period',
+      delta:
+        slaCompliance === null
+          ? 'No completed stages in 30 days'
+          : `${onTime} of ${slaOutcomes?.total} on time, last 30 days`,
       dir: 'up',
     },
     { value: avgTurnaround, label: 'Avg turnaround', delta: 'Raised to completed', dir: 'up' },
@@ -147,13 +157,13 @@ export default function MyPerformancePage() {
 
             <div className="card">
               <div className="card-head">
-                <span className="h3">SLA compliance trend</span>
+                <span className="h3">SLA compliance (last 30 days)</span>
               </div>
               <div className="card-body">
                 <div className="ring-wrap">
                   {slaCompliance === null ? (
                     <div className="caption" style={{ width: '130px', textAlign: 'center' }}>
-                      On-time rate isn&rsquo;t reported yet
+                      {outcomesLoading ? 'Loading…' : 'No completed stages in the last 30 days'}
                     </div>
                   ) : (
                     <DonutChart

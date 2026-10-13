@@ -16,16 +16,16 @@ direct ask.
 | S1 | Stop returning users' password hashes | `GET /cabinets/:id`, cabinet access lists | **P0 security** | XS |
 | S2 | Only hand a download URL to callers with `document:download` | `GET /documents/:id`, `GET /documents`, version list, `/export`, `/print` | **P0 security** | M |
 | S3 | Enforce grant rules on cabinet access | `POST /cabinets/:id/access` | **P0 security** | S |
-| W1 | Per-document stage, status and due date in task lists | `GET /tasks`, `GET /tasks/approvals` | P1 | XS |
-| W2 | Per-document executions in the workflow instance list | `GET /workflow-instances` | P1 | XS |
-| W3 | On-time reporting endpoint | new `GET /sla/outcomes/summary` | P1 | M |
+| W1 | ✅ ~~Per-document stage, status and due date in task lists~~ done: PR #50 (live 2026-10-13); also `sort` and `overdue` filters | `GET /tasks`, `GET /tasks/approvals` | P1 | XS |
+| W2 | ✅ ~~Per-document executions in the workflow instance list~~ done: PR #50 (live 2026-10-13) | `GET /workflow-instances` | P1 | XS |
+| W3 | ✅ ~~On-time reporting endpoint~~ done: PR #50 (live 2026-10-13): `GET /sla/outcomes/summary`, wired on the staff dashboard and My Performance | new `GET /sla/outcomes/summary` | P1 | M |
 | D1 | Accept metadata on upload | `POST /documents`, `POST /documents/batch` | P1 | S |
 | D2 | Let a metadata value be cleared | `PUT /documents/:id/metadata` | P2 | XS |
 | D3 | Re-index search when a document changes | metadata, title, restore | P1 | S |
 | D4 | Move documents between cabinets and to the cabinet root | `PATCH /documents/:id` | P2 | S |
 | D5 | `departmentId` filter on lists | `GET /documents`, `GET /workflow-instances` | P2 | S |
 | D6 | All filters on full-text search | `GET /documents/search` | P2 | S |
-| O1 | `departmentId` on the signed-in user | `POST /auth/login`, `GET /auth/me` | P1 | XS |
+| O1 | ✅ ~~`departmentId` on the signed-in user~~ done: on `/auth/me` in PR #50 (live 2026-10-13), adopted by the frontend; login still lacks it (unmerged `feat/frontend-spec-items`) | `POST /auth/login`, `GET /auth/me` | P1 | XS |
 | O2 | Limit departments to one level of nesting | `POST /departments`, `PATCH /departments/:id` | P2 | XS |
 | T1 | Optional signature on the review action | `POST /tasks/:id/action` | P2 | XS |
 | I1 | Keep OCR word positions | OCR worker + new read endpoint | P2 | M |
@@ -116,7 +116,9 @@ anything.
 Since `919d0ef` the list endpoints return no stage or deadline, so the frontend cannot show due
 dates, overdue filters, the Workflow Monitor's Stage/Due columns, or on-time rates.
 
-### W1. Per-document stage, status and due date in task lists
+### W1. Per-document stage, status and due date in task lists — ✅ **Done**
+
+> PR #50 (live 2026-10-13); also `sort` and `overdue` filters.
 
 **Problem.** `Task.dueAt` is gone; deadlines live on `WorkflowDocumentExecution.stageDueAt`.
 `workflowTaskListInclude` (`tasks.repository.ts` line 19) selects only the execution `id`, so
@@ -138,7 +140,9 @@ so the frontend can only sort or filter the page it holds:
 
 **Done when** `GET /tasks?limit=1` returns `documents[].workflowDocumentExecution.stageDueAt`.
 
-### W2. Per-document executions in the workflow instance list
+### W2. Per-document executions in the workflow instance list — ✅ **Done**
+
+> PR #50 (live 2026-10-13).
 
 **Problem.** `WorkflowInstance` no longer has `currentStage` or `stageDueAt`. `listInstances`
 (`instances.repository.ts` line 16) selects each document's `id`, `status` and dates, but no
@@ -158,7 +162,9 @@ are cheap. Not needed on `GET /workflow-instances/:id`.
 
 **Done when** `GET /workflow-instances?limit=1` returns `documents[].executions[].stageDueAt`.
 
-### W3. On-time reporting endpoint
+### W3. On-time reporting endpoint — ✅ **Done**
+
+> PR #50 (live 2026-10-13): `GET /sla/outcomes/summary`, wired on the staff dashboard and My Performance.
 
 **Problem.** The frontend computed on-time % from `Task.completedAt` vs `Task.dueAt`; `dueAt` is
 gone. `WorkflowSlaOutcome` (`workflow.prisma` line 242) records one row per completed execution
@@ -288,7 +294,9 @@ as `ListDocumentsQuerySchema`, applied in the same query.
 
 ## Users and organisation
 
-### O1. `departmentId` on the signed-in user
+### O1. `departmentId` on the signed-in user — ✅ **Done**
+
+> On `/auth/me` in PR #50 (live 2026-10-13), adopted by the frontend; login still lacks it (unmerged `feat/frontend-spec-items`).
 
 **Problem.** Login and `/auth/me` (the user object built in `auth.service.ts` around line 298)
 carry no `departmentId`. The frontend makes an extra `GET /users/:id` to learn it, which needs
@@ -449,7 +457,8 @@ so the frontend can't decide whether a department-assigned task is the user's. E
 `GET /tasks/:id` and on the tasks embedded in `GET /workflow-instances/:id`.
 
 > **Answer:** the backend will return `departmentId` (on `/auth/me`; this also closes O1).
-> Not built yet.
+> **Built** in PR #50 (live 2026-10-13); the frontend reads it from `/auth/me`. FE-3 still
+> waits for Q2 (sub-departments).
 
 **Q4. Should someone still see a workflow after routing it? (DRIFT-22)**
 At `own` scope, `buildInstanceAccessFilter` and `canActorAccessInstance` follow task
@@ -461,3 +470,48 @@ anything stopping the same document being routed into a second active workflow?
 > **Answer:** the logic is correct (intended). Frontend follow-up: explain the empty state on
 > the staff dashboard and the document page's Workflows card (doc 05 backlog 14b). The second
 > half (routing an in-workflow document again) is still unanswered.
+
+---
+
+## Notes on PR #49 (2026-10-13)
+
+The frontend now uses PR #49 (pending users, the suspended-login message, the hidden
+`schulltech_admin` role, AI summaries).
+
+### N2. A failed summary can't be retried — **in the works**
+
+`getDocumentSummary` queues a summary only when `summaryStatus` is `pending`. After the job's
+three attempts fail, the version stays `failed` for good. The backend developer confirmed
+(2026-10-13) that a summary trigger is being built. Until it's live, the frontend shows "The
+summary couldn't be written" with a "Check again" that only re-reads the status; once it is,
+that button should call the trigger.
+
+### N3. Login says whether an email belongs to a suspended account — **deferred**
+
+`login` checks `status` before the password, so a wrong password for a suspended account
+returns 403 "Account has been suspended" instead of 401, revealing which addresses are
+suspended accounts. Deferred by the product owner (2026-10-13): not a concern for now.
+
+### N4. A document's status can stay `in_progress` after its workflow closes
+
+`updateAttachedDocumentStatusesByWorkflowDocumentStatus(..., 'closed', 'closed')` closes only
+documents whose workflow-instance-document is already `closed`. A document still `pending` in
+the workflow when it closes keeps `status: 'in_progress'`. Live example: `487006a2…` ("INV 2026
+1839 invoice") is `in_progress`, but its two workflows are closed (in `3206942d…` it was
+`pending`). The frontend reads `in_progress`/`on_hold` as "in a running workflow" to explain
+workflows a staff member can't see (DRIFT-22) and to keep such documents out of a second
+routing, so a stale status blocks staff from routing that document again. Close every attached
+document when the workflow closes (or set it back to its pre-workflow status).
+
+### Q5. Should management read the audit trail?
+
+`/management/compliance` has a "Sensitive activity" panel over `GET /audit`, but the seeded
+`management` role has no `audit:view`, so it 403s. Since 2026-10-13 the panel says the role
+can't read the trail. Either give `management` `audit:view` (department or global), or the panel
+can go. Question for the PM.
+
+### Q4 (still open). Can a document be routed into a second running workflow?
+
+The frontend now leaves documents whose status is `in_progress`/`on_hold` out of routing. Does
+`POST /workflow-instances` (+ start) refuse a document already in a running workflow?
+

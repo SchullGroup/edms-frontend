@@ -102,8 +102,10 @@ export function SkeletonNotifRows({ rows = 4 }: { rows?: number }) {
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="notif-item" style={{ cursor: 'default' }}>
           <Skeleton width={7} height={7} circle style={{ marginTop: 6, flexShrink: 0 }} />
-          <div style={{ flex: 1 }}>
-            <Skeleton height={12} width={`${70 + ((i * 9) % 25)}%`} style={{ marginBottom: 6 }} />
+          {/* Stacked: the bars are inline-block, so a short message bar would
+              otherwise pull the timestamp bar up beside it in a narrow menu. */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Skeleton height={12} width={`${70 + ((i * 9) % 25)}%`} />
             <Skeleton height={10} width={70} />
           </div>
         </div>
