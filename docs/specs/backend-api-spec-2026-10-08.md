@@ -22,7 +22,7 @@ direct ask.
 | W1 | ✅ ~~Per-document stage, status and due date in task lists~~ done: PR #50 (live 2026-10-13); also `sort` and `overdue` filters | `GET /tasks`, `GET /tasks/approvals` | P1 | XS |
 | W2 | ✅ ~~Per-document executions in the workflow instance list~~ done: PR #50 (live 2026-10-13) | `GET /workflow-instances` | P1 | XS |
 | W3 | ✅ ~~On-time reporting endpoint~~ done: PR #50 (live 2026-10-13): `GET /sla/outcomes/summary`, wired on the staff dashboard and My Performance | new `GET /sla/outcomes/summary` | P1 | M |
-| D1 | Accept metadata on upload | `POST /documents`, `POST /documents/batch` | P1 | S |
+| D1 | ✅ ~~Accept metadata on upload~~ done: `dd10017` (2026-10-09), verified live — the spec row was stale, corrected 2026-10-14 | `POST /documents`, `POST /documents/batch` | P1 | S |
 | D2 | Let a metadata value be cleared | `PUT /documents/:id/metadata` | P2 | XS |
 | D3 | ✅ ~~Re-index search when a document changes~~ done: PR #51 (live 2026-10-14) — index at create, re-index on title change, metadata change and restore, and index anyway when OCR finally fails | metadata, title, restore | P1 | S |
 | D4 | ✅ ~~Move documents between cabinets and to the cabinet root~~ done: `dd10017` (2026-10-09); **item 7** (edit on the source cabinet) done: PR #51 (live 2026-10-14) | `PATCH /documents/:id` | P2 | S |
@@ -214,7 +214,14 @@ department grouped by user.
 
 ## Documents
 
-### D1. Accept metadata on upload
+### D1. Accept metadata on upload — ✅ **Done**
+
+> Shipped in `dd10017` (2026-10-09) — the spec never recorded it, but doc 01 §7's
+> `POST /documents` row and doc 05 item 18 both do: `metadata: [{ fieldId, value }]` is
+> validated against the cabinet's fields inside the create transaction, a missing
+> **required** field is a 400 that creates nothing, and a `staff` user (no
+> `document_metadata:edit`) can file with values. Verified live 2026-10-09; the workflow
+> picker's "Upload from computer" does the same (confirmed by the product owner).
 
 **Problem.** `UploadDocumentInputSchema` (`documents.validation.ts` line 30) has no metadata.
 The upload form saves metadata afterwards with `PUT /documents/:id/metadata`, which needs
