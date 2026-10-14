@@ -1,10 +1,10 @@
 import { useStore } from '@/store/useStore';
 
 /**
- * The signed-in user's department, from `GET /auth/me` (edms-backend PR #50),
- * which AppShell copies into the store. `known` is false until that call has
- * answered (login doesn't carry it); `departmentId` is then the id, or null for
- * a user with no department.
+ * The signed-in user's department, carried by `POST /auth/login` and
+ * `GET /auth/me` (`edms-backend` PR #50/#51) — the login page stores it and
+ * AppShell refreshes it. `known` is false until one of those has answered;
+ * `departmentId` is then the id, or null for a user with no department.
  */
 export function useMyDepartmentId(): { departmentId: string | null; known: boolean } {
   const departmentId = useStore((s) => s.currentUser?.departmentId);

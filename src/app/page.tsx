@@ -6,6 +6,7 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { authService } from '@/apis/services/auth.service';
 import { useMutation } from '@tanstack/react-query';
+import Cookies from 'js-cookie';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { PasswordInput } from '@/components/auth/PasswordInput';
 import { getBrandPreset } from '@/lib/brand';
@@ -29,6 +30,17 @@ export default function LoginPage() {
   // fall back to the seeded system-role grant approximation.
   useEffect(() => {
     if (currentUser) {
+      // The store keeps `currentUser` in localStorage so a reload doesn't bounce a
+      // signed-in user out — but it outlives the session it came from. With no
+      // `accessToken` cookie there is no session behind it (the proxy deletes the
+      // pair when it confirms one is dead), and treating it as one was a dead end:
+      // the portal push is bounced straight back here by the proxy while this page
+      // returns null for as long as the stale user is set, so the screen stayed
+      // blank and there was no way to sign in. Drop it and show the form.
+      if (!Cookies.get('accessToken')) {
+        setCurrentUser(null);
+        return;
+      }
       const perms =
         currentUser.permissions && currentUser.permissions.length > 0
           ? currentUser.permissions.map(normalizePermission)

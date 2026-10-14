@@ -352,7 +352,7 @@ workflow:route:global
 | Habit | Status | Note |
 |---|---|---|
 | File 20–30 documents a day | ✅ | The core loop works well |
-| Search for a document by content | ✅ | `/search` confirmed by the product owner 2026-10-09. *(Was "returns nothing"; the OCR claim was retracted, DRIFT-06)* DOCX/XLSX aren't text-searchable |
+| Search for a document by content | ✅ | `/search` confirmed by the product owner 2026-10-09. *(Was "returns nothing"; the OCR claim was retracted, DRIFT-06)* DOCX/XLSX have no extractable body text, so they're found by **title and metadata** only — indexed at create since edms-backend PR #51 (live 2026-10-14) instead of waiting for OCR. Since 2026-10-14 the facets also apply alongside typed text (D6) |
 | Browse to a document instead | ✅ | This becomes the workaround, and it works |
 | Check out before editing | ✅ | Lock prevents concurrent edits, returns 409 |
 | Upload a revised version | ✅ | Auto-increments the version number |

@@ -184,6 +184,23 @@ export default function ManagementDashboard() {
         </span>
       ),
     },
+    {
+      key: 'deptId',
+      label: 'Records',
+      // The bar click scopes this dashboard to a department; this opens the
+      // documents behind it, filtered by the `departmentId` list filter
+      // (edms-backend PR #51) on the search page.
+      render: (r) => (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          title={`Open ${r.dept}'s documents`}
+          onClick={() => router.push(`/search?dept=${r.deptId}`)}
+        >
+          View
+        </button>
+      ),
+    },
   ];
 
   if (isLoading) return <SkeletonPage kpis={4} charts={2} columns={['Department', 'Volume', 'Closed', 'SLA']} rows={5} />;
@@ -285,8 +302,9 @@ export default function ManagementDashboard() {
                         ? 'var(--status-pending)'
                         : 'var(--status-overdue)',
                   // Drill into that department: the whole dashboard scopes to it.
-                  // (A record list per department needs a `departmentId` filter
-                  // on `GET /documents`, which the API doesn't have.)
+                  // The department table's Records column opens the documents
+                  // behind a bar (a `departmentId` filter on `GET /documents`,
+                  // edms-backend PR #51).
                   onClick: () => setSt({ ...st, dept: r.deptId }),
                 }))}
                 max={100}

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { apiClient, invalidateInFlightAuth } from '@/lib/api-client';
 import { AuthUser, ApiResponse } from '@/types/models';
+import { useUIStore } from '@/store/useUIStore';
 import Cookies from 'js-cookie';
 
 export interface LoginResponseData {
@@ -32,6 +33,14 @@ export const authService = {
       // overnight and something 401'd before this fresh login) could still be
       // in flight — invalidate it so its late result can't act on this session.
       invalidateInFlightAuth();
+
+      // A session that ended earlier can leave `sessionExpired` set: it's
+      // cleared by `performLogout`, but the proxy's redirect to `/` for a dead
+      // token isn't a logout, so a bounce to the login screen followed by a
+      // sign-in on that same page arrives here with the flag still true — and
+      // the "session ended" modal then covers the app the moment AppShell
+      // mounts. A fresh session is by definition not an expired one.
+      useUIStore.getState().setSessionExpired(false);
     }
 
     return response.data.data;

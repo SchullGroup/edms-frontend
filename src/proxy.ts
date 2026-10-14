@@ -133,7 +133,18 @@ export async function proxy(req: NextRequest) {
   }
 
   if (!user) {
-    return NextResponse.redirect(new URL('/', req.url));
+    // Confirmed dead — a responding backend rejected both the access token and
+    // the refresh token (an unreachable backend returned above, leaving the
+    // session alone). Drop the dead credentials along with the redirect: leaving
+    // them in the browser means every later request re-sends them, and the login
+    // page reads the `accessToken` cookie to decide whether a persisted
+    // `currentUser` is still a session — a stale pair bounced the user between the
+    // portal and `/` with nothing rendered at all. Deleting them makes the client
+    // see the same truth this request just established.
+    const redirect = NextResponse.redirect(new URL('/', req.url));
+    redirect.cookies.delete('accessToken');
+    redirect.cookies.delete('refreshToken');
+    return redirect;
   }
 
   const permissions = (user.permissions ?? []).map(normalizePermission);

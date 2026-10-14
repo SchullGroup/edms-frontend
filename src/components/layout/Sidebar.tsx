@@ -8,7 +8,6 @@ import { useStore, userById } from '@/store/useStore';
 import { useNavigation } from '@/hooks/useNavigation';
 import { Icon, IconEl } from '@/components/ui/Icons';
 import { Avatar } from '@/components/ui/Avatar';
-import { useUIStore } from '@/store/useUIStore';
 import { performLogout } from '@/lib/logout';
 import { getBrandPreset } from '@/lib/brand';
 import { useImageFallback } from '@/hooks/useImageFallback';
@@ -23,8 +22,7 @@ export const Sidebar = ({ isMobileOpen, onClose, navToggleRef }: SidebarProps) =
   const router = useRouter();
   const pathname = usePathname();
   const preset = getBrandPreset();
-  const { currentUser, branding, resetData, prefs, setPrefs } = useStore();
-  const { addToast } = useUIStore();
+  const { currentUser, branding, prefs, setPrefs } = useStore();
   const queryClient = useQueryClient();
 
   const logoSrc = (branding.logoUrl || '').trim() || preset.logoUrl.trim();
@@ -301,21 +299,6 @@ export const Sidebar = ({ isMobileOpen, onClose, navToggleRef }: SidebarProps) =
                     <Icon name={prefs.theme === 'dark' ? 'sun' : 'moon'} size={16} />
                   </span>{' '}
                   {prefs.theme === 'dark' ? 'Light theme' : 'Dark theme'}
-                </button>
-                <div className="menu-sep"></div>
-                <button
-                  className="menu-item"
-                  role="menuitem"
-                  onClick={() => {
-                    resetData();
-                    addToast('Demo data reset', 'info');
-                    setMenuOpen(false);
-                  }}
-                >
-                  <span>
-                    <Icon name="swap" size={16} />
-                  </span>{' '}
-                  Reset demo data
                 </button>
                 <div className="menu-sep"></div>
                 <button className="menu-item danger" role="menuitem" onClick={handleSignOut}>

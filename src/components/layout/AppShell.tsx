@@ -107,6 +107,12 @@ export const AppShell = ({ children }: AppShellProps) => {
         if (cancelled || !res) return;
         const cur = useStore.getState().currentUser;
         if (!cur) return;
+        // A live `/auth/me` is proof the session is fine, so a `sessionExpired`
+        // flag set by an earlier 401 (this effect's own, or a refresh that
+        // failed while the refresh cookie was unusable) is stale. Without this
+        // the flag outlives the condition it described and the "session ended"
+        // modal reappears on the next mount.
+        useUIStore.getState().setSessionExpired(false);
         const patch: Record<string, unknown> = {};
         if (res.roles && JSON.stringify(res.roles) !== JSON.stringify(cur.roles)) {
           patch.roles = res.roles;
@@ -118,8 +124,9 @@ export const AppShell = ({ children }: AppShellProps) => {
         ) {
           patch.permissions = res.permissions;
         }
-        // `departmentId` arrived on `/auth/me` with edms-backend PR #50; null
-        // means no department, so only a missing key is skipped.
+        // `departmentId` arrived on `/auth/login` and `/auth/me` with
+        // edms-backend PR #50/#51; null means no department, so only a missing
+        // key is skipped.
         if (res.departmentId !== undefined && res.departmentId !== cur.departmentId) {
           patch.departmentId = res.departmentId;
         }

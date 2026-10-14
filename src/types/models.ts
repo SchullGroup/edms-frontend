@@ -40,9 +40,9 @@ export interface AuthUser {
   status: 'active' | 'inactive' | 'suspended';
   roles: string[];
   permissions?: PermissionType[];
-  /** From `GET /auth/me` (edms-backend PR #50); login doesn't return it yet,
-   *  so it's `undefined` until AppShell's `/auth/me` call lands. `null` means
-   *  the user has no department. Read it with `useMyDepartmentId`. */
+  /** From `POST /auth/login` and `GET /auth/me` (`edms-backend` PR #50, and login
+   *  since PR #51). `null` means the user has no department. Read it with
+   *  `useMyDepartmentId`. */
   departmentId?: string | null;
 }
 
@@ -216,6 +216,7 @@ export interface SavedSearch {
   q: string;
   filters: {
     cabinetId?: string;
+    departmentId?: string;
     documentType?: string;
     status?: 'pending' | 'in_progress' | 'on_hold' | 'closed';
     confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';

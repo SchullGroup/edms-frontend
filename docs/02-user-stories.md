@@ -416,12 +416,20 @@ a scanned archive useful rather than a digital shoebox.
 **Current state:** the plumbing is genuinely good. `documents.repository.search()` uses
 Postgres `websearch_to_tsquery` against a GIN-indexed `tsvector`, ranks with `ts_rank`,
 and applies confidentiality-tier and RBAC-scope filters **inside the SQL** rather than
-after the fact. The frontend has a working search page with filters.
+after the fact. The frontend has a working search page, and since 2026-10-14 it sends every
+facet to the search endpoint, not just Cabinet.
 
-**It returns nothing, because the index is never built.** `search_vector` is populated by
-a BullMQ job that is only enqueued from the **OCR success path**, and OCR always fails
-(DRIFT-06). Documents are visible via `GET /documents` and invisible via
-`GET /documents/search` — the two views disagree and the discrepancy looks like flakiness.
+**Corrected 2026-10-14.** This section previously said the index is never built because it
+is enqueued only from the OCR success path and "OCR always fails (DRIFT-06)". Both halves
+were already wrong by 2026-09-21 — DRIFT-06's "OCR always fails" claim was retracted after
+live verification (doc 01 §5), and OCR does succeed on real uploads. What was real: a
+document was indexed only when OCR completed, so a job stuck at `pending`, or a file with no
+extractable text at all (a DOCX), was invisible to search while sitting fine in
+`GET /documents`. **edms-backend PR #51 (live 2026-10-14) closes that**: indexing happens at
+create time, on a title change, on a metadata change and on a version restore, and the OCR
+worker indexes on its final failed attempt. Not covered: versions already stranded before
+that deploy (no backfill), and a stuck job still isn't retried — the reconciliation sweep
+DRIFT-06 asks for is unbuilt.
 
 **Acceptance criteria**
 - [x] Full-text search over title + OCR text + metadata values
@@ -429,11 +437,10 @@ a BullMQ job that is only enqueued from the **OCR success path**, and OCR always
 - [x] Confidentiality tier filtering applied in SQL
 - [x] RBAC scope (`own`/`department`/`global`) applied in SQL
 - [x] Paginated
-- [ ] 🔴 The index is actually populated (blocked on DRIFT-06)
-- [ ] Re-index on title change, metadata update, and version restore — none of these
-      currently re-enqueue, so the index drifts even once it works
-- [ ] Index by title regardless of OCR outcome, so a failed OCR never makes a document
-      unfindable
+- [x] The index is actually populated — **2026-10-14** (PR #51)
+- [x] Re-index on title change, metadata update, and version restore — **2026-10-14** (PR #51)
+- [x] Index by title regardless of OCR outcome, so a failed OCR never makes a document
+      unfindable — **2026-10-14** (PR #51). *No backfill for versions stranded earlier*
 - [ ] Search-term highlighting in results
 - [ ] `search.executed` audit event (defined in the schema, never written)
 
