@@ -887,6 +887,30 @@ Nothing in this phase was verified live when the docs were updated — that's th
       with `cabinetId = B`: 403 "You need edit access to the document's current cabinet to
       move it". Same-cabinet edits still work. *(API only — no cross-cabinet Move UI exists.)*
 
+## 19h. Phase Y — Session lifecycle (2026-10-14, DRIFT-23)
+
+- [ ] **TP-Y1 (the reported bug).** Sign in, then make the session genuinely dead: in
+      DevTools → Application → Cookies, delete `refreshToken` and blank `accessToken` (or
+      let a real access token expire past 15 min and revoke the refresh token server-side).
+      Trigger any API call (focus the window — the bell polls `/notifications/unread-count`
+      every 60 s and on focus). Expect: 401 on the call, one `POST /api/auth/refresh` that
+      also 401s, then the "your session ended" modal.
+- [ ] **TP-Y2 (the regression).** Without acting on that modal, reach the login screen the
+      way a dead token actually does it — navigate to a protected page and let `proxy.ts`
+      redirect to `/`, or click the modal. **Then sign in again and confirm the modal does
+      not come back.** It used to: the flag set during the dead session was never cleared by
+      the proxy's redirect, so the next `AppShell` mount rendered it. *(Fix: cleared on login
+      success, and on a live `GET /auth/me`.)*
+- [ ] **TP-Y3.** Sanity-check the same thing through the modal's own path: let the session
+      die, click **Sign in again**, log in — the modal stays away.
+- [ ] **TP-Y4.** Confirm the flag can't be set by an ordinary logged-out request: on the
+      login screen, watch the network log for one poll interval. Any request that 401s while
+      logged out should try one refresh and then stop — it must not leave the modal up for
+      the *next* session.
+- [ ] **TP-Y5.** Sign out normally from the sidebar and back in: no modal at any point.
+      `useUIStore` isn't persisted, so a full page reload also clears it — the fix matters
+      only for the in-page logout → login path.
+
 ## 20. Wrap-up
 
 - [ ] Re-run **TP-A1–A7** once more at the very end using kemi.reviewer (the custom-role
