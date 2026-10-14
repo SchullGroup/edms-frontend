@@ -132,7 +132,8 @@ export const routeConfig: RouteRule[] = [
   {
     path: '/admin/workflows/instances',
     matchType: 'prefix',
-    anyPermissions: ['workflow_instance:view'],
+    // Re-exports the Workflow Monitor; same gate as `/supervisor/instances`.
+    anyPermissions: [{ resource: 'workflow_instance', action: 'view', minScope: 'department' }],
   },
   // Requires the edit permission — a full canvas editor with no internal gating
   // yet, and a bad save corrupts a shared workflow definition every document
@@ -195,22 +196,25 @@ export const routeConfig: RouteRule[] = [
   // the matching `:view` key instead, with action buttons inside expected to hide
   // themselves per the admin-section follow-up. Approvals and Workload/Reassign are
   // the exception: their entire purpose is the action itself (approve/reassign), so
-  // they stay gated on `task:action` rather than `task:view` — see their own comments
-  // below. The `supervisor` portal-entry heuristic in permissions.ts deliberately
+  // they're gated on `task:action` (Approvals also on oversight) — see their own
+  // comments below. A `minScope` on a rule needs the grant at that scope or wider
+  // (`evaluateRouteAccess`). The `supervisor` portal-entry heuristic in permissions.ts deliberately
   // stays action-based too (see its comment there). The final `/supervisor` prefix
   // rule is the catch-all for Team Overview (Home).
-  // Gated on the action, not the view — the whole point of this page is acting
-  // on approvals, and the Approve/Reject buttons have no internal gating yet.
-  // Matches the nav item gate in useNavigation.ts.
+  // Gated on the action — the whole point of this page is acting on approvals —
+  // and on oversight: `GET /tasks/approvals` is refused (403) to anyone whose
+  // `task:view` is `own`. Matches the nav item gate in useNavigation.ts.
   {
     path: '/supervisor/approvals',
     matchType: 'prefix',
-    anyPermissions: ['task:action'],
+    permissions: ['task:action', { resource: 'task', action: 'view', minScope: 'department' }],
   },
+  // The Workflow Monitor: oversight across workflows beyond your own, so
+  // `workflow_instance:view` at department or wider, as its nav item requires.
   {
     path: '/supervisor/instances',
     matchType: 'prefix',
-    anyPermissions: ['workflow_instance:view'],
+    anyPermissions: [{ resource: 'workflow_instance', action: 'view', minScope: 'department' }],
   },
   {
     path: '/supervisor/bottlenecks',
@@ -224,10 +228,13 @@ export const routeConfig: RouteRule[] = [
     matchType: 'prefix',
     anyPermissions: ['task:action'],
   },
+  // Team Performance reads `GET /sla/outcomes/summary`, `GET /tasks?scope=all` and
+  // `GET /tasks/workload`: all `task:view`, and the last two 403 below department
+  // scope. So any role holding `task:view` at department or wider opens it.
   {
     path: '/supervisor/performance',
     matchType: 'prefix',
-    anyPermissions: ['task:view', 'workflow_instance:view'],
+    anyPermissions: [{ resource: 'task', action: 'view', minScope: 'department' }],
   },
   {
     path: '/supervisor/exceptions',

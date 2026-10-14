@@ -525,6 +525,19 @@ all actions". The portal shell a user lands in is chosen by `resolvePortal()` �
 name for the six built-ins (their permission sets overlap too much to disambiguate),
 by entry permission for custom roles.
 
+**Scope floors on routes (2026-10-13).** A rule's permission may carry a `minScope`
+(`{ resource, action, minScope }`), as sidebar items already could: `evaluateRouteAccess`
+then also requires the grant at that scope or wider, read from the raw
+`"resource:action:scope"` keys (`/auth/me` in the proxy, the store in AppShell). A grant with no
+known scope (the role-based approximation before `/auth/me` answers) passes, so nobody is
+bounced on first paint; the API still enforces the scope. Used by `/supervisor/approvals`
+(`task:action` + `task:view` at department, since `GET /tasks/approvals` 403s at `own`) and the
+Workflow Monitor (`/supervisor/instances`, `/admin/workflows/instances`: `workflow_instance:view`
+at department), and Team Performance (`/supervisor/performance`: `task:view` at department, which
+all three of its calls need; it used to accept `task:view` at any scope or
+`workflow_instance:view`). Verified live: `staff_finance` is sent to `/unauthorized` from both (Approvals
+used to let them in); the Finance supervisor and client admin open both.
+
 *Original finding, for history:*
 
 `usePermissions.ts:26-31` grants `client_admin` **everything** except `resource === 'platform'`.
@@ -866,7 +879,9 @@ pdf.js's worker and the files it loads at runtime (WebAssembly decoders for JBIG
 JPEG 2000 images, standard fonts, character maps, colour profiles) are served from
 `/pdfjs/`. `scripts/copy-pdfjs-assets.mjs` copies them out of `node_modules` at the start of
 `npm run dev` and `npm run build`; `public/pdfjs/` is git-ignored. `proxy.ts`'s matcher
-excludes `/pdfjs/` so those requests don't trigger a backend session check.
+excludes `/pdfjs/`, and static assets generally by file extension (images, fonts, media),
+so those requests don't trigger a backend session check — the login page's brand logo
+(`/gbb-logo.jpg`) has to load before any session exists.
 
 Printing renders each page to an image with the watermark drawn in and prints those from a
 hidden frame, after `GET /documents/:id/print` succeeds. Images still render as a plain
@@ -1006,7 +1021,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `GET/POST /workflows`, `GET/PATCH /workflows/:id` | ✅ — since `3014b89` a stage may carry `department_id` (alone, or with `role`; never with `user_id`); create, update and publish check that the department exists (422) | ✅ — 🟨 the Designer offers only role or person, so department assignment has no UI yet |
+| `GET/POST /workflows`, `GET/PATCH /workflows/:id` | ✅ — since `3014b89` a stage may carry `department_id` (alone, or with `role`; never with `user_id`); create, update and publish check that the department exists (422) | ✅ — **department-only stages since 2026-10-13, verified live**: the Designer's Assign to offers Role, Person or Department (the department tree flattened, "Operations › Finance") and saves `department_id` with no role or person. Role + department isn't offered until sub-department matching (spec Q2) is live; a stage that already has it (set through the API) keeps its department when saved as a role. Tasks: `assignedDepartmentId` drives "is this my task" (`isTaskForUser`, the backend's rule, with the department from `/auth/me`) and the holder label ("Finance", "supervisor · Finance") on the workflow page, the Monitor drawer and the reassign dialogs. Matching is exact: a stage for Operations doesn't reach Operations › Finance |
 | `POST /workflows/:id/publish` `/archive` | ✅ | ✅ |
 | `GET /workflow-instances`, `GET /workflow-instances/:id` | ✅ — since `919d0ef` an instance has `documents[]` and no `documentId`/`currentStage`/`stageDueAt`; the list doesn't return per-document executions (DRIFT-19). Since `3014b89`: each document carries `isLocked` + `access`, Restricted documents redacted to that title; and at `own` scope visibility follows task assignment only (direct, role, role + department, department), no longer document ownership (**DRIFT-22**). Attaching to a *pending* workflow is limited to the first-stage assignee or `global` scope | ✅ reshaped 2026-10-07 (DRIFT-19), not verified live. ✅ **DRIFT-21** fixed 2026-10-12: restricted entries render (lock tab, request card, no fetch) and stage actions cover only documents with Action access; verified live **PR #50 (live 2026-10-13):** the list returns each document's active `executions` (stage, status, `stageDueAt`) and redacts documents the caller can't view (`isLocked`, `access`, "Restricted document"); the detail returns every attached document. The list defaults to `scope=mine` (workflows the caller holds a task in), and `scope=all` is a **403** for anyone whose `workflow_instance:view` is `own`. The Workflow Monitor and `/doc/[id]`'s Workflows card sent no scope, so a client admin's Monitor was empty; since 2026-10-13 both send `scope=all` with oversight (department/global) and `mine` otherwise (verified live: admin Monitor 0 → 4 in progress, supervisor 3 for their department, staff `/doc/[id]` still 200). Stage and Next due columns fill from `executions` |
 | ~~`POST /workflow-instances/start`~~ | now the two-call `POST /workflow-instances` **then** `POST /:instanceId/start`; since `919d0ef` the create body is `{ workflowDefinitionId, documents: [{ documentId, comment? }] }` | ✅ **DRIFT-09 resolved**; body updated 2026-10-07 — documents routed together go into one workflow (DRIFT-19) |
@@ -1375,9 +1390,10 @@ reading both must handle both.
 > ```env
 > NEXT_PUBLIC_API_URL=https://edms-backend-zmfm.onrender.com
 > NEXT_PUBLIC_UPLOAD_BASE_URL=https://4c73wdutl4.execute-api.us-west-1.amazonaws.com/staging/fileupload/multipart
+> NEXT_PUBLIC_BRAND=galaxybackbone
 > ```
 >
-> Two keys, no duplicates, nothing dead. `NEXT_PUBLIC_API_URL` points straight at
+> Three keys, no duplicates, nothing dead. `NEXT_PUBLIC_API_URL` points straight at
 > the deployed backend (not `localhost:3001` — that only ever appears as
 > `api-client.ts`/`auth.server.ts`'s `||` fallback, used when the env var is
 > unset, e.g. a fresh local clone before this file exists). `NEXT_PUBLIC_UPLOAD_BASE_URL`
@@ -1406,6 +1422,39 @@ NEXT_PUBLIC_API_URL=                                # duplicate key — this one
 `NEXT_PUBLIC_API_URL`, same as the client. That still works, but it means the backend
 URL used for server-to-server calls is baked into the client bundle rather than kept in
 a separate non-public variable. Not urgent enough to be its own finding on its own.
+
+`.env` itself is **git-ignored** (`.gitignore:34`), so none of these values are committed —
+a fresh clone builds with `NEXT_PUBLIC_BRAND` unset, i.e. SchullTech, and the backend URL
+falls back to `api-client.ts`'s `||` default.
+
+### `NEXT_PUBLIC_BRAND` — the white-label switch (added 2026-10-14)
+
+| | |
+|---|---|
+| Values | `schulltech` (default) · `galaxybackbone` |
+| Unset or unknown | resolves to `schulltech` — `getBrandPreset()` maps anything that isn't exactly `galaxybackbone` to it |
+| Read by | `src/lib/brand.ts`, the only place that reads it. `src/app/layout.tsx`, `AuthShell`, `Sidebar`, `Topbar`, `useNavigation`, `app/page.tsx` and the Policies page all go through its exports |
+| Build-time | `NEXT_PUBLIC_*` is inlined at compile: restart `next dev` after changing it, and redeploy on Vercel. It cannot be switched per request |
+
+What the preset drives: the app name and tab title, sidebar sub-line, logo (`logoUrl`, else
+the `logoText` wordmark, else the app name's first letter), favicon, the sidebar/tenant
+colours written onto `<html>`, and the login hero copy and footer credit. It also carries the
+`features` flags that hide or show whole surfaces: `brandingPage` (`/admin/branding`),
+`tenantStorage`, `productGuide`, `extendedPolicyTabs` (Confidentiality/Retention/Controls on
+`/admin/policies` — Urgency & SLA always stays) and `loginTestAccounts`.
+
+Colour fields are **optional and deliberately sparse**: `schulltech` sets none of
+`ctaBg`/`ctaBgHover`/`focus`, so `globals.css` keeps deciding those per theme (near-black
+buttons and a blue focus in light, the violet gradient in dark). Only `galaxybackbone`
+re-paints them, and its `focus`/`focusDark` pair is composed by `:root` and
+`[data-theme="dark"]` — an inline `--focus` would beat the dark rule, which is exactly the
+bug that was fixed on 2026-10-14.
+
+Persisted branding: `src/store/useStore.ts` persists the whole state under `edms-state-v3`,
+`branding` included. The stored copy carries `brandKey` (which preset wrote it) and `source`
+(`preset` or `custom`), and `AppShell` drops it when the key doesn't match the active preset —
+so a browser that ran one brand can't keep it under the other — or when it is preset-owned and
+its values have changed. A `custom` copy is the `/admin/branding` page's publish and survives.
 
 ### Backend worker settings (`edms-backend/src/config/env.ts`)
 

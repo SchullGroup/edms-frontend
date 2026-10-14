@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { taskHolderLabel } from '@/utils/supervisor';
+import { useDepartmentNames } from '@/apis/hooks/useDepartments';
 import { useWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
 import { useWorkflowInstanceLifecycle } from '@/hooks/useWorkflowInstanceLifecycle';
 import { WorkflowStageProgress } from './WorkflowStageProgress';
@@ -39,13 +41,14 @@ export function WorkflowInstanceDetail({
   const { confirmHold, confirmResume, confirmClose, isPending } = useWorkflowInstanceLifecycle();
   // The monitor is an oversight view, so read the whole trail.
   const { positions } = useWorkflowDocumentPositions(instance, 'all');
+  const departmentName = useDepartmentNames();
 
   if (isLoading) return <WorkflowInstanceDetailSkeleton />;
   if (!instance) return <div className="caption">This workflow instance could not be loaded.</div>;
 
   const stages = instance.workflowDefinition?.definition?.stages;
   const pendingTask = instance.tasks?.find((t) => t.status === 'pending');
-  const actorName = pendingTask?.assignee?.name || pendingTask?.assignedRole?.name || 'Unassigned';
+  const actorName = pendingTask ? taskHolderLabel(pendingTask, departmentName) : 'Unassigned';
   const closed = instance.status === 'closed';
   const nearestDue = positions
     .flatMap((p) => p.active.map((e) => e.stageDueAt))

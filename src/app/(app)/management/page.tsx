@@ -28,7 +28,7 @@ interface DeptRow {
   pending: number;
   progress: number;
   closed: number;
-  sla: number;
+  sla: number | null;
 }
 
 export default function ManagementDashboard() {
@@ -101,7 +101,7 @@ export default function ManagementDashboard() {
   );
 
   const slaByDept = useMemo(
-    () => new Map((taskStats?.buckets ?? []).map((b) => [b.departmentId ?? 'unassigned', b.slaRate])),
+    () => new Map((taskStats?.buckets ?? []).map((b) => [b.departmentId ?? 'unassigned', b])),
     [taskStats],
   );
 
@@ -109,9 +109,13 @@ export default function ManagementDashboard() {
     (acc, b) => ({ total: acc.total + b.total, onTime: acc.onTime + b.onTime }),
     { total: 0, onTime: 0 },
   );
-  const orgSlaRate = slaTotals.total === 0 ? 100 : Math.round((slaTotals.onTime / slaTotals.total) * 100);
+  const orgSlaRate =
+    slaTotals.total === 0 ? null : Math.round((slaTotals.onTime / slaTotals.total) * 100);
+  const selectedSla = scopedDept ? slaByDept.get(scopedDept) : undefined;
   const slaRate = scopedDept
-    ? Math.round(slaByDept.get(scopedDept) ?? 100)
+    ? selectedSla && selectedSla.total > 0
+      ? Math.round(selectedSla.slaRate)
+      : null
     : orgSlaRate;
 
   const avgTurnaroundDays = wfStats?.avgTurnaroundDays ?? null;
@@ -124,7 +128,11 @@ export default function ManagementDashboard() {
       l: 'Avg turnaround',
       to: '/management/performance',
     },
-    { v: `${slaRate}%`, l: 'SLA compliance', to: '/management/departments' },
+    {
+      v: slaRate === null ? '—' : `${slaRate}%`,
+      l: 'SLA compliance (all time)',
+      to: '/management/departments',
+    },
   ];
 
   // Iterate the real department list (not the stats buckets) so a department
@@ -134,6 +142,7 @@ export default function ManagementDashboard() {
     .map((d) => {
       const totalDocs = totalDocsByDept.get(d.id) ?? 0;
       const open = openByDept.get(d.id) ?? { pending: 0, progress: 0 };
+      const slaBucket = slaByDept.get(d.id);
       return {
         deptId: d.id,
         dept: d.name,
@@ -144,9 +153,10 @@ export default function ManagementDashboard() {
         // trades a small margin of error (e.g. archived docs) for not walking
         // every document to get an exact count.
         closed: Math.max(0, totalDocs - open.pending - open.progress),
-        sla: Math.round(slaByDept.get(d.id) ?? 100),
+        sla: slaBucket?.total ? Math.round(slaBucket.slaRate) : null,
       };
     });
+  const rowsWithSla = rows.filter((row): row is DeptRow & { sla: number } => row.sla !== null);
 
   const cols: Column<DeptRow>[] = [
     { key: 'dept', label: 'Department', render: (r) => <b>{r.dept}</b> },
@@ -162,10 +172,15 @@ export default function ManagementDashboard() {
         <span
           style={{
             fontWeight: 800,
-            color: r.sla >= 85 ? 'var(--status-closed)' : 'var(--status-overdue)',
+            color:
+              r.sla === null
+                ? 'var(--muted)'
+                : r.sla >= 85
+                  ? 'var(--status-closed)'
+                  : 'var(--status-overdue)',
           }}
         >
-          {r.sla}%
+          {r.sla === null ? '—' : `${r.sla}%`}
         </span>
       ),
     },
@@ -255,12 +270,12 @@ export default function ManagementDashboard() {
         <div className="card">
           <div className="card-head">
             <span className="h3">SLA compliance by department</span>
-            <span className="caption">Target ≥ 85%</span>
+            <span className="caption">Completed tasks · all time · target ≥ 85%</span>
           </div>
           <div className="card-body">
-            {rows.length > 0 ? (
+            {rowsWithSla.length > 0 ? (
               <HBarChart
-                items={rows.map((r) => ({
+                items={rowsWithSla.map((r) => ({
                   label: r.dept,
                   value: r.sla,
                   color:
@@ -278,7 +293,9 @@ export default function ManagementDashboard() {
                 unit="%"
               />
             ) : (
-              <p className="muted">No departments yet.</p>
+              <p className="muted">
+                {rows.length ? 'No completed tasks with SLA outcomes yet.' : 'No departments yet.'}
+              </p>
             )}
           </div>
         </div>

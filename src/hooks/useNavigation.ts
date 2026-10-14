@@ -4,10 +4,12 @@ import { PORTAL_BY_KEY, scopeAtLeast } from '@/lib/permissions';
 import { useUnreadNotificationCount } from '@/apis/hooks/useNotifications';
 import { useApprovalTasks, useTasks } from '@/apis/hooks/useTasks';
 import { useCircularInboxSummary } from '@/apis/hooks/useCirculars';
+import { getBrandPreset } from '@/lib/brand';
 
 export const useNavigation = () => {
   const { currentUser, findings } = useStore();
   const { hasPermission, scopeFor, portal } = usePermissions();
+  const activeBrand = getBrandPreset();
   // Reused for "home"/resource-less items below so they can never drift out of sync
   // with the portal-entry criteria in permissions.ts, and so every portal's sidebar
   // is guaranteed non-empty: entering a portal already means satisfying this set, and
@@ -100,7 +102,7 @@ export const useNavigation = () => {
           items: [
             {
               route: '/staff/cabinets',
-              label: 'Cabinets',
+              label: 'Cabinet',
               icon: 'cabinet',
               anyPermissions: [{ resource: 'cabinet', action: 'view', minScope: 'department' }],
             },
@@ -171,9 +173,8 @@ export const useNavigation = () => {
               // view — "Monitor" implies oversight across a set of instances beyond
               // your own, so own-scoped view alone (`scopeAtLeast(..., 'department')`
               // accepts 'department' or 'global', rejects 'own' and null) shouldn't
-              // surface this. Route stays at plain workflow_instance:view (any scope)
-              // since routes.config.ts isn't scope-aware — same pattern as Users/
-              // Cabinet Designer.
+              // surface this. The route rule in routes.config.ts carries the same
+              // `minScope`.
               anyPermissions: [
                 { resource: 'workflow_instance', action: 'view', minScope: 'department' },
               ],
@@ -214,7 +215,10 @@ export const useNavigation = () => {
               route: '/supervisor/performance',
               label: 'Team Performance',
               icon: 'trend',
-              anyPermissions: ['task:view', 'workflow_instance:view'],
+              // Exactly what the page's calls need: `task:view` on all three
+              // (SLA outcomes, the team's tasks, the workload roster), and the
+              // latter two refuse anything below department scope.
+              anyPermissions: [{ resource: 'task', action: 'view', minScope: 'department' }],
             },
             {
               route: '/supervisor/exceptions',
@@ -234,7 +238,7 @@ export const useNavigation = () => {
           items: [
             {
               route: '/staff/cabinets',
-              label: 'Cabinets',
+              label: 'Cabinet',
               icon: 'cabinet',
               anyPermissions: [{ resource: 'cabinet', action: 'view', minScope: 'department' }],
             },
@@ -327,7 +331,7 @@ export const useNavigation = () => {
             },
             {
               route: '/staff/cabinets',
-              label: 'Cabinets',
+              label: 'Cabinet',
               icon: 'cabinet',
               anyPermissions: [{ resource: 'cabinet', action: 'view', minScope: 'department' }],
             },
@@ -534,7 +538,7 @@ export const useNavigation = () => {
             // becomes a dead link for an auditor without cabinet access.
             {
               route: '/staff/cabinets',
-              label: 'Document Sampling',
+              label: 'Cabinet',
               icon: 'cabinet',
               anyPermissions: [{ resource: 'cabinet', action: 'view', minScope: 'department' }],
             },
@@ -625,6 +629,8 @@ export const useNavigation = () => {
       .map((section: any) => ({
         ...section,
         items: section.items.filter((item: any) => {
+          if (!activeBrand.features.brandingPage && item.route === '/admin/branding')
+            return false;
           if (item.roles?.length && !item.roles.some((r: string) => me.roles?.includes(r)))
             return false;
           if (item.permissions?.length && !item.permissions.every(checkPerm)) return false;
@@ -635,19 +641,15 @@ export const useNavigation = () => {
       .filter((section: any) => section.items.length > 0),
   };
 
-  // Appended for every role rather than repeated in each NAV entry. The Product
-  // Guide is reference material, not role-specific work, and carries no route
-  // rule in routes.config.ts — so every signed-in user can reach it.
-  filteredNav.sections = [
-    ...filteredNav.sections,
-    {
-      label: 'Reference',
-      items: [
-        { route: '/help', label: 'Help', icon: 'info' },
-        { route: '/user-stories', label: 'Product Guide', icon: 'flow' },
-      ],
-    },
-  ];
+  if (activeBrand.features.productGuide) {
+    filteredNav.sections = [
+      ...filteredNav.sections,
+      {
+        label: 'Reference',
+        items: [{ route: '/user-stories', label: 'Product Guide', icon: 'flow' }],
+      },
+    ];
+  }
 
   return filteredNav;
 };

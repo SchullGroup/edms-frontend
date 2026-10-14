@@ -140,6 +140,10 @@ export async function proxy(req: NextRequest) {
   const { matched, allowed } = evaluateRouteAccess(pathname, {
     roles: user.roles ?? [],
     permissions,
+    // `/auth/me` returns `"resource:action:scope"`, which `minScope` rules need.
+    scopedPermissions: (user.permissions ?? []).filter(
+      (p: unknown): p is string => typeof p === 'string',
+    ),
   });
 
   if (matched && !allowed) {
@@ -160,5 +164,14 @@ export const config = {
   // static assets (including the pdf.js worker, fonts and decoders under
   // /pdfjs/). Public app pages are excluded inside the function itself
   // (isPublicPath), not here, so this stays a single source of truth.
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|pdfjs/).*)'],
+  //
+  // Static assets must be excluded by file extension, not just by directory:
+  // anything in `public/` at the root (the brand logo the login page shows
+  // before any session exists, the create-next-app SVGs) reaches this proxy
+  // unauthenticated, and gating it meant redirecting the request to `/` — so
+  // the browser got the login page's HTML where it expected a JPEG and
+  // rendered a broken image, on the login screen only.
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico|pdfjs/|.*\\.(?:avif|bmp|eot|gif|ico|jpe?g|mp4|otf|png|svg|ttf|webm|webp|woff2?)$).*)',
+  ],
 };

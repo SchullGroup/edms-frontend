@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { helpTopicForPath } from '@/constants/helpTopics';
 import { useStore } from '@/store/useStore';
-import { useNavigation } from '@/hooks/useNavigation';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
 import { SkeletonNotifRows } from '@/components/common/Skeleton';
@@ -23,20 +22,22 @@ import {
 } from '@/apis/services/notifications.service';
 
 // Keyed by portal (see src/lib/permissions.ts), not by role name.
-const QUICK_ACTION: Record<string, { label: string; icon: string; go: string }> = {
-  staff: { label: 'Upload document', icon: 'upload', go: '/upload' },
-  supervisor: { label: 'Approvals', icon: 'approve', go: '/supervisor/approvals' },
-  management: { label: 'New report', icon: 'report', go: '/management/reports' },
-  admin: { label: 'Upload document', icon: 'upload', go: '/upload' },
-  platform: { label: 'Provision tenant', icon: 'plus', go: '/platform' },
-  auditor: { label: 'Audit scope', icon: 'search', go: '/auditor' },
-};
-
-export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav: () => void }) => {
+export const Topbar = ({
+  pageTitle,
+  toggleNav,
+  navExpanded,
+  navToggleRef,
+  inert,
+}: {
+  pageTitle: string;
+  toggleNav: () => void;
+  navExpanded: boolean;
+  navToggleRef: React.RefObject<HTMLButtonElement | null>;
+  inert: boolean;
+}) => {
   const router = useRouter();
   const pathname = usePathname();
   const { currentUser, prefs, setPrefs } = useStore();
-  const nav = useNavigation();
   const { portal, portals } = usePermissions();
   const [notifOpen, setNotifOpen] = useState(false);
   const me = currentUser;
@@ -73,9 +74,7 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [notifOpen]);
-  if (!me || !nav) return null;
-
-  const qa = QUICK_ACTION[portal];
+  if (!me) return null;
   const dateStr = new Date().toLocaleDateString('en-GB', {
     weekday: 'long',
     day: '2-digit',
@@ -89,11 +88,14 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
   };
 
   return (
-    <header className="topbar">
+    <header className="topbar" inert={inert}>
       <button
+        ref={navToggleRef}
         className="icon-btn"
         aria-label="Toggle navigation"
-        title="Collapse / expand navigation"
+        aria-controls="primary-sidebar"
+        aria-expanded={navExpanded}
+        title="Open or close navigation"
         onClick={toggleNav}
       >
         <Icon name="menu" />
@@ -122,13 +124,11 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
         >
           {portals.map((key) => (
             <option key={key} value={key}>
-              {PORTAL_BY_KEY[key].surface}
+              {PORTAL_BY_KEY[key].shortLabel}
             </option>
           ))}
         </select>
-      ) : (
-        <span className="surface-label">{nav.surface}</span>
-      )}
+      ) : null}
 
       <button
         className="icon-btn"
@@ -213,11 +213,6 @@ export const Topbar = ({ pageTitle, toggleNav }: { pageTitle: string; toggleNav:
         )}
       </div>
 
-      {qa && (
-        <button className="btn btn-primary btn-pill" onClick={() => router.push(qa.go)}>
-          <Icon name={qa.icon} size={14} /> {qa.label}
-        </button>
-      )}
     </header>
   );
 };
