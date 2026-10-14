@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { UIProviders } from '@/components/ui/UIProviders';
 import ReactQueryProvider from '@/lib/react-query-provider';
 import { Geist } from 'next/font/google';
+import { getBrandCssVars, getBrandPreset } from '@/lib/brand';
 import './globals.css';
 
 const geist = Geist({
@@ -10,9 +11,14 @@ const geist = Geist({
   variable: '--font-geist',
 });
 
+const brand = getBrandPreset();
+
 export const metadata: Metadata = {
-  title: 'SchullTech EDMS',
+  title: brand.appName,
   description: 'A complete, role-based Electronic Document Management System',
+  icons: {
+    icon: brand.faviconUrl,
+  },
 };
 
 export default function RootLayout({
@@ -21,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={geist.variable}>
+    <html lang="en" className={geist.variable} style={getBrandCssVars() as React.CSSProperties}>
       <body>
         <ReactQueryProvider>
           <div id="app">{children}</div>

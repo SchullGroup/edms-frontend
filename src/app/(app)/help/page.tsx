@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
+import { getBrandPreset } from '@/lib/brand';
 import type { PortalKey } from '@/lib/permissions';
 import type { HelpTopicId } from '@/constants/helpTopics';
 
@@ -18,6 +19,8 @@ interface Topic {
 }
 
 const ADMIN_PORTALS: PortalKey[] = ['admin'];
+
+const brand = getBrandPreset();
 
 /** What each portal is for, shown first on the page. */
 const GETTING_STARTED: Record<PortalKey, React.ReactNode> = {
@@ -71,8 +74,7 @@ const GETTING_STARTED: Record<PortalKey, React.ReactNode> = {
   platform: (
     <>
       <p>
-        The platform console is for SchullTech staff. It can’t open your customers’ documents by
-        design.
+        The platform console is for {brand.platformName} staff. It can’t open your customers’ documents by design.
       </p>
     </>
   ),
@@ -459,7 +461,7 @@ export default function HelpPage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">Help</h1>
-          <div className="page-sub">How to get things done in SchullTech EDMS.</div>
+          <div className="page-sub">How to get things done in {brand.appName}.</div>
         </div>
         <input
           type="search"

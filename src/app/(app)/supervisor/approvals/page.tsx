@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useDepartmentNames } from '@/apis/hooks/useDepartments';
+import { taskHolderLabel } from '@/utils/supervisor';
 import { useUIStore } from '@/store/useUIStore';
 import { useApprovalTasks, useReassignTask } from '@/apis/hooks/useTasks';
 import { useAllUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
@@ -30,6 +32,7 @@ export default function ApprovalsQueuePage() {
     refetch: refetchTasks,
   } = useApprovalTasks({ scope: 'all', status: tab, page, limit: PAGE_SIZE });
   const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
+  const departmentName = useDepartmentNames();
   const tasks = tasksData?.data || [];
   const pagination = tasksData?.pagination;
   const users = usersData?.items || [];
@@ -62,7 +65,7 @@ export default function ApprovalsQueuePage() {
         <div>
           <div className="field">
             <label>Current assignee</label>
-            <input className="input" disabled value={t.assignee?.name || t.assignedRole?.name || ''} />
+            <input className="input" disabled value={taskHolderLabel(t, departmentName, '')} />
           </div>
           <div className="field">
             <label>New assignee</label>
@@ -97,7 +100,7 @@ export default function ApprovalsQueuePage() {
               addToast('Please select a new assignee', 'error');
               return false;
             }
-            const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
+            const prevName = taskHolderLabel(t, departmentName, 'previous assignee');
             const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
             return reassignTask
               .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })

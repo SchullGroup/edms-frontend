@@ -38,7 +38,7 @@ export default function AuditorDashboard() {
           <div className="page-sub">Review trails, test controls, track findings to closure.</div>
         </div>
         <div className="actions">
-          <button className="btn btn-secondary" onClick={() => router.push('/auditor/audittrail')}>Open audit trail</button>
+          <button className="btn btn-secondary" onClick={() => router.push('/auditor/trail')}>Open audit trail</button>
           <button className="btn btn-primary" onClick={() => router.push('/auditor/findings')}>Findings tracker</button>
         </div>
       </div>
@@ -59,7 +59,7 @@ export default function AuditorDashboard() {
           <div className="cnt">{findings.filter(f => f.status === 'In Remediation').length}</div>
           <div className="lbl"><Icon name="clock" size={13} /> In remediation</div>
         </div>
-        <div className="tile t-progress" role="button" tabIndex={0} onClick={() => router.push('/auditor/audittrail')}>
+        <div className="tile t-progress" role="button" tabIndex={0} onClick={() => router.push('/auditor/trail')}>
           <div className="cnt">{sensitive.length}</div>
           <div className="lbl"><Icon name="eye" size={13} /> Sensitive events</div>
         </div>
@@ -73,7 +73,7 @@ export default function AuditorDashboard() {
         <div className="card">
           <div className="card-head">
             <span className="h3">Sensitive activity — latest</span>
-            <button className="btn btn-ghost btn-sm" onClick={() => router.push('/auditor/audittrail')}>Full trail</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => router.push('/auditor/trail')}>Full trail</button>
           </div>
           <div className="card-body" style={{ paddingTop: '4px' }}>
             {sensitive.slice(0, 9).map((a, i) => (

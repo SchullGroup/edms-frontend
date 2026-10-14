@@ -9,42 +9,6 @@ import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
 import type { UploadDocumentRequest } from '@/types/models';
 
-const IDU_GUESSES = [
-  {
-    type: 'Invoice',
-    cab: 'cab-fin',
-    folder: 'f-fin-inv',
-    conf: 94,
-    fields: {
-      Vendor: 'Meridian Interiors Ltd',
-      Amount: '₦12,750,000',
-      'Invoice No.': 'INV-2026-0912',
-    },
-  },
-  {
-    type: 'Contract',
-    cab: 'cab-legal',
-    folder: 'f-legal-contracts',
-    conf: 88,
-    fields: { Counterparty: 'BlueRiver Consulting', Term: '12 months' },
-  },
-  {
-    type: 'Memo',
-    cab: 'cab-ops',
-    folder: 'f-ops-memos',
-    conf: 76,
-    fields: { Subject: 'Facilities notice' },
-  },
-  {
-    type: 'Purchase Order',
-    cab: 'cab-proc',
-    folder: 'f-proc-po',
-    conf: 91,
-    fields: { 'PO Number': 'PO-2026-0401', Vendor: 'TechHub Distribution' },
-  },
-  { type: 'Report', cab: 'cab-fin', folder: 'f-fin-audit', conf: 58, fields: {} },
-];
-
 type FileStatus = 'uploading' | 'processing' | 'ready' | 'filed' | 'discarded';
 
 interface UploadItem {
@@ -53,7 +17,6 @@ interface UploadItem {
   file: File;
   status: FileStatus;
   progress: number;
-  guess?: any;
   docId?: string;
   abortUpload?: () => void;
   /** Why the last upload or filing attempt failed; cleared on the next try. */
@@ -122,14 +85,12 @@ export default function UploadCapturePage() {
   const ingest = (selectedFiles: File[]) => {
     const newFiles = selectedFiles.map((file, i) => {
       const id = 'f-' + Date.now() + '-' + i;
-      const guessIdx = (file.name.length + i) % IDU_GUESSES.length;
       return {
         id,
         name: file.name,
         file,
         status: 'ready' as const,
         progress: 0,
-        guess: IDU_GUESSES[guessIdx],
       };
     });
     setFiles((prev) => [...newFiles, ...prev]);
@@ -225,7 +186,7 @@ export default function UploadCapturePage() {
         <div>
           <div className="page-title">Upload & Capture</div>
           <div className="page-sub">
-            Ingest → OCR → IDU classification → review suggestions → file.
+            Select documents, complete the filing details, and file them in a cabinet.
           </div>
         </div>
       </div>
@@ -504,16 +465,15 @@ function IDUCard({
   const { data: cabinetsData } = useCabinets();
   const cabinets = cabinetsData?.data || [];
   const { addToast } = useUIStore();
-  const guess = file.guess;
   const { startUpload, uploadProgress, abort } = useMultipartUploader();
   const busy = file.status === 'uploading' || file.status === 'processing';
 
   const [title, setTitle] = useState(file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]/g, ' '));
-  const [type, setType] = useState(guess.type);
-  const [selCab, setSelCab] = useState(guess.cab || '');
+  const [type, setType] = useState('');
+  const [selCab, setSelCab] = useState('');
   const { data: folData, isLoading: foldersLoading } = useCabinetFolders(selCab);
   const folders = folData?.data || [];
-  const [selFol, setSelFol] = useState(guess.folder || '');
+  const [selFol, setSelFol] = useState('');
 
   // Update selCab to valid initial value if cabinets data loads
   useEffect(() => {
@@ -524,8 +484,7 @@ function IDUCard({
     }
   }, [cabinets, selCab]);
 
-  // The IDU guess carries a sample folder id, so drop it (and any stale pick
-  // from a previous cabinet) once the real folder list for the cabinet arrives.
+  // Clear a folder selection that is no longer present in the selected cabinet.
   useEffect(() => {
     if (!selFol || !folders.length) return;
     if (!folders.find((f: any) => f.id === selFol)) setSelFol('');
@@ -546,7 +505,6 @@ function IDUCard({
 
   // The chosen cabinet's metadata. The values go in the create call itself, which
   // needs only what uploading needs, so anyone who can file here can fill them in.
-  // `selCab` briefly holds the IDU guess's sample id until real cabinets load.
   const realCabId = cabinets.some((c: any) => c.id === selCab) ? selCab : undefined;
   const meta = useUploadMetadata(realCabId);
 
@@ -556,8 +514,6 @@ function IDUCard({
   // The file's place in storage once uploaded, so a failed filing can be
   // retried without uploading it again.
   const uploaded = useRef<{ fileUrl: string; checksum: string } | null>(null);
-
-  const confCls = guess.conf >= 85 ? 'conf-hi' : guess.conf >= 70 ? 'conf-med' : 'conf-lo';
 
   // A document must land in a folder — filing straight into a cabinet leaves
   // it floating at the cabinet root. Not ready while the cabinet's metadata
@@ -655,17 +611,10 @@ function IDUCard({
           </span>
           <b style={{ fontSize: '13px' }}>{file.name}</b>
         </div>
-        <span className={`conf-pill ${confCls}`}>IDU confidence {guess.conf}%</span>
       </div>
       {file.error && !busy && (
         <div className="banner error" style={{ marginBottom: '12px' }}>
           Not filed: {file.error}. Check the details below and try again.
-        </div>
-      )}
-      {guess.conf < 70 && (
-        <div className="banner warning" style={{ marginBottom: '12px' }}>
-          Low classification confidence — this item would also appear in the review queue. Please
-          verify the fields below.
         </div>
       )}
 
@@ -692,6 +641,7 @@ function IDUCard({
           <div className="field">
             <label>Document type</label>
             <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="">-- Select a document type --</option>
               {DOCUMENT_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
@@ -805,21 +755,6 @@ function IDUCard({
           </div>
         )}
       </fieldset>
-
-      {Object.keys(guess.fields).length > 0 && (
-        <div className="mb-2">
-          <div className="caption" style={{ fontWeight: 700, marginBottom: '6px' }}>
-            EXTRACTED METADATA (IDU)
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {Object.entries(guess.fields).map(([k, v]) => (
-              <span key={k} className="tag">
-                {k}: {String(v)}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {busy ? (
         <div className="flex items-center gap-3" style={{ marginTop: '10px' }}>

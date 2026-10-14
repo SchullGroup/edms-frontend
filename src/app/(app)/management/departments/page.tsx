@@ -53,7 +53,7 @@ export default function DeptComparisonPage() {
     [deptDocStats],
   );
   const slaByDept = useMemo(
-    () => new Map((taskStats?.buckets ?? []).map((b) => [b.departmentId ?? 'unassigned', b.slaRate])),
+    () => new Map((taskStats?.buckets ?? []).map((b) => [b.departmentId ?? 'unassigned', b])),
     [taskStats],
   );
 
@@ -82,14 +82,16 @@ export default function DeptComparisonPage() {
     onClick: () => drill(d.id),
   }));
 
-  const slaItems = scope.map((d) => {
-    const sla = Math.round(slaByDept.get(d.id) ?? 100);
-    return {
+  const slaItems = scope.flatMap((d) => {
+    const bucket = slaByDept.get(d.id);
+    if (!bucket || bucket.total === 0) return [];
+    const sla = Math.round(bucket.slaRate);
+    return [{
       label: d.name,
       value: sla,
       color: sla >= 85 ? 'var(--status-closed)' : 'var(--status-overdue)',
       onClick: () => drill(d.id),
-    };
+    }];
   });
 
   const lineLabels = lastNMonths(range).map((m) => m.label);
@@ -106,7 +108,9 @@ export default function DeptComparisonPage() {
       <div className="page-head">
         <div>
           <div className="page-title">Department Comparison</div>
-          <div className="page-sub">Volumes and SLA compliance, side by side.</div>
+          <div className="page-sub">
+            Volume uses the selected period; SLA uses completed tasks across all time.
+          </div>
         </div>
         <div className="actions">
           <div className="flex gap-2 flex-wrap">
@@ -157,9 +161,14 @@ export default function DeptComparisonPage() {
             <div className="card">
               <div className="card-head">
                 <span className="h3">SLA by department</span>
+                <span className="caption">Departments without completed outcomes are omitted.</span>
               </div>
               <div className="card-body">
-                <HBarChart items={slaItems} max={100} unit="%" />
+                {slaItems.length > 0 ? (
+                  <HBarChart items={slaItems} max={100} unit="%" />
+                ) : (
+                  <p className="muted">No completed tasks with SLA outcomes for these departments.</p>
+                )}
               </div>
             </div>
           </div>

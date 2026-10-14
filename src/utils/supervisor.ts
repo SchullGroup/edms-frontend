@@ -13,6 +13,39 @@ import { taskDueAt, taskUrgency } from '@/utils/workflowDocuments';
  * documents' execution deadlines (`taskDueAt`, `@/utils/workflowDocuments`).
  */
 
+/** Who a task is waiting on, the way the backend matches it
+ *  (`buildTaskParticipantFilter`): the named person; anyone with the role (in
+ *  the task's department, when it has one); or, for a department-only task,
+ *  anyone whose department is exactly that one. */
+export function isTaskForUser(
+  task: Pick<Task, 'assigneeId' | 'assignedRoleId' | 'assignedRole' | 'assignedDepartmentId'>,
+  user: { id: string; roles?: string[]; departmentId?: string | null },
+): boolean {
+  const department = task.assignedDepartmentId ?? null;
+  const inDepartment = !department || department === user.departmentId;
+  return (
+    (!!task.assigneeId && task.assigneeId === user.id) ||
+    (!!task.assignedRole?.name && !!user.roles?.includes(task.assignedRole.name) && inDepartment) ||
+    (!task.assigneeId && !task.assignedRoleId && !!department && department === user.departmentId)
+  );
+}
+
+/** What to call whoever holds a task: the person, the role, "Role · Department",
+ *  or the department. `departmentName` resolves an id (see `useDepartmentNames`). */
+export function taskHolderLabel(
+  task: Pick<Task, 'assignee' | 'assignedRole' | 'assignedDepartmentId'>,
+  departmentName: (id: string) => string | undefined,
+  fallback = 'Unassigned',
+): string {
+  if (task.assignee?.name) return task.assignee.name;
+  const department = task.assignedDepartmentId
+    ? departmentName(task.assignedDepartmentId) || 'a department'
+    : null;
+  const role = task.assignedRole?.name?.replace(/_/g, ' ');
+  if (role && department) return `${role} · ${department}`;
+  return role || department || fallback;
+}
+
 /** A task the assignee still has to act on. */
 export const ACTIVE_TASK_STATUSES = ['pending', 'escalated'] as const;
 
