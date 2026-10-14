@@ -852,6 +852,41 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
 - [ ] **TP-W3.** Assign a stage to "Operations" (Finance's parent) and route: Finance users
       should **not** get it yet. Expected until spec Q2 lands; re-test then.
 
+## 19g. Phase X — Frontend spec items (backend PR #51, live 2026-10-14)
+
+Backend half: `edms-backend` `9998e05` (D3 re-index, D4 item 7 source-cabinet edit, D5
+`departmentId` filters, D6 search filters, O1 login `departmentId`, O2 one-level departments).
+Nothing in this phase was verified live when the docs were updated — that's the point of it.
+
+- [ ] **TP-X1.** `/search`: type a word, then set **Status** = Closed and **Type** =
+      Invoice. The facets stay live (they used to grey out with text in the box) and the
+      request carries `q`, `status=closed`, `documentType=Invoice` together. Results narrow
+      accordingly. *(Frontend shipped 2026-10-14.)*
+- [ ] **TP-X2.** `/search`: a **Department** facet is listed. Picking "Operations › Finance"
+      narrows both the browse list (no text) and the text search. Clearing it restores.
+- [ ] **TP-X3.** `/management`: the department table has a **Records** column. Clicking View
+      on Finance opens `/search?dept=<Finance id>`, the Department facet shows Finance, and
+      the result count is in the same ballpark as the row's Volume/Closed figures (it counts
+      documents whose cabinet is Finance's, so a shared cabinet can differ — note it if so).
+- [ ] **TP-X4.** `/management/departments`: pick a department, then **View records** → the
+      same `/search?dept=<id>`. With All departments selected the button isn't shown.
+- [ ] **TP-X5.** `/search`: save a search that includes a department, reload, apply it — it
+      restores the facet. Delete that department (or use one a saved search keeps) and apply
+      again: it's dropped with a toast rather than returning nothing.
+- [ ] **TP-X6.** As `supervisor_finance`, call `GET /workflow-instances?departmentId=<another
+      department>&scope=all` directly: 403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`. With your
+      own department, 200. *(No UI sends `departmentId` to this endpoint yet.)*
+- [ ] **TP-X7.** Upload a file with no extractable text (a DOCX) and search for its **title**
+      straight away: it's found, without waiting for OCR. Then set a metadata value on an
+      existing document and search for that value: found. *(Both used to need OCR to finish.)*
+- [ ] **TP-X8.** As `client_admin`, `/admin/departments` → New sub-department: the parent
+      picker offers top-level departments only, and a department with sub-departments can't
+      be given a parent. Through the API, `POST /departments` with a sub-department as parent
+      returns 422 `DEPARTMENT_DEPTH` and the screen's toast prints its message.
+- [ ] **TP-X9.** As a user with edit on cabinet A but not B, `PATCH /documents/<id in A>`
+      with `cabinetId = B`: 403 "You need edit access to the document's current cabinet to
+      move it". Same-cabinet edits still work. *(API only — no cross-cabinet Move UI exists.)*
+
 ## 20. Wrap-up
 
 - [ ] Re-run **TP-A1–A7** once more at the very end using kemi.reviewer (the custom-role
@@ -914,9 +949,11 @@ Items whose backend already exists (or needs none). Worked through one at a time
 
 - [x] Search: filters sent to `GET /documents` (one value each, paginated) instead of
       filtering one page client-side; types from the shared `constants/documentTypes.ts`;
-      saved searches per user, without the two seeded fakes (15.3, 15.4). While text is
-      entered only the Cabinet filter applies — `GET /documents/search` accepts only `q` and
-      `cabinetId` (backend request: add the other filters there).
+      saved searches per user, without the two seeded fakes (15.3, 15.4). ~~While text is
+      entered only the Cabinet filter applies~~ — **fixed 2026-10-14:** `GET /documents/search`
+      takes the whole list filter set (edms-backend PR #51), so `/search` sends every facet
+      alongside `q` and no longer greys them out. A **Department** facet was added at the same
+      time (see Phase X, TP-X1/TP-X2).
 - [x] Edit a document's confidentiality and urgency after upload — `PATCH /documents/:id`,
       gated on `document:edit` (13.1/13.2). **Built 2026-10-08:** `/doc/[id]` → Details →
       Classification → **Change**. Also needs Edit on the cabinet. Tiers above your clearance
@@ -967,10 +1004,13 @@ Items whose backend already exists (or needs none). Worked through one at a time
       with no folders → "Folders in every cabinet (1 without one)" and a pending task appear
 - [ ] Chart drill-downs to filtered record lists (21.6, 22.3). **Partly done 2026-10-08:** on
       `/management` and `/management/departments`, clicking a department's bar scopes the
-      dashboard to that department (clicking it again on Departments widens back). **The record
-      list needs backend:** the charts are per department, and neither `GET /documents` nor
-      `GET /workflow-instances` takes a `departmentId` filter, so there's no list to open.
-      To test: click a department bar on each page
+      dashboard to that department (clicking it again on Departments widens back).
+      **Backend + frontend built 2026-10-14, not yet verified:** `GET /documents` takes
+      `departmentId` (edms-backend PR #51), `/search` has a Department facet fed by `?dept=`, and
+      `/management`'s department table (**Records**) and `/management/departments`
+      (**View records**) open `/search?dept=<id>`.
+      To test: click a department bar on each page, then Records / View records — see Phase X
+      (TP-X3, TP-X4)
 - [x] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6).
       **Built 2026-10-08** on `/management/reports`: open items by cabinet, ageing register, SLA
       compliance by department (date range), workload by member; department filter; preview
