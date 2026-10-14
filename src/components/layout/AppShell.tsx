@@ -118,8 +118,9 @@ export const AppShell = ({ children }: AppShellProps) => {
         ) {
           patch.permissions = res.permissions;
         }
-        // `departmentId` arrived on `/auth/me` with edms-backend PR #50; null
-        // means no department, so only a missing key is skipped.
+        // `departmentId` arrived on `/auth/login` and `/auth/me` with
+        // edms-backend PR #50/#51; null means no department, so only a missing
+        // key is skipped.
         if (res.departmentId !== undefined && res.departmentId !== cur.departmentId) {
           patch.departmentId = res.departmentId;
         }

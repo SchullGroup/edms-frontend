@@ -17,6 +17,11 @@ export interface WorkflowInstanceFilters {
   status?: 'pending' | 'in_progress' | 'on_hold' | 'closed';
   documentId?: string;
   workflowDefinitionId?: string;
+  /** Only instances with at least one document in a cabinet belonging to this
+   *  department (edms-backend PR #51). A department-scoped caller may only pass
+   *  their own department — anything else is a 403
+   *  `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`. */
+  departmentId?: string;
   /** Defaults to `mine`: only workflows the caller has a task in. `all` widens
    *  to everything the caller's `workflow_instance:view` scope allows
    *  (department or global); at `own` scope it's the same as `mine`. */
