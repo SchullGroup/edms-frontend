@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useDepartmentNames } from '@/apis/hooks/useDepartments';
+import { taskHolderLabel } from '@/utils/supervisor';
 import { useUIStore } from '@/store/useUIStore';
 import { useTaskWorkload, useTasks, useReassignTask } from '@/apis/hooks/useTasks';
 import { useAllUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
@@ -25,6 +27,7 @@ export default function WorkloadPage() {
     refetch: refetchWorkload,
   } = useTaskWorkload();
   const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
+  const departmentName = useDepartmentNames();
   const users = usersData?.items || [];
   // Reassign targets: active users in the reassigner's own department only.
   const { users: colleagues } = useDepartmentColleagues();
@@ -51,7 +54,7 @@ export default function WorkloadPage() {
             <input
               className="input"
               disabled
-              value={t.assignee?.name || t.assignedRole?.name || ''}
+              value={taskHolderLabel(t, departmentName, '')}
             />
           </div>
           <div className="field">
@@ -87,7 +90,7 @@ export default function WorkloadPage() {
               addToast('Please select a new assignee', 'error');
               return false;
             }
-            const prevName = t.assignee?.name || t.assignedRole?.name || 'previous assignee';
+            const prevName = taskHolderLabel(t, departmentName, 'previous assignee');
             const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
             return reassignTask
               .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })

@@ -80,7 +80,9 @@ export default function BrandingPage() {
   }, [localB.primary, localB.primaryLight, localB.accent, brandingData]);
 
   const apply = () => {
-    updateBranding.mutate(localB, {
+    // Tagged so the shell treats it as the user's own, not preset-owned — a
+    // published brand survives a reload, a preset refresh does not overwrite it.
+    updateBranding.mutate({ ...localB, source: 'custom' }, {
       onSuccess: () => {
         auditAction('BRANDING_UPDATE', 'Branding', 'Updated tenant branding');
       },

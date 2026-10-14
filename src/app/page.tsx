@@ -9,6 +9,7 @@ import { authService } from '@/apis/services/auth.service';
 import { useMutation } from '@tanstack/react-query';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { PasswordInput } from '@/components/auth/PasswordInput';
+import { getBrandPreset } from '@/lib/brand';
 import {
   PORTAL_BY_KEY,
   fallbackPermissionsForRoles,
@@ -72,6 +73,11 @@ export default function LoginPage() {
     setPassword(testPassword);
   };
 
+  const isDev = process.env.NODE_ENV === 'development';
+  // The fixture logins belong to our own deployment, so a white-labelled build
+  // never shows them — not even in development.
+  const { loginTestAccounts } = getBrandPreset().features;
+
   if (currentUser) return null;
 
   return (
@@ -119,62 +125,64 @@ export default function LoginPage() {
         </button>
       </form>
 
-      <div className="mt-8 border-t border-(--border) pt-5">
-        <div className="mb-3 text-xs font-semibold uppercase text-(--text-soft)">
-          Test Accounts (Set 2)
+      {isDev && loginTestAccounts && (
+        <div className="mt-8 border-t border-(--border) pt-5">
+          <div className="mb-3 text-xs font-semibold uppercase text-(--text-soft)">
+            Test Accounts (Set 2)
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="btn btn-secondary text-xs"
+              style={{ padding: '6px 12px' }}
+              onClick={() => autofill('tjoel+staff_finance@schulltech.com', 'Fixture123!')}
+            >
+              Staff (Finance)
+            </button>
+            <button
+              className="btn btn-secondary text-xs"
+              style={{ padding: '6px 12px' }}
+              onClick={() => autofill('tjoel+staff_hr@schulltech.com', 'Fixture123!')}
+            >
+              Staff (HR)
+            </button>
+            <button
+              className="btn btn-secondary text-xs"
+              style={{ padding: '6px 12px' }}
+              onClick={() => autofill('tjoel+supervisor_finance@schulltech.com', 'Fixture123!')}
+            >
+              Supervisor (Finance)
+            </button>
+            <button
+              className="btn btn-secondary text-xs"
+              style={{ padding: '6px 12px' }}
+              onClick={() => autofill('tjoel+management_ops@schulltech.com', 'Fixture123!')}
+            >
+              Management (Ops)
+            </button>
+            <button
+              className="btn btn-secondary text-xs"
+              style={{ padding: '6px 12px' }}
+              onClick={() => autofill('tjoel+clientadmin@schulltech.com', 'Fixture123!')}
+            >
+              Client Admin
+            </button>
+            <button
+              className="btn btn-secondary text-xs"
+              style={{ padding: '6px 12px' }}
+              onClick={() => autofill('tjoel+auditor@schulltech.com', 'Fixture123!')}
+            >
+              Auditor
+            </button>
+            <button
+              className="btn btn-secondary text-xs"
+              style={{ padding: '6px 12px' }}
+              onClick={() => autofill('tjoel+schulltechadmin@schulltech.com', 'Fixture123!')}
+            >
+              Platform Admin
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="btn btn-secondary text-xs"
-            style={{ padding: '6px 12px' }}
-            onClick={() => autofill('tjoel+staff_finance@schulltech.com', 'Fixture123!')}
-          >
-            Staff (Finance)
-          </button>
-          <button
-            className="btn btn-secondary text-xs"
-            style={{ padding: '6px 12px' }}
-            onClick={() => autofill('tjoel+staff_hr@schulltech.com', 'Fixture123!')}
-          >
-            Staff (HR)
-          </button>
-          <button
-            className="btn btn-secondary text-xs"
-            style={{ padding: '6px 12px' }}
-            onClick={() => autofill('tjoel+supervisor_finance@schulltech.com', 'Fixture123!')}
-          >
-            Supervisor (Finance)
-          </button>
-          <button
-            className="btn btn-secondary text-xs"
-            style={{ padding: '6px 12px' }}
-            onClick={() => autofill('tjoel+management_ops@schulltech.com', 'Fixture123!')}
-          >
-            Management (Ops)
-          </button>
-          <button
-            className="btn btn-secondary text-xs"
-            style={{ padding: '6px 12px' }}
-            onClick={() => autofill('tjoel+clientadmin@schulltech.com', 'Fixture123!')}
-          >
-            Client Admin
-          </button>
-          <button
-            className="btn btn-secondary text-xs"
-            style={{ padding: '6px 12px' }}
-            onClick={() => autofill('tjoel+auditor@schulltech.com', 'Fixture123!')}
-          >
-            Auditor
-          </button>
-          <button
-            className="btn btn-secondary text-xs"
-            style={{ padding: '6px 12px' }}
-            onClick={() => autofill('tjoel+schulltechadmin@schulltech.com', 'Fixture123!')}
-          >
-            Platform Admin
-          </button>
-        </div>
-      </div>
+      )}
     </AuthShell>
   );
 }

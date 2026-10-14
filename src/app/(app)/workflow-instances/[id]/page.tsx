@@ -3,6 +3,8 @@
 import React, { Suspense, use, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useStore } from '@/store/useStore';
+import { isTaskForUser, taskHolderLabel } from '@/utils/supervisor';
+import { useDepartmentNames } from '@/apis/hooks/useDepartments';
 import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
@@ -100,10 +102,13 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
 
   const { data: instance, isLoading, isError, refetch } = useWorkflowInstance(id);
 
-  const isMineTask = (t: Pick<Task, 'assigneeId' | 'assignedRole'>) =>
-    !!me &&
-    (t.assigneeId === me.id ||
-      (!!t.assignedRole?.name && !!me.roles?.includes(t.assignedRole.name)));
+  // Person, role (within the task's department, if it has one), or a
+  // department-only task for someone in that department — the backend's rule.
+  // The department comes from `/auth/me`.
+  const isMineTask = (
+    t: Pick<Task, 'assigneeId' | 'assignedRoleId' | 'assignedRole' | 'assignedDepartmentId'>,
+  ) => !!me && isTaskForUser(t, me);
+  const departmentName = useDepartmentNames();
   // A workflow has no single current stage any more (edms-backend `919d0ef`):
   // its documents move on their own, so several tasks — at different stages, or
   // in parallel branches — can be live at once.
@@ -175,7 +180,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   const canAct =
     !!me && instance?.status === 'in_progress' && focusActive && focusMine && canActPermission;
   const currentActorName =
-    activeTasks[0]?.assignee?.name || activeTasks[0]?.assignedRole?.name || 'Unassigned';
+    activeTasks[0] ? taskHolderLabel(activeTasks[0], departmentName) : 'Unassigned';
   const disabledReason = !instance
     ? null
     : instance.status === 'closed'

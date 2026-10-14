@@ -27,12 +27,14 @@ direct ask.
 | D6 | All filters on full-text search | `GET /documents/search` | P2 | S |
 | O1 | ✅ ~~`departmentId` on the signed-in user~~ done: on `/auth/me` in PR #50 (live 2026-10-13), adopted by the frontend; login still lacks it (unmerged `feat/frontend-spec-items`) | `POST /auth/login`, `GET /auth/me` | P1 | XS |
 | O2 | Limit departments to one level of nesting | `POST /departments`, `PATCH /departments/:id` | P2 | XS |
+| O3 | Return people's names alongside their ids | `GET /audit`, documents, versions, signatures, `GET /delegations` | P1 | S |
 | T1 | Optional signature on the review action | `POST /tasks/:id/action` | P2 | XS |
 | I1 | Keep OCR word positions | OCR worker + new read endpoint | P2 | M |
 | I2 | Office/email previews, text extraction, ZIP intake | upload pipeline | P2 | L |
 | X1 | **Decide:** watermark downloaded copies | download path | P3 | M |
 | X2 | Delete unused access rules | `listInstanceDocuments` | P3 | XS |
 | M1 | Check the edited migrations before the next deploy | deploy | **Before next deploy** | XS |
+| M2 | Per-deployment brand name in emails | `env.ts`, mailer config, auth emails | P2 | S |
 
 ---
 
@@ -320,6 +322,38 @@ fewer options in the UI than the API would allow.
 
 ---
 
+### O3. Return people's names alongside their ids
+
+**Problem.** Several responses give a person only as an id, so the frontend looks the name up
+through `GET /users`. Staff and the auditor have no `user:view`, so the lookup 403s and they see
+"Unknown" or "User". To name everyone, the frontend loads every page of `GET /users` on those
+pages (since 2026-10-13; it read one 20-row page before, so anyone after the 20th showed as an
+id). Fine for 12 users, dozens of requests for a large tenant. `?search=` doesn't help: it
+matches name/email text, not ids.
+
+**Change.** Next to each id field, also return the person as `{ id, name, email }`, as
+`checkoutLock.locker` already does on `GET /documents/:id`. Keep the id fields.
+
+| Response | Id field today | Add |
+|---|---|---|
+| `GET /audit`, `GET /audit/:id` | `actorId` | `actor` (null when `actorType` is `system`) |
+| `GET /documents`, `GET /documents/:id`, `GET /documents/search`, cabinet document lists | `createdBy` | `creator` |
+| `GET /documents/:id/versions`, and `currentVersion` on `GET /documents/:id` | `uploadedBy` | `uploader` |
+| `GET /documents/:id` → `signatures[]` | `userId` | `user` |
+| `GET /delegations` | `delegatorId`, `delegateId` | `delegator`, `delegate` |
+
+Return them regardless of `user:view`: a name on a record the caller can already see isn't a
+user-directory read.
+
+**Alternative** if that's too much work: `GET /users?ids=<id>,<id>,…` returning just those users
+(max 100), so the frontend makes one request per page. Embedding is better: nothing extra to
+fetch, and staff see names without `user:view`.
+
+**Done when** those responses carry the objects above. The frontend then reads them and stops
+loading the whole user list on these pages (`useAllUsers` in `/admin/audit`, `/auditor/trail`,
+`/management/compliance`, `/doc/[id]`, `/workflow-instances/[id]`, `/staff/cabinets`,
+`/delegations`).
+
 ## Tasks
 
 ### T1. Optional signature on the review action
@@ -419,6 +453,34 @@ branch. If it fails, move the self-heal SQL into a new migration and restore the
 `db:setup` (or the seed) re-run before its roles get them; until then even client_admin can't
 open Confidential documents. The test tenant has been re-seeded (checked 2026-10-08).
 
+### M2. A per-deployment brand name for emails — asked 2026-10-14
+
+The frontend now ships as two deployments from one codebase: a build-time preset
+(`NEXT_PUBLIC_BRAND`, doc 01 §9) sets the product name, logo, favicon, colours and login copy
+per brand. The backend knows nothing about the second brand, so its emails still say
+"SchullTech EDMS" — including the ones a GalaxyBackbone user receives.
+
+**Ask.** Add a `BRAND_NAME` setting (default `SchullTech EDMS`) to `src/config/env.ts`, read
+wherever the product name is hard-coded today: the sender name in `src/config/mailer.ts` and
+the auth emails in `src/modules/auth/auth.service.ts` (invitations, verification, password
+reset — every template that spells the product name out). Each deployment then sets it, along
+with the three things that already differ per tenant:
+
+| Variable | GalaxyBackbone deployment |
+|---|---|
+| `BRAND_NAME` | `GalaxyBackbone EDMS` |
+| `MAILING_FROM_EMAIL` | their sending address |
+| `APP_URL` | their app origin — every notification/email `actionUrl` is built from it, and `notificationHref` drops a link it judges cross-origin (§8.4) |
+| `ALLOWED_ORIGINS` | their origin, or the browser's BFF calls fail CORS |
+
+**Verification note.** The file names and "four auth emails" come from the white-label plan
+(`docs/specs/HANDOFF.md`, ticket 07), not from a read of the backend on this branch. Confirm
+both before implementing — this is a request, not a report.
+
+**Not wanted:** the frontend must not learn a brand name from an API. A preset value is
+resolved at build time, before any request; a fetched one would flash the wrong name on the
+login page.
+
 ---
 
 ## Questions for the backend developer (2026-10-12)
@@ -457,8 +519,9 @@ so the frontend can't decide whether a department-assigned task is the user's. E
 `GET /tasks/:id` and on the tasks embedded in `GET /workflow-instances/:id`.
 
 > **Answer:** the backend will return `departmentId` (on `/auth/me`; this also closes O1).
-> **Built** in PR #50 (live 2026-10-13); the frontend reads it from `/auth/me`. FE-3 still
-> waits for Q2 (sub-departments).
+> **Built** in PR #50 (live 2026-10-13); the frontend reads it from `/auth/me`. FE-3 is
+> built for department-only stages (2026-10-13), matching exactly as the backend does today;
+> role + department and sub-departments wait for Q2.
 
 **Q4. Should someone still see a workflow after routing it? (DRIFT-22)**
 At `own` scope, `buildInstanceAccessFilter` and `canActorAccessInstance` follow task

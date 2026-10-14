@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   departmentsService,
@@ -5,6 +6,7 @@ import {
 } from '@/apis/services/departments.service';
 import { CreateDepartmentRequest, UpdateDepartmentRequest } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
+import { buildDepartmentIndex } from '@/apis/utils/managementAggregation';
 
 export const departmentKeys = {
   all: ['departments'] as const,
@@ -12,6 +14,15 @@ export const departmentKeys = {
   list: (params: DepartmentFilters = {}) => [...departmentKeys.lists(), params] as const,
   detail: (id: string) => [...departmentKeys.all, 'detail', id] as const,
 };
+
+/** Department id → name, for labelling department-assigned work. Every role
+ *  can read `GET /departments`. It returns a tree, so sub-departments are found
+ *  too. Returns undefined until it loads. */
+export function useDepartmentNames() {
+  const { data } = useDepartments();
+  const byId = useMemo(() => buildDepartmentIndex(data?.data ?? []), [data]);
+  return useCallback((id: string) => byId.get(id)?.name, [byId]);
+}
 
 export function useDepartments(params: DepartmentFilters = {}) {
   return useQuery({

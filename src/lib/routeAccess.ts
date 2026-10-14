@@ -1,10 +1,16 @@
 import { routeConfig } from '@/config/routes.config';
-import { normalizePermission, permissionMatches } from '@/lib/permissions';
+import { normalizePermission, parseScope, permissionMatches, scopeAtLeast } from '@/lib/permissions';
 import type { PermissionType } from '@/types/models';
 
 export interface RouteAccessUser {
   roles: string[];
+  /** `"resource:action"` keys (scope dropped). */
   permissions: string[];
+  /** The raw `"resource:action:scope"` grants, for rules with a `minScope`.
+   *  Omitted or scope-less (the role-based approximation before `/auth/me`
+   *  answers), a `minScope` check passes rather than bouncing someone to
+   *  `/unauthorized` on first paint; the backend still enforces the scope. */
+  scopedPermissions?: string[];
 }
 
 export interface RouteAccessResult {
@@ -24,7 +30,17 @@ export interface RouteAccessResult {
 export function evaluateRouteAccess(pathname: string, user: RouteAccessUser): RouteAccessResult {
   const checkOne = (p: PermissionType): boolean => {
     const [resource, action] = normalizePermission(p).split(':');
-    return user.permissions.some((granted) => permissionMatches(granted, resource, action));
+    if (!user.permissions.some((granted) => permissionMatches(granted, resource, action))) {
+      return false;
+    }
+    const minScope = typeof p === 'string' ? undefined : p.minScope;
+    if (!minScope) return true;
+    const scopes = (user.scopedPermissions ?? [])
+      .filter((granted) => permissionMatches(granted, resource, action))
+      .map(parseScope)
+      .filter((s) => s !== null);
+    if (scopes.length === 0) return true;
+    return scopes.some((s) => scopeAtLeast(s, minScope));
   };
 
   for (const rule of routeConfig) {

@@ -11,6 +11,21 @@ export function buildDepartmentIndex(departments: Department[]): Map<string, Dep
   return index;
 }
 
+/** Every department in a `GET /departments` tree, parents before their
+ *  children, labelled with its path ("Operations › Finance") for pickers. */
+export function departmentOptions(
+  departments: Department[],
+): { id: string; name: string; label: string }[] {
+  const out: { id: string; name: string; label: string }[] = [];
+  const add = (dept: Department, path: string[]) => {
+    const trail = [...path, dept.name];
+    out.push({ id: dept.id, name: dept.name, label: trail.join(' › ') });
+    dept.children?.forEach((child) => add(child, trail));
+  };
+  departments.forEach((d) => add(d, []));
+  return out;
+}
+
 export function departmentName(
   departmentId: string | null | undefined,
   index: Map<string, Department>,
