@@ -8,6 +8,7 @@ import { ConfBadge } from '@/components/ui/Badges';
 import { SlaSettingsPanel } from '@/components/policies/SlaSettingsPanel';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
+import { getBrandPreset } from '@/lib/brand';
 import {
   usePolicies,
   useUpdatePolicyConfidentiality,
@@ -17,12 +18,15 @@ import {
 export default function PoliciesPage() {
   const { auditAction } = useStore();
   const { setPageTitle, addToast } = useUIStore();
+  const showExtendedPolicyTabs = getBrandPreset().features.extendedPolicyTabs;
 
   const { data: policiesData, isLoading, isError, refetch } = usePolicies();
   const updatePolicyConfidentiality = useUpdatePolicyConfidentiality();
   const updatePolicyControl = useUpdatePolicyControl();
 
-  const [tab, setTab] = useState<'conf' | 'urg' | 'ret' | 'ctl'>('conf');
+  const [tab, setTab] = useState<'conf' | 'urg' | 'ret' | 'ctl'>(() =>
+    showExtendedPolicyTabs ? 'conf' : 'urg',
+  );
 
   const policies = policiesData as any; // type casting to any to handle nested properties from mock data
 
@@ -156,24 +160,32 @@ export default function PoliciesPage() {
         <div>
           <div className="page-title">Policies</div>
           <div className="page-sub">
-            Confidentiality behaviour, urgency SLAs, retention schedules and control rules.
+            {showExtendedPolicyTabs
+              ? 'Confidentiality behaviour, urgency SLAs, retention schedules and control rules.'
+              : 'Urgency levels, service targets, working hours and breach actions.'}
           </div>
         </div>
       </div>
 
       <div className="tabs mb-4">
-        <button className={`tab ${tab === 'conf' ? 'active' : ''}`} onClick={() => setTab('conf')}>
-          Confidentiality
-        </button>
+        {showExtendedPolicyTabs && (
+          <button className={`tab ${tab === 'conf' ? 'active' : ''}`} onClick={() => setTab('conf')}>
+            Confidentiality
+          </button>
+        )}
         <button className={`tab ${tab === 'urg' ? 'active' : ''}`} onClick={() => setTab('urg')}>
           Urgency & SLA
         </button>
-        <button className={`tab ${tab === 'ret' ? 'active' : ''}`} onClick={() => setTab('ret')}>
-          Retention
-        </button>
-        <button className={`tab ${tab === 'ctl' ? 'active' : ''}`} onClick={() => setTab('ctl')}>
-          Controls
-        </button>
+        {showExtendedPolicyTabs && (
+          <>
+            <button className={`tab ${tab === 'ret' ? 'active' : ''}`} onClick={() => setTab('ret')}>
+              Retention
+            </button>
+            <button className={`tab ${tab === 'ctl' ? 'active' : ''}`} onClick={() => setTab('ctl')}>
+              Controls
+            </button>
+          </>
+        )}
       </div>
 
       {tab === 'conf' && (

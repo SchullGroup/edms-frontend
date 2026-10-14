@@ -116,6 +116,10 @@ export interface Portal {
   key: PortalKey;
   home: string;
   surface: string;
+  /** What the Topbar switcher shows instead of `surface`: the same portal name
+   *  without "Workspace"/"Console"/"Portal" trailing a role the user already
+   *  knows from the option itself. */
+  shortLabel: string;
   /** Higher wins when a user can enter more than one portal. */
   priority: number;
   entry: PortalEntry;
@@ -127,6 +131,7 @@ export const PORTALS: Portal[] = [
     key: 'platform',
     home: '/platform',
     surface: 'SchullTech Platform Admin',
+    shortLabel: 'Platform',
     priority: 60,
     entry: { roles: ['schulltech_admin'] },
   },
@@ -134,6 +139,7 @@ export const PORTALS: Portal[] = [
     key: 'admin',
     home: '/admin',
     surface: 'Client Administration',
+    shortLabel: 'Administration',
     priority: 50,
     // View-gated (not write-gated) so a read-only custom role — e.g. "user:view only"
     // — still lands here and sees the admin nav items it can actually view; the write
@@ -155,6 +161,7 @@ export const PORTALS: Portal[] = [
     key: 'auditor',
     home: '/auditor',
     surface: 'Audit & Compliance',
+    shortLabel: 'Audit',
     priority: 40,
     entry: { anyPermissions: ['audit:view'] },
   },
@@ -162,6 +169,7 @@ export const PORTALS: Portal[] = [
     key: 'management',
     home: '/management',
     surface: 'Management Portal',
+    shortLabel: 'Management',
     priority: 30,
     // `dashboard:view` is not a real backend resource — no role can ever hold
     // it. Gated instead on the union of what the management pages fetch; see
@@ -174,6 +182,7 @@ export const PORTALS: Portal[] = [
     key: 'supervisor',
     home: '/supervisor',
     surface: 'Supervisor Console',
+    shortLabel: 'Supervisor',
     priority: 20,
     // `workflow:route` was retired by the backend's 2026-09-16 permission
     // restructuring — see the matching note in `routes.config.ts`.
@@ -193,6 +202,7 @@ export const PORTALS: Portal[] = [
     key: 'staff',
     home: '/staff',
     surface: 'Staff Workspace',
+    shortLabel: 'Staff',
     priority: 10,
     entry: { anyPermissions: ['document:view'] },
   },

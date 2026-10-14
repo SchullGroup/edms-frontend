@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { evaluateRouteAccess } from '@/lib/routeAccess';
 import { useStore } from '@/store/useStore';
@@ -11,10 +11,13 @@ import { authService } from '@/apis/services/auth.service';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SessionExpiredModal } from '@/components/common/SessionExpiredModal';
 import { ServiceUnavailableOverlay } from '@/components/common/ServiceUnavailableOverlay';
+import { getPresetBranding } from '@/lib/brand';
 
 interface AppShellProps {
   children: React.ReactNode;
 }
+
+const MOBILE_NAV_QUERY = '(max-width: 1023px)';
 
 // Lighten a hex colour by mixing toward white — keeps tenant brands legible on dark surfaces
 function lighten(hex: string, amt: number) {
@@ -29,9 +32,11 @@ function lighten(hex: string, amt: number) {
 export const AppShell = ({ children }: AppShellProps) => {
   const router = useRouter();
   const pathname = usePathname();
-  const { currentUser, branding, prefs, patchCurrentUser } = useStore();
+  const { currentUser, branding, prefs, patchCurrentUser, updateBranding } = useStore();
   const { pageTitle } = useUIStore();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const navToggleRef = useRef<HTMLButtonElement>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const { granted, isReady: permsReady } = usePermissions();
@@ -47,6 +52,15 @@ export const AppShell = ({ children }: AppShellProps) => {
     setCollapsed(val);
     setIsMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const closeOnDesktop = () => {
+      if (!window.matchMedia(MOBILE_NAV_QUERY).matches) setMobileNavOpen(false);
+    };
+    window.addEventListener('resize', closeOnDesktop);
+    return () => window.removeEventListener('resize', closeOnDesktop);
+  }, [mobileNavOpen]);
 
   useEffect(() => {
     // --- Route Guard Logic (cosmetic — middleware.ts is the real gate now) ---
@@ -136,6 +150,28 @@ export const AppShell = ({ children }: AppShellProps) => {
   }, [currentUser?.id, isMounted, hydrated]);
 
   useEffect(() => {
+    if (!hydrated) return;
+
+    const presetBranding = getPresetBranding();
+    // A browser that ran the other brand must not keep it, and a preset-owned
+    // copy follows the preset when its values change — but a brand published from
+    // `/admin/branding` (`source: 'custom'`) is the user's, so it is left alone.
+    const stalePresetValues =
+      branding.source !== 'custom' &&
+      (branding.appName !== presetBranding.appName ||
+        branding.tenantName !== presetBranding.tenantName ||
+        branding.primary !== presetBranding.primary ||
+        branding.primaryLight !== presetBranding.primaryLight ||
+        branding.accent !== presetBranding.accent ||
+        branding.logoText !== presetBranding.logoText ||
+        branding.logoUrl !== presetBranding.logoUrl);
+
+    if (branding.brandKey !== presetBranding.brandKey || stalePresetValues) {
+      updateBranding(presetBranding);
+    }
+  }, [branding, hydrated, updateBranding]);
+
+  useEffect(() => {
     if (branding && prefs) {
       const dark = prefs.theme === 'dark';
       const r = document.documentElement.style;
@@ -152,19 +188,44 @@ export const AppShell = ({ children }: AppShellProps) => {
   }, [branding, prefs]);
 
   const toggleNav = () => {
+    if (window.matchMedia(MOBILE_NAV_QUERY).matches) {
+      setMobileNavOpen((open) => !open);
+      return;
+    }
     const next = !collapsed;
     setCollapsed(next);
     sessionStorage.setItem('edms-nav-collapsed', next ? '1' : '0');
   };
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
 
   if (!hydrated) return null; // Wait for hydration before rendering to prevent flash or bad redirects
   if (!currentUser) return null;
 
   return (
-    <div className={`shell ${collapsed ? 'nav-collapsed' : ''}`}>
-      <Sidebar />
-      <Topbar pageTitle={pageTitle} toggleNav={toggleNav} />
-      <main className="main" id="main-content">
+    <div
+      className={`shell ${collapsed ? 'nav-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`}
+    >
+      <Sidebar
+        isMobileOpen={mobileNavOpen}
+        onClose={closeMobileNav}
+        navToggleRef={navToggleRef}
+      />
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close navigation"
+          onClick={closeMobileNav}
+        />
+      )}
+      <Topbar
+        pageTitle={pageTitle}
+        toggleNav={toggleNav}
+        navExpanded={mobileNavOpen || !collapsed}
+        navToggleRef={navToggleRef}
+        inert={mobileNavOpen}
+      />
+      <main className="main" id="main-content" inert={mobileNavOpen}>
         <div className="main-inner">{children}</div>
       </main>
       <SessionExpiredModal />
