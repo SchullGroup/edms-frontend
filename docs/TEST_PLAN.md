@@ -871,14 +871,19 @@ Run against the live backend (`edms-backend-zmfm.onrender.com`) as `client_admin
 - [x] **TP-X3.** `/management`'s department table has a **Records** column; View opens
       `/search?dept=<id>` with the Department facet already checked. *(Verified 2026-10-14 on
       Finance: `Finance | 5 | 5 | 9 | 86% | View` → `/search?dept=b133c724…` → facet checked →
-      18 results.)*
+      18 results.)* *The **View** button was renamed **Documents** later that day, when a
+      **Workflows** button joined it — see TP-Z4.*
 - [x] **TP-X4.** `/management/departments`: no button with "All departments"; with one selected,
       **View records** opens the same URL. *(Verified 2026-10-14.)*
 - [x] **TP-X5.** A saved search keeps its department and survives a reload. *(Verified
       2026-10-14: saved "TP-X5 finance invoices" → reloaded → applied → all three facets back
-      (Department/Type/Status) and the request carried all four params. The stale-department
-      guard was **not** exercised — it needs a department deleted out from under a saved
-      search.)*
+      (Department/Type/Status) and the request carried all four params.)* **Stale-department
+      guard verified later on 2026-10-14** as `client_admin`: created a throwaway department,
+      opened `/search?dept=<it>` (`GET /documents?departmentId=<it>` → 200), saved the search,
+      deleted the department (204), reloaded and applied it → toast "The department in this
+      saved search is no longer available", the department gone from the facet list, and no
+      request carried the deleted id (the remaining unfiltered list came from cache). Saved
+      search removed afterwards.
 - [x] **TP-X6.** As `supervisor_finance`: `GET /workflow-instances?scope=all&departmentId=<own>`
       → 200 (11); `departmentId=<Human Resources>` → **403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`**.
       *(Verified 2026-10-14, directly against the API.)*
@@ -928,6 +933,37 @@ looks) → wait for the bell's 60 s poll.
       verified the fix does not turn a reachable-but-dead-looking backend into a logout, since
       the proxy only deletes on a confirmed 401/403.)*
 
+
+## 19i. Phase Z — Handoff "easy" items (2026-10-14)
+
+From `HANDOFF-2026-10-14` "What's left". Run against the user's `next dev` on :3000 and the
+live backend, headless Edge, signing in through the login form.
+
+- [x] **TP-Z1.** As `supervisor_finance`, `/staff/tasks` → Status **Overdue**: the request is
+      `GET /tasks?scope=mine&overdue=true` and every row is Overdue. *(Verified 2026-10-14:
+      1 row, matching `overdue=true` total 1 from the API.)*
+- [x] **TP-Z2.** Status **Pending**, **In Progress**, **On Hold**: each sends
+      `status=pending&overdue=false` and the rows split by workflow state. Before, In Progress
+      and On Hold sent `status=in_progress` / `on_hold` — not task statuses — and showed
+      "Failed to load tasks" (400 `VALIDATION_ERROR`, reproduced with curl). *(Verified
+      2026-10-14: Pending 0, In Progress 1, On Hold 0, no error; the one open task is
+      In Progress.)*
+- [x] **TP-Z3.** **Sort: Due date** sends `sort=dueAt` and keeps the server's order: earliest
+      deadline first, tasks without one last. *(Verified 2026-10-14: Overdue, In Progress, then
+      the 11 closed tasks.)*
+- [x] **TP-Z4.** As `management_ops`, `/management`'s Records column has **Documents** and
+      **Workflows**. Finance → **Workflows** opens `/supervisor/instances?dept=<Finance>` with
+      the Department picker on "Operations › Finance" and `departmentId` on the request; picking
+      "All departments" drops it. *(Verified 2026-10-14: 3 in-progress workflows for Finance,
+      4 for all departments.)*
+- [x] **TP-Z5.** `/management/departments`: no buttons with "All departments"; with Finance
+      picked, **View records** and **View workflows**. *(Verified 2026-10-14.)*
+- [x] **TP-Z6.** As `supervisor_finance` (department scope), open
+      `/supervisor/instances?dept=<a department that isn't theirs>`: no Department picker, no
+      `departmentId` on the request, no 403. *(Verified 2026-10-14: 3 rows, request
+      `scope=all&page=1&limit=20&status=in_progress`.)*
+- [x] **TP-Z7 (DRIFT-12).** The seven login autofill accounts exist. *(Verified 2026-10-14:
+      `POST /auth/login` succeeds for all seven `tjoel+…` addresses with `Fixture123!`.)*
 
 ## 20. Wrap-up
 

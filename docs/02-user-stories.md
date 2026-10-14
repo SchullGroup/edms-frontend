@@ -629,9 +629,11 @@ and role-pool assignment, and honours active delegations.
 - [x] Due/overdue state visible per row
 - [x] Paginated
 - [x] Frontend: `/staff/tasks`, `/supervisor/approvals` both live
-- [ ] ⚠️ Badge counts in the sidebar are computed from `SEED.documents`, not the task API
-      (`useNavigation.ts` `myOpenTasks`, `approvalsCount` — the latter is hardcoded to
-      `assignee === 'u-david'`)
+- [x] `/staff/tasks`'s Overdue filter and "Sort: Due date" are applied server-side
+      (`overdue`, `sort=dueAt`, edms-backend PR #50), so they cover the whole queue, not
+      just the page fetched (2026-10-14, verified live)
+- [x] Sidebar badges come from the task API — fixed 2026-10-12 (doc 05). *Was:* computed
+      from `SEED.documents`, with `approvalsCount` hardcoded to `assignee === 'u-david'`
 
 ---
 
@@ -1000,8 +1002,9 @@ sitting, and which have stalled.
 **Flow as built** (`/supervisor/instances`, re-exported at `/admin/workflows/instances`;
 `WorkflowInstanceMonitor` / `WorkflowInstanceDetail` / `WorkflowStageProgress` /
 `WorkflowHistoryTimeline`):
-1. A server-paginated table of instances (`GET /workflow-instances?page=&limit=20&status=&workflowDefinitionId=`),
-   filterable by status and by workflow definition.
+1. A server-paginated table of instances (`GET /workflow-instances?page=&limit=20&status=&workflowDefinitionId=&departmentId=`),
+   filterable by status, by workflow definition and — for tenant-wide viewers — by
+   department, which the management dashboards' **Workflows** links pre-set via `?dept=`.
 2. Clicking a row opens a drawer: `GET /workflow-instances/:id` for the stage rail and
    `GET /workflow-history?workflowInstanceId=&scope=all&order=desc` for the activity trail.
 3. Hold / resume / close act on `POST /workflow-instances/:id/hold | resume | close`.
@@ -1010,6 +1013,9 @@ sitting, and which have stalled.
 - [x] Instance list with status + definition filters, server-paginated
 - [x] Per-instance stage rail and activity trail from live endpoints
 - [x] Hold, resume and close, wired to the real lifecycle routes
+- [x] Department filter and drill-down from `/management` (2026-10-14, verified live) —
+      only for `global` `workflow_instance:view`; a department-scoped supervisor already
+      sees just their own department
 - [x] Skeleton loading state (`SkeletonTable`)
 - [x] ✅ **DRIFT-05 resolved** (2026-09-04) — `instances.service.ts` gates every read and
       `WORKFLOW_INSTANCE_MANAGE_ROLES` gates hold/resume/close. *Previously* any

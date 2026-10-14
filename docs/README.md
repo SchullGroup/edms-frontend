@@ -153,6 +153,8 @@ above was found; and the three "7-line stub" pages are **re-exports**, one of wh
 
 **Corrected 2026-10-14 (later):** DRIFT-12 was still listed as open in doc 01 (section heading, register and order of attack), doc 03 (Phase 7 and its demo-accounts section) and doc 04 (Schulltech admin's day one), all saying every login autofill button fails. The code has been right since 2026-09-15: Set 2 moved to the `tjoel+…` accounts in `aa11682` and Set 1 was deleted in `ce4d968`. Doc 05 had already ticked it on 2026-10-08 without the other docs following. Re-verified live by signing in as all seven accounts.
 
+**Corrected 2026-10-14 (later):** doc 02's C2 story still had an open criterion saying the sidebar badge counts came from `SEED.documents`, with `approvalsCount` hardcoded to one user. Doc 05 recorded the fix on 2026-10-12 (`GET /tasks?scope=mine&status=pending&limit=1`), verified live then; doc 02 now matches. Found while adding the My Tasks `overdue`/`sort` criteria to the same story.
+
 **Correction (2026-09-10).** Doc 05 stated `/admin/users` "writes the role matrix to
 `SEED`" and listed `useRole`/`useUpdateRole`/`useDeleteRole` etc. as dead — both were
 stale. The matrix already used `PUT /roles/{id}/permissions` via `useSetRolePermissions`;
