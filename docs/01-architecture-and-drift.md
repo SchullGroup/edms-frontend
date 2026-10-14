@@ -457,6 +457,62 @@ weaken the fail-closed path; and — the case that mattered most — a **real pr
 against a backend that's genuinely unreachable**: no redirect, no logout, the shell
 rendered from cache, and `ServiceUnavailableOverlay` appeared after three failed queries.
 
+### ✅ DRIFT-23 — "Your session ended" modal survived a re-login — **Resolved (frontend, 2026-10-14)**
+
+`sessionExpired` (the flag behind `SessionExpiredModal`) was set in two places —
+`api-client.ts`'s interceptor, when a 401 survived a failed refresh, and `AppShell`'s
+`/auth/me` effect, on 401/403 — but cleared in only one: `performLogout`, which runs when
+the user signs out or acts on the modal itself. **The proxy's redirect to `/` for a dead
+token is not a logout**, so a session that ended by bounce left the flag `true`.
+
+Reported symptom: the notification bell's `GET /notifications/unread-count` (polled every
+60 s and on window focus) 401'd, the interceptor's `/api/auth/refresh` 401'd, the user was
+bounced to `/`, and after signing in the "session ended" modal covered the app. Nothing was
+wrong with the *new* session — the modal was the old session's flag, which had outlived the
+condition it described. `useUIStore` isn't persisted, so the flag survives exactly as long
+as the tab does, which is why only an in-page logout → login showed it.
+
+Fix: clear the flag where a session *begins* rather than only where it ends —
+`authService.login()`'s success block (next to `invalidateInFlightAuth`, the same "the
+session changed" boundary the refresh epoch uses) and `AppShell`'s `/auth/me` success path,
+so a live `/auth/me` also retires a flag left by an earlier 401.
+
+**Verified live 2026-10-14** (headless Chromium against the dev server, session killed in
+place with `POST /api/auth/logout` + a garbage `accessToken` cookie, then the bell's 60 s
+poll): `401 /notifications/unread-count` → one `401 /api/auth/refresh` → modal; a
+**client-side** navigation then bounced through the proxy (`307 …/approvals?_rsc=…` →
+`200 /`) onto the login screen with the stores still alive; signing in again showed
+**no modal**. The counterfactual is what makes that meaningful — with **both** clears
+disabled the modal reappears over the new session (`modalAfterLogin: 1`), which is the
+report, and with either one enabled it doesn't. TEST_PLAN Phase Y (TP-Y1, TP-Y2).
+
+### ✅ DRIFT-24 — A dead session could leave the app unopenable — **Resolved (frontend, 2026-10-14)**
+
+Found while setting up the DRIFT-23 repro, and severe on its own. The store persists
+`currentUser` to `localStorage` (no `partialize` — that's deliberate, so a reload doesn't
+bounce a signed-in user out), but the login page treated it as proof of a session:
+`if (currentUser) return null` plus a push to the portal home. With the cookie dead, the
+proxy bounced that push back to `/`, and the page rendered `null` for as long as the stale
+user was set.
+
+Observed: `/` with a persisted `currentUser` and no valid session renders **nothing at all**
+(`bodyTextLength: 0`), and it survives a reload — the only way in was clearing site data or
+an incognito window. Reachable by anyone whose refresh token expires and who reloads the tab
+or reopens a restored session; the proxy also left the dead `accessToken`/`refreshToken`
+cookies in place, so every later request re-sent them.
+
+Fix, in two parts that depend on each other:
+
+1. `proxy.ts` deletes both auth cookies when it redirects for a **confirmed** dead session.
+   It already tells "a responding backend rejected it" apart from "unreachable" — only the
+   former deletes, so the documented fail-open behaviour is untouched.
+2. The login page drops a persisted `currentUser` that has no `accessToken` cookie behind it,
+   and renders the form.
+
+**Verified live 2026-10-14:** `/supervisor` with a dead session → `307` to `/` with both
+cookies deleted → login form renders, stale user cleared from `localStorage`. Before the fix
+the same steps gave a blank page.
+
 ### ✅ DRIFT-03 — Permission string formats do not match — **Resolved (backend 2026-09-15)**
 
 | Side | Format | Example | Source |
@@ -849,6 +905,21 @@ no other signal to anyone:**
 
 Both #1 and #2 are backend (`edms-backend`) changes — not built in this pass.
 
+**Update 2026-10-14 — the browse/search disagreement is fixed; the reliability sweep is not.**
+PR #51 (live 2026-10-14) makes search indexing independent of OCR: `POST /documents` and
+`/batch` enqueue the search-index job as soon as the document is created (title + metadata
+are already indexable), `PATCH` re-indexes when the `title` actually changes, restoring a
+version re-indexes, and the OCR worker's *final* failed attempt indexes anyway so a file
+with no extractable text (a DOCX, say) is still found by its title and metadata
+(`documents.service.ts`, `ocr.workers.ts`, `search-index.workers.ts` on `origin/dev`).
+That closes the *mechanism* this finding described — a document can no longer be stranded
+out of search just because its OCR job never ran.
+
+What it does **not** do: backfill. A version already stuck at `pending` before this
+deploy still has an empty `search_vector` until something re-indexes it (an edit, a
+metadata change, a restore) — the reconciliation sweep in #1 and the manual retry in #2
+above are still unbuilt, and still the only thing that unsticks one.
+
 ### Related storage problems
 
 Re-audited 2026-09-21 against the actual live uploader (`uploader.ts`/
@@ -984,10 +1055,10 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists | ✅ |
+| `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists — since PR #51 (live 2026-10-14) the login response's `user` also carries `departmentId` | ✅ — the login page stores the whole `user`, so `useMyDepartmentId` is answered from the login itself; AppShell refreshes it from `/auth/me` |
 | `POST /api/auth/refresh` → `/api/v1/auth/refresh` | ✅ exists | ✅ |
 | `POST /api/auth/logout` → `/api/v1/auth/logout` | ❌ **not registered** | 🟨 **DRIFT-01** — frontend now *calls* it (Sidebar sign-out → `authService.logout()`, with the bearer token, 2026-09-10); backend route still missing so revocation is still a no-op |
-| `GET /auth/me` | ✅ exists — since PR #50 (live 2026-10-13) also `departmentId` (null when none). Login doesn't return it yet (on the unmerged `feat/frontend-spec-items`) | ✅ (`permissions` now included — DRIFT-03 resolved). **`departmentId` adopted 2026-10-13, verified live:** AppShell copies it into the store; `useMyDepartmentId` replaces the `GET /users/:id` lookups in `useConfidentialityClearance`, `useDepartmentColleagues` and `/admin/cabinets`, and the first-page lookup on `/doc/[id]` |
+| `GET /auth/me` | ✅ exists — since PR #50 (live 2026-10-13) also `departmentId` (null when none); login carries it too since PR #51 (live 2026-10-14) | ✅ (`permissions` now included — DRIFT-03 resolved). **`departmentId` adopted 2026-10-13, verified live:** AppShell copies it into the store; `useMyDepartmentId` replaces the `GET /users/:id` lookups in `useConfidentialityClearance`, `useDepartmentColleagues` and `/admin/cabinets`, and the first-page lookup on `/doc/[id]` |
 | `POST /auth/forgot-password` | ✅ exists | ✅ |
 | `POST /auth/reset-password` | ✅ exists | ✅ **DRIFT-15 resolved (frontend, 2026-09-18)** — was sending `newPassword`/`confirmPassword`; backend wants `password`. Fixed both sides of the shared invitation/reset-link landing page |
 
@@ -995,17 +1066,17 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `GET /documents` | ✅ | ✅ |
-| `GET /documents/search` | ✅ | ✅ (misses a document if its OCR job gets stuck at `pending` — see DRIFT-06) |
+| `GET /documents` | ✅ — since PR #51 (live 2026-10-14) also takes `departmentId` (documents whose cabinet belongs to that department); it only narrows, scope and clearance still apply | ✅ |
+| `GET /documents/search` | ✅ — since PR #51 (live 2026-10-14) takes every list filter (`cabinetId`, `departmentId`, `folderId`, `status`, `confidentiality`, `urgency`, `documentType`) alongside `q`, all AND'd with clearance and scope | ✅ — **wired 2026-10-14**: `/search` sends the same filters to both the list and the search endpoint, so the facet panel stays live while text is typed (it used to fall back to Cabinet only). DRIFT-06's browse/search disagreement is closed for anything indexed since the re-index work — indexing no longer waits on OCR |
 | `GET /documents/:id` | ✅ | ✅ — embeds `checkoutLock` + `locker {id,name,email}` since `edms-backend` `b4a3f81` (2026-09-29); before that only `isCheckedOut` came back, so even the lock holder couldn't check the document back in (TEST_PLAN "Things to check") |
 | `POST /documents` | ✅ — since `edms-backend` `dd10017` (2026-10-09) takes `metadata: [{ fieldId, value }]`, checked against the cabinet's fields and saved in the same transaction. A missing **required** field fails the upload (400), so a client that sends no metadata can't file into a cabinet with required fields | ✅ — `metadata` sent from `/upload` and the workflow picker's "Upload from computer" since 2026-10-09. **Verified live 2026-10-09** on `/upload`: a `staff` user (no `document_metadata:edit`) filed with a value, `GET /documents/:id/metadata` returned it, no `PUT` was made. The picker was confirmed by the product owner's testing 2026-10-09 |
 | `POST /documents/batch` (≤ 20, one transaction) | ✅ — each item takes `metadata` too (`dd10017`) | ✅ wired 2026-10-08 — `/upload`'s "File all", in chunks of 20; confirmed in testing 2026-10-08. Each item carries its card's metadata since 2026-10-09, **verified live** (two documents, two values stored). *This row was missing from the matrix* |
 | `POST /documents/versions/batch` (≤ 20) | ✅ | ⚠️ backend only — nothing uploads several new versions at once |
-| `PATCH /documents/:id` | ✅ — since `dd10017` (2026-10-09) also moves documents: `cabinetId` changes the cabinet (the folder is cleared unless a folder in the new cabinet is given) and `folderId: null` moves to the cabinet root; a folder from another cabinet is a 400. ⚠️ Edit access is checked only on the **destination** cabinet, so someone with edit on any cabinet can pull a document out of one they can't edit (request doc item 7) | ✅ — also, from 2026-10-08, the document page's "Change classification" dialog (`confidentiality`, `urgency`; 🟨 not verified live). Moves still send only `folderId` within the cabinet: cross-cabinet Move waits on the item 7 fix |
+| `PATCH /documents/:id` | ✅ — since `dd10017` (2026-10-09) also moves documents: `cabinetId` changes the cabinet (the folder is cleared unless a folder in the new cabinet is given) and `folderId: null` moves to the cabinet root; a folder from another cabinet is a 400. ✅ **Request item 7 fixed in PR #51 (live 2026-10-14):** a cross-cabinet move now needs edit on the document's **current** cabinet as well as the destination (`requireSourceCabinetAccessOnMove`), so no one can pull a document out of a cabinet they can't edit — 403 with "You need edit access to the document's current cabinet to move it" | ✅ — also, from 2026-10-08, the document page's "Change classification" dialog (`confidentiality`, `urgency`; 🟨 not verified live). Moves still send only `folderId` within the cabinet — a cross-cabinet Move UI was never built; the backend blocker for one is gone |
 | `POST /documents/:id/checkout` | ✅ | ✅ |
 | `POST /documents/:id/checkin` | ✅ | ✅ — holder, **or** a `document_lock:delete` holder at `global` scope / `department` scope for the cabinet's department (`canReleaseLock`). Frontend offers that "Force check in" only once the lock is past `expectedReturnAt` (2026-10-02) |
 | `GET /documents/:id/metadata` | ✅ | ✅ |
-| `PUT /documents/:id/metadata` | ✅ — re-indexes search after a change since `dd10017` | ✅ (cannot clear values — see backend analysis). Since 2026-10-09 only the document page's metadata editor calls it; uploads send metadata with the create call |
+| `PUT /documents/:id/metadata` | ✅ — re-indexes search after a change since `dd10017`, and since PR #51 (live 2026-10-14) `POST /documents`/`/batch` index at create time rather than waiting for OCR, `PATCH` re-indexes when the title actually changes, and restoring a version re-indexes (re-running OCR first if the source's never finished). An OCR failure indexes anyway, so a document with no extractable text is still findable by title and metadata | ✅ (cannot clear values — see backend analysis). Since 2026-10-09 only the document page's metadata editor calls it; uploads send metadata with the create call |
 | `GET /documents/:id/versions` | ✅ | ✅ |
 | `GET /documents/:id/summary` | ✅ — PR #49 (live 2026-10-13): Gemini summary of the current version, written after OCR; `summaryStatus` pending → processing → completed / failed / skipped. Older versions are queued the first time it's asked for. Each call is audited (`document.summary_viewed`). A summary that failed can't be re-queued yet; a trigger is in the works (backend spec N2) | ✅ wired 2026-10-13, verified live — `/doc/[id]` "AI summary" card; polls every 10 s for at most a minute per version while it's being written, then offers "Check again" |
 | `GET /documents/:id/versions/:versionId` | ✅ — since `edms-backend` `0dab81a` (2026-10-08) needs `document:download` on top of confidentiality clearance, and is audited as `document.downloaded` | 🟨 **wired 2026-10-08** as the only download path (`useDownloadDocumentVersion`): `/doc/[id]`'s Download, the workflow viewer's Download, and each version's Open in `DocumentVersionsPanel`. Permissions confirmed live on `/auth/me`. ✅ **Clicked through 2026-10-09** (Finance supervisor, `department` scope): Download on `/doc/[id]` and in the workflow viewer each called this route (200) and sent the new tab to the signed S3 URL. *Was marked ✅ before, but nothing called it: the versions panel opened the list's own signed `fileUrl`. Corrected 2026-10-08* |
@@ -1023,7 +1094,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 |---|---|---|
 | `GET/POST /workflows`, `GET/PATCH /workflows/:id` | ✅ — since `3014b89` a stage may carry `department_id` (alone, or with `role`; never with `user_id`); create, update and publish check that the department exists (422) | ✅ — **department-only stages since 2026-10-13, verified live**: the Designer's Assign to offers Role, Person or Department (the department tree flattened, "Operations › Finance") and saves `department_id` with no role or person. Role + department isn't offered until sub-department matching (spec Q2) is live; a stage that already has it (set through the API) keeps its department when saved as a role. Tasks: `assignedDepartmentId` drives "is this my task" (`isTaskForUser`, the backend's rule, with the department from `/auth/me`) and the holder label ("Finance", "supervisor · Finance") on the workflow page, the Monitor drawer and the reassign dialogs. Matching is exact: a stage for Operations doesn't reach Operations › Finance |
 | `POST /workflows/:id/publish` `/archive` | ✅ | ✅ |
-| `GET /workflow-instances`, `GET /workflow-instances/:id` | ✅ — since `919d0ef` an instance has `documents[]` and no `documentId`/`currentStage`/`stageDueAt`; the list doesn't return per-document executions (DRIFT-19). Since `3014b89`: each document carries `isLocked` + `access`, Restricted documents redacted to that title; and at `own` scope visibility follows task assignment only (direct, role, role + department, department), no longer document ownership (**DRIFT-22**). Attaching to a *pending* workflow is limited to the first-stage assignee or `global` scope | ✅ reshaped 2026-10-07 (DRIFT-19), not verified live. ✅ **DRIFT-21** fixed 2026-10-12: restricted entries render (lock tab, request card, no fetch) and stage actions cover only documents with Action access; verified live **PR #50 (live 2026-10-13):** the list returns each document's active `executions` (stage, status, `stageDueAt`) and redacts documents the caller can't view (`isLocked`, `access`, "Restricted document"); the detail returns every attached document. The list defaults to `scope=mine` (workflows the caller holds a task in), and `scope=all` is a **403** for anyone whose `workflow_instance:view` is `own`. The Workflow Monitor and `/doc/[id]`'s Workflows card sent no scope, so a client admin's Monitor was empty; since 2026-10-13 both send `scope=all` with oversight (department/global) and `mine` otherwise (verified live: admin Monitor 0 → 4 in progress, supervisor 3 for their department, staff `/doc/[id]` still 200). Stage and Next due columns fill from `executions` |
+| `GET /workflow-instances`, `GET /workflow-instances/:id` | ✅ — since PR #51 (live 2026-10-14) the list also takes `departmentId` (instances with a document in a cabinet of that department); a **department-scoped** caller passing someone else's department gets 403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`, while at `own` scope a requested department only narrows the participant list. Since `919d0ef` an instance has `documents[]` and no `documentId`/`currentStage`/`stageDueAt`; the list doesn't return per-document executions (DRIFT-19). Since `3014b89`: each document carries `isLocked` + `access`, Restricted documents redacted to that title; and at `own` scope visibility follows task assignment only (direct, role, role + department, department), no longer document ownership (**DRIFT-22**). Attaching to a *pending* workflow is limited to the first-stage assignee or `global` scope | ✅ reshaped 2026-10-07 (DRIFT-19), not verified live. ✅ **DRIFT-21** fixed 2026-10-12: restricted entries render (lock tab, request card, no fetch) and stage actions cover only documents with Action access; verified live **PR #50 (live 2026-10-13):** the list returns each document's active `executions` (stage, status, `stageDueAt`) and redacts documents the caller can't view (`isLocked`, `access`, "Restricted document"); the detail returns every attached document. The list defaults to `scope=mine` (workflows the caller holds a task in), and `scope=all` is a **403** for anyone whose `workflow_instance:view` is `own`. The Workflow Monitor and `/doc/[id]`'s Workflows card sent no scope, so a client admin's Monitor was empty; since 2026-10-13 both send `scope=all` with oversight (department/global) and `mine` otherwise (verified live: admin Monitor 0 → 4 in progress, supervisor 3 for their department, staff `/doc/[id]` still 200). Stage and Next due columns fill from `executions`. `departmentId` is on the service's filter type since 2026-10-14; no UI sends it yet |
 | ~~`POST /workflow-instances/start`~~ | now the two-call `POST /workflow-instances` **then** `POST /:instanceId/start`; since `919d0ef` the create body is `{ workflowDefinitionId, documents: [{ documentId, comment? }] }` | ✅ **DRIFT-09 resolved**; body updated 2026-10-07 — documents routed together go into one workflow (DRIFT-19) |
 | `POST /workflow-instances/:id/hold` `/resume` `/close` | ✅ | ✅ |
 | `GET /tasks`, `GET /tasks/:id` | ✅ — since `919d0ef` no `Task.dueAt`; documents come through `documents[].workflowDocumentExecution`, and only `/:id` carries their stage and deadline (DRIFT-19). Since `3014b89`: tasks carry `assignedDepartmentId`; `/:id` returns **every** document, each with `access: { canView, canRoute, canRequestView, canRequestRoute }`, and a document the caller can't view comes back as "Restricted document" with null confidentiality, cabinet and version (before, it was left out). Acting on a document above your tier needs a `route` grant | ✅ reshaped 2026-10-07, not verified live. ✅ **DRIFT-21, fixed 2026-10-12** — the workflow page reads `access`, shows Restricted documents as lock tabs with the request card and never fetches them; `ConfBadge`/`UrgBadge` render nothing for a null level. Verified live (staff: no `GET /documents/:id` for the restricted one, no error; client admin: unchanged). Stage actions cover only documents with Action access (`canRoute`) and name them explicitly whenever any is held back; close and delegate (whole-task) are disabled meanwhile. Verified live: approving the viewable document of a two-document task returned 200, the restricted one stayed at the stage in a new task for the same user **PR #50 (live 2026-10-13):** `GET /tasks` and `/tasks/approvals` return each document's `currentStage`, `status`, `stageDueAt` (W1), accept `sort=createdAt\|dueAt` and `overdue=true\|false`, and redact documents the caller can't view like `/:id` does. Task rows show the deadline (only on open tasks — a closed task's documents have moved to someone else's stage) and "Overdue" past it; verified live. `sort`/`overdue` not used yet |
@@ -1066,7 +1137,7 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 | `POST /users/:id/invitation` | ✅ — since PR #49 accepts `pending` or `active` users (409 otherwise) | ✅ wired 2026-09-18 — "Resend invite" button, shown for pending users and for active users with no `lastLoginAt` (since 2026-10-13; before, only the latter, so a pending user couldn't be re-invited) |
 | `GET/POST /roles`, `GET/PATCH/DELETE /roles/:id` | ✅ — since PR #49 `schulltech_admin` is never listed or returned, and assigning it through `POST /users` or `/users/:id/roles` is a 404 | ✅ — no frontend change: the role pickers list what the API returns. A user who already holds the role still shows it in their roles, and editing them keeps it |
 | `PUT /roles/:id/permissions` | ✅ | ✅ |
-| `GET/POST /departments`, `GET/PATCH/DELETE /departments/:id` | ✅ | ✅ |
+| `GET/POST /departments`, `GET/PATCH/DELETE /departments/:id` | ✅ — since PR #51 (live 2026-10-14) departments nest **one level only**: a parent must itself be top-level and a department with sub-departments can't be moved under another, both 422 `DEPARTMENT_DEPTH`. Editing a department that predates the rule only fails when its parent actually changes | ✅ — `/admin/departments` already offered exactly one level (its parent picker lists top-level departments only and pins "has sub-departments" rows), so no change was needed; the 422 message is shown verbatim via the mutation's error toast |
 
 ### Filing
 
@@ -1390,8 +1461,12 @@ reading both must handle both.
 > ```env
 > NEXT_PUBLIC_API_URL=https://edms-backend-zmfm.onrender.com
 > NEXT_PUBLIC_UPLOAD_BASE_URL=https://4c73wdutl4.execute-api.us-west-1.amazonaws.com/staging/fileupload/multipart
-> NEXT_PUBLIC_BRAND=galaxybackbone
+> NEXT_PUBLIC_BRAND=schulltech
 > ```
+>
+> `.env` is gitignored (`.gitignore`: `.env*`), so this is a *local* build setting rather
+> than something in the repo — the quoted `NEXT_PUBLIC_BRAND` said `galaxybackbone` until
+> 2026-10-14, and it is whatever brand the developer is building. Corrected 2026-10-14.
 >
 > Three keys, no duplicates, nothing dead. `NEXT_PUBLIC_API_URL` points straight at
 > the deployed backend (not `localhost:3001` — that only ever appears as
@@ -1449,6 +1524,15 @@ buttons and a blue focus in light, the violet gradient in dark). Only `galaxybac
 re-paints them, and its `focus`/`focusDark` pair is composed by `:root` and
 `[data-theme="dark"]` — an inline `--focus` would beat the dark rule, which is exactly the
 bug that was fixed on 2026-10-14.
+
+**Not every surface follows the brand.** Toasts are the deliberate exception: they use
+`--toast-bg` (`#23252E`, defined once in `:root` and never per theme or brand) rather than
+`--cta-bg`. Inheriting the CTA colour meant `galaxybackbone`'s green painted light-mode
+toast panels green, while dark mode had to override the violet gradient back to a neutral
+anyway — so the two themes disagreed, and a brand could repaint a surface that was already
+being forced. Corrected 2026-10-14; verified by raising a real "Search saved" toast with
+`--cta-bg` forced green: panel `#23252E`, text white, the green status tick and the 60%-white
+close button unchanged.
 
 Persisted branding: `src/store/useStore.ts` persists the whole state under `edms-state-v3`,
 `branding` included. The stored copy carries `brandKey` (which preset wrote it) and `source`
@@ -1532,12 +1616,14 @@ suspiciously few documents.
 | ~~DRIFT-20~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `POST /documents/:id/access-requests` requires `permission: 'view' \| 'route'` since `edms-backend` `3014b89`; `documentsService.requestAccess` sent only `{ reason }` | Frontend | Was: **Request access refused for everyone (422)**, on `/doc/[id]` and the workflow page. Fix: send `view` from the document page; on the workflow page, ask for whichever of `view`/`route` the document's `access` lacks. Show the permission in `/admin/access-requests` |
 | ~~DRIFT-21~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `GET /tasks/:id` and `GET /workflow-instances/:id` now return documents the caller can't see, redacted ("Restricted document", `confidentiality: null`, no version) with an `access` object | Frontend | **The workflow page throws** for anyone whose task holds such a document: the access overlay renders `ConfBadge` with `null`, and `titleCase(null)` calls `.replace` on null. Fix: drive the overlay from `access`/`isLocked`, guard null fields, and keep locked documents out of the action pickers unless `canRoute`. Workflow history also blanks comments, notes and signatures in workflows holding such a document (by design) |
 | **DRIFT-22** | 🟠 Med (found 2026-10-12; **intended**, per the backend developer the same day) | At `own` scope, workflow visibility (`buildInstanceAccessFilter`, `canActorAccessInstance`) follows task assignment only; `3014b89` dropped the "created one of its documents" clause | Backend (decision) | A `staff` user who routes a document to a supervisor stage can't see or open that workflow; `/doc/[id]`'s Workflows card goes empty and offers "Route to workflow" again. Confirmed intended; the frontend follow-up is explaining the empty state (doc 05 backlog 14b) |
+| ~~DRIFT-23~~ | ✅ **Resolved (frontend, 2026-10-14)**, verified live incl. the counterfactual | `sessionExpired` was cleared only by `performLogout`, but a session can also end via `proxy.ts`'s redirect to `/` (a dead token on a navigation) — not a logout | Frontend | Was: the "your session ended" modal covered the app immediately after a *successful* re-login, because the flag set during the dead session outlived it (`useUIStore` isn't persisted, so it persisted for the tab's lifetime). Fix: clear it on login success and on a live `GET /auth/me` — see §3 |
+| ~~DRIFT-24~~ | ✅ **Resolved (frontend, 2026-10-14)**, verified live | The login page trusted the store's persisted `currentUser` as proof of a session, and `proxy.ts` left dead cookies in place on its redirect | Frontend | Was: **with a dead session `/` rendered nothing at all and stayed that way across reloads** — the persisted user made the page return `null` while its portal push was bounced back by the proxy, so signing in was impossible without clearing site data. Fix: the proxy deletes the dead cookies, and the login page drops a persisted user with no `accessToken` behind it — see §3 |
 | ~~DRIFT-18~~ | ✅ **Resolved (frontend, 2026-10-02)** | `request_changes` required a `documents` array the frontend didn't send (`5144fc7`, multi-document workflows) | Frontend | Was: "Send back" failed validation for every user. Fixed as part of the doc/workflow page split — the new `/workflow-instances/[id]` asks which of the task's documents need changes. Not yet verified e2e |
 | ~~DRIFT-17~~ | ✅ **Resolved (frontend, 2026-10-02)** | Notification/email `actionUrl`s (`/tasks/:id`, `/workflow-instances/:id`, `/documents/:id…`, `/reset-password`, `/login`) named routes this app doesn't have | Frontend | Was: every notification deep-link and the password-reset email 404'd. One gap left: access-request links go to a page the document's creator usually can't open — see [§8.4](#8-contract-shape-drift-same-url-different-meaning) |
 | ~~DRIFT-16~~ | ✅ **Resolved (frontend, 2026-09-21)** | Frontend route guard (`routes.config.ts`, `PORTALS`) gated `/supervisor` and `/management` on `workflow:route`/`dashboard:view` — retired/fictional keys no role could ever hold | Frontend | Was: real supervisors and management users redirected to `/unauthorized` by the app's own guard, independent of what the backend allowed |
 | ~~DRIFT-11~~ | ✅ **Resolved** | Backend audit module real & auto-writing; `/admin/audit`, `auditor/trail` and `management/compliance` all migrated 2026-09-18 | — | `platform/audit` stays on `SEED` — no cross-tenant `GET /audit` exists, and no platform-level API exists at all to migrate it *to* |
 | ~~DRIFT-15~~ | ✅ **Resolved** | ~~`POST /auth/reset-password` sent `newPassword`/`confirmPassword`~~ — backend wants `password` | Frontend | Was: blocked **every** password reset and invitation acceptance, on every role |
-| DRIFT-06 | 🟡 **Re-diagnosed (2026-09-21) — retracted as written** | Live-verified against the deployed backend: OCR works, real uploads get real extracted text, every `fileUrl` resolves to `env.S3_BUCKET`. The "wrong bucket" claim was code-level speculation, never checked live, and was wrong. Real, narrower finding: one document out of eight sat at `ocrStatus: 'pending'` for 3 days — a lost/never-picked-up job, not a Textract rejection | Backend (reliability, not architecture) | Was overstated as "OCR always fails" — see [§5](#5-the-document-storage-path-and-why-ocr-cannot-work) for the fix recommendation (reconciliation sweep + manual retry) |
+| DRIFT-06 | 🟨 **Half-resolved (backend, PR #51 live 2026-10-14)** — the search half is fixed, the reliability half isn't | Live-verified against the deployed backend: OCR works, real uploads get real extracted text, every `fileUrl` resolves to `env.S3_BUCKET`. The "wrong bucket" claim was code-level speculation, never checked live, and was wrong. Real, narrower finding: one document out of eight sat at `ocrStatus: 'pending'` for 3 days — a lost/never-picked-up job, not a Textract rejection. **Fixed 2026-10-14:** indexing no longer waits on OCR (index at create; re-index on title change, metadata change and restore; index even when OCR finally fails), so nothing is invisible to search because its OCR job died. Still open: the reconciliation sweep + manual "Retry OCR" that would unstick a job in the first place, and no backfill for versions already stranded | Backend (reliability, not architecture) | Was overstated as "OCR always fails" — see [§5](#5-the-document-storage-path-and-why-ocr-cannot-work) |
 | ~~DRIFT-05~~ | ✅ **Resolved** | ~~Workflow routes have zero permission checks~~ — router-level `requirePermission` added 2026-09-16 on top of the five services' own `_FORBIDDEN` assertions | Backend | Was: any staff account could publish or archive workflow definitions |
 | ~~DRIFT-02~~ | ✅ **Resolved (frontend, 2026-09-21)** | `src/proxy.ts` (Next.js 16's `middleware.ts` replacement) resolves real roles/permissions from `GET /auth/me` server-side on every protected navigation, fails closed only on a confirmed 401/403, fails open on an unreachable backend — backed by `SessionExpiredModal` and `ServiceUnavailableOverlay` so fail-open doesn't mean "silently broken." Live-verified against a real dev server, including a genuinely unreachable backend. | Frontend | Was: any role forgeable via localStorage; fully exposed all `SEED`-backed portals |
 | ~~DRIFT-09~~ | ✅ **Resolved** | ~~`POST /workflow-instances/start` 404s~~ — two-call sequence shipped 2026-09 | Frontend | Was: document routing did not work from the UI at all |

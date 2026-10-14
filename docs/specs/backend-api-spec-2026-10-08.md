@@ -1,10 +1,13 @@
 # Backend API spec: changes the frontend is waiting on
 
-**Date:** 2026-10-08 · **Checked against:** `edms-backend` `dev` at `2db7e19` · **Author:** frontend
+**Date:** 2026-10-08 · **Re-checked:** 2026-10-14 against `edms-backend` `origin/dev` at `9998e05` (PR #51) · **Author:** frontend
 
 Each item says what is wrong today, the change, the contract, who may call it, and how we will
 know it is done. Code pointers are to `dev` at `2db7e19`. The frontend side of every item is
 already built, or will be the day the endpoint ships; nothing here needs a frontend decision first.
+
+The **Problem** paragraphs below describe the state at 2026-10-08 and are kept as the record of
+what was asked. The `> ` notes under each heading are what has shipped since.
 
 Items marked **Decide** need a call from the backend team before building. Everything else is a
 direct ask.
@@ -19,14 +22,14 @@ direct ask.
 | W1 | ✅ ~~Per-document stage, status and due date in task lists~~ done: PR #50 (live 2026-10-13); also `sort` and `overdue` filters | `GET /tasks`, `GET /tasks/approvals` | P1 | XS |
 | W2 | ✅ ~~Per-document executions in the workflow instance list~~ done: PR #50 (live 2026-10-13) | `GET /workflow-instances` | P1 | XS |
 | W3 | ✅ ~~On-time reporting endpoint~~ done: PR #50 (live 2026-10-13): `GET /sla/outcomes/summary`, wired on the staff dashboard and My Performance | new `GET /sla/outcomes/summary` | P1 | M |
-| D1 | Accept metadata on upload | `POST /documents`, `POST /documents/batch` | P1 | S |
+| D1 | ✅ ~~Accept metadata on upload~~ done: `dd10017` (2026-10-09), verified live — the spec row was stale, corrected 2026-10-14 | `POST /documents`, `POST /documents/batch` | P1 | S |
 | D2 | Let a metadata value be cleared | `PUT /documents/:id/metadata` | P2 | XS |
-| D3 | Re-index search when a document changes | metadata, title, restore | P1 | S |
-| D4 | Move documents between cabinets and to the cabinet root | `PATCH /documents/:id` | P2 | S |
-| D5 | `departmentId` filter on lists | `GET /documents`, `GET /workflow-instances` | P2 | S |
-| D6 | All filters on full-text search | `GET /documents/search` | P2 | S |
-| O1 | ✅ ~~`departmentId` on the signed-in user~~ done: on `/auth/me` in PR #50 (live 2026-10-13), adopted by the frontend; login still lacks it (unmerged `feat/frontend-spec-items`) | `POST /auth/login`, `GET /auth/me` | P1 | XS |
-| O2 | Limit departments to one level of nesting | `POST /departments`, `PATCH /departments/:id` | P2 | XS |
+| D3 | ✅ ~~Re-index search when a document changes~~ done: PR #51 (live 2026-10-14) — index at create, re-index on title change, metadata change and restore, and index anyway when OCR finally fails | metadata, title, restore | P1 | S |
+| D4 | ✅ ~~Move documents between cabinets and to the cabinet root~~ done: `dd10017` (2026-10-09); **item 7** (edit on the source cabinet) done: PR #51 (live 2026-10-14) | `PATCH /documents/:id` | P2 | S |
+| D5 | ✅ ~~`departmentId` filter on lists~~ done: PR #51 (live 2026-10-14) | `GET /documents`, `GET /workflow-instances` | P2 | S |
+| D6 | ✅ ~~All filters on full-text search~~ done: PR #51 (live 2026-10-14) | `GET /documents/search` | P2 | S |
+| O1 | ✅ ~~`departmentId` on the signed-in user~~ done: `/auth/me` in PR #50 (live 2026-10-13), **login** in PR #51 (live 2026-10-14), adopted by the frontend | `POST /auth/login`, `GET /auth/me` | P1 | XS |
+| O2 | ✅ ~~Limit departments to one level of nesting~~ done: PR #51 (live 2026-10-14), 422 `DEPARTMENT_DEPTH` | `POST /departments`, `PATCH /departments/:id` | P2 | XS |
 | O3 | Return people's names alongside their ids | `GET /audit`, documents, versions, signatures, `GET /delegations` | P1 | S |
 | T1 | Optional signature on the review action | `POST /tasks/:id/action` | P2 | XS |
 | I1 | Keep OCR word positions | OCR worker + new read endpoint | P2 | M |
@@ -211,7 +214,14 @@ department grouped by user.
 
 ## Documents
 
-### D1. Accept metadata on upload
+### D1. Accept metadata on upload — ✅ **Done**
+
+> Shipped in `dd10017` (2026-10-09) — the spec never recorded it, but doc 01 §7's
+> `POST /documents` row and doc 05 item 18 both do: `metadata: [{ fieldId, value }]` is
+> validated against the cabinet's fields inside the create transaction, a missing
+> **required** field is a 400 that creates nothing, and a `staff` user (no
+> `document_metadata:edit`) can file with values. Verified live 2026-10-09; the workflow
+> picker's "Upload from computer" does the same (confirmed by the product owner).
 
 **Problem.** `UploadDocumentInputSchema` (`documents.validation.ts` line 30) has no metadata.
 The upload form saves metadata afterwards with `PUT /documents/:id/metadata`, which needs
@@ -244,7 +254,13 @@ On a required field it is a 400.
 
 **Done when** `PUT … [{ fieldId, value: null }]` removes an optional field's value.
 
-### D3. Re-index search when a document changes
+### D3. Re-index search when a document changes — ✅ **Done**
+
+> PR #51 (live 2026-10-14). `POST /documents` and `/batch` now index at create time; `PATCH`
+> re-indexes when the title actually changes (a `documentType` change doesn't — search matches
+> type through the filter, not the text); restoring a version re-indexes, re-running OCR first
+> when the source's never finished; and the OCR worker indexes on its **final** failed attempt,
+> so a file with no extractable text is still found by title and metadata.
 
 **Problem.** Only OCR completion queues indexing (`ocr.workers.ts` line 105,
 `searchIndexQueue.add`). Changing metadata, the title, or restoring a version never re-indexes,
@@ -258,7 +274,13 @@ can't be found even by title.
 **Done when** a document is findable by a metadata value set after upload, and a DOCX is findable
 by its title.
 
-### D4. Move documents between cabinets and to the cabinet root
+### D4. Move documents between cabinets and to the cabinet root — ✅ **Done**
+
+> The move itself shipped in `dd10017` (2026-10-09). **Item 7** — edit access on the
+> document's *current* cabinet, not just the destination — shipped in PR #51 (live
+> 2026-10-14) as `requireSourceCabinetAccessOnMove('edit')`; it returns 403 "You need edit
+> access to the document's current cabinet to move it". The frontend never built a
+> cross-cabinet Move UI, so there is no adoption work — only the blocker is gone.
 
 **Problem.** `UpdateDocumentInputSchema` (line 79) has no `cabinetId` and `folderId` can't be
 `null`. Cross-cabinet moves are dropped, nothing checks the folder belongs to the cabinet, and a
@@ -271,7 +293,15 @@ cabinet plus edit on the source.
 **Done when** a move to another cabinet's folder works, a mismatched folder is rejected, and
 `folderId: null` puts the document at the cabinet root.
 
-### D5. `departmentId` filter on lists
+### D5. `departmentId` filter on lists — ✅ **Done**
+
+> PR #51 (live 2026-10-14). On `GET /documents` it filters on the document's cabinet's
+> department; on `GET /workflow-instances` on instances with a document in such a cabinet.
+> Both only narrow — scope and clearance are still AND'd on top — and a **department-scoped**
+> workflow caller may only pass its own department (403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`).
+> Adopted 2026-10-14: both filter types carry it, and `/management`'s department table and
+> `/management/departments`' header link to `/search?dept=<id>`, which is the record list
+> this item was blocking.
 
 **Problem.** Management charts are per department, but a bar can't open the records behind it:
 `ListDocumentsQuerySchema` (line 62) and the instance list take no department.
@@ -282,7 +312,11 @@ rules still apply on top.
 
 **Done when** both lists return only that department's records.
 
-### D6. All filters on full-text search
+### D6. All filters on full-text search — ✅ **Done**
+
+> PR #51 (live 2026-10-14). Adopted 2026-10-14: `/search` sends the same filters to
+> `/documents/search` as to `GET /documents`, so the facet panel stays live while text is
+> typed — the page used to grey the facets out and say "only the Cabinet filter applies".
 
 **Problem.** `SearchDocumentsQuerySchema` (line 131) takes only `q` and `cabinetId`. With words
 typed, the Search page can't also filter by type, status, confidentiality or urgency.
@@ -298,7 +332,9 @@ as `ListDocumentsQuerySchema`, applied in the same query.
 
 ### O1. `departmentId` on the signed-in user — ✅ **Done**
 
-> On `/auth/me` in PR #50 (live 2026-10-13), adopted by the frontend; login still lacks it (unmerged `feat/frontend-spec-items`).
+> On `/auth/me` in PR #50 (live 2026-10-13); on **login** too since PR #51 (live 2026-10-14).
+> Adopted by the frontend — the login page stores the whole `user`, so `useMyDepartmentId` is
+> answered straight after sign-in instead of waiting for AppShell's `/auth/me`.
 
 **Problem.** Login and `/auth/me` (the user object built in `auth.service.ts` around line 298)
 carry no `departmentId`. The frontend makes an extra `GET /users/:id` to learn it, which needs
@@ -310,7 +346,14 @@ fewer options in the UI than the API would allow.
 
 **Done when** `GET /auth/me` returns `user.departmentId`.
 
-### O2. Limit departments to one level of nesting
+### O2. Limit departments to one level of nesting — ✅ **Done**
+
+> PR #51 (live 2026-10-14). Both create and update reject a parent that is itself a
+> sub-department, and update also refuses to give a parent to a department that has
+> children — 422 `DEPARTMENT_DEPTH` either way. Depth is only re-checked when the parent
+> actually changes, so a department predating the rule doesn't start failing on an
+> unrelated edit. The UI already offered exactly one level; no frontend change was needed
+> beyond the mutation's existing "show the backend's message" toast.
 
 **Problem.** The UI offers one level of sub-departments; the API accepts any depth
 (`departments.service.ts` around lines 45 and 54 check only that the parent exists).
@@ -577,4 +620,32 @@ can go. Question for the PM.
 
 The frontend now leaves documents whose status is `in_progress`/`on_hold` out of routing. Does
 `POST /workflow-instances` (+ start) refuse a document already in a running workflow?
+
+---
+
+## Notes on PR #51 (2026-10-14) — the "frontend spec items" batch
+
+`feat/frontend-spec-items`, merged as `9998e05` (2026-10-14 09:12), closes D3, D4 item 7,
+D5, D6, O1 and O2 in one go. Frontend work it unblocked, all shipped 2026-10-14:
+
+| Item | Frontend change |
+|---|---|
+| D5 | `departmentId` added to `DocumentFilters` and `WorkflowInstanceFilters`; `/management`'s department table and `/management/departments`' header now link to `/search?dept=<id>` |
+| D6 | `/search` sends its whole facet set to `/documents/search`, and gained a **Department** facet (read from `?dept=`, and kept in saved searches) |
+| O1 | No code change needed — the login page already stored the whole `user`, so `departmentId` now lands in the store at sign-in; only the type/comment said otherwise |
+| O2 | No code change needed — `/admin/departments` already offered one level, and its error toast shows the backend's 422 message verbatim |
+| D3 | No frontend work — search indexing is now unconditional | 
+| D4 item 7 | No frontend work — no cross-cabinet Move UI was ever built; only the blocker was removed |
+
+**Two things PR #51 does *not* cover**, worth keeping on the list:
+
+- **O3 (names alongside ids)** is untouched — every page that needed a person's name still
+  loads `GET /users` page by page.
+- **No search backfill.** Indexing at create time fixes new and edited documents; a version
+  already stuck at `ocrStatus: 'pending'` before this deploy keeps an empty `search_vector`
+  until something re-indexes it. The reconciliation sweep and manual "Retry OCR" from
+  DRIFT-06 are still unbuilt.
+- **`buildAccessScopeWhere` / `buildScopeSqlFilter` still ignore cabinet grants** (doc 01
+  §7, `documents.repository.ts`) — the prerequisite for cabinet/folder access requests.
+  PR #51 did not touch document scope.
 

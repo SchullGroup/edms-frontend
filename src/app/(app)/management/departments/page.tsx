@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQueries } from '@tanstack/react-query';
 import { useUIStore } from '@/store/useUIStore';
 import { useDepartments } from '@/apis/hooks/useDepartments';
@@ -24,6 +25,7 @@ const LINE_COLORS = [
 ];
 
 export default function DeptComparisonPage() {
+  const router = useRouter();
   const { setPageTitle } = useUIStore();
   const [dept, setDept] = useState('All');
   const [range, setRange] = useState(7);
@@ -139,6 +141,18 @@ export default function DeptComparisonPage() {
               <option value={3}>Last 3 months</option>
               <option value={1}>This month</option>
             </select>
+            {dept !== 'All' && (
+              // The bars scope the charts to a department; this opens the
+              // documents behind them, via the `departmentId` list filter
+              // (edms-backend PR #51).
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => router.push(`/search?dept=${dept}`)}
+              >
+                View records
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -31,6 +31,9 @@ export interface DocumentStatsParams {
 
 export interface DocumentFilters {
   cabinetId?: string;
+  /** Documents in a cabinet belonging to this department (edms-backend PR #51).
+   *  Narrows what the caller can already see — scope and clearance still apply. */
+  departmentId?: string;
   folderId?: string;
   status?: 'pending' | 'in_progress' | 'on_hold' | 'closed';
   confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
@@ -49,8 +52,9 @@ export const documentsService = {
     return res.data;
   },
 
-  // Spec supports `q`, `cabinetId`, `page`, `limit`; kept permissive for call sites
-  // that pass a wider `DocumentFilters` object.
+  // Since edms-backend PR #51 (live 2026-10-14) `/documents/search` takes the same
+  // list filters as `GET /documents` — cabinet, department, folder, status,
+  // confidentiality, urgency and type — so a text search can be narrowed like a browse.
   search: async (
     query: string,
     params?: DocumentFilters,
