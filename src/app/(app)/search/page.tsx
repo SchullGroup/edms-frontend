@@ -7,6 +7,8 @@ import { useUIStore } from '@/store/useUIStore';
 import { documentStatusLabel } from '@/utils/helpers';
 import { useDocuments, useDocumentSearch } from '@/apis/hooks/useDocuments';
 import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useDepartments } from '@/apis/hooks/useDepartments';
+import { departmentOptions } from '@/apis/utils/managementAggregation';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
@@ -60,19 +62,17 @@ function FilterGroup({
   options,
   value,
   onChange,
-  disabled,
 }: {
   title: string;
   options: Option[];
   value: string | undefined;
   onChange: (value: string | undefined) => void;
-  disabled?: boolean;
 }) {
   return (
     <div className="facet-group" role="radiogroup" aria-label={title}>
       <div className="flex justify-between items-center">
         <span className="fg-title">{title}</span>
-        {value && !disabled && (
+        {value && (
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -84,16 +84,11 @@ function FilterGroup({
         )}
       </div>
       {options.map(([v, label]) => (
-        <label
-          className="facet-opt"
-          key={v}
-          style={disabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-        >
+        <label className="facet-opt" key={v}>
           <input
             type="radio"
             name={`filter-${title}`}
             checked={value === v}
-            disabled={disabled}
             readOnly
             // onClick, not onChange: a checked radio never fires onChange, and
             // clicking the selected option should clear it.
@@ -138,6 +133,12 @@ export default function SearchPage() {
     [cabinets],
   );
 
+  const { data: departmentsData } = useDepartments();
+  const deptOptions = useMemo<Option[]>(
+    () => departmentOptions(departmentsData?.data ?? []).map((d) => [d.id, d.label] as const),
+    [departmentsData],
+  );
+
   // `input` is what's typed; `q` is the debounced value actually searched.
   const urlQ = searchParams?.get('q') ?? '';
   const [input, setInput] = useState(urlQ);
@@ -145,6 +146,7 @@ export default function SearchPage() {
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<Filters>(() => ({
     cabinetId: searchParams?.get('cabinet') || undefined,
+    departmentId: searchParams?.get('dept') || undefined,
     documentType: fromParam(searchParams?.get('type') ?? null, TYPE_OPTIONS),
     status: fromParam(searchParams?.get('status') ?? null, STATUS_OPTIONS) as Filters['status'],
     confidentiality: fromParam(
@@ -171,18 +173,14 @@ export default function SearchPage() {
     setPage(1);
   }, 350);
 
-  // Text search (`GET /documents/search`) only accepts a cabinet filter; the
-  // others need the list endpoint. So while there's text, only Cabinet applies.
+  // Text search (`GET /documents/search`) takes the same filters as the list
+  // endpoint since edms-backend PR #51, so both queries see the same narrowing.
   const textMode = q.length > 0;
   const listQuery = useDocuments(
     { ...filters, page, limit: PAGE_SIZE },
     { enabled: !textMode },
   );
-  const searchQuery = useDocumentSearch(q, {
-    cabinetId: filters.cabinetId,
-    page,
-    limit: PAGE_SIZE,
-  });
+  const searchQuery = useDocumentSearch(q, { ...filters, page, limit: PAGE_SIZE });
   const active = textMode ? searchQuery : listQuery;
   const results: Document[] = active.data?.data ?? [];
   const pagination = active.data?.pagination;
@@ -244,10 +242,19 @@ export default function SearchPage() {
 
   const applySaved = (ss: SavedSearch) => {
     let next = { ...ss.filters };
-    // A saved cabinet may have been deleted since, or be one this user can't see.
+    // A saved cabinet or department may have been deleted since, or be one this
+    // user can't see.
     if (next.cabinetId && cabinets.length && !cabinetName.has(next.cabinetId)) {
       next = { ...next, cabinetId: undefined };
       addToast('The cabinet in this saved search is no longer available', 'info');
+    }
+    if (
+      next.departmentId &&
+      deptOptions.length &&
+      !deptOptions.some(([id]) => id === next.departmentId)
+    ) {
+      next = { ...next, departmentId: undefined };
+      addToast('The department in this saved search is no longer available', 'info');
     }
     setInput(ss.q);
     setQ(ss.q);
@@ -331,13 +338,6 @@ export default function SearchPage() {
             ))}
           </div>
 
-          {textMode && (
-            <div className="facet-group caption">
-              While searching text, only the Cabinet filter applies. Clear the search box to
-              use the others.
-            </div>
-          )}
-
           <FilterGroup
             title="Cabinet"
             options={cabinets.map((c: any) => [c.id, c.name] as const)}
@@ -345,32 +345,34 @@ export default function SearchPage() {
             onChange={(v) => setFilter('cabinetId', v)}
           />
           <FilterGroup
+            title="Department"
+            options={deptOptions}
+            value={filters.departmentId}
+            onChange={(v) => setFilter('departmentId', v)}
+          />
+          <FilterGroup
             title="Type"
             options={TYPE_OPTIONS}
             value={filters.documentType}
             onChange={(v) => setFilter('documentType', v)}
-            disabled={textMode}
           />
           <FilterGroup
             title="Status"
             options={STATUS_OPTIONS}
             value={filters.status}
             onChange={(v) => setFilter('status', v as Filters['status'])}
-            disabled={textMode}
           />
           <FilterGroup
             title="Confidentiality"
             options={CONFIDENTIALITY_OPTIONS}
             value={filters.confidentiality}
             onChange={(v) => setFilter('confidentiality', v as Filters['confidentiality'])}
-            disabled={textMode}
           />
           <FilterGroup
             title="Urgency"
             options={URGENCY_OPTIONS}
             value={filters.urgency}
             onChange={(v) => setFilter('urgency', v as Filters['urgency'])}
-            disabled={textMode}
           />
           {hasFilters && (
             <div className="facet-group">

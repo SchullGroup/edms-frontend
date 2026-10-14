@@ -852,6 +852,83 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
 - [ ] **TP-W3.** Assign a stage to "Operations" (Finance's parent) and route: Finance users
       should **not** get it yet. Expected until spec Q2 lands; re-test then.
 
+## 19g. Phase X — Frontend spec items (backend PR #51, live 2026-10-14)
+
+Backend half: `edms-backend` `9998e05` (D3 re-index, D4 item 7 source-cabinet edit, D5
+`departmentId` filters, D6 search filters, O1 login `departmentId`, O2 one-level departments).
+Run against the live backend (`edms-backend-zmfm.onrender.com`) as `client_admin` and
+`supervisor_finance` on 2026-10-14.
+
+- [x] **TP-X1.** `/search` with text in the box: the Status / Type / Confidentiality / Urgency
+      facets stay enabled (they used to grey out) and all of them reach the search endpoint
+      together. *(Verified 2026-10-14: `q=invoice` → 11 results; `+ status=closed` → 6;
+      `+ documentType=Invoice` → 5. Requests captured:
+      `/documents/search?q=invoice&status=closed&documentType=Invoice&…`.)*
+- [x] **TP-X2.** A **Department** facet is listed (all 6, sub-departments labelled with their
+      path, e.g. "Operations › Finance") and narrows both browse and text search. *(Verified
+      2026-10-14: `+ departmentId=<Finance>` sent; `departmentId=<Human Resources>` → "0 results
+      for “invoice”" with the no-match empty state.)*
+- [x] **TP-X3.** `/management`'s department table has a **Records** column; View opens
+      `/search?dept=<id>` with the Department facet already checked. *(Verified 2026-10-14 on
+      Finance: `Finance | 5 | 5 | 9 | 86% | View` → `/search?dept=b133c724…` → facet checked →
+      18 results.)*
+- [x] **TP-X4.** `/management/departments`: no button with "All departments"; with one selected,
+      **View records** opens the same URL. *(Verified 2026-10-14.)*
+- [x] **TP-X5.** A saved search keeps its department and survives a reload. *(Verified
+      2026-10-14: saved "TP-X5 finance invoices" → reloaded → applied → all three facets back
+      (Department/Type/Status) and the request carried all four params. The stale-department
+      guard was **not** exercised — it needs a department deleted out from under a saved
+      search.)*
+- [x] **TP-X6.** As `supervisor_finance`: `GET /workflow-instances?scope=all&departmentId=<own>`
+      → 200 (11); `departmentId=<Human Resources>` → **403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`**.
+      *(Verified 2026-10-14, directly against the API.)*
+- [ ] **TP-X7.** DOCX indexed by title at create / metadata value re-indexed on edit. **Not run**
+      — needs a fresh upload; the upload path went to the external gateway. The re-index code is
+      in `origin/dev`, not verified from here.
+- [x] **TP-X8.** Departments are one level deep. *(Verified 2026-10-14: the UI's parent picker
+      offers only the 6 top-level departments, no "Finance"; `POST /departments` with a
+      sub-department as parent → 422 `DEPARTMENT_DEPTH` "Departments can only be nested one level
+      deep"; re-parenting a department that has children → 422 `DEPARTMENT_DEPTH` "A department
+      with sub-departments cannot be moved under another department" — tested on throwaway
+      rows, which were then deleted and the tree re-checked at 6 top-level / 7 total.)*
+- [ ] **TP-X9.** Cross-cabinet move needs edit on the source cabinet. **Not run** — needs two
+      cabinets with different edit grants; API-only, no UI sends `cabinetId`.
+
+## 19h. Phase Y — Session lifecycle (2026-10-14, DRIFT-23 and DRIFT-24)
+
+Reproduced and fixed against the live dev server (headless Chromium) on 2026-10-14. The
+repro is: a live session → kill it in place (`POST /api/auth/logout` revokes the refresh
+token, then the `accessToken` cookie is replaced with garbage, exactly as an expired JWT
+looks) → wait for the bell's 60 s poll.
+
+- [x] **TP-Y1 (the reported bug).** The poll 401s, exactly one `POST /api/auth/refresh` 401s,
+      and the "Session ended" modal appears. *(Verified 2026-10-14 at 45 s / 60 s on two runs.
+      Network: `401 /notifications/unread-count` → `401 /api/auth/refresh`, twice because the
+      notification query retries once.)*
+- [x] **TP-Y2 (the regression).** With the modal up, a **client-side** navigation (the proxy
+      answers `307 /supervisor/approvals?_rsc=…` → `200 /`) lands on the login screen with the
+      stores still alive, because the middleware's redirect is not a logout. Signing in again
+      then used to re-surface the modal over the *new* session. *(Verified 2026-10-14 —
+      including the counterfactual: with **both** clears disabled, `modalAfterLogin: 1` and the
+      modal covered the app; with either clear enabled, `modalAfterLogin: 0`. That is the exact
+      report, and the fix is what stops it.)*
+- [ ] **TP-Y3.** The modal's own **Sign in again** path. **Not run** — that path already cleared
+      the flag before this change (`performLogout`), so it wasn't the broken one.
+- [ ] **TP-Y4.** A request that 401s while logged out leaves the next session alone. **Not run**
+      directly; covered indirectly by TP-Y2 (the flag is now cleared at the start of a session).
+- [x] **TP-Y5.** Normal sidebar sign-out and sign-in: no modal. *(Verified 2026-10-14 while checking the
+      galaxybackbone brand: the sidebar's "Sign out / switch role" landed on `/` with the sign-in form and
+      `[role=dialog][aria-label="Session ended"]` count 0.)*
+- [x] **TP-Y6 (DRIFT-24, found while setting up the above).** A dead session must not leave the
+      app unopenable. Before: with a persisted `currentUser` and dead cookies, the login page
+      rendered **nothing at all** (`bodyTextLength: 0`) and survived a reload — the only escape
+      was clearing site data. *(Verified 2026-10-14, before and after: pre-fix blank on reload,
+      fixed by clearing localStorage; post-fix `/supervisor` → `307` + cookies deleted → login
+      form renders, `accessToken`/`refreshToken` gone, stale `currentUser` cleared. Also
+      verified the fix does not turn a reachable-but-dead-looking backend into a logout, since
+      the proxy only deletes on a confirmed 401/403.)*
+
+
 ## 20. Wrap-up
 
 - [ ] Re-run **TP-A1–A7** once more at the very end using kemi.reviewer (the custom-role
@@ -914,9 +991,11 @@ Items whose backend already exists (or needs none). Worked through one at a time
 
 - [x] Search: filters sent to `GET /documents` (one value each, paginated) instead of
       filtering one page client-side; types from the shared `constants/documentTypes.ts`;
-      saved searches per user, without the two seeded fakes (15.3, 15.4). While text is
-      entered only the Cabinet filter applies — `GET /documents/search` accepts only `q` and
-      `cabinetId` (backend request: add the other filters there).
+      saved searches per user, without the two seeded fakes (15.3, 15.4). ~~While text is
+      entered only the Cabinet filter applies~~ — **fixed 2026-10-14:** `GET /documents/search`
+      takes the whole list filter set (edms-backend PR #51), so `/search` sends every facet
+      alongside `q` and no longer greys them out. A **Department** facet was added at the same
+      time (see Phase X, TP-X1/TP-X2).
 - [x] Edit a document's confidentiality and urgency after upload — `PATCH /documents/:id`,
       gated on `document:edit` (13.1/13.2). **Built 2026-10-08:** `/doc/[id]` → Details →
       Classification → **Change**. Also needs Edit on the cabinet. Tiers above your clearance
@@ -967,10 +1046,13 @@ Items whose backend already exists (or needs none). Worked through one at a time
       with no folders → "Folders in every cabinet (1 without one)" and a pending task appear
 - [ ] Chart drill-downs to filtered record lists (21.6, 22.3). **Partly done 2026-10-08:** on
       `/management` and `/management/departments`, clicking a department's bar scopes the
-      dashboard to that department (clicking it again on Departments widens back). **The record
-      list needs backend:** the charts are per department, and neither `GET /documents` nor
-      `GET /workflow-instances` takes a `departmentId` filter, so there's no list to open.
-      To test: click a department bar on each page
+      dashboard to that department (clicking it again on Departments widens back).
+      **Backend + frontend built 2026-10-14, not yet verified:** `GET /documents` takes
+      `departmentId` (edms-backend PR #51), `/search` has a Department facet fed by `?dept=`, and
+      `/management`'s department table (**Records**) and `/management/departments`
+      (**View records**) open `/search?dept=<id>`.
+      To test: click a department bar on each page, then Records / View records — see Phase X
+      (TP-X3, TP-X4)
 - [x] Status/ageing/SLA reports with CSV/Excel export built in the browser (25.2, 25.6).
       **Built 2026-10-08** on `/management/reports`: open items by cabinet, ageing register, SLA
       compliance by department (date range), workload by member; department filter; preview

@@ -283,7 +283,7 @@ Departments are the spine of the access model. Until they exist:
 | # | Action | API | Notes |
 |---|---|---|---|
 | 2.1 | Create top-level departments | `POST /departments` `{name}` | Finance, Operations, HR, Legal, IT, Compliance |
-| 2.2 | Create sub-departments | `POST /departments` `{name, parentId}` | Self-referencing hierarchy, arbitrary depth |
+| 2.2 | Create sub-departments | `POST /departments` `{name, parentId}` | Self-referencing hierarchy, **one level deep only since edms-backend PR #51 (live 2026-10-14)**: a parent must itself be top-level, and a department with children can't be re-parented — 422 `DEPARTMENT_DEPTH`. Before PR #51 the API accepted arbitrary depth while the UI offered one |
 | 2.3 | Verify the tree | `GET /departments` | Returns top-level nodes with nested `children` |
 
 ### Gotchas

@@ -5,6 +5,10 @@
 `edms-backend` (branch `tolu`, commit `2c8b901`, 11,393 LOC, 74 routes).
 **Re-verified 2026-09-04 (evening) against** `edms-backend` @ `dev` (`e60c418`,
 **90 routes**, 45 permissions) and `EDMS-FRONTEND` @ `dev` (`aec7863`, **46 pages**).
+**Re-checked 2026-10-14** against `edms-backend` `origin/dev` (`9998e05`, PR #51) for the
+contracts PR #50 published to `/auth/me`, `/tasks` and `GET /sla/outcomes/summary` and PR #51
+to `/auth/login`, `/documents`, `/documents/search`, `/workflow-instances` and
+`/departments` — those rows only, not the whole route inventory.
 
 > **What changed on 2026-09-04.** Three scans happened in one day, because both
 > codebases moved. In order:
@@ -144,6 +148,8 @@ above was found; and the three "7-line stub" pages are **re-exports**, one of wh
 (`/platform/flags`) renders the wrong screen entirely.
 
 **Corrected 2026-10-13:** docs 03 (Phase 5) and 04 (Bola's journey, step 7 and the identity section) still said new users got a hardcoded default password and there was no invite flow. `POST /users` without a password has emailed a set-password link since 2026-09-18, and since PR #49 the user is `pending` until they use it. Found while wiring PR #49.
+
+**Corrected 2026-10-14:** doc 01's `GET /documents/search` row still claimed search "misses a document if its OCR job gets stuck at `pending`" (DRIFT-06), and the auth row said login didn't return `departmentId`. Both were true of `origin/dev` before PR #51 (`9998e05`, merged 2026-10-14 09:12) and are not any more: search is now indexed at create/edit/restore **and** on a final OCR failure (`documents.service.ts`, `ocr.workers.ts`), and `POST /auth/login` carries `departmentId`. Docs 01, 05, the backend spec, the task tracker and TEST_PLAN (new Phase X) were re-derived from `origin/dev` rather than from the previous doc text. The spec's D3, D4 item 7, D5, D6, O1 and O2 entries are marked done with what shipped; the frontend side of D5 and D6 was built the same day and is **not yet verified live** (Phase X).
 
 **Correction (2026-09-10).** Doc 05 stated `/admin/users` "writes the role matrix to
 `SEED`" and listed `useRole`/`useUpdateRole`/`useDeleteRole` etc. as dead — both were
