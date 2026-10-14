@@ -151,6 +151,8 @@ above was found; and the three "7-line stub" pages are **re-exports**, one of wh
 
 **Corrected 2026-10-14:** doc 01's `GET /documents/search` row still claimed search "misses a document if its OCR job gets stuck at `pending`" (DRIFT-06), and the auth row said login didn't return `departmentId`. Both were true of `origin/dev` before PR #51 (`9998e05`, merged 2026-10-14 09:12) and are not any more: search is now indexed at create/edit/restore **and** on a final OCR failure (`documents.service.ts`, `ocr.workers.ts`), and `POST /auth/login` carries `departmentId`. Docs 01, 05, the backend spec, the task tracker and TEST_PLAN (new Phase X) were re-derived from `origin/dev` rather than from the previous doc text. The spec's D3, D4 item 7, D5, D6, O1 and O2 entries are marked done with what shipped; the frontend side of D5 and D6 was built the same day and is **not yet verified live** (Phase X).
 
+**Corrected 2026-10-14 (later):** DRIFT-12 was still listed as open in doc 01 (section heading, register and order of attack), doc 03 (Phase 7 and its demo-accounts section) and doc 04 (Schulltech admin's day one), all saying every login autofill button fails. The code has been right since 2026-09-15: Set 2 moved to the `tjoel+…` accounts in `aa11682` and Set 1 was deleted in `ce4d968`. Doc 05 had already ticked it on 2026-10-08 without the other docs following. Re-verified live by signing in as all seven accounts.
+
 **Correction (2026-09-10).** Doc 05 stated `/admin/users` "writes the role matrix to
 `SEED`" and listed `useRole`/`useUpdateRole`/`useDeleteRole` etc. as dead — both were
 stale. The matrix already used `PUT /roles/{id}/permissions` via `useSetRolePermissions`;

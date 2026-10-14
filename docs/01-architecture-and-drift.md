@@ -1568,16 +1568,19 @@ its values have changed. A `custom` copy is the `/admin/branding` page's publish
 `http://localhost:3000,http://127.0.0.1:3000,https://edms-kappa.vercel.app` — correct for
 local dev and the Vercel staging origin.
 
-### 🟠 DRIFT-12 — The login page's test accounts do not exist in the backend
+### ✅ DRIFT-12 — The login page's test accounts (resolved)
 
-`src/app/page.tsx` renders two rows of autofill buttons:
+**Resolved in code by 2026-09-15; the docs caught up 2026-10-14.** Set 2 moved to the
+`tjoel+…` addresses in `aa11682` (2026-08-31) and Set 1 was deleted in `ce4d968`
+(2026-09-15). `src/app/page.tsx` now renders one row of seven autofill buttons (dev
+builds, and only when the brand preset's `loginTestAccounts` is on), one per seeded
+account below. **Verified live 2026-10-14:** `POST /auth/login` succeeds for all seven.
 
-| Set | Emails | Exists in `prisma/seed.ts`? |
-|---|---|---|
-| Set 1 | `chika@firstatlantic.com`, `david@…`, `eniola@…`, `bola@…`, `femi@…`, `adaeze@schulltech.com` | ❌ No — these are `initialData.ts` fixture personas |
-| Set 2 | `boyebamiji+staff@schulltech.com` … password `Fixture123!` | ❌ No — the seed creates `tjoel+…` addresses |
+*Was:* two rows of autofill buttons — Set 1 (`chika@firstatlantic.com` etc., the
+`initialData.ts` fixture personas) and Set 2 (`boyebamiji+staff@schulltech.com` etc.) —
+none of which existed in the backend, so every button failed.
 
-The backend seed actually creates, all with password `Fixture123!`:
+The backend seed creates, all with password `Fixture123!`:
 
 ```
 tjoel+staff_finance@schulltech.com        → staff
@@ -1588,9 +1591,6 @@ tjoel+clientadmin@schulltech.com          → client_admin
 tjoel+schulltechadmin@schulltech.com      → schulltech_admin
 tjoel+auditor@schulltech.com              → internal_auditor
 ```
-
-**Every autofill button on the login screen fails against a freshly seeded backend.**
-This is a 10-minute fix and it is the first thing every new developer hits.
 
 ### 🟠 Backend build is currently broken locally
 
@@ -1633,7 +1633,7 @@ suspiciously few documents.
 | DRIFT-01 | 🟨 **Frontend fixed 2026-09-10** | `POST /auth/logout` missing | Backend | Sidebar sign-out now calls it with the bearer token; backend route + denylist still outstanding — confirmed still absent from `auth.router.ts` 2026-09-21 |
 | DRIFT-08 | ✅ **Resolved (frontend 2026-09-10, reaffirmed 2026-09-18)** | `/documents/:id/comments` + `/signatures` 404 | Frontend | Neither is a document operation. Comments = `comment` on `POST /tasks/:id/action`; signature = `signature` image on its `approve` action. `/doc/[id]` and the supervisor approvals queue rewired; a signature pad (`SignaturePad` + `useSignAndApprove`) captures/uploads the image. Dead `documents.service` methods + hooks removed. **2026-09-18 same-day update:** the dedicated `GET/POST /documents/:id/comments`/`/signatures` endpoints turned out to be real (not 404) and were briefly wired, then deliberately un-wired again — product wants one trail, not two. See BE-16/BE-17. |
 | DRIFT-04 | ✅ **Frontend resolved 2026-09-10** | Frontend role heuristics contradict backend grants | Frontend | Heuristic block deleted; gating is permission-key based (`routes.config` `anyPermissions`), `/platform` still role-gated by design |
-| DRIFT-12 | 🟠 Med | Login test accounts don't exist | Frontend | Every autofill button fails; blocks new-dev onboarding |
+| ~~DRIFT-12~~ | ✅ **Resolved (frontend, by 2026-09-15)**, verified live 2026-10-14 | Login test accounts didn't exist in the backend | Frontend | Was: every autofill button failed, blocking new-dev onboarding. The seven buttons now use the seeded `tjoel+…` accounts; this row went stale until 2026-10-14 |
 | — | 🟠 Med | Prisma client stale → all users forced to `department` scope | Backend | Run `npx prisma generate` |
 | ~~DRIFT-13~~ | ✅ **Resolved (frontend, 2026-09-21)** | `effStatus()` deleted from both `useStore.ts` and `helpers.ts`. Task rows (`staff/tasks`, `TaskRow`) now use `taskStatusLabel`/`isOverdue` (`@/utils/supervisor`) — already correct, just never imported. Document rows (`staff/cabinets`, `search`) get `documentStatusLabel` — casing fixed, no fabricated `Overdue` since `Document` has no due-date field anywhere in the backend schema. The fictional `Document.dueDate` field removed from `models.ts` | Frontend | Was: "Pending"/"Overdue" status filters on `/staff/tasks` matched nothing; badges showed raw lowercase status |
 | ~~DRIFT-07~~ | ✅ **Resolved (frontend, 2026-09-21)** | Client-side aggregation via `fetchAllPages` replaced by the server aggregation endpoints in all four management dashboards + Performance Overview | **Frontend** | Was: management dashboards fired up to 50 sequential requests; 7 of 8 aggregation endpoints had no caller |
@@ -1676,7 +1676,8 @@ re-diagnosed but still open and still item 1.*
    directly; `useAllTasks`/`useAllWorkflowInstances` deleted as dead code.
    `useAllDocuments` stays for its one legitimate remaining use (listing every document
    in one cabinet for a folder-assignment UI).
-8. Fix the login test-account emails to the `tjoel+…` set (DRIFT-12)
+8. ✅ ~~Fix the login test-account emails to the `tjoel+…` set~~ — **done** (DRIFT-12
+   resolved; verified live 2026-10-14)
 9. ✅ ~~Make `usePermissions` parse three-segment strings before anyone touches
    `/auth/me`~~ — **done**; backend now sends scoped `permissions` on login/`/auth/me`
    (DRIFT-03 resolved)

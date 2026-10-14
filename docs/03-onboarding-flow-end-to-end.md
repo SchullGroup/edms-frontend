@@ -103,7 +103,7 @@ PHASE 6   Client Admin  ·  🟨 PARTIAL (no authorization on the endpoint)
           ─────────────────────────────────────────────────────────────────
                                     │  produces: published workflows
                                     ▼
-PHASE 7   Every role  ·  ✅ REAL (test accounts are wrong — DRIFT-12)
+PHASE 7   Every role  ·  ✅ REAL (test accounts fixed — DRIFT-12)
           First login → JWT → role-based landing page
           ─────────────────────────────────────────────────────────────────
                                     │
@@ -241,7 +241,7 @@ global     → no additional restriction
 > and `internal_auditor` who are supposed to see the whole tenant. This presents as
 > "management can't see all documents" and is very hard to trace back to a stale client.
 
-### ⛔ Seeded demo accounts vs. the login screen (DRIFT-12)
+### ✅ Seeded demo accounts vs. the login screen (DRIFT-12, resolved)
 
 `prisma/seed.ts` creates seven demo users, **all with password `Fixture123!`**:
 
@@ -255,12 +255,14 @@ global     → no additional restriction
 | `tjoel+schulltechadmin@schulltech.com` | `schulltech_admin` | — |
 | `tjoel+auditor@schulltech.com` | `internal_auditor` | Compliance |
 
-The login screen (`src/app/page.tsx`) offers twelve autofill buttons across two sets —
-`chika@firstatlantic.com` etc. (fixture personas from `initialData.ts`) and
-`boyebamiji+staff@schulltech.com` etc. **None of the twelve exist in the backend.**
+The login screen (`src/app/page.tsx`) offers seven autofill buttons in dev builds, one per
+account above (hidden when the brand preset turns `loginTestAccounts` off, as
+galaxybackbone does). **Verified live 2026-10-14:** all seven sign in.
 
-**Every autofill button on the login screen fails.** This is the first wall a new developer
-hits, and it is a ten-minute fix.
+*Was:* twelve buttons across two sets — `chika@firstatlantic.com` etc. (fixture personas
+from `initialData.ts`) and `boyebamiji+staff@schulltech.com` etc. — none of which existed in
+the backend, so every one failed. Fixed in code by 2026-09-15; this section went stale until
+2026-10-14.
 
 ---
 
@@ -779,7 +781,7 @@ Phase 5  Users                   🟨            → ⛔ no login rate limit (in
 Phase 6  Workflows               ✅            → ✅ authorization FIXED 09-04
                                                → ⛔ but staff/supervisor can no
                                                  longer READ definitions (DRIFT-14)
-Phase 7  First login             ✅            → ⛔ test accounts wrong (DRIFT-12)
+Phase 7  First login             ✅            → ✅ test accounts FIXED (DRIFT-12)
 Phase 8  First document          🟨            → ⛔ OCR fails; ✅ routing FIXED 09-04
 Phase 9  Steady state            🟨            → ⛔ search dead; 🟨 notifications
                                                     plumbed but never emitted

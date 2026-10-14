@@ -167,7 +167,7 @@ records, that is a serious and correct architectural decision.
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in | `/` | ✅ (⛔ the autofill button uses a non-existent email) |
+| 1 | Log in | `/` | ✅ (the dev-build autofill button signs in as `tjoel+schulltechadmin@…` — DRIFT-12 resolved) |
 | 2 | Land on the Tenant Directory | `/platform` | 🟥 `SEED.tenants` |
 | 3 | Review platform health | `/platform/sysconfig` | 🟥 `SEED` |
 | 4 | Check plans and entitlements | `/platform/plans` | 🟥 `SEED.plans` |
