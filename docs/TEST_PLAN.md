@@ -916,8 +916,9 @@ looks) → wait for the bell's 60 s poll.
       the flag before this change (`performLogout`), so it wasn't the broken one.
 - [ ] **TP-Y4.** A request that 401s while logged out leaves the next session alone. **Not run**
       directly; covered indirectly by TP-Y2 (the flag is now cleared at the start of a session).
-- [ ] **TP-Y5.** Normal sidebar sign-out and sign-in: no modal. **Not run** as a step (unchanged
-      behaviour — `performLogout` still clears it).
+- [x] **TP-Y5.** Normal sidebar sign-out and sign-in: no modal. *(Verified 2026-10-14 while checking the
+      galaxybackbone brand: the sidebar's "Sign out / switch role" landed on `/` with the sign-in form and
+      `[role=dialog][aria-label="Session ended"]` count 0.)*
 - [x] **TP-Y6 (DRIFT-24, found while setting up the above).** A dead session must not leave the
       app unopenable. Before: with a persisted `currentUser` and dead cookies, the login page
       rendered **nothing at all** (`bodyTextLength: 0`) and survived a reload — the only escape
