@@ -1461,8 +1461,12 @@ reading both must handle both.
 > ```env
 > NEXT_PUBLIC_API_URL=https://edms-backend-zmfm.onrender.com
 > NEXT_PUBLIC_UPLOAD_BASE_URL=https://4c73wdutl4.execute-api.us-west-1.amazonaws.com/staging/fileupload/multipart
-> NEXT_PUBLIC_BRAND=galaxybackbone
+> NEXT_PUBLIC_BRAND=schulltech
 > ```
+>
+> `.env` is gitignored (`.gitignore`: `.env*`), so this is a *local* build setting rather
+> than something in the repo — the quoted `NEXT_PUBLIC_BRAND` said `galaxybackbone` until
+> 2026-10-14, and it is whatever brand the developer is building. Corrected 2026-10-14.
 >
 > Three keys, no duplicates, nothing dead. `NEXT_PUBLIC_API_URL` points straight at
 > the deployed backend (not `localhost:3001` — that only ever appears as
@@ -1520,6 +1524,15 @@ buttons and a blue focus in light, the violet gradient in dark). Only `galaxybac
 re-paints them, and its `focus`/`focusDark` pair is composed by `:root` and
 `[data-theme="dark"]` — an inline `--focus` would beat the dark rule, which is exactly the
 bug that was fixed on 2026-10-14.
+
+**Not every surface follows the brand.** Toasts are the deliberate exception: they use
+`--toast-bg` (`#23252E`, defined once in `:root` and never per theme or brand) rather than
+`--cta-bg`. Inheriting the CTA colour meant `galaxybackbone`'s green painted light-mode
+toast panels green, while dark mode had to override the violet gradient back to a neutral
+anyway — so the two themes disagreed, and a brand could repaint a surface that was already
+being forced. Corrected 2026-10-14; verified by raising a real "Search saved" toast with
+`--cta-bg` forced green: panel `#23252E`, text white, the green status tick and the 60%-white
+close button unchanged.
 
 Persisted branding: `src/store/useStore.ts` persists the whole state under `edms-state-v3`,
 `branding` included. The stored copy carries `brandKey` (which preset wrote it) and `source`
