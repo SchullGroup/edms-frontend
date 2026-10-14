@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
-import { useSlaBreaches } from '@/apis/hooks/useSla';
+import type { TaskFilters } from '@/apis/services/tasks.service';
 import { byUrgencyThenDue, taskStatusLabel } from '@/utils/supervisor';
-import { taskDocuments, taskDueAt } from '@/utils/workflowDocuments';
+import { taskDocuments } from '@/utils/workflowDocuments';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -26,20 +26,20 @@ export default function MyTasksPage() {
     setPageTitle('My Tasks');
   }, [setPageTitle]);
 
-  // Build backend filters
-  const backendFilters: Record<string, any> = { scope: 'mine' };
-  if (statusF !== 'All') {
-    // Map frontend 'Pending' etc to backend task statuses
-    if (statusF === 'Pending' || statusF === 'Overdue') {
-      backendFilters.status = 'pending';
-    } else if (statusF === 'In Progress') {
-      backendFilters.status = 'in_progress';
-    } else if (statusF === 'Closed') {
-      backendFilters.status = 'completed';
-    } else if (statusF === 'On Hold') {
-      backendFilters.status = 'on_hold';
-    }
+  // Overdue and due-date order are decided server-side (edms-backend PR #50),
+  // so they cover every task, not just the page that was fetched.
+  // Pending, In Progress and On Hold aren't task statuses: they come from the
+  // workflow's state (`taskStatusLabel`), so fetch open tasks that aren't
+  // overdue and split them below.
+  const labelledByWorkflow = ['Pending', 'In Progress', 'On Hold'].includes(statusF);
+  const backendFilters: TaskFilters = { scope: 'mine' };
+  if (statusF === 'Overdue') {
+    backendFilters.overdue = true;
+  } else if (labelledByWorkflow) {
+    backendFilters.status = 'pending';
+    backendFilters.overdue = false;
   }
+  if (sortBy === 'due') backendFilters.sort = 'dueAt';
 
   const {
     data: tasksData,
@@ -48,22 +48,12 @@ export default function MyTasksPage() {
     refetch,
   } = useTasks(backendFilters);
   const tasks = tasksData?.data || [];
-  // Overdue = past a document's deadline (on `GET /tasks` since edms-backend
-  // PR #50) or holding an open SLA breach, the same source as the dashboard tile.
-  const { data: slaBreaches } = useSlaBreaches({ scope: 'mine', status: 'open', limit: 100 });
-  const breachedTaskIds = new Set((slaBreaches?.data ?? []).map((b) => b.taskId));
 
   if (!currentUser) return null;
 
-  let list = tasks;
-  // Backend 'pending' covers both — refine the Pending/Overdue split client-side.
-  if (statusF !== 'All') {
-    list = list.filter((t) => {
-      const overdue = breachedTaskIds.has(t.id) || taskStatusLabel(t) === 'Overdue';
-      if (statusF === 'Overdue') return overdue;
-      if (statusF === 'Pending') return !overdue && taskStatusLabel(t) === 'Pending';
-      return true; // Already filtered by backend for other exact matches
-    });
+  let list = [...tasks];
+  if (labelledByWorkflow) {
+    list = list.filter((t) => taskStatusLabel(t) === statusF);
   }
 
   // A task matches when any of its documents has that urgency.
@@ -71,16 +61,11 @@ export default function MyTasksPage() {
     list = list.filter((t) => taskDocuments(t).some((d) => d.urgency === urgF.toLowerCase()));
   }
 
-  const dueMs = (t: (typeof list)[number]) => {
-    const due = taskDueAt(t);
-    return due ? Date.parse(due) : Number.MAX_SAFE_INTEGER;
-  };
+  // 'due' keeps the server's order. The backend can only sort oldest-first,
+  // so 'created' (newest first) sorts the fetched page here.
   if (sortBy === 'urgency') {
     list.sort(byUrgencyThenDue);
-  } else if (sortBy === 'due') {
-    // Tasks whose deadline isn't returned sort last.
-    list.sort((a, b) => dueMs(a) - dueMs(b));
-  } else {
+  } else if (sortBy === 'created') {
     list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }
 
