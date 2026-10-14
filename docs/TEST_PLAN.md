@@ -856,60 +856,77 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
 
 Backend half: `edms-backend` `9998e05` (D3 re-index, D4 item 7 source-cabinet edit, D5
 `departmentId` filters, D6 search filters, O1 login `departmentId`, O2 one-level departments).
-Nothing in this phase was verified live when the docs were updated — that's the point of it.
+Run against the live backend (`edms-backend-zmfm.onrender.com`) as `client_admin` and
+`supervisor_finance` on 2026-10-14.
 
-- [ ] **TP-X1.** `/search`: type a word, then set **Status** = Closed and **Type** =
-      Invoice. The facets stay live (they used to grey out with text in the box) and the
-      request carries `q`, `status=closed`, `documentType=Invoice` together. Results narrow
-      accordingly. *(Frontend shipped 2026-10-14.)*
-- [ ] **TP-X2.** `/search`: a **Department** facet is listed. Picking "Operations › Finance"
-      narrows both the browse list (no text) and the text search. Clearing it restores.
-- [ ] **TP-X3.** `/management`: the department table has a **Records** column. Clicking View
-      on Finance opens `/search?dept=<Finance id>`, the Department facet shows Finance, and
-      the result count is in the same ballpark as the row's Volume/Closed figures (it counts
-      documents whose cabinet is Finance's, so a shared cabinet can differ — note it if so).
-- [ ] **TP-X4.** `/management/departments`: pick a department, then **View records** → the
-      same `/search?dept=<id>`. With All departments selected the button isn't shown.
-- [ ] **TP-X5.** `/search`: save a search that includes a department, reload, apply it — it
-      restores the facet. Delete that department (or use one a saved search keeps) and apply
-      again: it's dropped with a toast rather than returning nothing.
-- [ ] **TP-X6.** As `supervisor_finance`, call `GET /workflow-instances?departmentId=<another
-      department>&scope=all` directly: 403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`. With your
-      own department, 200. *(No UI sends `departmentId` to this endpoint yet.)*
-- [ ] **TP-X7.** Upload a file with no extractable text (a DOCX) and search for its **title**
-      straight away: it's found, without waiting for OCR. Then set a metadata value on an
-      existing document and search for that value: found. *(Both used to need OCR to finish.)*
-- [ ] **TP-X8.** As `client_admin`, `/admin/departments` → New sub-department: the parent
-      picker offers top-level departments only, and a department with sub-departments can't
-      be given a parent. Through the API, `POST /departments` with a sub-department as parent
-      returns 422 `DEPARTMENT_DEPTH` and the screen's toast prints its message.
-- [ ] **TP-X9.** As a user with edit on cabinet A but not B, `PATCH /documents/<id in A>`
-      with `cabinetId = B`: 403 "You need edit access to the document's current cabinet to
-      move it". Same-cabinet edits still work. *(API only — no cross-cabinet Move UI exists.)*
+- [x] **TP-X1.** `/search` with text in the box: the Status / Type / Confidentiality / Urgency
+      facets stay enabled (they used to grey out) and all of them reach the search endpoint
+      together. *(Verified 2026-10-14: `q=invoice` → 11 results; `+ status=closed` → 6;
+      `+ documentType=Invoice` → 5. Requests captured:
+      `/documents/search?q=invoice&status=closed&documentType=Invoice&…`.)*
+- [x] **TP-X2.** A **Department** facet is listed (all 6, sub-departments labelled with their
+      path, e.g. "Operations › Finance") and narrows both browse and text search. *(Verified
+      2026-10-14: `+ departmentId=<Finance>` sent; `departmentId=<Human Resources>` → "0 results
+      for “invoice”" with the no-match empty state.)*
+- [x] **TP-X3.** `/management`'s department table has a **Records** column; View opens
+      `/search?dept=<id>` with the Department facet already checked. *(Verified 2026-10-14 on
+      Finance: `Finance | 5 | 5 | 9 | 86% | View` → `/search?dept=b133c724…` → facet checked →
+      18 results.)*
+- [x] **TP-X4.** `/management/departments`: no button with "All departments"; with one selected,
+      **View records** opens the same URL. *(Verified 2026-10-14.)*
+- [x] **TP-X5.** A saved search keeps its department and survives a reload. *(Verified
+      2026-10-14: saved "TP-X5 finance invoices" → reloaded → applied → all three facets back
+      (Department/Type/Status) and the request carried all four params. The stale-department
+      guard was **not** exercised — it needs a department deleted out from under a saved
+      search.)*
+- [x] **TP-X6.** As `supervisor_finance`: `GET /workflow-instances?scope=all&departmentId=<own>`
+      → 200 (11); `departmentId=<Human Resources>` → **403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`**.
+      *(Verified 2026-10-14, directly against the API.)*
+- [ ] **TP-X7.** DOCX indexed by title at create / metadata value re-indexed on edit. **Not run**
+      — needs a fresh upload; the upload path went to the external gateway. The re-index code is
+      in `origin/dev`, not verified from here.
+- [x] **TP-X8.** Departments are one level deep. *(Verified 2026-10-14: the UI's parent picker
+      offers only the 6 top-level departments, no "Finance"; `POST /departments` with a
+      sub-department as parent → 422 `DEPARTMENT_DEPTH` "Departments can only be nested one level
+      deep"; re-parenting a department that has children → 422 `DEPARTMENT_DEPTH` "A department
+      with sub-departments cannot be moved under another department" — tested on throwaway
+      rows, which were then deleted and the tree re-checked at 6 top-level / 7 total.)*
+- [ ] **TP-X9.** Cross-cabinet move needs edit on the source cabinet. **Not run** — needs two
+      cabinets with different edit grants; API-only, no UI sends `cabinetId`.
 
-## 19h. Phase Y — Session lifecycle (2026-10-14, DRIFT-23)
+## 19h. Phase Y — Session lifecycle (2026-10-14, DRIFT-23 and DRIFT-24)
 
-- [ ] **TP-Y1 (the reported bug).** Sign in, then make the session genuinely dead: in
-      DevTools → Application → Cookies, delete `refreshToken` and blank `accessToken` (or
-      let a real access token expire past 15 min and revoke the refresh token server-side).
-      Trigger any API call (focus the window — the bell polls `/notifications/unread-count`
-      every 60 s and on focus). Expect: 401 on the call, one `POST /api/auth/refresh` that
-      also 401s, then the "your session ended" modal.
-- [ ] **TP-Y2 (the regression).** Without acting on that modal, reach the login screen the
-      way a dead token actually does it — navigate to a protected page and let `proxy.ts`
-      redirect to `/`, or click the modal. **Then sign in again and confirm the modal does
-      not come back.** It used to: the flag set during the dead session was never cleared by
-      the proxy's redirect, so the next `AppShell` mount rendered it. *(Fix: cleared on login
-      success, and on a live `GET /auth/me`.)*
-- [ ] **TP-Y3.** Sanity-check the same thing through the modal's own path: let the session
-      die, click **Sign in again**, log in — the modal stays away.
-- [ ] **TP-Y4.** Confirm the flag can't be set by an ordinary logged-out request: on the
-      login screen, watch the network log for one poll interval. Any request that 401s while
-      logged out should try one refresh and then stop — it must not leave the modal up for
-      the *next* session.
-- [ ] **TP-Y5.** Sign out normally from the sidebar and back in: no modal at any point.
-      `useUIStore` isn't persisted, so a full page reload also clears it — the fix matters
-      only for the in-page logout → login path.
+Reproduced and fixed against the live dev server (headless Chromium) on 2026-10-14. The
+repro is: a live session → kill it in place (`POST /api/auth/logout` revokes the refresh
+token, then the `accessToken` cookie is replaced with garbage, exactly as an expired JWT
+looks) → wait for the bell's 60 s poll.
+
+- [x] **TP-Y1 (the reported bug).** The poll 401s, exactly one `POST /api/auth/refresh` 401s,
+      and the "Session ended" modal appears. *(Verified 2026-10-14 at 45 s / 60 s on two runs.
+      Network: `401 /notifications/unread-count` → `401 /api/auth/refresh`, twice because the
+      notification query retries once.)*
+- [x] **TP-Y2 (the regression).** With the modal up, a **client-side** navigation (the proxy
+      answers `307 /supervisor/approvals?_rsc=…` → `200 /`) lands on the login screen with the
+      stores still alive, because the middleware's redirect is not a logout. Signing in again
+      then used to re-surface the modal over the *new* session. *(Verified 2026-10-14 —
+      including the counterfactual: with **both** clears disabled, `modalAfterLogin: 1` and the
+      modal covered the app; with either clear enabled, `modalAfterLogin: 0`. That is the exact
+      report, and the fix is what stops it.)*
+- [ ] **TP-Y3.** The modal's own **Sign in again** path. **Not run** — that path already cleared
+      the flag before this change (`performLogout`), so it wasn't the broken one.
+- [ ] **TP-Y4.** A request that 401s while logged out leaves the next session alone. **Not run**
+      directly; covered indirectly by TP-Y2 (the flag is now cleared at the start of a session).
+- [ ] **TP-Y5.** Normal sidebar sign-out and sign-in: no modal. **Not run** as a step (unchanged
+      behaviour — `performLogout` still clears it).
+- [x] **TP-Y6 (DRIFT-24, found while setting up the above).** A dead session must not leave the
+      app unopenable. Before: with a persisted `currentUser` and dead cookies, the login page
+      rendered **nothing at all** (`bodyTextLength: 0`) and survived a reload — the only escape
+      was clearing site data. *(Verified 2026-10-14, before and after: pre-fix blank on reload,
+      fixed by clearing localStorage; post-fix `/supervisor` → `307` + cookies deleted → login
+      form renders, `accessToken`/`refreshToken` gone, stale `currentUser` cleared. Also
+      verified the fix does not turn a reachable-but-dead-looking backend into a logout, since
+      the proxy only deletes on a confirmed 401/403.)*
+
 
 ## 20. Wrap-up
 

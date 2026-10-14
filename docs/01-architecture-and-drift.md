@@ -475,8 +475,43 @@ as the tab does, which is why only an in-page logout → login showed it.
 Fix: clear the flag where a session *begins* rather than only where it ends —
 `authService.login()`'s success block (next to `invalidateInFlightAuth`, the same "the
 session changed" boundary the refresh epoch uses) and `AppShell`'s `/auth/me` success path,
-so a live `/auth/me` also retires a flag left by an earlier 401. Not yet verified live; see
-TEST_PLAN Phase Y.
+so a live `/auth/me` also retires a flag left by an earlier 401.
+
+**Verified live 2026-10-14** (headless Chromium against the dev server, session killed in
+place with `POST /api/auth/logout` + a garbage `accessToken` cookie, then the bell's 60 s
+poll): `401 /notifications/unread-count` → one `401 /api/auth/refresh` → modal; a
+**client-side** navigation then bounced through the proxy (`307 …/approvals?_rsc=…` →
+`200 /`) onto the login screen with the stores still alive; signing in again showed
+**no modal**. The counterfactual is what makes that meaningful — with **both** clears
+disabled the modal reappears over the new session (`modalAfterLogin: 1`), which is the
+report, and with either one enabled it doesn't. TEST_PLAN Phase Y (TP-Y1, TP-Y2).
+
+### ✅ DRIFT-24 — A dead session could leave the app unopenable — **Resolved (frontend, 2026-10-14)**
+
+Found while setting up the DRIFT-23 repro, and severe on its own. The store persists
+`currentUser` to `localStorage` (no `partialize` — that's deliberate, so a reload doesn't
+bounce a signed-in user out), but the login page treated it as proof of a session:
+`if (currentUser) return null` plus a push to the portal home. With the cookie dead, the
+proxy bounced that push back to `/`, and the page rendered `null` for as long as the stale
+user was set.
+
+Observed: `/` with a persisted `currentUser` and no valid session renders **nothing at all**
+(`bodyTextLength: 0`), and it survives a reload — the only way in was clearing site data or
+an incognito window. Reachable by anyone whose refresh token expires and who reloads the tab
+or reopens a restored session; the proxy also left the dead `accessToken`/`refreshToken`
+cookies in place, so every later request re-sent them.
+
+Fix, in two parts that depend on each other:
+
+1. `proxy.ts` deletes both auth cookies when it redirects for a **confirmed** dead session.
+   It already tells "a responding backend rejected it" apart from "unreachable" — only the
+   former deletes, so the documented fail-open behaviour is untouched.
+2. The login page drops a persisted `currentUser` that has no `accessToken` cookie behind it,
+   and renders the form.
+
+**Verified live 2026-10-14:** `/supervisor` with a dead session → `307` to `/` with both
+cookies deleted → login form renders, stale user cleared from `localStorage`. Before the fix
+the same steps gave a blank page.
 
 ### ✅ DRIFT-03 — Permission string formats do not match — **Resolved (backend 2026-09-15)**
 
@@ -1568,7 +1603,8 @@ suspiciously few documents.
 | ~~DRIFT-20~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `POST /documents/:id/access-requests` requires `permission: 'view' \| 'route'` since `edms-backend` `3014b89`; `documentsService.requestAccess` sent only `{ reason }` | Frontend | Was: **Request access refused for everyone (422)**, on `/doc/[id]` and the workflow page. Fix: send `view` from the document page; on the workflow page, ask for whichever of `view`/`route` the document's `access` lacks. Show the permission in `/admin/access-requests` |
 | ~~DRIFT-21~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `GET /tasks/:id` and `GET /workflow-instances/:id` now return documents the caller can't see, redacted ("Restricted document", `confidentiality: null`, no version) with an `access` object | Frontend | **The workflow page throws** for anyone whose task holds such a document: the access overlay renders `ConfBadge` with `null`, and `titleCase(null)` calls `.replace` on null. Fix: drive the overlay from `access`/`isLocked`, guard null fields, and keep locked documents out of the action pickers unless `canRoute`. Workflow history also blanks comments, notes and signatures in workflows holding such a document (by design) |
 | **DRIFT-22** | 🟠 Med (found 2026-10-12; **intended**, per the backend developer the same day) | At `own` scope, workflow visibility (`buildInstanceAccessFilter`, `canActorAccessInstance`) follows task assignment only; `3014b89` dropped the "created one of its documents" clause | Backend (decision) | A `staff` user who routes a document to a supervisor stage can't see or open that workflow; `/doc/[id]`'s Workflows card goes empty and offers "Route to workflow" again. Confirmed intended; the frontend follow-up is explaining the empty state (doc 05 backlog 14b) |
-| ~~DRIFT-23~~ | ✅ **Resolved (frontend, 2026-10-14)**, not yet verified live | `sessionExpired` was cleared only by `performLogout`, but a session can also end via `proxy.ts`'s redirect to `/` (a dead token on a navigation) — not a logout | Frontend | Was: the "your session ended" modal covered the app immediately after a *successful* re-login, because the flag set during the dead session outlived it (`useUIStore` isn't persisted, so it persisted for the tab's lifetime). Fix: clear it on login success and on a live `GET /auth/me` — see §3 |
+| ~~DRIFT-23~~ | ✅ **Resolved (frontend, 2026-10-14)**, verified live incl. the counterfactual | `sessionExpired` was cleared only by `performLogout`, but a session can also end via `proxy.ts`'s redirect to `/` (a dead token on a navigation) — not a logout | Frontend | Was: the "your session ended" modal covered the app immediately after a *successful* re-login, because the flag set during the dead session outlived it (`useUIStore` isn't persisted, so it persisted for the tab's lifetime). Fix: clear it on login success and on a live `GET /auth/me` — see §3 |
+| ~~DRIFT-24~~ | ✅ **Resolved (frontend, 2026-10-14)**, verified live | The login page trusted the store's persisted `currentUser` as proof of a session, and `proxy.ts` left dead cookies in place on its redirect | Frontend | Was: **with a dead session `/` rendered nothing at all and stayed that way across reloads** — the persisted user made the page return `null` while its portal push was bounced back by the proxy, so signing in was impossible without clearing site data. Fix: the proxy deletes the dead cookies, and the login page drops a persisted user with no `accessToken` behind it — see §3 |
 | ~~DRIFT-18~~ | ✅ **Resolved (frontend, 2026-10-02)** | `request_changes` required a `documents` array the frontend didn't send (`5144fc7`, multi-document workflows) | Frontend | Was: "Send back" failed validation for every user. Fixed as part of the doc/workflow page split — the new `/workflow-instances/[id]` asks which of the task's documents need changes. Not yet verified e2e |
 | ~~DRIFT-17~~ | ✅ **Resolved (frontend, 2026-10-02)** | Notification/email `actionUrl`s (`/tasks/:id`, `/workflow-instances/:id`, `/documents/:id…`, `/reset-password`, `/login`) named routes this app doesn't have | Frontend | Was: every notification deep-link and the password-reset email 404'd. One gap left: access-request links go to a page the document's creator usually can't open — see [§8.4](#8-contract-shape-drift-same-url-different-meaning) |
 | ~~DRIFT-16~~ | ✅ **Resolved (frontend, 2026-09-21)** | Frontend route guard (`routes.config.ts`, `PORTALS`) gated `/supervisor` and `/management` on `workflow:route`/`dashboard:view` — retired/fictional keys no role could ever hold | Frontend | Was: real supervisors and management users redirected to `/unauthorized` by the app's own guard, independent of what the backend allowed |
