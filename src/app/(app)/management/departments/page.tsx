@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueries } from '@tanstack/react-query';
 import { useUIStore } from '@/store/useUIStore';
+import { usePermissions } from '@/hooks/usePermissions';
+import { scopeAtLeast } from '@/lib/permissions';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { useDocumentStats } from '@/apis/hooks/useDocuments';
 import { useTaskStats } from '@/apis/hooks/useTasks';
@@ -27,6 +29,9 @@ const LINE_COLORS = [
 export default function DeptComparisonPage() {
   const router = useRouter();
   const { setPageTitle } = useUIStore();
+  // The Workflow Monitor's department filter is for tenant-wide viewers only.
+  const { scopeFor } = usePermissions();
+  const canOpenWorkflows = scopeAtLeast(scopeFor('workflow_instance', 'view'), 'global');
   const [dept, setDept] = useState('All');
   const [range, setRange] = useState(7);
 
@@ -142,16 +147,27 @@ export default function DeptComparisonPage() {
               <option value={1}>This month</option>
             </select>
             {dept !== 'All' && (
-              // The bars scope the charts to a department; this opens the
-              // documents behind them, via the `departmentId` list filter
-              // (edms-backend PR #51).
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => router.push(`/search?dept=${dept}`)}
-              >
-                View records
-              </button>
+              // The bars scope the charts to a department; these open the
+              // documents and workflows behind them, via the `departmentId`
+              // list filters (edms-backend PR #51).
+              <>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => router.push(`/search?dept=${dept}`)}
+                >
+                  View records
+                </button>
+                {canOpenWorkflows && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => router.push(`/supervisor/instances?dept=${dept}`)}
+                  >
+                    View workflows
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
