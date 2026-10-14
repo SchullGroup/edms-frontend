@@ -1,4 +1,5 @@
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
+import { getPresetBranding } from '@/lib/brand';
 import type { DocumentShortcut, SavedSearch } from '@/types/models';
 import type { PortalChoice } from '@/lib/permissions';
 
@@ -1453,14 +1454,7 @@ export const SEED = {
   savedSearches: {} as Record<string, SavedSearch[]>,
   recentDocuments: {} as Record<string, DocumentShortcut[]>,
   pinnedDocuments: {} as Record<string, DocumentShortcut[]>,
-  branding: {
-    appName: 'SchullTech EDMS',
-    tenantName: 'First Atlantic Bank',
-    primary: '#1F3864',
-    primaryLight: '#2E5496',
-    accent: '#C55A11',
-    logoText: 'S',
-  },
+  branding: getPresetBranding(),
   prefs: { density: 'comfortable', theme: 'light' } as {
     density: string;
     theme: string;
