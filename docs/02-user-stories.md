@@ -269,8 +269,10 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
 
 **Flow as built** (`src/app/(app)/upload/page.tsx`):
 1. Drag-and-drop or browse. Multiple files queue independently.
-2. Each file gets an "IDU" card (Intelligent Document Understanding) proposing a document
-   type, cabinet and folder with a confidence percentage.
+2. Each file gets a filing card for its title, document type, cabinet, folder,
+   confidentiality and urgency, plus the destination cabinet's own metadata fields.
+   *(Until 2026-10-14 this card also showed a fabricated "IDU" classification — a
+   document type, cabinet, folder and confidence percentage with no ML behind it.)*
 3. Chika reviews and corrects title, type, cabinet, folder, confidentiality, urgency.
 4. On **File document**: SHA-256 is computed in-browser → the file uploads with a progress
    bar → `POST /api/v1/documents` creates the document and version 1 → toast → the card
@@ -284,9 +286,10 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
 - [x] Backend generates a unique reference (`DOC-YYYYMMDD-HHmmss`)
 - [x] Document + version 1 are created in a single transaction
 - [x] Upload failure reverts the card to `ready` and surfaces the error
-- [ ] ⚠️ **The IDU classification is hardcoded.** `IDU_GUESSES` in `upload/page.tsx` is a
-      fixed array of four fake predictions cycled per file. No ML, no OCR, no backend call.
-      The confidence badge is decoration.
+- [x] ~~⚠️ **The IDU classification is hardcoded.**~~ **Removed 2026-10-14** — the card no
+      longer shows a confidence badge, a pre-filled classification, or "extracted metadata"
+      chips, and no longer pre-selects a type/cabinet/folder from a fixture. The real
+      cabinet-metadata fields below are what the form collects.
 - [ ] ⚠️ **The due date is collected and discarded.** The form has a `due` field; it is
       never sent to the API, and the backend `Document` model has no due-date column.
 - [x] Custom metadata is captured at upload — **2026-10-09, verified live**: the card shows
@@ -307,8 +310,9 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
 > scanned invoice and pre-fill the metadata,
 > **so that** I am confirming a machine's reading rather than typing from a page.
 
-**Why this matters:** this is the difference between 60-second filing and 4-minute filing,
-and it is the story the IDU card is *pretending* to tell.
+**Why this matters:** this is the difference between 60-second filing and 4-minute filing.
+The removed "IDU" card claimed to tell this story; nothing behind it was real, which is why
+it is gone.
 
 **Current state:** the backend runs AWS Textract (`ocr.workers.ts`) purely for full-text
 extraction into `search_vector`. It does not do form or key-value extraction
