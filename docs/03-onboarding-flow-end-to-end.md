@@ -590,7 +590,8 @@ it succeeds and where it stops.
 ```
 ┌─ STEP 1 · Chika (staff) uploads ──────────────────────────────── ✅ WORKS ──┐
 │ /upload                                                                     │
-│   • drag file → IDU card (⚠️ classification is hardcoded fixture data)      │
+│   • drag file → filing card (title, type, cabinet, folder, metadata)        │
+│     ⚠️ was an "IDU" card with a hardcoded classification — removed 2026-10-14│
 │   • calculateChecksum()          SHA-256 via crypto.subtle                  │
 │   • uploadFile() → ⚠️ third-party API Gateway, base64, 2 MB cap             │
 │   • POST /api/v1/documents { title, cabinetId, folderId, confidentiality,   │

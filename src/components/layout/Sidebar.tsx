@@ -10,13 +10,28 @@ import { Icon, IconEl } from '@/components/ui/Icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { useUIStore } from '@/store/useUIStore';
 import { performLogout } from '@/lib/logout';
+import { getBrandPreset } from '@/lib/brand';
+import { useImageFallback } from '@/hooks/useImageFallback';
 
-export const Sidebar = () => {
+interface SidebarProps {
+  isMobileOpen: boolean;
+  onClose: () => void;
+  navToggleRef: React.RefObject<HTMLButtonElement | null>;
+}
+
+export const Sidebar = ({ isMobileOpen, onClose, navToggleRef }: SidebarProps) => {
   const router = useRouter();
   const pathname = usePathname();
+  const preset = getBrandPreset();
   const { currentUser, branding, resetData, prefs, setPrefs } = useStore();
   const { addToast } = useUIStore();
   const queryClient = useQueryClient();
+
+  const logoSrc = (branding.logoUrl || '').trim() || preset.logoUrl.trim();
+  const brandAppName = branding.appName || preset.appName;
+  const brandTenantName = branding.tenantName || preset.tenantName;
+  const brandLogoText = (branding.logoText || preset.logoText).trim();
+  const { showImage: showLogoImage, onImageError: onLogoError } = useImageFallback(logoSrc);
 
   const handleSignOut = () => {
     setMenuOpen(false);
@@ -28,6 +43,51 @@ export const Sidebar = () => {
   const me = currentUser;
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const popoverRef = React.useRef<HTMLDivElement>(null);
+  const sidebarRef = React.useRef<HTMLElement>(null);
+  const wasMobileOpen = React.useRef(false);
+
+  useEffect(() => {
+    if (isMobileOpen) {
+      setMenuOpen(false);
+      sidebarRef.current?.querySelector<HTMLButtonElement>('.nav-item')?.focus();
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      const handleKey = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          onClose();
+          return;
+        }
+        if (event.key !== 'Tab' || !sidebarRef.current) return;
+
+        const focusable = Array.from(
+          sidebarRef.current.querySelectorAll<HTMLElement>(
+            'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((element) => element.getClientRects().length > 0);
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!sidebarRef.current.contains(document.activeElement)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first)?.focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      };
+      document.addEventListener('keydown', handleKey);
+      wasMobileOpen.current = true;
+      return () => {
+        document.removeEventListener('keydown', handleKey);
+        document.body.style.overflow = previousOverflow;
+      };
+    }
+
+    if (wasMobileOpen.current) navToggleRef.current?.focus();
+    wasMobileOpen.current = false;
+  }, [isMobileOpen, navToggleRef, onClose]);
 
   // Position the popover against the trigger. It renders in a portal on
   // `document.body` (position: fixed) so the sidebar's `overflow: hidden`
@@ -92,12 +152,30 @@ export const Sidebar = () => {
   const storagePct = 79;
 
   return (
-    <aside className="sidebar" aria-label="Primary navigation">
+    <aside
+      ref={sidebarRef}
+      id="primary-sidebar"
+      className="sidebar"
+      aria-label="Primary navigation"
+      role={isMobileOpen ? 'dialog' : undefined}
+      aria-modal={isMobileOpen || undefined}
+    >
       <div className="sidebar-brand">
-        <div className="brand-logo">{branding.logoText || branding.appName[0]}</div>
+        <div className="brand-mark" aria-label={`${brandAppName} logo`}>
+          {showLogoImage ? (
+            <img
+              src={logoSrc}
+              alt={`${brandAppName} logo`}
+              className="brand-logo-image"
+              onError={onLogoError}
+            />
+          ) : (
+            <div className="brand-logo">{brandLogoText || brandAppName[0]}</div>
+          )}
+        </div>
         <div>
-          <div className="brand-name">{branding.appName}</div>
-          <div className="brand-sub">{branding.tenantName}</div>
+          <div className="brand-name">{brandAppName}</div>
+          <div className="brand-sub">{brandTenantName}</div>
         </div>
       </div>
 
@@ -114,6 +192,7 @@ export const Sidebar = () => {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && e.currentTarget.value.trim()) {
                 router.push(`/search?q=${encodeURIComponent(e.currentTarget.value.trim())}`);
+                onClose();
               }
             }}
           />
@@ -131,7 +210,10 @@ export const Sidebar = () => {
                 <button
                   key={iIdx}
                   className={`nav-item ${pathname === it.route ? 'active' : ''}`}
-                  onClick={() => router.push(it.route)}
+                  onClick={() => {
+                    router.push(it.route);
+                    onClose();
+                  }}
                   title={it.label}
                   aria-current={pathname === it.route ? 'page' : undefined}
                 >
@@ -145,21 +227,29 @@ export const Sidebar = () => {
         ))}
       </nav>
 
-      <div className="side-usage">
-        <div className="su-title">
-          <Icon name="cabinet" size={14} />
-          &nbsp;Tenant storage
+      {preset.features.tenantStorage && (
+        <div className="side-usage">
+          <div className="su-title">
+            <Icon name="cabinet" size={14} />
+            &nbsp;Tenant storage
+          </div>
+          <div className="su-sub">812 GB of 1 TB used</div>
+          <div className={`pbar ${storagePct > 85 ? 'crit' : 'warn'}`}>
+            <i style={{ width: `${storagePct}%` }}></i>
+          </div>
         </div>
-        <div className="su-sub">812 GB of 1 TB used</div>
-        <div className={`pbar ${storagePct > 85 ? 'crit' : 'warn'}`}>
-          <i style={{ width: `${storagePct}%` }}></i>
-        </div>
-      </div>
+      )}
 
       <div className="sidebar-foot">
-        <button className="foot-link" onClick={() => router.push('/help')}>
+        <button
+          className="foot-link"
+          onClick={() => {
+            router.push('/help');
+            onClose();
+          }}
+        >
           <span>
-            <Icon name="circle" size={16} />
+            <Icon name="info" size={16} />
           </span>
           <span className="foot-label">Help & support</span>
         </button>

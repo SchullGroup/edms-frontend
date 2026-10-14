@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { useRouter } from 'next/navigation';
 import { authService } from '@/apis/services/auth.service';
 import { useStore } from '@/store/useStore';
+import { useUIStore } from '@/store/useUIStore';
 
 /**
  * The one full teardown sequence — extracted from `Sidebar`'s "Sign out"
@@ -16,6 +17,7 @@ export function performLogout(
 ): void {
   authService.logout();
   queryClient.clear();
+  useUIStore.getState().setSessionExpired(false);
   useStore.getState().setCurrentUser(null);
   router.replace('/');
 }

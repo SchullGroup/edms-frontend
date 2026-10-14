@@ -54,7 +54,7 @@ export function SessionExpiredModal() {
         <div className="modal-body">
           <p>
             Your session has ended, most likely from being idle for a while. Sign in again to
-            keep going — nothing you were working on has been lost server-side.
+            keep going.
           </p>
         </div>
         <div className="modal-foot">

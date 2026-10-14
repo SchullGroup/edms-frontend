@@ -18,12 +18,12 @@ export default function PerformanceOverviewPage() {
   const { data: stats, isLoading } = useTaskStats();
   const buckets = stats?.buckets ?? [];
 
-  const orgSla = useMemo(() => {
+  const orgSla = useMemo<number | null>(() => {
     const totals = buckets.reduce(
       (acc, b) => ({ total: acc.total + b.total, onTime: acc.onTime + b.onTime }),
       { total: 0, onTime: 0 },
     );
-    return totals.total === 0 ? 100 : Math.round((totals.onTime / totals.total) * 100);
+    return totals.total === 0 ? null : Math.round((totals.onTime / totals.total) * 100);
   }, [buckets]);
 
   if (isLoading) return <SkeletonPage kpis={4} charts={2} />;
@@ -33,13 +33,17 @@ export default function PerformanceOverviewPage() {
       <div className="page-head">
         <div>
           <div className="page-title">Performance Overview</div>
-          <div className="page-sub">Org-wide SLA performance across all tasks.</div>
+          <div className="page-sub">Org-wide SLA performance across completed tasks · all time.</div>
         </div>
       </div>
 
       <div className="grid cols-3 mb-4">
         <div className="card card-pad" style={{ textAlign: 'center' }}>
-          <DonutChart value={orgSla} label="Org SLA" size={120} color="var(--status-closed)" />
+          {orgSla === null ? (
+            <div className="muted">No completed tasks with SLA outcomes yet.</div>
+          ) : (
+            <DonutChart value={orgSla} label="Org SLA" size={120} color="var(--status-closed)" />
+          )}
         </div>
       </div>
 
@@ -47,7 +51,6 @@ export default function PerformanceOverviewPage() {
         <div className="card">
           <div className="card-head">
             <span className="h3">SLA by department</span>
-            <span className="caption">Server-computed · GET /tasks/stats</span>
           </div>
           <div className="tbl-wrap">
             <table className="tbl">

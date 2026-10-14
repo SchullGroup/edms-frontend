@@ -1534,4 +1534,9 @@ export interface Branding {
   primaryLight: string;
   accent: string;
   logoText: string;
+  logoUrl?: string;
+  /** Which preset this came from, so a browser that ran another brand drops it. */
+  brandKey?: string;
+  /** `custom` = published from /admin/branding; otherwise preset-owned. */
+  source?: 'preset' | 'custom';
 }

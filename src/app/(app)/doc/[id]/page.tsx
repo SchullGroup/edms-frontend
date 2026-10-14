@@ -40,6 +40,7 @@ import type { WorkflowInstanceStatus } from '@/types/models';
 import { Skeleton, SkeletonText } from '@/components/common/Skeleton';
 import { DateTimeField, todayStr } from '@/components/ui/DatePicker';
 import { folderPathLabel } from '@/utils/folders';
+import { getBrandPreset } from '@/lib/brand';
 
 const WORKFLOW_STATUS_LABEL: Record<WorkflowInstanceStatus, string> = {
   pending: 'Pending',
@@ -59,6 +60,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const docId = use(params).id;
 
   const { currentUser: me } = useStore();
+  const brand = getBrandPreset();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
   const { data: cabinetsData, isLoading: isLoadingCabs } = useCabinets();
@@ -256,7 +258,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     } else {
       const blob = new Blob(
         [
-          `SchullTech EDMS export\n\n${doc.title}\nStatus: ${doc.status}\nConfidentiality: ${doc.confidentiality}\n\n(No file is attached to this version.)`,
+          `${brand.appName} export\n\n${doc.title}\nStatus: ${doc.status}\nConfidentiality: ${doc.confidentiality}\n\n(No file is attached to this version.)`,
         ],
         { type: 'text/plain' },
       );

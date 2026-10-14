@@ -233,13 +233,15 @@ Fixtures declared directly inside a component, invisible to any `SEED` audit:
 
 | Page | Constant | What it fakes |
 |---|---|---|
-| `upload/page.tsx` | `IDU_GUESSES` (4 entries) | The entire "Intelligent Document Understanding" classification, including confidence percentages |
+| ~~`upload/page.tsx`~~ | ~~`IDU_GUESSES`~~ | **Removed 2026-10-14** — presented a fabricated document type, cabinet, folder, confidence badge and "extracted metadata" chips in the product's most prominent flow, with nothing signalling it was fixed data |
 | `supervisor/exceptions/page.tsx` | `useState([...])` (4 rows) | SoD conflicts, control failures, access anomalies |
 | ~~`management/reports/page.tsx`~~ | ~~`DEPTS`~~ | **Removed 2026-10-08** — departments come from `useDepartments` |
 
-**Why it's the sneakiest kind:** `IDU_GUESSES` presents fabricated ML output with a
-confidence badge, in the product's most prominent flow. Nothing about the UI signals that
-it is fixed data.
+**Why it's the sneakiest kind:** the fixtures in this table present fabricated output that
+looks computed. `IDU_GUESSES` gave every queued file a made-up classification and a
+confidence percentage, in the flow the whole product hinges on — nothing in the UI said so.
+It was removed rather than relabelled on 2026-10-14 exactly for that reason, and the upload
+card now starts blank; `supervisor/exceptions` is the only entry left here.
 
 ---
 
@@ -319,7 +321,7 @@ destination (request doc item 7).
 | Where | Fixture | Consequence |
 |---|---|---|
 | ~~Sidebar "My Tasks" badge~~ | ✅ **Fixed 2026-10-12** — counts the caller's pending tasks (`GET /tasks?scope=mine&status=pending&limit=1` → `pagination.total`); verified live (staff: 1, matching the API) | Was `SEED.documents`, which didn't match the real task queue. *The Notifications, Approvals and Circulars badges are real (re-checked 2026-10-12); this row used to include `SEED.notifications`* |
-| `/upload` IDU card | `IDU_GUESSES` inline | Fake classification with a fake confidence score |
+| ~~`/upload` IDU card~~ | ~~`IDU_GUESSES` inline~~ | **Removed 2026-10-14** — the card now starts blank and the only extra inputs are the cabinet's own metadata fields. Was: a fake classification with a fake confidence score |
 | ~~`/staff/performance`, `/staff`~~ | ~~hard-coded "Rework rate 4.2%" and a turnaround delta~~ | **Removed 2026-10-08** — replaced by a real "Changes requested" rate (`changesRequestedRate`, `utils/supervisor.ts`) |
 
 ### Flows
@@ -350,7 +352,7 @@ destination (request doc item 7).
 3a. ~~**Fix Request access (DRIFT-20)**~~ — **done 2026-10-12**, verified live.
 4. ~~Add `POST /documents/:id/comments`~~ — **done differently (2026-09-10):** comments are the `comment` field on `POST /tasks/:id/action`; the stage-action modals now send it.
 5. ~~**Add a download endpoint** gated by `requireConfidentiality('download')`.~~ **Done:** `GET /documents/:id/versions/:vid` checks `document:download` + clearance (edms-backend `0dab81a`); the frontend downloads only through it, clicked through 2026-10-09.
-6. **Replace `IDU_GUESSES`** with real extraction, or clearly label it as a preview.
+6. ~~**Replace `IDU_GUESSES`** with real extraction, or clearly label it as a preview.~~ **Done differently 2026-10-14** — removed rather than relabelled: there is no extraction to replace it with, it produced a fabricated classification, and the real cabinet-metadata fields (item 7) already collect what the form must.
 7. ~~**Render cabinet metadata fields** in the upload form.~~ **Done 2026-10-09**, sent with the upload and verified live.
 8. ~~**Drive the My Tasks badge from the API**~~ — **done 2026-10-12**, verified live.
 9. **Raise the file-size cap** and support the document types the allowlist already claims.
@@ -918,7 +920,7 @@ This is a **phase**, not a backlog item:
 
 | Page | LOC | Roles | Store reads | API | Status |
 |---|---:|---|---|---|---|
-| `/` (login) | 316 | all | `currentUser`, `setCurrentUser` | `authService` ✅ | ✅ Live — the 7 autofill accounts match the backend's `tjoel+…` fixtures (re-checked 2026-10-08; the "12 wrong accounts" note was stale) |
+| `/` (login) | 316 | all | `currentUser`, `setCurrentUser` | `authService` ✅ | ✅ Live — the 7 autofill accounts match the backend's `tjoel+…` fixtures (re-checked 2026-10-08; the "12 wrong accounts" note was stale). **2026-10-14:** those autofill buttons render only outside production *and* only under the SchullTech preset — a white-labelled build (`NEXT_PUBLIC_BRAND=galaxybackbone`, `features.loginTestAccounts`) never shows our fixture logins, even in `next dev` |
 | `/doc/[id]` | 699 | all | `currentUser` | `useDocument`, versions, `useDownloadDocumentVersion`, checkout, `useWorkflowInstances`, `useDocumentSummary` ✅ · `usePolicies` 🟥 mock (watermark only) | 🟨 Hybrid (policies) — **made view-only 2026-10-02**: workflow actions, signing and the activity trail moved to `/workflow-instances/[id]`. **AI summary card (2026-10-13, verified live):** `GET /documents/:id/summary`; while the summary is being written it says so and polls every 10 s for up to a minute, then offers "Check again". Seen as `supervisor_finance`: a Confidential invoice went from "Writing the summary" to a summary in one poll. Also states no readable text, OCR failed and generation failed |
 | `/search` | 536 | all | `currentUser`, `savedSearches` (per-user, user-created — not `SEED`) | `useDocuments` (server-side filters + pagination), `useDocumentSearch` (text + cabinet), `useCabinets` ✅ | ✅ Live — rebuilt 2026-09-30: no `SEED` reads, no `@ts-nocheck`; types from `constants/documentTypes.ts`. *(confirmed by the product owner’s testing, 2026-10-09)* **2026-10-08:** results can be ticked (for anyone with `workflow_instance:create`); the selection survives paging, new searches and filter changes, and **Route to workflow** sends it all into one workflow — the only way to route documents from different folders or cabinets together (confirmed 2026-10-09). |
 | `/upload` | 926 | staff, supervisor, management, client_admin | `docTypes`, `session`, `users` | `useCabinets`, `useCabinet`, `useCabinetFolders`, `documentsService` (`POST /documents` and `/batch` with `metadata`), `s3` ✅ | ✅ Live — **2026-10-09: metadata files with the document.** The chosen cabinet's fields (`useUploadMetadata`) are offered to everyone who can upload, and their values go in the create call (`metadata: [{ fieldId, value }]`, edms-backend `dd10017`), so the document and its metadata are saved together or not at all. Required fields must be filled before filing; the backend also refuses the upload without them. **Verified live 2026-10-09** as a `staff` user, single and "File all": values stored, no `PUT` made. *2026-10-07 to 2026-10-09 the values were saved by a second `PUT /documents/:id/metadata`, which needs `document_metadata:edit` + `edit`, so staff only saw the field list. Once `dd10017` made required fields mandatory on upload, that form couldn't file into a cabinet with required fields at all.* **2026-10-08: batch filing** — with two or more files waiting, an "Apply to all" bar sets cabinet/folder/confidentiality/urgency on every card, and **File all (N)** checks every card first, uploads three at a time, then files them through `POST /documents/batch` in chunks of 20 (one transaction each; a failed chunk's cards return to editable and reuse their upload on retry). Each card's metadata rides in the batch item (since 2026-10-09); when it's done, a banner offers to route everything that run filed into **one** workflow. Progress now shows inside the card, which stays mounted — previously it was unmounted mid-upload, so the bar didn't move (🟨 not yet verified live).  **2026-10-02:** accepted types unified in `src/constants/uploadTypes.ts` — PDF, DOCX, XLSX, TIFF, JPG, PNG up to 100 MB (was PDF ≤50 MB + images ≤10 MB, despite the page text claiming DOCX/XLSX/TIFF). DOCX/XLSX/TIFF upload but **don't preview** in the viewer and **aren't OCR'd** (Textract can't read DOCX/XLSX), so they're not text-searchable |

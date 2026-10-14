@@ -879,7 +879,9 @@ pdf.js's worker and the files it loads at runtime (WebAssembly decoders for JBIG
 JPEG 2000 images, standard fonts, character maps, colour profiles) are served from
 `/pdfjs/`. `scripts/copy-pdfjs-assets.mjs` copies them out of `node_modules` at the start of
 `npm run dev` and `npm run build`; `public/pdfjs/` is git-ignored. `proxy.ts`'s matcher
-excludes `/pdfjs/` so those requests don't trigger a backend session check.
+excludes `/pdfjs/`, and static assets generally by file extension (images, fonts, media),
+so those requests don't trigger a backend session check — the login page's brand logo
+(`/gbb-logo.jpg`) has to load before any session exists.
 
 Printing renders each page to an image with the watermark drawn in and prints those from a
 hidden frame, after `GET /documents/:id/print` succeeds. Images still render as a plain
@@ -1388,9 +1390,10 @@ reading both must handle both.
 > ```env
 > NEXT_PUBLIC_API_URL=https://edms-backend-zmfm.onrender.com
 > NEXT_PUBLIC_UPLOAD_BASE_URL=https://4c73wdutl4.execute-api.us-west-1.amazonaws.com/staging/fileupload/multipart
+> NEXT_PUBLIC_BRAND=galaxybackbone
 > ```
 >
-> Two keys, no duplicates, nothing dead. `NEXT_PUBLIC_API_URL` points straight at
+> Three keys, no duplicates, nothing dead. `NEXT_PUBLIC_API_URL` points straight at
 > the deployed backend (not `localhost:3001` — that only ever appears as
 > `api-client.ts`/`auth.server.ts`'s `||` fallback, used when the env var is
 > unset, e.g. a fresh local clone before this file exists). `NEXT_PUBLIC_UPLOAD_BASE_URL`
@@ -1419,6 +1422,39 @@ NEXT_PUBLIC_API_URL=                                # duplicate key — this one
 `NEXT_PUBLIC_API_URL`, same as the client. That still works, but it means the backend
 URL used for server-to-server calls is baked into the client bundle rather than kept in
 a separate non-public variable. Not urgent enough to be its own finding on its own.
+
+`.env` itself is **git-ignored** (`.gitignore:34`), so none of these values are committed —
+a fresh clone builds with `NEXT_PUBLIC_BRAND` unset, i.e. SchullTech, and the backend URL
+falls back to `api-client.ts`'s `||` default.
+
+### `NEXT_PUBLIC_BRAND` — the white-label switch (added 2026-10-14)
+
+| | |
+|---|---|
+| Values | `schulltech` (default) · `galaxybackbone` |
+| Unset or unknown | resolves to `schulltech` — `getBrandPreset()` maps anything that isn't exactly `galaxybackbone` to it |
+| Read by | `src/lib/brand.ts`, the only place that reads it. `src/app/layout.tsx`, `AuthShell`, `Sidebar`, `Topbar`, `useNavigation`, `app/page.tsx` and the Policies page all go through its exports |
+| Build-time | `NEXT_PUBLIC_*` is inlined at compile: restart `next dev` after changing it, and redeploy on Vercel. It cannot be switched per request |
+
+What the preset drives: the app name and tab title, sidebar sub-line, logo (`logoUrl`, else
+the `logoText` wordmark, else the app name's first letter), favicon, the sidebar/tenant
+colours written onto `<html>`, and the login hero copy and footer credit. It also carries the
+`features` flags that hide or show whole surfaces: `brandingPage` (`/admin/branding`),
+`tenantStorage`, `productGuide`, `extendedPolicyTabs` (Confidentiality/Retention/Controls on
+`/admin/policies` — Urgency & SLA always stays) and `loginTestAccounts`.
+
+Colour fields are **optional and deliberately sparse**: `schulltech` sets none of
+`ctaBg`/`ctaBgHover`/`focus`, so `globals.css` keeps deciding those per theme (near-black
+buttons and a blue focus in light, the violet gradient in dark). Only `galaxybackbone`
+re-paints them, and its `focus`/`focusDark` pair is composed by `:root` and
+`[data-theme="dark"]` — an inline `--focus` would beat the dark rule, which is exactly the
+bug that was fixed on 2026-10-14.
+
+Persisted branding: `src/store/useStore.ts` persists the whole state under `edms-state-v3`,
+`branding` included. The stored copy carries `brandKey` (which preset wrote it) and `source`
+(`preset` or `custom`), and `AppShell` drops it when the key doesn't match the active preset —
+so a browser that ran one brand can't keep it under the other — or when it is preset-owned and
+its values have changed. A `custom` copy is the `/admin/branding` page's publish and survives.
 
 ### Backend worker settings (`edms-backend/src/config/env.ts`)
 

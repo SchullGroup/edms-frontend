@@ -34,6 +34,7 @@ direct ask.
 | X1 | **Decide:** watermark downloaded copies | download path | P3 | M |
 | X2 | Delete unused access rules | `listInstanceDocuments` | P3 | XS |
 | M1 | Check the edited migrations before the next deploy | deploy | **Before next deploy** | XS |
+| M2 | Per-deployment brand name in emails | `env.ts`, mailer config, auth emails | P2 | S |
 
 ---
 
@@ -451,6 +452,34 @@ branch. If it fails, move the self-heal SQL into a new migration and restore the
 `view_restricted`, `view_top_secret`, `download`, `export`, `print`). Each tenant needs
 `db:setup` (or the seed) re-run before its roles get them; until then even client_admin can't
 open Confidential documents. The test tenant has been re-seeded (checked 2026-10-08).
+
+### M2. A per-deployment brand name for emails — asked 2026-10-14
+
+The frontend now ships as two deployments from one codebase: a build-time preset
+(`NEXT_PUBLIC_BRAND`, doc 01 §9) sets the product name, logo, favicon, colours and login copy
+per brand. The backend knows nothing about the second brand, so its emails still say
+"SchullTech EDMS" — including the ones a GalaxyBackbone user receives.
+
+**Ask.** Add a `BRAND_NAME` setting (default `SchullTech EDMS`) to `src/config/env.ts`, read
+wherever the product name is hard-coded today: the sender name in `src/config/mailer.ts` and
+the auth emails in `src/modules/auth/auth.service.ts` (invitations, verification, password
+reset — every template that spells the product name out). Each deployment then sets it, along
+with the three things that already differ per tenant:
+
+| Variable | GalaxyBackbone deployment |
+|---|---|
+| `BRAND_NAME` | `GalaxyBackbone EDMS` |
+| `MAILING_FROM_EMAIL` | their sending address |
+| `APP_URL` | their app origin — every notification/email `actionUrl` is built from it, and `notificationHref` drops a link it judges cross-origin (§8.4) |
+| `ALLOWED_ORIGINS` | their origin, or the browser's BFF calls fail CORS |
+
+**Verification note.** The file names and "four auth emails" come from the white-label plan
+(`docs/specs/HANDOFF.md`, ticket 07), not from a read of the backend on this branch. Confirm
+both before implementing — this is a request, not a report.
+
+**Not wanted:** the frontend must not learn a brand name from an API. A preset value is
+resolved at build time, before any request; a fetched one would flash the wrong name on the
+login page.
 
 ---
 
