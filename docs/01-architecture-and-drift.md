@@ -8,8 +8,8 @@
 | Was | Now |
 |---|---|
 | DRIFT-09 — routing 404s | ✅ **Resolved** — two-call sequence shipped and wired |
-| DRIFT-10 — notifications module missing | 🟨 **Revised** — module and UI both exist; **nothing emits** |
-| DRIFT-05 — 23 workflow routes unguarded | 🔴 recounted to 25 |
+| DRIFT-10 — notifications module missing | 🟨 **Revised** — module and UI both exist; **nothing emits** *(→ ✅ emits since 2026-09-21)* |
+| DRIFT-05 — 23 workflow routes unguarded | 🔴 recounted to 25 *(→ ✅ resolved the same evening)* |
 
 **Re-scanned 2026-09-04 (evening)** against `edms-backend` @ `dev` (`e60c418`,
 **90 routes** over 9 routers, 45 permissions) and `EDMS-FRONTEND` @ `dev` (`aec7863`,
@@ -24,8 +24,10 @@ fixed**:
 | DRIFT-07 — client-side aggregation | 🔄 **Owner flips to Frontend** — 8 aggregation endpoints now exist | [§10](#10-drift-register--ranked-with-owners) |
 | **DRIFT-14 (new)** | 🔴 Workflow definitions are now **admin-only to read**, which breaks routing for the roles that are granted it | [§4](#4-authorization-four-independent-layers) |
 
-> ⚠️ **Do not re-derive DRIFT-05 from a route-level grep.** `requirePermission` still
-> appears **0 times** in `workflows.router.ts`, and that no longer means what it used to.
+> ⚠️ *(Superseded 2026-09-21 — the router now has 40 `requirePermission` calls across 39
+> routes, re-counted 2026-10-15; kept for history.)* ~~**Do not re-derive DRIFT-05 from a
+> route-level grep.** `requirePermission` still appears **0 times** in
+> `workflows.router.ts`~~, and that no longer means what it used to.
 > Authorization moved into the **service layer** — `definitions.service.ts`,
 > `instances.service.ts`, `tasks.service.ts`, `delegations.service.ts` and
 > `sla.service.ts` each assert roles and throw `403` with a named code. Grep for
@@ -99,7 +101,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │   │  edms-state-v3)  │   │                   │   │                         │  │
 │   │                  │   │                   │   │                         │  │
 │   │ • currentUser    │   │ • documents       │   │                         │  │
-│   │ • 1,520 lines of │   │ • tasks           │   │                         │  │
+│   │ • 1,466 lines of │   │ • tasks           │   │                         │  │
 │   │   SEED demo data │   │ • cabinets        │   │                         │  │
 │   │   (initialData)  │   │ • users, roles    │   │                         │  │
 │   └──────────────────┘   └───────────────────┘   └─────────────────────────┘  │
@@ -119,7 +121,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
 │                               │              │                                        │
-│  Sole responsibility:         │              │  90 routes over 9 modules              │
+│  Sole responsibility:         │              │  134 routes over 11 modules (10-15)    │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
 │  sees it.                     │              │  │ Repository → PrismaClient        │  │
@@ -149,8 +151,8 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
-| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 46 pages (45 authed + 1 public) |
-| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 90 routes, Swagger at `/api-docs` |
+| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 58 pages (54 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-15, was 46 |
+| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 134 routes over 11 router files — re-counted 2026-10-15, was 90. Swagger at `/api-docs` |
 | Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |
 
@@ -194,7 +196,7 @@ Browser
                                           /admin | /platform | /auditor
 ```
 
-### Path B — everything else (66 routes)
+### Path B — everything else (132 routes, re-counted 2026-10-15; was 66)
 
 ```
 Browser
@@ -247,8 +249,9 @@ Browser — response interceptor
   │         • otherwise: Cookies.remove + window.location.href = '/'
 ```
 
-**Note the asymmetry.** Only 3 routes go through the Next.js server. The other 71 are
-plain browser→Express cross-origin calls. There is no SSR data fetching anywhere in the
+**Note the asymmetry.** Only 3 routes go through the Next.js server (login, refresh and
+logout — and the backend has no logout route, DRIFT-01). The other 132 backend routes are
+plain browser→Express cross-origin calls *(re-counted 2026-10-15; was "the other 71")*. There is no SSR data fetching anywhere in the
 app: every page is `'use client'`.
 
 ---
@@ -599,7 +602,8 @@ used to let them in); the Finance supervisor and client admin open both.
 `usePermissions.ts:26-31` grants `client_admin` **everything** except `resource === 'platform'`.
 `routes.config.ts` gives `schulltech_admin` the entire `/platform` prefix.
 
-The backend disagrees on both counts:
+The backend disagrees on both counts *(grant counts as of 2026-08-29; today's seed has 72 /
+18 / 26 / 27 / 40 / 29 in this table's row order — see doc 03 Phase 1)*:
 
 | Role | Backend permission grants (`prisma/seed-system.ts`) | Frontend assumption |
 |---|---|---|
@@ -638,16 +642,20 @@ pair of codebases.
 | `delegations.service.ts` | list, create, end | `DELEGATION_*_FORBIDDEN` |
 | `sla.service.ts` | breach list | `SLA_BREACH_LIST_FORBIDDEN` |
 
-Role membership comes from `src/shared/constants/workflow.constants.ts` —
+~~Role membership comes from `src/shared/constants/workflow.constants.ts` —
 `WORKFLOW_DEFINITION_MANAGE_ROLES`, `WORKFLOW_OVERSIGHT_ROLES`,
-`WORKFLOW_ORGANIZATION_WIDE_ROLES`, `TASK_REASSIGN_ROLES`. A new
-`shared/utils/workflow-scope.ts` additionally narrows a **pure supervisor** to their own
-department on reads, while leaving organisation-wide roles unrestricted.
+`WORKFLOW_ORGANIZATION_WIDE_ROLES`, `TASK_REASSIGN_ROLES`.~~ *(Re-checked 2026-10-15: none
+of these role lists exist in the backend any more. Since the 2026-09-16 RBAC refactor,
+authorization comes from `workflow`, `workflow_instance`, `task` and `delegation`
+permissions and their scope.)* A new `shared/utils/workflow-scope.ts` additionally narrows a
+**pure supervisor** to their own department on reads, while leaving organisation-wide roles
+unrestricted.
 
-> ⚠️ **The route-level grep is now misleading.** `requirePermission` is still absent from
-> all 32 workflow routes, and that no longer indicates a hole. Check `_FORBIDDEN` instead.
-> Whether authorization *belongs* in the service rather than the router is a real design
-> question — the other eight routers use `requirePermission` — but it is enforced.
+> ~~⚠️ **The route-level grep is now misleading.** `requirePermission` is still absent from
+> all 32 workflow routes~~ — *superseded 2026-09-21:* `workflows.router.ts` now has 40
+> `requirePermission` calls across its 39 routes (re-counted 2026-10-15), so the route-level
+> grep is meaningful again, and the service-layer `_FORBIDDEN` checks remain as a second
+> layer.
 
 ### 🔴 DRIFT-14 — Workflow definitions became unreadable by the roles that route documents
 
@@ -674,10 +682,17 @@ itself.
 
 Net effect, unchanged from the original finding: `staff`, `supervisor`, `management`
 and `internal_auditor` still get a 403 from `GET /workflows`. `useRouteToWorkflow`
-(`src/hooks/useRouteToWorkflow.tsx`, shared by `/upload`, `/staff/cabinets` and
-`/doc/[id]`) still shows its empty state — *"No published workflows. A workflow has to
+(`src/hooks/useRouteToWorkflow.tsx`, shared by `/upload`, `/staff/cabinets`,
+`/doc/[id]` and `/search`) still shows its empty state — *"No published workflows. A workflow has to
 be published in the Workflow Designer before anything can be routed to it"* — to
 exactly the roles that do the routing.
+
+**Re-checked 2026-10-15 against `edms-backend` `dev` `9998e05`: still open.** The seed
+still grants `workflow:view` only to `client_admin` and `schulltech_admin`. One open
+question: doc 04 records staff routing as confirmed in testing on 2026-10-08, which this
+finding says a seeded staff account can't do. Either that test ran as an admin, or the live
+database's grants differ from `seed-system.ts`. A re-test as
+`tjoel+staff_finance@schulltech.com` would settle it.
 
 **Owner: Backend, unchanged.** This is not a frontend bug and there is nothing to fix
 on this side — the frontend's `GET /workflows` call, its 403 handling, and its empty
@@ -1123,9 +1138,11 @@ correct sequence — `POST /workflow-instances` then `POST /workflow-instances/:
 It is wired into the UI through `useStartWorkflowInstance` (`useWorkflowInstances.ts:67`),
 consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 
-> ⚠️ **Two of the compounding problems remain.** The endpoint still performs
+> ✅ ~~**Two of the compounding problems remain.** The endpoint still performs
 > **no authorization check** (DRIFT-05), and the assignee is still **never notified**
-> (DRIFT-10) — the task lands in the queue silently.
+> (DRIFT-10)~~ — both resolved: authorization 2026-09-04 (DRIFT-05) and `task.assigned`
+> notifications 2026-09-21 (DRIFT-10). Re-checked 2026-10-15. What blocks routing today
+> is DRIFT-14.
 
 ### Identity
 

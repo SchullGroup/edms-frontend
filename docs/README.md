@@ -15,7 +15,8 @@ to `/auth/login`, `/documents`, `/documents/search`, `/workflow-instances` and
 >
 > **Morning (frontend).** Document routing was fixed — the two-call create-then-start
 > sequence shipped. The notifications module now exists on both sides, but nothing calls
-> `notifyUser`, so no notification is ever created. The `feature/management` merge added a
+> `notifyUser`, so no notification is ever created. *(→ It is called since 2026-09-21,
+> DRIFT-10.)* The `feature/management` merge added a
 > metadata-field editor, a cabinet-access editor, a shared route-to-workflow picker on
 > three screens, and live workflow history.
 >
@@ -27,7 +28,8 @@ to `/auth/login`, `/documents`, `/documents/search`, `/workflow-instances` and
 > - 🔴 **A new critical finding replaced it.** The same commit made workflow definitions
 >   readable only by `client_admin` and `schulltech_admin` — so `staff` and `supervisor`,
 >   who hold `workflow:route`, can no longer list the workflows they need to route into.
->   **Document routing is broken again**, by a different cause.
+>   **Document routing is broken again**, by a different cause. *(→ Still open 2026-10-15
+>   as DRIFT-14; the cause is now the RBAC seed, not a constant.)*
 > - 🔄 **Two findings changed owner from backend to frontend.** OCR now uses the
 >   asynchronous Textract API against the correct bucket; the only remaining problem is
 >   that the frontend still uploads elsewhere. And eight server-side aggregation endpoints
@@ -72,7 +74,9 @@ setting up an environment.
 
 ## The short version
 
-**58 frontend pages · 130 backend routes · 6 roles · 0 tests.**
+**58 frontend pages · 134 backend routes · 6 roles · 0 tests.**
+*(Re-derived 2026-10-15 with the commands in `AGENTS.md`, backend @ `dev` `9998e05`:
+routes 130 → 134; pages unchanged; still no test files in either repo.)*
 *(Re-derived 2026-10-05 with the commands in `AGENTS.md`, backend @ `dev` `c353105`: pages
 +4 for the circulars area; routes 106 → 130, of which 15 are the new `circulars` module —
 the rest accumulated since the 2026-09-18 count and weren't attributed individually.)*
@@ -88,26 +92,32 @@ The DOCUMENT half is real
   task queues · approval decisions · SLA detection
                                                     ✅ works end to end
 
-The GOVERNANCE half is a UI over fixtures
-  notifications · policies          (circulars: wired 2026-10-05, 🟨 unverified)
-  findings · retention · platform operations
-                                                    🟥 13 of 58 pages
+The GOVERNANCE half is now half real
+  ✅ audit trail · circulars · SLA settings
+  🟨 notifications (emitted, not clicked through)
+  🟥 findings · retention · branding · platform operations
+                                                    🟥 11 of 58 pages
 ```
+*(Re-drawn 2026-10-15 from doc 05's portfolio table — was "notifications · policies …
+🟥 13 of 58 pages".)*
 
 ### The four defects that matter most
 
+*Re-checked 2026-10-15: #2, #3 and #4 are resolved; #1 is the one still open.*
+
 | # | Defect | Where | Effect |
 |---|---|---|---|
-| 1 | **Staff and supervisors cannot read workflow definitions** | `WORKFLOW_DEFINITION_VIEW_ROLES` is set equal to `MANAGE_ROLES` — `client_admin` and `schulltech_admin` only — in `src/shared/constants/workflow.constants.ts` | **Document routing is unreachable for the roles that do it.** `useRouteToWorkflow` gets a `403`, so its picker says "no published workflows" — neither true nor the reason. Also contradicts `management` and `internal_auditor`'s seeded `workflow:view:global` |
+| 1 | **Staff, supervisors, management and auditors cannot read workflow definitions** (DRIFT-14) | `GET /workflows` requires `workflow:view`, and `prisma/seed-system.ts` grants it only to `client_admin` and `schulltech_admin`. *(Was: "`WORKFLOW_DEFINITION_VIEW_ROLES` is set equal to `MANAGE_ROLES`" — that constant was removed 2026-09-16; the seed now causes the same symptom.)* | **Document routing is unreachable for the roles that do it.** `useRouteToWorkflow` gets a `403`, so its picker says "no published workflows" — neither true nor the reason |
 | ~~2~~ | ✅ **Resolved 2026-09-18.** ~~The real audit trail is invisible to the role whose job is to read it~~ | Backend is real and auto-writing (DRIFT-11 in doc 01); `/admin/audit`, `/auditor/trail` and `management/compliance` all read it now. `/platform/audit` stays mocked by design — no cross-tenant backend exists to read | The compliance story now has real data behind it, and the auditor role can see it |
-| 3 | **Nothing ever creates a notification** | The module, its 6 routes, the queue, the worker and the whole frontend surface exist — but there are **zero references to `notifyUser` outside `src/modules/notifications/`** | Task assignment, returned work and SLA breaches are all silent; the list is permanently empty |
-| 4 | **`effStatus()` is a no-op on real data** | Two divergent copies; `Document` has no due-date field; status compares are capitalized against lowercase values | Every overdue badge, count and ageing bucket reads zero across 8 call sites |
+| ~~3~~ | ✅ **Resolved 2026-09-21 (DRIFT-10).** ~~Nothing ever creates a notification~~ | `notifyUser` / `notifyAssignment` / `notifyRole` are now called from tasks, SLA, documents, checkout-overdue and circulars | Task assignment, returned work, SLA warnings and breaches notify. Not yet clicked through end to end |
+| ~~4~~ | ✅ **Resolved 2026-09-21 (DRIFT-13).** ~~`effStatus()` is a no-op on real data~~ | `effStatus()` was deleted; task rows use `taskStatusLabel`/`isOverdue` | Overdue indicators read real data |
 
-**#1 is a one-line fix and it currently disables the product's core loop** — give read its
-own role list instead of aliasing manage. Verify it against the seeded `workflow:view` and
-`workflow:route` grants rather than choosing a list by hand.
-**#3 is much smaller than it was** — the plumbing is built; only the call sites are missing.
-**#4 is roughly two hours and restores every SLA and ageing view.**
+**#1 is four seed rows and a re-seed, and it currently disables the product's core loop**
+for every non-admin role: grant `workflow:view` to `staff`, `supervisor`, `management` and
+`internal_auditor` in `prisma/seed-system.ts`. *(Was "a one-line fix … give read its own
+role list".)* Before fixing it, settle one open question: doc 04 records staff routing as
+confirmed in testing on 2026-10-08, which a seeded staff account shouldn't be able to do.
+~~**#3 is much smaller than it was**~~ — done. ~~**#4 is roughly two hours**~~ — done.
 
 > ✅ **Resolved since 2026-08-29.** Two items have left this list.
 >
@@ -117,28 +127,32 @@ own role list instead of aliasing manage. Verify it against the seeded `workflow
 >
 > *"Workflow routes have no authorization"* — fixed, and it was #1 here for a week. All
 > five workflow services now assert roles and return a named `403`.
-> **⚠️ Note for anyone verifying this:** `requirePermission` still appears **0 times** in
-> `workflows.router.ts`. Authorization lives in the service layer, so grep for
-> `_FORBIDDEN`, not `requirePermission`. A route-level grep will make you re-report a
-> finding that is closed.
+> ~~**⚠️ Note for anyone verifying this:** `requirePermission` still appears **0 times** in
+> `workflows.router.ts`.~~ *Superseded 2026-09-21:* the router now has 40
+> `requirePermission` calls across 39 routes (re-counted 2026-10-15), and the service-layer
+> `_FORBIDDEN` checks are still there as a second layer.
 >
 > Read #1 above alongside this: fixing the authorization hole is what introduced it.
 
 ### Two more worth knowing before you debug anything
 
-- **Run `npx prisma generate` in `edms-backend` before anything else.** The checked-in
-  generated client predates the `scope` migration. Without it the build fails — and in dev
-  (where `tsx` skips typechecking) every user is silently narrowed to `department` scope.
-- **The 12 test-account buttons on the login screen all fail.** The backend seed creates
-  `tjoel+…@schulltech.com` accounts, password `Fixture123!`. See doc 03, Phase 1.
+- **Run `npx prisma generate` in `edms-backend` before anything else.** The generated
+  client (`src/generated/prisma`) is git-ignored, so a fresh clone or a pulled migration
+  needs it. Without it the build fails — and in dev (where `tsx` skips typechecking) a stale
+  client can silently narrow every user to `department` scope. *(Was "The checked-in
+  generated client predates the `scope` migration" — it isn't checked in; re-checked
+  2026-10-15.)*
+- ~~**The 12 test-account buttons on the login screen all fail.**~~ Fixed by 2026-09-15
+  (DRIFT-12): seven buttons, one per seeded `tjoel+…@schulltech.com` account, password
+  `Fixture123!`. See doc 03, Phase 7.
 
 ---
 
 ## Where the numbers come from
 
 Nothing here is estimated. The classification in doc 05 was produced by inspecting, for
-every one of the 42 pages, what it destructures from `useStore` versus which API hooks it
-calls — and by distinguishing *legitimate session state* (`currentUser`, `prefs`) from
+every page (42 at first, all 58 since 2026-10-08), what it destructures from `useStore`
+versus which API hooks it calls — and by distinguishing *legitimate session state* (`currentUser`, `prefs`) from
 *rendered `SEED` domain data*. The endpoint inventory in doc 01 was extracted from both
 codebases and diffed route by route.
 
@@ -466,7 +480,8 @@ confidentiality permissions (`0dab81a`), three doc claims turned out wrong. Doc 
 opened the list's own signed URL, which skipped the download check and audit. Doc 02 B3 said
 there was no preview or download endpoint, though `GET /documents/:id` has returned a signed
 `fileUrl` for some time. And doc 02 E1 described a doc-detail edit form offering Top Secret
-that never existed. All corrected in place. **Known stale, not yet fixed:** the per-role
+that never existed. All corrected in place. **Known stale, not yet fixed** *(fixed
+2026-10-15 — see below)*: the per-role
 grant counts in docs 02, 03 and 04 (e.g. supervisor "18", client_admin "45, all global",
 Phase 1's "45 permissions, 100 grants"). The seed now has 73 permissions and 212 grants:
 client_admin 72 (one `own`), supervisor 40, staff 29, management 27, internal_auditor 26,
@@ -497,6 +512,44 @@ DRIFT-20…22 in doc 01.
 **400**. Checked live, the backend answers a request without `permission` with **422**
 (`VALIDATION_ERROR`). Docs 01, 04 and 05 said 400 in several places; corrected in place to
 422 the same day, while fixing it.
+
+**Correction (2026-10-15) — a stale-claims sweep across all five docs.** Each doc had been
+updated by adding dated notes at the top and new rows to its tables. The older body text
+underneath was left as written, so resolved findings still read as open a few paragraphs
+later. This pass re-checked those passages against `edms-backend` `dev` (`9998e05`) and
+this repo, and corrected them in place (struck through, with the current state beside them).
+The main ones:
+
+- **Counts.** 134 backend routes (was 130), 73 permissions, 212 grants. Per-role grants
+  (client_admin 72, supervisor 40, staff 29, management 27, internal_auditor 26,
+  schulltech_admin 18) replaced the pre-2026-09-16 figures (45 / 18 / 14 / 10 / 10 / 3) in
+  docs 02, 03 and 04 — the item the 2026-10-08 correction listed as known stale. Doc 05's
+  "By data source" bars were re-derived over all 58 pages (method in doc 05); doc 01's
+  system map said 46 pages / 90 routes.
+- **Resolved findings still written as open:** DRIFT-10 ("nothing calls `notifyUser`" — it
+  is called from five services); DRIFT-05 ("zero `requirePermission`" — 40 calls across 39
+  routes); DRIFT-13 (`effStatus()`); DRIFT-07 (client-side aggregation); DRIFT-04 (the
+  `usePermissions` heuristic); DRIFT-11 (story H1 was still 🟥 Mock, and docs 03/04 said
+  nothing was audited); and DRIFT-06 (doc 03's Phase 8 still showed OCR failing).
+- **DRIFT-14's mechanism.** Docs 02–05 and this README still blamed
+  `WORKFLOW_DEFINITION_VIEW_ROLES`, which was removed 2026-09-16. The 2026-09-21 correction
+  above re-diagnosed it, but only in doc 01. The fix is now described everywhere as four seed
+  rows granting `workflow:view`.
+- **Other stale rows:** cabinet grants (doc 03 Phase 4 said "no UI"; cabinet and folder
+  reads do check grants — document reads don't); downloads (several rows said no endpoint);
+  the 2 MB / PDF-only upload limit (100 MB, Office formats); the initial user invite
+  (emailed since 2026-09-18); `client_admin`'s `audit:export` (it holds it); conditional
+  workflow routing (merged 2026-10-06; doc 03 said sequential only); the role matrix "writes
+  to localStorage" (it uses `PUT /roles/:id/permissions`); and the supervisor page rows'
+  hook lists.
+- **One open question surfaced, not resolved.** Doc 04/05 record staff routing as confirmed
+  in testing on 2026-10-08, but the seed gives staff no `workflow:view`, which
+  `GET /workflows` requires (DRIFT-14). Either that test ran as an admin, or the live
+  database's grants differ from `seed-system.ts`. Flagged in docs 01, 04 and 05; needs a
+  re-test as a seeded staff user.
+
+Dated revision banners at the top of each doc were left as history. Docs 03–05 gained a
+"Re-checked 2026-10-15" block listing which of their statements no longer hold.
 
 ---
 

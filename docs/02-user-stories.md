@@ -27,7 +27,8 @@ and `/supervisor` (Team Overview) now call `GET /tasks/workload` and
 every task page in the browser. **F2 (SLA ageing)** ticks one more box — `/supervisor/bottlenecks`
 now reads `GET /workflow-instances/bottlenecks-ageing` instead of computing ageing from
 `SEED`, with SLA status and workflow status rendered as two separate badges — but stays
-Partial: nothing still calls `notifyUser` on a breach. **C4 (delegation) moves from
+Partial: nothing still calls `notifyUser` on a breach *(→ it does since 2026-09-21,
+DRIFT-10)*. **C4 (delegation) moves from
 Partial-with-no-UI to a fuller Partial** — `/delegations` now exists (create, list, end;
 "Delegated by you" / "Delegated to you"), leaving only the delegation-arrived visual marker
 and the activation notification. `/supervisor/approvals` also moved onto the purpose-built
@@ -123,10 +124,14 @@ their desk.
 **What they fear:** losing a document; being blamed for a delay that was actually sitting
 in a supervisor's queue; having to re-key metadata a machine could have read.
 
-**Backend rights (14 grants):** `document:view:department`, `document:create:own`,
-`document:search:department`, `document_version:view:department`,
-`document_version:create:own`, `document_lock:*:own`, `document_metadata:*`,
-`cabinet:view`, `folder:view`, `workflow:view`, `workflow:route`.
+**Backend rights (29 grants — 16 `own`, 9 `department`, 4 `global`; re-counted
+2026-10-15 from `prisma/seed-system.ts`):** document view/search/download/export/print at
+`department`, `document:create:own`; versions (view `department`, create `own`); locks
+`own`; metadata, comments and signatures (view `department`, create `own`);
+`document_access_request:create`; `cabinet:view`, `department:view`; folders (view, create
+and edit `own`); `workflow_instance:view/create/route:own`; `task:view/action:own`;
+`delegation:view/create/end:own`. **No `workflow:view`** — see DRIFT-14.
+*(Was "14 grants … `workflow:view`, `workflow:route`" — the pre-2026-09-16 seed.)*
 Note the scopes — staff see their **department's** documents, not the whole tenant.
 
 ---
@@ -146,9 +151,15 @@ member in two clicks.
 **What they fear:** a breached SLA he never saw coming; approving something he should have
 read more carefully; discovering a backlog only when a customer escalates.
 
-**Backend rights (18 grants):** department-scoped document view/edit, `workflow:route`,
-plus membership of `TASK_VIEW_ALL_ROLES` and `TASK_REASSIGN_ROLES`, which is what actually
-lets him see and reassign other people's tasks.
+**Backend rights (40 grants — 34 `department`, 2 `own`, 4 `global`; re-counted
+2026-10-15):** department-scoped document view/create/edit/search/download/export/print
+and `view_confidential`; versions including `restore`; locks, metadata, comments,
+signatures; `user:view:department`; `workflow_instance:view/create/route/close:department`;
+`task:view/action/reassign:department` — which is what lets him see and reassign other
+people's tasks; delegation; and circulars (`create:own`, `publish`/`withdraw:department`).
+**No `workflow:view`** — see DRIFT-14. *(Was "18 grants … plus membership of
+`TASK_VIEW_ALL_ROLES` and `TASK_REASSIGN_ROLES`" — those role lists no longer exist in the
+backend; `task:view`/`task:reassign` grants replaced them.)*
 
 ---
 
@@ -167,10 +178,15 @@ it without asking anyone.
 **What they fear:** being surprised in a board meeting; numbers that don't reconcile with
 what the operations team says.
 
-**Backend rights (10 grants):** all read-only and `global`-scoped — `document:view`,
-`document:search`, `document_version:view`, `document_metadata:view`, `cabinet:view`,
-`folder:view`, `department:view`, `user:view`, `workflow:view`, plus `workflow:route`.
-**Management cannot create, edit, or delete anything.** (Fixed 2026-09-10: the
+**Backend rights (27 grants — 21 `global`, 6 `own`; re-counted 2026-10-15):** `global`
+read across documents (view, search, `view_confidential`, download, export, print),
+versions, metadata, comments, signatures, cabinets, folders, departments, users, workflow
+instances, tasks and delegations — plus a small set of writes: `workflow_instance:create/route:own`,
+`task:action:own`, `delegation:create/end:own`, `document_access_request:create`, and
+circulars (`create:own`, `publish`, `withdraw`). **No `workflow:view`** — see DRIFT-14.
+~~**Management cannot create, edit, or delete anything.**~~ *(Was "10 grants, all
+read-only" — no longer true: management can act on its own tasks, route its own documents,
+delegate, and publish circulars. It still cannot create or edit documents.)* (Fixed 2026-09-10: the
 `usePermissions` role-name heuristic was deleted — the UI now derives each user's
 `resource:action` keys from `GET /roles` and gates on those. Management's approve/reject
 affordances only appear where the seeded grants actually allow them. See DRIFT-04.)
@@ -192,10 +208,17 @@ tracked to closure with named owners and dates.
 **What they fear:** an audit trail with gaps; being unable to prove the trail is complete;
 findings that quietly die.
 
-**Backend rights (10 grants):** read-only and `global` — including `audit:view`
-(**for which no endpoint exists**), `cabinet_access:view`, and `document:view` across the
-whole tenant. `document:view_confidential:global` lets them read confidential-tier
-documents (a permission since `edms-backend` `0dab81a`; it was a role list before). Deliberately **cannot mutate anything** — that independence is the point.
+**Backend rights (26 grants — 21 `global`, 5 `own`; re-counted 2026-10-15):** the same
+`global` read set as management, plus `audit:view`/`audit:export` (served by the
+hash-chained `GET /audit` since 2026-09-18 — DRIFT-11), `cabinet_access:view` and
+`circular:view`. `document:view_confidential:global` lets them read confidential-tier
+documents (a permission since `edms-backend` `0dab81a`; it was a role list before).
+**No `workflow:view`** — see DRIFT-14. *(Was "10 grants, read-only … `audit:view` (for which
+no endpoint exists)" and "deliberately cannot mutate anything". The seed now also grants
+`workflow_instance:create/route:own`, `task:action:own`, `delegation:create/end:own` and
+`document_access_request:create`. The auditor still cannot change documents, cabinets or
+users, but "cannot mutate anything" no longer holds — worth confirming with the product
+owner that this is intended.)*
 
 ---
 
@@ -214,7 +237,9 @@ an approval chain without a support ticket; the system looks like their organisa
 **What they fear:** granting someone too much access by accident; a misconfigured workflow
 silently stalling every document in a cabinet.
 
-**Backend rights (45 grants, all `global`):** effectively full control of the tenant.
+**Backend rights (72 grants, 71 `global` + 1 `own`; re-counted 2026-10-15 — was 45):**
+effectively full control of the tenant, across all 20 resources including `role`,
+`workflow`, `cabinet_access` and `circular`.
 They are the **only** role in `CABINET_ACCESS_BYPASS_ROLES` (they see every cabinet
 regardless of grants) and the only seeded role holding `document:view_restricted`.
 
@@ -233,8 +258,11 @@ accurate; a bad release can be switched off without a deploy.
 **What they fear:** being *able* to read a customer's confidential documents — that is a
 liability, not a capability.
 
-**Backend rights: 3 grants only** — `workflow:view:global`, `workflow:route:global`,
-`audit:view:global`. This is deliberate and important: the platform admin is
+**Backend rights: 18 grants** *(re-counted 2026-10-15 — was "3 grants only")* —
+`workflow:view/create/edit/publish/archive`, `workflow_instance:view/create/route/close`,
+`task:view/action/reassign`, `delegation:view/end` plus `create:own`, `audit:view/export`,
+and `document_access_request:create`. Still **no `document:*` grant of any kind.** This is
+deliberate and important: the platform admin is
 **excluded from `CABINET_ACCESS_BYPASS_ROLES`, from every confidentiality tier list, and
 from all document permissions.** The vendor cannot read customer documents. The
 architecture note in `access-control.constants.ts` is explicit that any future support
@@ -242,8 +270,8 @@ access must be a separate, audited, time-boxed impersonation mechanism — not a
 role grant.
 
 > ✅ Fixed 2026-09-10. The `usePermissions` "return true for schulltech_admin" heuristic
-> is gone. `schulltech_admin`'s effective keys are now just its 3 seeded grants
-> (`workflow:view`, `workflow:route`, `audit:view`); `hasPermission('document', …)` etc.
+> is gone. `schulltech_admin`'s effective keys are now just its seeded grants
+> (3 at the time; 18 as of 2026-10-15, none on `document`); `hasPermission('document', …)` etc.
 > return `false`. The `/platform` portal is still `SEED`-backed so this is latent until
 > those pages are wired, but the UI no longer *claims* the vendor can read documents. See
 > DRIFT-04.
@@ -296,8 +324,10 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
       the cabinet's fields and sends them with `POST /documents` (`metadata`, edms-backend
       `dd10017`), which refuses an upload missing a required field. *This box said the form
       never asked for them; it has rendered them since 2026-10-07, saved by a second call.*
-- [ ] ⚠️ **2 MB ceiling** (`s3.service.ts` `maxFileSize`), and only PDF and image types
-      actually upload despite a broader allowlist in `validateFile`.
+- [x] ~~⚠️ **2 MB ceiling** (`s3.service.ts` `maxFileSize`), and only PDF and image types
+      actually upload~~ — *re-checked 2026-10-15:* uploads go through the chunked
+      presigned uploader, capped at 100 MB, accepting PDF, DOCX, XLSX, TIFF, JPEG and PNG
+      (`src/constants/uploadTypes.ts`, `c8e9d24`, 2026-10-02).
 
 **Known drift:** DRIFT-06 — the file lands in a third-party bucket the backend cannot read.
 
@@ -600,14 +630,22 @@ built and unreachable.
 - [x] ✅ **Authorization now enforced** (2026-09-04). All five workflow services assert
       roles and return a named `403` — `instances.service` gates list, bottlenecks-ageing
       and team-status-matrix; `WORKFLOW_INSTANCE_MANAGE_ROLES` covers hold/resume/close.
-      DRIFT-05 is resolved. *(`requirePermission` is still absent from the 32 workflow
-      routes — the checks live in the services, so grep `_FORBIDDEN`.)*
-- [ ] 🔴 ⚠️ **Blocked again, by a different cause (DRIFT-14).** The same commit set
-      `WORKFLOW_DEFINITION_VIEW_ROLES = MANAGE_ROLES`, so `staff` and `supervisor` cannot
-      call `GET /workflows` — the list `useRouteToWorkflow` needs to build its picker.
-      The modal falls back to *"No published workflows"*, which is neither true nor the
-      reason. **Routing is unreachable for the roles that hold `workflow:route`.**
-- [ ] ⚠️ No notification is sent to the new assignee (DRIFT-10)
+      DRIFT-05 is resolved. ~~*(`requirePermission` is still absent from the 32 workflow
+      routes — the checks live in the services, so grep `_FORBIDDEN`.)*~~ *(2026-10-15:
+      `workflows.router.ts` now has 40 `requirePermission` calls across its 39 routes —
+      the router-level checks landed with the 2026-09-16 RBAC refactor.)*
+- [ ] 🔴 ⚠️ **Blocked again, by a different cause (DRIFT-14).** `GET /workflows` — the
+      list `useRouteToWorkflow` needs to build its picker — requires `workflow:view`, and
+      `prisma/seed-system.ts` grants that only to `client_admin` and `schulltech_admin`
+      (re-checked 2026-10-15). `staff`, `supervisor`, `management` and `internal_auditor`
+      all hold `workflow_instance:route` but cannot list what to route into. The modal
+      falls back to *"No published workflows"*, which is neither true nor the reason.
+      *(Originally blamed on `WORKFLOW_DEFINITION_VIEW_ROLES = MANAGE_ROLES`; that constant
+      is gone and the RBAC seed now causes the same symptom — see README correction
+      2026-09-21.)*
+- [x] Notification to the first assignee when the workflow starts (`task.assigned`, in
+      `tasks.service.ts` since 2026-09-21 — DRIFT-10). *(Was: "No notification is sent to
+      the new assignee".)*
 
 ---
 
@@ -624,7 +662,7 @@ and role-pool assignment, and honours active delegations.
 
 **Acceptance criteria**
 - [x] `GET /tasks` returns tasks assigned to me directly **or** to a role I hold
-- [x] Oversight roles can request `scope=all` (`TASK_VIEW_ALL_ROLES`)
+- [x] Oversight roles can request `scope=all` (holders of `task:view` wider than `own`; was `TASK_VIEW_ALL_ROLES`, removed 2026-09-16)
 - [x] Prioritised by urgency then due date
 - [x] Due/overdue state visible per row
 - [x] Paginated
@@ -645,13 +683,16 @@ and role-pool assignment, and honours active delegations.
 
 **Acceptance criteria**
 - [x] `POST /tasks/:id/action` with `approve | reject | review | request_changes | close | delegate`
-- [x] Only the assignee, a role-pool member, or a `TASK_REASSIGN_ROLES` holder may act
+- [x] Only the assignee, a role-pool member, a delegate, or a `task:reassign` holder may act (was `TASK_REASSIGN_ROLES`, removed 2026-09-16)
 - [x] Advances the instance to the next stage and recomputes `stageDueAt`
 - [x] Writes a `WorkflowHistory` row with `fromStage`, `toStage`, actor, note and
       `elapsedSeconds`
 - [x] Closing the final stage closes the instance
 - [x] Notes are captured and stored
-- [ ] ⚠️ No notification to the next assignee or the originator (DRIFT-10)
+- [x] Notification to the next assignee (`task.assigned`) and the originator
+      (`workflow.changes_requested`, `workflow.rejected`, `workflow.closed`) — in
+      `tasks.service.ts` since 2026-09-21 (DRIFT-10); not clicked through end to end.
+      *(Was: "No notification to the next assignee or the originator".)*
 - [ ] ⚠️ Only `WorkflowHistory` is confirmed written here — a different table, different
       purpose, no hash chain. `audit_entries` is real and auto-written now (DRIFT-11
       revised, 2026-09-18 — confirmed for `user.login`/`user.invited`/
@@ -685,8 +726,10 @@ one activates.
 - [x] Backend: `DELEGATION_VIEW_ALL_ROLES` / `DELEGATION_MANAGE_ALL_ROLES` govern oversight
 - [x] UI to create, list and end a delegation (`/delegations`)
 - [ ] Visual marker on a task showing it arrived by delegation
-- [ ] Notification to the delegate when a delegation activates (DRIFT-10 — same
-      "nothing calls `notifyUser`" gap as everywhere else)
+- [ ] Notification to the delegate when a delegation activates. *(2026-10-15: still
+      missing, but no longer "the same gap as everywhere else" — DRIFT-10 is resolved and
+      per-task delegation does notify (`task.delegated`); the `delegations` module itself
+      emits nothing when a date-bounded delegation starts.)*
 
 ---
 
@@ -709,13 +752,22 @@ lifecycle.
       every method: `assertCanView` on list/getById, `assertCanManage` on
       create/update/publish/archive, with `WORKFLOW_DEFINITION_MANAGE_ROLES` =
       `client_admin` + `schulltech_admin`. DRIFT-05 resolved.
-- [ ] 🔴 **Read access was over-restricted in the same change (DRIFT-14).**
-      `WORKFLOW_DEFINITION_VIEW_ROLES` aliases `MANAGE_ROLES`, so `management` and
-      `internal_auditor` are refused despite holding a seeded `workflow:view:global`
-      grant — and `staff`/`supervisor` cannot list definitions to route into.
+- [ ] 🔴 **Read access is over-restricted (DRIFT-14).** `GET /workflows` requires
+      `workflow:view`, which the seed grants only to `client_admin` and
+      `schulltech_admin` (re-checked 2026-10-15), so `staff`, `supervisor`, `management`
+      and `internal_auditor` cannot list definitions to route into. *(Was described as
+      "`WORKFLOW_DEFINITION_VIEW_ROLES` aliases `MANAGE_ROLES` … despite holding a seeded
+      `workflow:view:global` grant". That constant is gone, and no non-admin role holds
+      `workflow:view` in today's seed.)*
 - [x] ✅ `// @ts-nocheck` removed 2026-10-08 — the page type-checks
-- [ ] Parallel and conditional branches — Phase 1 is explicitly sequential-only
-- [ ] Visual graph editor; today it is a form
+- [ ] Parallel branches — still not supported
+- [x] Conditional branches — backend conditional routing merged 2026-10-06
+      (`definitions.validation.ts` condition rules, `matchesWorkflowCondition` in
+      `tasks.service.ts`), and the designer has a branch editor since 2026-09-29
+      (`BranchEditorCard`, `RuleValueInput`). *(Was: "Phase 1 is explicitly
+      sequential-only". Not clicked through end to end in this pass.)*
+- [ ] Visual graph editor — `WorkflowCanvas` now draws the stages, but editing is still
+      done in side panels, not on the graph
 
 ---
 
@@ -857,8 +909,10 @@ a records officer. The picker leaves out the user themselves, roles they hold, c
       verified live); self-grant / escalation blocked in the UI and, since `dd10017`, by the API
 - [ ] 🔴 Enforced on **read** paths — cabinet list/detail and folders now are (code-read
       2026-10-06); document list/detail/search unverified
-- [ ] "Who can see this cabinet?" view for auditors (`cabinet_access:view` is already
-      granted to `internal_auditor` with no endpoint to use it)
+- [ ] "Who can see this cabinet?" view for auditors — the endpoint exists
+      (`GET /cabinets/:id/access`, gated on `cabinet_access:view`, which `internal_auditor`
+      holds), but no auditor screen calls it. *(Was: "with no endpoint to use it" —
+      re-checked 2026-10-15.)*
 
 ---
 
@@ -930,7 +984,7 @@ aggregation stopgap; a member's row still lazily fetches their actual task list 
       (`GET /tasks/workload`), not a client-side walk of every task
 - [x] `/supervisor` (Team Overview) renders the member × status matrix and open-items-by-
       cabinet from their own dedicated endpoints
-- [x] Reassignment via `PATCH /tasks/:id/reassign`, gated by `TASK_REASSIGN_ROLES`
+- [x] Reassignment via `PATCH /tasks/:id/reassign`, gated by `task:reassign` (was `TASK_REASSIGN_ROLES`)
 - [x] Supervisor omits `departmentId`; the backend resolves it — no department picker in
       the UI (per the API guide's §4 rule)
 
@@ -949,16 +1003,20 @@ rows of type `warning` or `escalation`, escalates overdue tasks, writes history,
 resolves breaches that are no longer active. A unique constraint on `(taskId, breachType)`
 prevents duplicate alerts.
 
-**And nobody is ever told.** The worker writes history rows and stops. There is no
+~~**And nobody is ever told.** The worker writes history rows and stops. There is no
 notification module, so `sla.warning` and `sla.breach` — both defined in
-`NOTIFICATION_TYPES` — are never delivered to anyone. **The SLA engine runs into a void.**
+`NOTIFICATION_TYPES` — are never delivered to anyone. **The SLA engine runs into a void.**~~
+*(Re-checked 2026-10-15: `sla.service.ts` now sends `sla.warning` to the task's assignee
+(`notifyAssignment`) and `sla.breach` to the supervisor role (`notifyRole`) — DRIFT-10,
+resolved 2026-09-21.)*
 
 **Acceptance criteria**
 - [x] Scheduled reconciliation with warning and escalation tiers
 - [x] Duplicate-alert suppression
 - [x] Auto-escalation of overdue tasks
 - [x] Breach resolution when the task completes
-- [ ] 🔴 Anyone is actually notified (DRIFT-10)
+- [x] Anyone is actually notified — warning to the assignee, breach to supervisors
+      *(in code since 2026-09-21, DRIFT-10; not clicked through end to end)*
 - [x] `/supervisor/bottlenecks` reads real SLA data — `GET /workflow-instances/bottlenecks-ageing`
       (summary + ageing/stage distributions + paginated detail rows) rather than computing
       ageing from `SEED` documents. `slaStatus` (`healthy | due_soon | breached | paused |
@@ -979,11 +1037,13 @@ notification module, so `sla.warning` and `sla.breach` — both defined in
 > **so that** absence or overload doesn't stall a document.
 
 **Acceptance criteria**
-- [x] `PATCH /tasks/:id/reassign`, restricted to `TASK_REASSIGN_ROLES`
-      (supervisor, client_admin, schulltech_admin)
+- [x] `PATCH /tasks/:id/reassign`, restricted to holders of `task:reassign`
+      (supervisor at `department`, client_admin and schulltech_admin at `global`).
+      *(Was `TASK_REASSIGN_ROLES`; that role list no longer exists in the backend.)*
 - [x] Writes a history row recording the reassignment
 - [x] UI at `/supervisor/workload`
-- [ ] ⚠️ No notification to either the old or new assignee
+- [x] Notification to the new assignee (`task.reassigned`, since 2026-09-21 — DRIFT-10)
+- [ ] Notification to the old assignee — still not sent
 
 ---
 
@@ -1037,22 +1097,25 @@ sitting, and which have stalled.
 > **I want to** see throughput, backlog and SLA compliance side by side across departments,
 > **so that** I can direct attention where it is needed.
 
-**Current state:** `/management/departments` and `/management` are wired to real endpoints
-— but every number is computed **in the browser**. `useAllDocuments`, `useAllTasks` and
-`useAllWorkflowInstances` each call `fetchAllPages`, walking up to 50 pages of 100 records,
-then `managementAggregation.ts` does department rollups, month bucketing and SLA maths in
-JavaScript.
+**Current state (re-checked 2026-10-15):** `/management`, `/management/departments` and
+`/management/trends` read the server's aggregation endpoints — `useDocumentStats`,
+`useTaskStats`, `useWorkflowInstanceStats`, `useOpenItemsByCabinet` (DRIFT-07, resolved
+2026-09-21). `useAllTasks` and `useAllWorkflowInstances` were deleted.
+`managementAggregation.ts` survives only to shape server results (department index, month
+alignment), not to count records.
 
-The utility's own header documents this honestly as an *"INTERIM STOPGAP — not a substitute
-for real server-side aggregation"* and asks to be deleted once endpoints exist.
+*Superseded:* "every number is computed **in the browser** … `fetchAllPages`, walking up to
+50 pages of 100 records".
 
 **Acceptance criteria**
 - [x] Per-department document, task and instance counts
 - [x] CSV export
 - [x] Department tree flattened correctly, including nested children
-- [ ] 🔴 Server-side aggregation endpoints. The backend has **no** statistics, reporting or
-      aggregation routes of any kind.
-- [ ] Bounded response time as data grows — today it degrades linearly with tenant size
+- [x] Server-side aggregation endpoints — 8 exist and the management pages use them
+      (DRIFT-07). ~~The backend has **no** statistics, reporting or aggregation routes of
+      any kind.~~
+- [ ] Bounded response time as data grows — likely now that counting is server-side, but
+      not measured
 
 ---
 
@@ -1065,7 +1128,9 @@ for real server-side aggregation"* and asks to be deleted once endpoints exist.
 **Acceptance criteria**
 - [x] `/management/trends` renders month-bucketed line charts
 - [x] Buckets derived from real `createdAt` / `closedAt` timestamps
-- [ ] 🔴 Computed client-side; same scaling problem as G1
+- [x] Computed server-side — `/management/trends` reads `useDocumentStats` and
+      `useWorkflowInstanceStats` (DRIFT-07, 2026-09-21). *(Was: "Computed client-side; same
+      scaling problem as G1".)*
 - [ ] No forecasting despite the page being titled "Trends & Forecast"
 
 ---
@@ -1087,12 +1152,13 @@ for real server-side aggregation"* and asks to be deleted once endpoints exist.
 
 ## Epic H — Audit & Compliance
 
-> ⚠️ **This entire epic is currently a mock on both sides.** It is the largest single gap
-> in the product, and the one most at odds with its positioning.
+> ~~⚠️ **This entire epic is currently a mock on both sides.**~~ *(2026-10-15: no longer
+> true. The audit trail is real on both sides — H1 is 🟨. Findings (H2) are still mock and
+> separation-of-duties checks (H3) are not built.)*
 
 ---
 
-### H1 — See a complete, tamper-evident activity trail · 🟥 **Mock**
+### H1 — See a complete, tamper-evident activity trail · 🟨 **Partial** *(was 🟥 Mock until 2026-10-15)*
 
 > **As** Femi (Auditor),
 > **I want** an append-only record of every view, edit, approval, download and permission
@@ -1110,20 +1176,26 @@ for real server-side aggregation"* and asks to be deleted once endpoints exist.
   since shipped) against live behavior: `GET /audit`, `/audit/:id`, `/audit/export` and
   `/audit/verify` all exist and work, entries write automatically, and the hash chain
   checked out intact via `/audit/verify`. See doc 01 for the full writeup.
-- The frontend's `/auditor/trail` still renders `SEED.audit`; `/admin/audit` was wired to
-  the real trail 2026-09-18.
-  `useCreateAuditLog()` resolves after a 400 ms `setTimeout` and does nothing.
+- ~~The frontend's `/auditor/trail` still renders `SEED.audit`~~ — **re-checked
+  2026-10-15:** `/auditor/trail` reads `GET /audit` (`useAuditEntries`, `useExportAuditCsv`)
+  and doc 05 lists it ✅ Live (confirmed in the product owner's testing, 2026-10-08).
+  `/admin/audit` was wired to the real trail 2026-09-18. The status was left at 🟥 Mock
+  after both moved; it is 🟨 rather than ✅ because several criteria below are unverified.
+- `useCreateAuditLog()` still resolves after a 400 ms `setTimeout` and does nothing — the
+  "action logged" toasts it drives are not audit entries.
 
 **Acceptance criteria**
-- [ ] Every mutating service writes an audit entry
-- [ ] Document view and download are logged (the highest-value events for compliance)
+- [ ] Every mutating service writes an audit entry *(not audited service by service)*
+- [x] Document view and download are logged — `documents.router.ts` records
+      `document.viewed` and `document.downloaded` *(in code; not checked live)*
 - [ ] Entries capture actor, actor type, action, object type, object ID, before/after diff,
       IP address and user agent
-- [ ] `entryHash` chains to `prevHash`; a verification endpoint proves chain integrity
+- [x] `entryHash` chains to `prevHash`; a verification endpoint proves chain integrity —
+      `GET /audit/verify`, chain checked intact live 2026-09-18 (DRIFT-11)
 - [ ] The database role used by the app cannot `UPDATE` or `DELETE` the table
-- [ ] `GET /audit` with filters by actor, object, action and date range —
-      **`internal_auditor` is already granted `audit:view:global` and there is no endpoint
-      to use it**
+- [x] `GET /audit` with filters by actor, object, action and date range — exists, and
+      `/auditor/trail` uses it. ~~**`internal_auditor` is already granted
+      `audit:view:global` and there is no endpoint to use it**~~
 - [ ] Monthly range partitioning as designed
 
 ---
@@ -1192,29 +1264,37 @@ stages.
 
 ---
 
-### I2 — Onboard a new employee · 🟨 **Partial**
+### I2 — Onboard a new employee · 🟨 **Partial** *(re-checked 2026-10-15 — most of this story has shipped)*
 
 > **As** Bola,
 > **I want to** invite a new joiner by email and have them set their own password,
 > **so that** I never handle their credentials.
 
-**Current state:** `POST /users` creates the account with an admin-supplied password. That
-is the whole flow.
+**Current state (re-checked 2026-10-15):** `POST /users` without a password emails the new
+user a single-use, expiring set-password link (`authService.sendInvitation`, TTL
+`INVITATION_TOKEN_TTL_HOURS`, since 2026-09-18). The user is **Pending** until they set a
+password (PR #49), and `/admin/users` can resend the invitation. Self-service reset works
+through `POST /auth/forgot-password` → the emailed `/reset-password` link, which
+`next.config.ts` redirects to `/set-password`.
+
+*Superseded:* "`POST /users` creates the account with an admin-supplied password. That is the
+whole flow." — and the first three "missing" bullets below.
 
 **Missing, and each is a genuine security gap:**
-- No invite token, no email, no magic link
-- No forced password change on first login
-- No self-service password reset
-- No password-complexity policy (Zod validates a minimum length only)
+- ~~No invite token, no email, no magic link~~ — shipped 2026-09-18
+- ~~No forced password change on first login~~ — moot: the user sets their own
+- ~~No self-service password reset~~ — works (DRIFT-15 fixed 2026-09-18)
+- No password-complexity policy (Zod validates a minimum length of 8 only)
 - No account lockout or rate limiting on `POST /auth/login` — unlimited password guessing
 - No SSO, though `User.passwordHash` is nullable specifically to accommodate it in Phase 4
 
 **Acceptance criteria**
 - [x] Admin can create a user with department and roles
-- [ ] `POST /users/invite` issuing a signed, expiring token
-- [ ] Email delivery (no mail transport exists in the backend at all)
-- [ ] First-login password set
-- [ ] Password reset
+- [x] A signed, expiring, single-use invitation token — sent by `POST /users` itself and
+      resent by `POST /users/:id/invitation` (not a separate `POST /users/invite`)
+- [x] Email delivery — `src/config/mailer.ts`, through a shared mailing Lambda
+- [x] First-login password set — `/set-password?token=…`
+- [x] Password reset — `POST /auth/forgot-password` + `POST /auth/reset-password`
 - [ ] Login rate limiting
 
 ---
@@ -1313,21 +1393,27 @@ or scheduled; recipients are fixed at publication. Published circulars change by
 > breach, or a circular needs acknowledging,
 > **so that** I don't have to poll the system to find out I'm blocking someone.
 
-**Current state (verified 2026-09-04): the pipe is built end to end and nothing is ever
-put into it.**
+**Current state (re-checked 2026-10-15 against `edms-backend` `dev` `9998e05`): the pipe
+is built and is now fed.** `notifyUser` / `notifyAssignment` / `notifyRole` are called from
+`tasks.service.ts` (task assigned, changes requested, rejected, reassigned, delegated,
+workflow completed), `sla.service.ts` (SLA warning and breach), `documents.service.ts`
+(access requested, granted, denied), `checkout-overdue.service.ts` (overdue checkouts) and
+`circulars.service.ts` (published, reminders). Doc 01 records this as DRIFT-10, resolved
+2026-09-21. Stays 🟨 because nobody has yet clicked through a notification arriving end
+to end (doc 05 lists `/notifications` as 🟨 for the same reason).
+
+*Superseded (2026-09-04): "the pipe is built end to end and nothing is ever put into it."*
 
 `src/modules/notifications/` now exists in full — router, controller, service, repository,
 validation, types, swagger and an email worker — exposing **6 routes**. The frontend was
 rewired to them on 2026-09-03 (commit `e07d8c3`): the bell badge and notification centre
 read the live API instead of `SEED`, and delivery preferences got a UI for the first time.
 
-**The one thing missing is the thing that matters.** There are **zero references to
+~~**The one thing missing is the thing that matters.** There are **zero references to
 `notifyUser` outside the notifications module itself.** No upload, task assignment,
 approval, reassignment, delegation or SLA breach calls it. Every screen is correctly
-wired to an endpoint that correctly returns an empty list, forever.
-
-This is a much smaller fix than the original finding implied — the module, queue, worker
-and UI all exist. What is needed is the call sites.
+wired to an endpoint that correctly returns an empty list, forever.~~ *(True on
+2026-09-04; the call sites landed by 2026-09-21 — see above.)*
 
 **Acceptance criteria**
 - [x] `GET /notifications` (paginated, `unreadOnly` filter)
@@ -1338,16 +1424,21 @@ and UI all exist. What is needed is the call sites.
 - [x] `GET`/`PUT /notifications/preferences`
 - [x] Unread badge driven by the API rather than `SEED`
 - [x] `NotificationPreference` model respected by the read/write endpoints
-- [ ] 🔴 **Notifications actually emitted** on task assignment, completion, reassignment,
-      delegation, escalation, SLA warning/breach and workflow transitions —
-      **nothing calls `notifyUser`**
-- [ ] Digest mode honoured by a scheduled job
-- [ ] Email channel (no mail transport exists)
-- [ ] Add a JSON 404 handler to `app.ts` so missing routes fail legibly (DRIFT-10b)
+- [x] **Notifications actually emitted** on task assignment, completion, reassignment,
+      delegation, SLA warning/breach and workflow outcomes *(in code since 2026-09-21,
+      DRIFT-10; not yet clicked through end to end)*. ~~**nothing calls `notifyUser`**~~
+- [ ] Notification when a date-bounded `Delegation` activates — `delegations` emits
+      nothing; only per-task delegation (`task.delegated`) notifies
+- [ ] Digest mode honoured by a scheduled job — *in code* (`notifications/workers/digest.workers.ts`,
+      `pending_digest` status), not verified live
+- [ ] Email channel — *in code* (`src/config/mailer.ts` sends through a shared mailing
+      Lambda), not verified live. *(Was "no mail transport exists".)*
+- [ ] Add a JSON 404 handler to `app.ts` so missing routes fail legibly (DRIFT-10b — still
+      open 2026-10-15: `app.ts` mounts only `errorHandler` after the routers)
 
-> ⚠️ **A demo caveat.** Where a demo previously showed a fabricated unread count from
-> `SEED`, it now correctly shows **0** until something writes a notification. That is the
-> fix working, but it reads as a regression to anyone presenting.
+> ~~⚠️ **A demo caveat.** Where a demo previously showed a fabricated unread count from
+> `SEED`, it now correctly shows **0** until something writes a notification.~~ No longer
+> applies: real events write notifications now.
 
 ---
 
@@ -1477,26 +1568,32 @@ error paths and workers).
 | Epic | ✅ Done | 🟨 Partial | 🟥 Mock | ⬜ Not built | Verdict |
 |---|---|---|---|---|---|
 | A — Capture & Filing | 2 | 1 | 0 | 1 | Core works; enrichment missing |
-| B — Retrieval & Search | 1 | 3 | 0 | 0 | Search built but returns nothing; download gated and audited (2026-10-08) |
-| C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; routing **fixed**; still **unauthorized** |
+| B — Retrieval & Search | 1 | 3 | 0 | 0 | Search indexes every document since PR #51 (2026-10-14); download gated and audited (2026-10-08) |
+| C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; workflow routes authorized (DRIFT-05); routing **blocked for non-admins** by the RBAC seed (DRIFT-14) |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
-| F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; **nobody is notified** |
-| G — Executive Reporting | 0 | 3 | 0 | 0 | Works today; will not scale |
-| H — Audit & Compliance | 0 | 0 | 2 | 1 | **Entirely mock — the biggest gap** |
+| F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; SLA warnings and breaches notify (in code, DRIFT-10) |
+| G — Executive Reporting | 0 | 3 | 0 | 0 | On server aggregation endpoints (DRIFT-07); no PDF export or forecasting |
+| H — Audit & Compliance | 0 | 1 | 1 | 1 | Audit trail real (H1 🟨, 2026-10-15); findings mock; SoD not built |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
-| J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications **plumbed but silent** |
+| J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **15** | **16** | **9** | **2** | 42 functional stories |
+| **Total** | **15** | **17** | **8** | **2** | 42 functional stories |
 
-**The honest one-paragraph summary:** the *document* half of this EDMS — capture, filing,
-versioning, checkout, classification, task execution and approval — is genuinely built and
-mostly works. The *governance* half — audit, notifications, policies, findings,
-platform operations — is a convincing UI over fixture data (circulars moved onto the real
-API 2026-10-05, pending a live check). Two defects sit across the
-seam and matter more than any individual gap: **workflow routes have no authorization at
-all**, and **the audit trail the product's compliance positioning rests on has never
-recorded a single event.**
+*(2026-10-15: H1 moved 🟥 → 🟨, so Partial 16 → 17 and Mock 9 → 8. Totals re-tallied from
+the story headings, not carried forward.)*
+
+**The honest one-paragraph summary (revised 2026-10-15):** the *document* half of this EDMS
+— capture, filing, versioning, checkout, classification, search, task execution and
+approval — is genuinely built and mostly works. Audit, notifications and circulars have
+since moved onto real backends. What is still a UI over fixture data is policies (except
+the SLA tab), findings, branding and platform operations. The one defect that still sits
+across the seam is **DRIFT-14**: the roles that route documents cannot list workflow
+definitions, because the RBAC seed grants `workflow:view` only to the two admin roles.
+
+*Superseded (written 2026-08-29):* "Two defects … **workflow routes have no authorization at
+all**, and **the audit trail … has never recorded a single event.**" The first was fixed
+2026-09-04 (DRIFT-05) and the second was confirmed wrong 2026-09-18 (DRIFT-11).
 
 **Revised 2026-09-04.** Two stories moved. **C1 (routing) is fixed** — the two-call
 create-then-start sequence shipped, which released the entire approval half of the
@@ -1538,7 +1635,8 @@ landed on the backend. This is the first revision where a *cross-cutting* defect
   correct bucket, so multi-page documents are supported. Search still returns nothing
   because the upload still goes to a third-party gateway — now a frontend-only fix.
 - **Unchanged:** the audit trail (H1, H2) has still never recorded an event, and nothing
-  still calls `notifyUser` (J3).
+  still calls `notifyUser` (J3). *(Both later changed: the audit trail is real since
+  2026-09-18 (DRIFT-11) and `notifyUser` is called since 2026-09-21 (DRIFT-10).)*
 
 Story statuses themselves are unchanged by this scan. What changed is *why* several of
 them are where they are, and who owns moving them.
