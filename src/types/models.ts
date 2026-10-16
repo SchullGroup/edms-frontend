@@ -802,6 +802,10 @@ export interface TaskDocumentSnapshot {
   /** `GET /tasks/:id` only; null for a Restricted document. */
   documentVersionId?: string | null;
   createdAt: string;
+  /** `GET /tasks/:id` only: set once this document was actioned on this task
+   *  (edms-backend PR #52). A partial action leaves the task open with the
+   *  rest; actioned rows stay listed. Absent on a Restricted document. */
+  actionedAt?: string | null;
   /** `GET /tasks/:id` only (edms-backend `3014b89`). */
   access?: WorkflowDocumentAccess;
   /** Stage, status and deadline: `GET /tasks/:id` only (requested on the list). */
@@ -869,8 +873,9 @@ export type TaskActionRequest =
       comment?: string;
       note?: string;
       /** Which of the task's documents this covers (edms-backend `919d0ef`).
-       *  Omitted = all of them. The rest stay at this stage in a new task for
-       *  the same assignee. Same on `review` and `reject`. */
+       *  Omitted = all of them. Since PR #52 the same task stays open with the
+       *  rest; it completes once every document is actioned. Same on `review`
+       *  and `reject`. */
       documents?: { documentId: string }[];
     }
   | {
