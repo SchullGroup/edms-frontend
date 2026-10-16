@@ -28,6 +28,12 @@ export interface TaskFilters {
   assignedRoleId?: string;
   stage?: string;
   scope?: 'mine' | 'all';
+  /** `dueAt`: earliest document deadline first, tasks without one last.
+   *  Omitted: most urgent first, then oldest. */
+  sort?: 'createdAt' | 'dueAt';
+  /** `true`: active tasks holding a document past its stage deadline;
+   *  `false`: everything else. */
+  overdue?: boolean;
 }
 
 /** Query for `GET /tasks/approvals` — the purpose-built supervisor queue. */

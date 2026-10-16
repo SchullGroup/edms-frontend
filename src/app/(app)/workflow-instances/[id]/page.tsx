@@ -22,7 +22,7 @@ import { Icon } from '@/components/ui/Icons';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { fmtDateTime } from '@/utils/helpers';
-import { documentsLabel, taskDueAt } from '@/utils/workflowDocuments';
+import { documentsLabel, isActionedTaskDocument, taskDueAt } from '@/utils/workflowDocuments';
 import type {
   DocumentAccessKind,
   Task,
@@ -51,6 +51,9 @@ interface PageDocument {
   restricted: boolean;
   /** The viewer has Action access: stage actions may include it. */
   actionable: boolean;
+  /** Already actioned on this (still open) task: a partial action leaves it
+   *  listed (edms-backend PR #52). Neither actionable nor held back. */
+  actioned: boolean;
   /** The kinds of access the viewer may still request for it. */
   requestable: DocumentAccessKind[];
 }
@@ -145,6 +148,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
           confidentiality: wid.document.confidentiality,
           versionNumber: s.documentVersion?.versionNumber,
           ...accessFlags(s.access),
+          actioned: isActionedTaskDocument(s, taskDetail),
         };
       })
     : (instance?.documents ?? []).map((d) => ({
@@ -153,10 +157,14 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
         confidentiality: d.document.confidentiality,
         versionNumber: d.document.currentVersion?.versionNumber,
         ...accessFlags(d.access, d.isLocked),
+        actioned: false,
       }));
 
   const [selectedId, setSelectedId] = useState<string | undefined>();
-  const selected = documents.find((d) => d.id === selectedId) ?? documents[0];
+  const selected =
+    documents.find((d) => d.id === selectedId) ??
+    documents.find((d) => !d.actioned) ??
+    documents[0];
 
   // Only needed to know whether the selected document is viewable (the viewer
   // itself fetches it too — same query, deduplicated). A Restricted document is
@@ -212,10 +220,11 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   );
 
   // Stage actions only ever cover documents the caller has Action access to.
-  // The backend refuses an action that would touch any other; the rest of the
-  // task stays at this stage, in a new task for the same person.
-  const actionableDocuments = documents.filter((d) => d.actionable);
-  const heldBackDocuments = documents.filter((d) => !d.actionable);
+  // The backend refuses an action that would touch any other. Acting on some
+  // documents keeps this same task open with the rest; the ones already
+  // actioned stay listed but count as neither actionable nor held back.
+  const actionableDocuments = documents.filter((d) => d.actionable && !d.actioned);
+  const heldBackDocuments = documents.filter((d) => !d.actionable && !d.actioned);
   const heldBack = heldBackDocuments.length;
   const firstHeldBack = heldBackDocuments[0];
 
@@ -224,6 +233,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
     stageLabel,
     documents: actionableDocuments,
     heldBackDocuments,
+    actionedDocumentIds: documents.filter((d) => d.actioned).map((d) => d.id),
     selectedDocumentId: selected?.actionable ? selected.id : undefined,
     auditTargetId: selected?.id ?? id,
     instanceId: id,
@@ -318,7 +328,9 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
           <div className="page-title" style={{ fontSize: '19px' }}>
             {/* Restricted documents stay out of the title: it would read
                 "Restricted document". */}
-            {documentsLabel(documents.filter((d) => !d.restricted).map((d) => d.title)) ||
+            {documentsLabel(
+              documents.filter((d) => !d.restricted && !d.actioned).map((d) => d.title),
+            ) ||
               workflowName}
           </div>
           <div className="flex gap-2 mt-2 flex-wrap items-center">
@@ -430,6 +442,12 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
                 </>
               )}
               {d.title}
+              {d.actioned && (
+                <span className="caption" title="Already actioned at this stage">
+                  {' '}
+                  · Done
+                </span>
+              )}
               {revisionsFor(d.id).length > 0 && (
                 <span style={{ color: 'var(--status-pending)' }} title="Changes requested">
                   {' '}

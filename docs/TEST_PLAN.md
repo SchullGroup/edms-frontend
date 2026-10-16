@@ -753,9 +753,12 @@ still limited to the caller's `user:view` scope.
       The count drops from every user to the supervisors only, and the table goes back to
       page 1. A term matching nobody shows "No records match the current filters."
       *(Verified 2026-10-13: 12 → 3.)*
-- [x] **TP-S2.** `/admin/audit` → "All actors": type "finance". "Searching…" shows until
-      results arrive, then only matching people are offered. Picking one filters the trail
-      to them. Picking "All actors" clears it. *(Verified 2026-10-13.)*
+- [x] **TP-S2.** `/admin/audit` → the "All actors" search box: type "tj". It says "Type at
+      least 3 characters to search." and sends nothing. Type "o": `GET /users?search=tjo`
+      goes out and matching people are listed (max 300px tall, over the table). Pick one with
+      the mouse or ↓ + Enter: the box shows their name and the trail filters by `actorId`.
+      ✕ or emptying the box goes back to all actors. *(Verified 2026-10-16; the 2026-10-13
+      version was a dropdown.)*
 - [x] **TP-S3.** As `supervisor_finance`, `/delegations` → New delegation → "Delegate to":
       only active colleagues in your scope are offered, never yourself. Typing narrows the
       list. *(Verified 2026-10-13: Finance Staff User offered and picked.)*
@@ -850,7 +853,26 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
       *(Verified on instance `bdda387f…` with "New-Memo"; rejected as `staff_finance` through
       the API to confirm the backend accepts it.)*
 - [ ] **TP-W3.** Assign a stage to "Operations" (Finance's parent) and route: Finance users
-      should **not** get it yet. Expected until spec Q2 lands; re-test then.
+      should **not** get it. Matching stays exact (product decision 2026-10-16), so this is
+      the intended result, not a gap.
+- [x] **TP-W4.** Designer → a stage → Assign to → Department: pick Operations. A second
+      dropdown offers "No sub-department: Operations itself" and Finance. Pick Finance and
+      save: the stored stage has `department_id` = Operations and `sub_department_id` =
+      Finance, and the canvas reads "Operations › Finance · 24h". *(Verified 2026-10-16 on
+      "TEST — sub-department picker (draft)".)*
+- [x] **TP-W5.** Same stage → Role: the department dropdowns stay, with "Any department"
+      first. Saving with Operations › Finance stores `role` + both ids ("staff · Operations ›
+      Finance"); saving with Any department stores the role alone. *(Verified 2026-10-16.)*
+- [x] **TP-W6.** Open "TEST – department stage" (saved before PR #52 with Finance in
+      `department_id` alone): it shows Operations, then Finance, and isn't marked unsaved.
+      *(Verified 2026-10-16.)*
+- [ ] **TP-W7.** Route a document through a sub-department stage: only people in that
+      sub-department get the task; people directly in the parent don't.
+- [ ] **TP-W8.** On a task with two documents you can act on, act on one only (review,
+      approve or reject it). The page stays on the same task: that document's tab reads
+      "· Done", the other is selected and actionable, and there's no "needs Action access"
+      note. *(Checked 2026-10-16 with an edited `GET /tasks/:id`; not yet with a real
+      partial action.)*
 
 ## 19g. Phase X — Frontend spec items (backend PR #51, live 2026-10-14)
 
@@ -871,14 +893,19 @@ Run against the live backend (`edms-backend-zmfm.onrender.com`) as `client_admin
 - [x] **TP-X3.** `/management`'s department table has a **Records** column; View opens
       `/search?dept=<id>` with the Department facet already checked. *(Verified 2026-10-14 on
       Finance: `Finance | 5 | 5 | 9 | 86% | View` → `/search?dept=b133c724…` → facet checked →
-      18 results.)*
+      18 results.)* *The **View** button was renamed **Documents** later that day, when a
+      **Workflows** button joined it — see TP-Z4.*
 - [x] **TP-X4.** `/management/departments`: no button with "All departments"; with one selected,
       **View records** opens the same URL. *(Verified 2026-10-14.)*
 - [x] **TP-X5.** A saved search keeps its department and survives a reload. *(Verified
       2026-10-14: saved "TP-X5 finance invoices" → reloaded → applied → all three facets back
-      (Department/Type/Status) and the request carried all four params. The stale-department
-      guard was **not** exercised — it needs a department deleted out from under a saved
-      search.)*
+      (Department/Type/Status) and the request carried all four params.)* **Stale-department
+      guard verified later on 2026-10-14** as `client_admin`: created a throwaway department,
+      opened `/search?dept=<it>` (`GET /documents?departmentId=<it>` → 200), saved the search,
+      deleted the department (204), reloaded and applied it → toast "The department in this
+      saved search is no longer available", the department gone from the facet list, and no
+      request carried the deleted id (the remaining unfiltered list came from cache). Saved
+      search removed afterwards.
 - [x] **TP-X6.** As `supervisor_finance`: `GET /workflow-instances?scope=all&departmentId=<own>`
       → 200 (11); `departmentId=<Human Resources>` → **403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`**.
       *(Verified 2026-10-14, directly against the API.)*
@@ -928,6 +955,37 @@ looks) → wait for the bell's 60 s poll.
       verified the fix does not turn a reachable-but-dead-looking backend into a logout, since
       the proxy only deletes on a confirmed 401/403.)*
 
+
+## 19i. Phase Z — Handoff "easy" items (2026-10-14)
+
+From `HANDOFF-2026-10-14` "What's left". Run against the user's `next dev` on :3000 and the
+live backend, headless Edge, signing in through the login form.
+
+- [x] **TP-Z1.** As `supervisor_finance`, `/staff/tasks` → Status **Overdue**: the request is
+      `GET /tasks?scope=mine&overdue=true` and every row is Overdue. *(Verified 2026-10-14:
+      1 row, matching `overdue=true` total 1 from the API.)*
+- [x] **TP-Z2.** Status **Pending**, **In Progress**, **On Hold**: each sends
+      `status=pending&overdue=false` and the rows split by workflow state. Before, In Progress
+      and On Hold sent `status=in_progress` / `on_hold` — not task statuses — and showed
+      "Failed to load tasks" (400 `VALIDATION_ERROR`, reproduced with curl). *(Verified
+      2026-10-14: Pending 0, In Progress 1, On Hold 0, no error; the one open task is
+      In Progress.)*
+- [x] **TP-Z3.** **Sort: Due date** sends `sort=dueAt` and keeps the server's order: earliest
+      deadline first, tasks without one last. *(Verified 2026-10-14: Overdue, In Progress, then
+      the 11 closed tasks.)*
+- [x] **TP-Z4.** As `management_ops`, `/management`'s Records column has **Documents** and
+      **Workflows**. Finance → **Workflows** opens `/supervisor/instances?dept=<Finance>` with
+      the Department picker on "Operations › Finance" and `departmentId` on the request; picking
+      "All departments" drops it. *(Verified 2026-10-14: 3 in-progress workflows for Finance,
+      4 for all departments.)*
+- [x] **TP-Z5.** `/management/departments`: no buttons with "All departments"; with Finance
+      picked, **View records** and **View workflows**. *(Verified 2026-10-14.)*
+- [x] **TP-Z6.** As `supervisor_finance` (department scope), open
+      `/supervisor/instances?dept=<a department that isn't theirs>`: no Department picker, no
+      `departmentId` on the request, no 403. *(Verified 2026-10-14: 3 rows, request
+      `scope=all&page=1&limit=20&status=in_progress`.)*
+- [x] **TP-Z7 (DRIFT-12).** The seven login autofill accounts exist. *(Verified 2026-10-14:
+      `POST /auth/login` succeeds for all seven `tjoel+…` addresses with `Fixture123!`.)*
 
 ## 20. Wrap-up
 

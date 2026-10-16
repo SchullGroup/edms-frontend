@@ -16,7 +16,6 @@ export interface AppStore extends AppState {
   currentUser: AuthUser | null;
   setCurrentUser: (user: AuthUser | null) => void;
   patchCurrentUser: (partial: Partial<AuthUser>) => void;
-  resetData: () => void;
   auditAction: (action: string, target: string, detail: string) => void;
   notifyUser: (
     userId: string,
@@ -80,7 +79,6 @@ export const useStore = create<AppStore>()(
           return { currentUser: { ...s.currentUser, ...partial } };
         }),
       setPrefs: (prefs) => set({ prefs }),
-      resetData: () => set(SEED),
       auditAction: (action, target, detail) => {
         const { currentUser, audit } = get();
         const newAudit = {

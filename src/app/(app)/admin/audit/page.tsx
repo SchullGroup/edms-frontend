@@ -6,7 +6,7 @@ import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuditEntries, useExportAuditCsv, useVerifyAuditChain } from '@/apis/hooks/useAudit';
 import { useAllUsers } from '@/apis/hooks/useUsers';
-import { UserPicker } from '@/components/common/UserPicker';
+import { UserSearchCombobox } from '@/components/common/UserSearchCombobox';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { AuditEntry } from '@/types/models';
@@ -147,18 +147,17 @@ export default function TenantAuditPage() {
               setPage(1);
             }}
           />
-          <div style={{ width: 200 }}>
-            <UserPicker
-              value={actorId}
-              onChange={(id) => {
-                setActorId(id);
-                setPage(1);
-              }}
-              allLabel="All actors"
-              ariaLabel="Filter by actor"
-              controlStyle={{ height: 32 }}
-            />
-          </div>
+          <UserSearchCombobox
+            value={actorId}
+            onChange={(id) => {
+              setActorId(id);
+              setPage(1);
+            }}
+            placeholder="All actors"
+            ariaLabel="Filter by actor"
+            compact
+            style={{ width: 220 }}
+          />
           <DateField
             compact
             aria-label="From date"

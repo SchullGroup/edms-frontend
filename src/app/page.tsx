@@ -139,7 +139,7 @@ export default function LoginPage() {
       {isDev && loginTestAccounts && (
         <div className="mt-8 border-t border-(--border) pt-5">
           <div className="mb-3 text-xs font-semibold uppercase text-(--text-soft)">
-            Test Accounts (Set 2)
+            Test accounts
           </div>
           <div className="flex flex-wrap gap-2">
             <button
