@@ -484,7 +484,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             <Icon name="flow" size={14} /> Open workflow
           </button>
         )}
-        {canRoute && hasRoutePermission && !closed && (
+        {/* A closed document (its workflow ended) can start another one, as it
+            can from Search and Cabinets: the backend refuses only archived
+            documents and ones already in a running instance of that workflow. */}
+        {canRoute && hasRoutePermission && (
           <button className="btn btn-primary" onClick={routeThisDocument}>
             <Icon name="flow" size={14} /> Route to workflow
           </button>
