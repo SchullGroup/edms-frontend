@@ -376,12 +376,16 @@ export type WorkflowStageAction =
 export interface WorkflowStage {
   id: string;
   name: string;
-  /** Exactly one assignment: `user_id`; `role`; `department_id` (anyone whose
-   *  department is exactly this one — sub-departments aren't included yet);
-   *  or `role` + `department_id` (not offered in the Designer yet). */
+  /** One of: `user_id` alone; `role`; a department; or `role` + a department.
+   *  A department is `department_id` (a top-level one), or `department_id` +
+   *  `sub_department_id` (one of its sub-departments, edms-backend PR #52).
+   *  Matching is exact: a stage for Finance doesn't reach Finance › Payables.
+   *  Stages saved before PR #52 may hold a sub-department in `department_id`. */
   role?: string;
   user_id?: string;
   department_id?: string;
+  /** A direct child of `department_id`; the task goes to people in it. */
+  sub_department_id?: string;
   sla_hours: number;
   actions?: WorkflowStageAction[];
 }
@@ -773,7 +777,8 @@ export interface Task {
   assigneeId?: string | null;
   assignedRoleId?: string | null;
   /** Set for a department-assigned stage, alone or with a role (edms-backend
-   *  `3014b89`). Matched exactly: sub-departments aren't included yet. */
+   *  `3014b89`): the stage's sub-department when it names one (PR #52), else
+   *  its department. Matched exactly against the user's department. */
   assignedDepartmentId?: string | null;
   action?: string | null;
   status: TaskStatus;
