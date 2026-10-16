@@ -78,7 +78,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const printDocument = usePrintDocument();
   const checkoutDocument = useCheckoutDocument();
   const checkinDocument = useCheckinDocument();
-  const { routeDocuments, canRoute: hasRoutePermission } = useRouteToWorkflow();
+  const { routeDocuments, canRoute: hasRoutePermission, mayRouteDocument } = useRouteToWorkflow();
   const { promptRequestAccess, isRequesting } = useRequestAccessPrompt();
 
   const [zoom, setZoom] = useState(1);
@@ -226,13 +226,15 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         myDepartmentId === cabinetDepartmentId));
   const eff =
     doc.status === 'closed' ? 'Closed' : doc.status === 'in_progress' ? 'In Progress' : 'Pending';
-  const closed = doc.status === 'closed';
   const lockHolderName =
     doc.checkoutLock?.locker?.name ||
     userById(users, doc.checkoutLock?.lockedBy)?.name ||
     'another user';
 
-  const routeThisDocument = () => routeDocuments([{ id: doc.id, title: doc.title }]);
+  const routeThisDocument = () =>
+    routeDocuments([{ id: doc.id, title: doc.title, createdBy: doc.createdBy }]);
+  // At `own` scope only the uploader may route it (the backend 403s otherwise).
+  const mayRouteThis = mayRouteDocument({ createdBy: doc.createdBy });
 
   const actDownload = () => {
     if (!canDownload) {
@@ -462,15 +464,13 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <button
             className="btn btn-secondary"
             onClick={actCheckout}
-            disabled={checkoutBusy || closed || lockedByOther || !can('document', 'edit')}
+            disabled={checkoutBusy || lockedByOther || !can('document', 'edit')}
             title={
-              closed
-                ? 'Document is closed'
-                : lockedByOther
-                  ? 'Checked out by another user'
-                  : !can('document', 'edit')
-                    ? "You don't have permission to edit documents"
-                    : 'Check out for editing'
+              lockedByOther
+                ? 'Checked out by another user'
+                : !can('document', 'edit')
+                  ? "You don't have permission to edit documents"
+                  : 'Check out for editing'
             }
           >
             <Icon name="key" size={14} /> Check out
@@ -484,8 +484,17 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             <Icon name="flow" size={14} /> Open workflow
           </button>
         )}
-        {canRoute && hasRoutePermission && !closed && (
-          <button className="btn btn-primary" onClick={routeThisDocument}>
+        {/* A closed document only means its workflow ended: it can start another
+            one, as it can from Search and Cabinets, and is edited like any other.
+            The backend refuses only archived documents and ones already in a
+            running instance of that workflow. */}
+        {canRoute && hasRoutePermission && (
+          <button
+            className="btn btn-primary"
+            onClick={routeThisDocument}
+            disabled={!mayRouteThis}
+            title={!mayRouteThis ? 'You can only route documents you uploaded' : undefined}
+          >
             <Icon name="flow" size={14} /> Route to workflow
           </button>
         )}
@@ -569,7 +578,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             canEditMetadata={
               can('document_metadata', 'edit') &&
               cabinetAllows(myCabinetLevel, 'edit') &&
-              !closed &&
               !lockedByOther
             }
             confidentiality={doc.confidentiality}
@@ -577,7 +585,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             canEditClassification={
               can('document', 'edit') &&
               cabinetAllows(myCabinetLevel, 'edit') &&
-              !closed &&
               !lockedByOther
             }
           />
@@ -595,7 +602,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             canDownload={canDownload}
             canEdit={
               can('document_version', 'restore') &&
-              !closed &&
               !lockedByOther &&
               !activeWorkflow &&
               !inHiddenWorkflow

@@ -8,8 +8,8 @@
 | Was | Now |
 |---|---|
 | DRIFT-09 — routing 404s | ✅ **Resolved** — two-call sequence shipped and wired |
-| DRIFT-10 — notifications module missing | 🟨 **Revised** — module and UI both exist; **nothing emits** |
-| DRIFT-05 — 23 workflow routes unguarded | 🔴 recounted to 25 |
+| DRIFT-10 — notifications module missing | 🟨 **Revised** — module and UI both exist; **nothing emits** *(→ ✅ emits since 2026-09-21)* |
+| DRIFT-05 — 23 workflow routes unguarded | 🔴 recounted to 25 *(→ ✅ resolved the same evening)* |
 
 **Re-scanned 2026-09-04 (evening)** against `edms-backend` @ `dev` (`e60c418`,
 **90 routes** over 9 routers, 45 permissions) and `EDMS-FRONTEND` @ `dev` (`aec7863`,
@@ -24,8 +24,10 @@ fixed**:
 | DRIFT-07 — client-side aggregation | 🔄 **Owner flips to Frontend** — 8 aggregation endpoints now exist | [§10](#10-drift-register--ranked-with-owners) |
 | **DRIFT-14 (new)** | 🔴 Workflow definitions are now **admin-only to read**, which breaks routing for the roles that are granted it | [§4](#4-authorization-four-independent-layers) |
 
-> ⚠️ **Do not re-derive DRIFT-05 from a route-level grep.** `requirePermission` still
-> appears **0 times** in `workflows.router.ts`, and that no longer means what it used to.
+> ⚠️ *(Superseded 2026-09-21 — the router now has 40 `requirePermission` calls across 39
+> routes, re-counted 2026-10-15; kept for history.)* ~~**Do not re-derive DRIFT-05 from a
+> route-level grep.** `requirePermission` still appears **0 times** in
+> `workflows.router.ts`~~, and that no longer means what it used to.
 > Authorization moved into the **service layer** — `definitions.service.ts`,
 > `instances.service.ts`, `tasks.service.ts`, `delegations.service.ts` and
 > `sla.service.ts` each assert roles and throw `403` with a named code. Grep for
@@ -99,7 +101,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │   │  edms-state-v3)  │   │                   │   │                         │  │
 │   │                  │   │                   │   │                         │  │
 │   │ • currentUser    │   │ • documents       │   │                         │  │
-│   │ • 1,520 lines of │   │ • tasks           │   │                         │  │
+│   │ • 1,466 lines of │   │ • tasks           │   │                         │  │
 │   │   SEED demo data │   │ • cabinets        │   │                         │  │
 │   │   (initialData)  │   │ • users, roles    │   │                         │  │
 │   └──────────────────┘   └───────────────────┘   └─────────────────────────┘  │
@@ -119,7 +121,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
 │                               │              │                                        │
-│  Sole responsibility:         │              │  90 routes over 9 modules              │
+│  Sole responsibility:         │              │  134 routes over 11 modules (10-15)    │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
 │  sees it.                     │              │  │ Repository → PrismaClient        │  │
@@ -149,8 +151,8 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
-| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 46 pages (45 authed + 1 public) |
-| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 90 routes, Swagger at `/api-docs` |
+| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 58 pages (54 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-15, was 46 |
+| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 134 routes over 11 router files — re-counted 2026-10-15, was 90. Swagger at `/api-docs` |
 | Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |
 
@@ -194,7 +196,7 @@ Browser
                                           /admin | /platform | /auditor
 ```
 
-### Path B — everything else (66 routes)
+### Path B — everything else (132 routes, re-counted 2026-10-15; was 66)
 
 ```
 Browser
@@ -247,8 +249,9 @@ Browser — response interceptor
   │         • otherwise: Cookies.remove + window.location.href = '/'
 ```
 
-**Note the asymmetry.** Only 3 routes go through the Next.js server. The other 71 are
-plain browser→Express cross-origin calls. There is no SSR data fetching anywhere in the
+**Note the asymmetry.** Only 3 routes go through the Next.js server (login, refresh and
+logout — and the backend has no logout route, DRIFT-01). The other 132 backend routes are
+plain browser→Express cross-origin calls *(re-counted 2026-10-15; was "the other 71")*. There is no SSR data fetching anywhere in the
 app: every page is `'use client'`.
 
 ---
@@ -599,7 +602,8 @@ used to let them in); the Finance supervisor and client admin open both.
 `usePermissions.ts:26-31` grants `client_admin` **everything** except `resource === 'platform'`.
 `routes.config.ts` gives `schulltech_admin` the entire `/platform` prefix.
 
-The backend disagrees on both counts:
+The backend disagrees on both counts *(grant counts as of 2026-08-29; today's seed has 72 /
+18 / 26 / 27 / 40 / 29 in this table's row order — see doc 03 Phase 1)*:
 
 | Role | Backend permission grants (`prisma/seed-system.ts`) | Frontend assumption |
 |---|---|---|
@@ -638,16 +642,20 @@ pair of codebases.
 | `delegations.service.ts` | list, create, end | `DELEGATION_*_FORBIDDEN` |
 | `sla.service.ts` | breach list | `SLA_BREACH_LIST_FORBIDDEN` |
 
-Role membership comes from `src/shared/constants/workflow.constants.ts` —
+~~Role membership comes from `src/shared/constants/workflow.constants.ts` —
 `WORKFLOW_DEFINITION_MANAGE_ROLES`, `WORKFLOW_OVERSIGHT_ROLES`,
-`WORKFLOW_ORGANIZATION_WIDE_ROLES`, `TASK_REASSIGN_ROLES`. A new
-`shared/utils/workflow-scope.ts` additionally narrows a **pure supervisor** to their own
-department on reads, while leaving organisation-wide roles unrestricted.
+`WORKFLOW_ORGANIZATION_WIDE_ROLES`, `TASK_REASSIGN_ROLES`.~~ *(Re-checked 2026-10-15: none
+of these role lists exist in the backend any more. Since the 2026-09-16 RBAC refactor,
+authorization comes from `workflow`, `workflow_instance`, `task` and `delegation`
+permissions and their scope.)* A new `shared/utils/workflow-scope.ts` additionally narrows a
+**pure supervisor** to their own department on reads, while leaving organisation-wide roles
+unrestricted.
 
-> ⚠️ **The route-level grep is now misleading.** `requirePermission` is still absent from
-> all 32 workflow routes, and that no longer indicates a hole. Check `_FORBIDDEN` instead.
-> Whether authorization *belongs* in the service rather than the router is a real design
-> question — the other eight routers use `requirePermission` — but it is enforced.
+> ~~⚠️ **The route-level grep is now misleading.** `requirePermission` is still absent from
+> all 32 workflow routes~~ — *superseded 2026-09-21:* `workflows.router.ts` now has 40
+> `requirePermission` calls across its 39 routes (re-counted 2026-10-15), so the route-level
+> grep is meaningful again, and the service-layer `_FORBIDDEN` checks remain as a second
+> layer.
 
 ### 🔴 DRIFT-14 — Workflow definitions became unreadable by the roles that route documents
 
@@ -674,10 +682,17 @@ itself.
 
 Net effect, unchanged from the original finding: `staff`, `supervisor`, `management`
 and `internal_auditor` still get a 403 from `GET /workflows`. `useRouteToWorkflow`
-(`src/hooks/useRouteToWorkflow.tsx`, shared by `/upload`, `/staff/cabinets` and
-`/doc/[id]`) still shows its empty state — *"No published workflows. A workflow has to
+(`src/hooks/useRouteToWorkflow.tsx`, shared by `/upload`, `/staff/cabinets`,
+`/doc/[id]` and `/search`) still shows its empty state — *"No published workflows. A workflow has to
 be published in the Workflow Designer before anything can be routed to it"* — to
 exactly the roles that do the routing.
+
+**Re-checked 2026-10-15 against `edms-backend` `dev` `9998e05`: still open.** The seed
+still grants `workflow:view` only to `client_admin` and `schulltech_admin`. One open
+question: doc 04 records staff routing as confirmed in testing on 2026-10-08, which this
+finding says a seeded staff account can't do. Either that test ran as an admin, or the live
+database's grants differ from `seed-system.ts`. A re-test as
+`tjoel+staff_finance@schulltech.com` would settle it.
 
 **Owner: Backend, unchanged.** This is not a frontend bug and there is nothing to fix
 on this side — the frontend's `GET /workflows` call, its 403 handling, and its empty
@@ -1092,14 +1107,14 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `GET/POST /workflows`, `GET/PATCH /workflows/:id` | ✅ — since `3014b89` a stage may carry `department_id` (alone, or with `role`; never with `user_id`); create, update and publish check that the department exists (422) | ✅ — **department-only stages since 2026-10-13, verified live**: the Designer's Assign to offers Role, Person or Department (the department tree flattened, "Operations › Finance") and saves `department_id` with no role or person. Role + department isn't offered until sub-department matching (spec Q2) is live; a stage that already has it (set through the API) keeps its department when saved as a role. Tasks: `assignedDepartmentId` drives "is this my task" (`isTaskForUser`, the backend's rule, with the department from `/auth/me`) and the holder label ("Finance", "supervisor · Finance") on the workflow page, the Monitor drawer and the reassign dialogs. Matching is exact: a stage for Operations doesn't reach Operations › Finance |
+| `GET/POST /workflows`, `GET/PATCH /workflows/:id` | ✅ — since `3014b89` a stage may carry `department_id` (alone, or with `role`; never with `user_id`); create, update and publish check that the department exists (422). **PR #52 (live 2026-10-15):** optional `sub_department_id`, a direct child of `department_id` (422 `WORKFLOW_SUB_DEPARTMENT_MISMATCH` otherwise); the task's `assignedDepartmentId` is then the child | ✅ — **department-only stages since 2026-10-13, verified live**. **2026-10-16 (verified live):** Department picks a top-level department, then optionally one of its sub-departments, saved as `department_id` + `sub_department_id`; Role takes an optional department the same way (role + department), and "Any department" clears both. Stages saved earlier with a sub-department in `department_id` alone are read as the pair (no false "unsaved") and saved that way. One department per stage, matched exactly: a parent doesn't include its sub-departments (product decision 2026-10-16, superseding spec Q2's answer). Department labels, here and in task holder labels (`useDepartmentNames`), show the path ("Operations › Finance"): names can repeat across trees. Tasks: `assignedDepartmentId` drives "is this my task" (`isTaskForUser`, the backend's rule, with the department from `/auth/me`) and the holder label ("Finance", "supervisor · Finance") on the workflow page, the Monitor drawer and the reassign dialogs. Matching is exact: a stage for Operations doesn't reach Operations › Finance |
 | `POST /workflows/:id/publish` `/archive` | ✅ | ✅ |
-| `GET /workflow-instances`, `GET /workflow-instances/:id` | ✅ — since PR #51 (live 2026-10-14) the list also takes `departmentId` (instances with a document in a cabinet of that department); a **department-scoped** caller passing someone else's department gets 403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`, while at `own` scope a requested department only narrows the participant list. Since `919d0ef` an instance has `documents[]` and no `documentId`/`currentStage`/`stageDueAt`; the list doesn't return per-document executions (DRIFT-19). Since `3014b89`: each document carries `isLocked` + `access`, Restricted documents redacted to that title; and at `own` scope visibility follows task assignment only (direct, role, role + department, department), no longer document ownership (**DRIFT-22**). Attaching to a *pending* workflow is limited to the first-stage assignee or `global` scope | ✅ reshaped 2026-10-07 (DRIFT-19), not verified live. ✅ **DRIFT-21** fixed 2026-10-12: restricted entries render (lock tab, request card, no fetch) and stage actions cover only documents with Action access; verified live **PR #50 (live 2026-10-13):** the list returns each document's active `executions` (stage, status, `stageDueAt`) and redacts documents the caller can't view (`isLocked`, `access`, "Restricted document"); the detail returns every attached document. The list defaults to `scope=mine` (workflows the caller holds a task in), and `scope=all` is a **403** for anyone whose `workflow_instance:view` is `own`. The Workflow Monitor and `/doc/[id]`'s Workflows card sent no scope, so a client admin's Monitor was empty; since 2026-10-13 both send `scope=all` with oversight (department/global) and `mine` otherwise (verified live: admin Monitor 0 → 4 in progress, supervisor 3 for their department, staff `/doc/[id]` still 200). Stage and Next due columns fill from `executions`. `departmentId` is on the service's filter type since 2026-10-14; no UI sends it yet |
-| ~~`POST /workflow-instances/start`~~ | now the two-call `POST /workflow-instances` **then** `POST /:instanceId/start`; since `919d0ef` the create body is `{ workflowDefinitionId, documents: [{ documentId, comment? }] }` | ✅ **DRIFT-09 resolved**; body updated 2026-10-07 — documents routed together go into one workflow (DRIFT-19) |
+| `GET /workflow-instances`, `GET /workflow-instances/:id` | ✅ — since PR #51 (live 2026-10-14) the list also takes `departmentId` (instances with a document in a cabinet of that department); a **department-scoped** caller passing someone else's department gets 403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`, while at `own` scope a requested department only narrows the participant list. Since `919d0ef` an instance has `documents[]` and no `documentId`/`currentStage`/`stageDueAt`; the list doesn't return per-document executions (DRIFT-19). Since `3014b89`: each document carries `isLocked` + `access`, Restricted documents redacted to that title; and at `own` scope visibility follows task assignment only (direct, role, role + department, department), no longer document ownership (**DRIFT-22**). Attaching to a *pending* workflow is limited to the first-stage assignee or `global` scope | ✅ reshaped 2026-10-07 (DRIFT-19), not verified live. ✅ **DRIFT-21** fixed 2026-10-12: restricted entries render (lock tab, request card, no fetch) and stage actions cover only documents with Action access; verified live **PR #50 (live 2026-10-13):** the list returns each document's active `executions` (stage, status, `stageDueAt`) and redacts documents the caller can't view (`isLocked`, `access`, "Restricted document"); the detail returns every attached document. The list defaults to `scope=mine` (workflows the caller holds a task in), and `scope=all` is a **403** for anyone whose `workflow_instance:view` is `own`. The Workflow Monitor and `/doc/[id]`'s Workflows card sent no scope, so a client admin's Monitor was empty; since 2026-10-13 both send `scope=all` with oversight (department/global) and `mine` otherwise (verified live: admin Monitor 0 → 4 in progress, supervisor 3 for their department, staff `/doc/[id]` still 200). Stage and Next due columns fill from `executions`. **2026-10-14 (verified live):** the Monitor sends `departmentId` — from `?dept=` (the management dashboards' new **Workflows** / **View workflows** links) or its Department picker — but only for a viewer whose `workflow_instance:view` is `global`; a department-scoped viewer gets no picker and a foreign `?dept=` is ignored, so it can't trip the 403 |
+| ~~`POST /workflow-instances/start`~~ | now the two-call `POST /workflow-instances` **then** `POST /:instanceId/start`; since `919d0ef` the create body is `{ workflowDefinitionId, documents: [{ documentId, comment? }] }` | ✅ **DRIFT-09 resolved**; body updated 2026-10-07 — documents routed together go into one workflow (DRIFT-19). **Who may route what (2026-10-16, verified live):** create checks each document against the caller's `workflow_instance:create` scope: any document at `global` (client_admin), only documents they uploaded at `own` (staff, management, internal_auditor), and at `department` one whose cabinet is in their department; otherwise 403 `WORKFLOW_INSTANCE_CREATE_FORBIDDEN`. `useRouteToWorkflow` now applies the `own` rule (`mayRouteDocument`): the document page disables "Route to workflow" on someone else's document, and a Search/Cabinets selection leaves those out with a note. `department` is left to the backend. Before, staff got the 403 after picking a workflow |
 | `POST /workflow-instances/:id/hold` `/resume` `/close` | ✅ | ✅ |
-| `GET /tasks`, `GET /tasks/:id` | ✅ — since `919d0ef` no `Task.dueAt`; documents come through `documents[].workflowDocumentExecution`, and only `/:id` carries their stage and deadline (DRIFT-19). Since `3014b89`: tasks carry `assignedDepartmentId`; `/:id` returns **every** document, each with `access: { canView, canRoute, canRequestView, canRequestRoute }`, and a document the caller can't view comes back as "Restricted document" with null confidentiality, cabinet and version (before, it was left out). Acting on a document above your tier needs a `route` grant | ✅ reshaped 2026-10-07, not verified live. ✅ **DRIFT-21, fixed 2026-10-12** — the workflow page reads `access`, shows Restricted documents as lock tabs with the request card and never fetches them; `ConfBadge`/`UrgBadge` render nothing for a null level. Verified live (staff: no `GET /documents/:id` for the restricted one, no error; client admin: unchanged). Stage actions cover only documents with Action access (`canRoute`) and name them explicitly whenever any is held back; close and delegate (whole-task) are disabled meanwhile. Verified live: approving the viewable document of a two-document task returned 200, the restricted one stayed at the stage in a new task for the same user **PR #50 (live 2026-10-13):** `GET /tasks` and `/tasks/approvals` return each document's `currentStage`, `status`, `stageDueAt` (W1), accept `sort=createdAt\|dueAt` and `overdue=true\|false`, and redact documents the caller can't view like `/:id` does. Task rows show the deadline (only on open tasks — a closed task's documents have moved to someone else's stage) and "Overdue" past it; verified live. `sort`/`overdue` not used yet |
+| `GET /tasks`, `GET /tasks/:id` | ✅ — since `919d0ef` no `Task.dueAt`; documents come through `documents[].workflowDocumentExecution`, and only `/:id` carries their stage and deadline (DRIFT-19). Since `3014b89`: tasks carry `assignedDepartmentId`; `/:id` returns **every** document, each with `access: { canView, canRoute, canRequestView, canRequestRoute }`, and a document the caller can't view comes back as "Restricted document" with null confidentiality, cabinet and version (before, it was left out). Acting on a document above your tier needs a `route` grant | ✅ reshaped 2026-10-07, not verified live. ✅ **DRIFT-21, fixed 2026-10-12** — the workflow page reads `access`, shows Restricted documents as lock tabs with the request card and never fetches them; `ConfBadge`/`UrgBadge` render nothing for a null level. Verified live (staff: no `GET /documents/:id` for the restricted one, no error; client admin: unchanged). Stage actions cover only documents with Action access (`canRoute`) and name them explicitly whenever any is held back; close and delegate (whole-task) are disabled meanwhile. Verified live: approving the viewable document of a two-document task returned 200, the restricted one stayed at the stage in a new task for the same user (before PR #52). **PR #52 (live 2026-10-15):** a partial action keeps the same task open with the rest; `/:id` still lists the actioned documents, with `actionedAt` and `canRoute`/`canRequestRoute` false (the lists drop them). **2026-10-16:** the workflow page treats those as done ("· Done" tab; out of the actions, the held-back count and the deadline) instead of as needing Action access, which also disabled Delegate and Close. A Restricted document has no `actionedAt`, so it counts as done once its execution has left the task's stage (backend ask T2). Verified in the browser on task `27f8a97d…` with `GET /tasks/:id` edited to mark one document actioned (no live partial action made); the unfixed page showed "One document needs Action access". Open backend bug T3: sending an actioned document back to a stage whose task is still open 409s **PR #50 (live 2026-10-13):** `GET /tasks` and `/tasks/approvals` return each document's `currentStage`, `status`, `stageDueAt` (W1), accept `sort=createdAt\|dueAt` and `overdue=true\|false`, and redact documents the caller can't view like `/:id` does. Task rows show the deadline (only on open tasks — a closed task's documents have moved to someone else's stage) and "Overdue" past it; verified live. **2026-10-14 (verified live):** `/staff/tasks` sends `overdue=true` for Overdue, `status=pending&overdue=false` for Pending / In Progress / On Hold (split by `taskStatusLabel`), and `sort=dueAt` for "Sort: Due date", so those cover every task rather than the one page fetched. Before, In Progress and On Hold sent `status=in_progress`/`on_hold`, which aren't task statuses — a 400 `VALIDATION_ERROR`, shown as "Failed to load tasks" |
 | `POST /tasks/:id/action` | ✅ | ✅ — `request_changes` sends `documents: [{documentId}]` from the workflow page's document picker since 2026-10-02 (**DRIFT-18** fixed; the field became required in `edms-backend` `5144fc7`). Not yet verified e2e |
-| — | `POST /workflow-instances/:id/documents` `{documentId, comment?}` (`5144fc7`) | ✅ wired — "Mark reviewed" attaches the reviewer's documents through it (`useWorkflowTaskActions`). *This row said "no UI yet"; stale, corrected 2026-10-07* |
+| — | `POST /workflow-instances/:id/documents` `{documentId, comment?}` (`5144fc7`) | ✅ wired — "Mark reviewed" attaches the reviewer's documents through it (`useWorkflowTaskActions`); optional since 2026-10-16 (the `review` action never required any). *This row said "no UI yet"; stale, corrected 2026-10-07* |
 | `PATCH /tasks/:id/reassign` | ✅ | ✅ |
 | `GET /tasks/approvals` | ✅ — refused (403 `TASK_APPROVAL_QUEUE_FORBIDDEN`) to anyone whose `task:view` is `own` | ✅ — `/supervisor/approvals`, and the sidebar badge. **2026-10-13:** the badge and the nav item require `task:action` *and* `task:view` at department or wider; before, the badge fired for anyone with `task:action`, so staff got a hidden 403 on every page. Verified live: no request for staff, badge still 1 for the Finance supervisor |
 | `GET /sla/outcomes/summary` | ✅ PR #50 (live 2026-10-13, `task:view`): on-time vs late stage results from `workflow_sla_outcomes` over `from`–`to` (UTC dates), optional `groupBy=user\|department\|stage`, `departmentId`, `userId`; `own` scope is limited to the caller | ✅ wired 2026-10-13, verified live — staff dashboard "SLA compliance (30d)" and My Performance (rate, on time, breached; 88% = 7 of 8 for the Finance staff fixture). `/supervisor/performance` since 2026-10-13 (`groupBy=user`, plus the previous 30 days for the change; verified live: team 79%, 11 of 14). Not yet on the management pages |
@@ -1123,16 +1138,18 @@ correct sequence — `POST /workflow-instances` then `POST /workflow-instances/:
 It is wired into the UI through `useStartWorkflowInstance` (`useWorkflowInstances.ts:67`),
 consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 
-> ⚠️ **Two of the compounding problems remain.** The endpoint still performs
+> ✅ ~~**Two of the compounding problems remain.** The endpoint still performs
 > **no authorization check** (DRIFT-05), and the assignee is still **never notified**
-> (DRIFT-10) — the task lands in the queue silently.
+> (DRIFT-10)~~ — both resolved: authorization 2026-09-04 (DRIFT-05) and `task.assigned`
+> notifications 2026-09-21 (DRIFT-10). Re-checked 2026-10-15. What blocks routing today
+> is DRIFT-14.
 
 ### Identity
 
 | Frontend call | Backend route | Status |
 |---|---|---|
 | `GET/POST /users`, `GET/PATCH/DELETE /users/:id` | ✅ — since PR #49 (live 2026-10-13) a user is `pending` from an emailed invitation until they set a password (then `active`); `invitedAt` records the first invitation; `?status=pending` filters. Existing invited users without a password were migrated to `pending` | ✅ — `/admin/users` shows Pending with the invitation date, filters by it, offers Resend invite and no Activate for them; "Invite user" toasts "Invitation sent to …". Verified live 2026-10-13 |
-| `GET /users?search=` (name or email, case-insensitive; backend PR #48) | ✅ | ✅ wired 2026-10-13: `/admin/users` search box, and `UserPicker` (Delegations "Delegate to", the actor filter on `/admin/audit` and `/auditor/trail`). Results stay inside the caller's `user:view` scope |
+| `GET /users?search=` (name or email, case-insensitive; backend PR #48) | ✅ | ✅ wired 2026-10-13: `/admin/users` search box, and `UserPicker` (Delegations "Delegate to"). The actor filter on `/admin/audit` and `/auditor/trail` is `UserSearchCombobox` since 2026-10-16: a search box that queries from the third character. Results stay inside the caller's `user:view` scope |
 | `POST /users/:id/roles`, `DELETE /users/:id/roles/:roleId` | ✅ | ✅ |
 | `POST /users/:id/invitation` | ✅ — since PR #49 accepts `pending` or `active` users (409 otherwise) | ✅ wired 2026-09-18 — "Resend invite" button, shown for pending users and for active users with no `lastLoginAt` (since 2026-10-13; before, only the latter, so a pending user couldn't be re-invited) |
 | `GET/POST /roles`, `GET/PATCH/DELETE /roles/:id` | ✅ — since PR #49 `schulltech_admin` is never listed or returned, and assigning it through `POST /users` or `/users/:id/roles` is a 404 | ✅ — no frontend change: the role pickers list what the API returns. A user who already holds the role still shows it in their roles, and editing them keeps it |
@@ -1568,16 +1585,19 @@ its values have changed. A `custom` copy is the `/admin/branding` page's publish
 `http://localhost:3000,http://127.0.0.1:3000,https://edms-kappa.vercel.app` — correct for
 local dev and the Vercel staging origin.
 
-### 🟠 DRIFT-12 — The login page's test accounts do not exist in the backend
+### ✅ DRIFT-12 — The login page's test accounts (resolved)
 
-`src/app/page.tsx` renders two rows of autofill buttons:
+**Resolved in code by 2026-09-15; the docs caught up 2026-10-14.** Set 2 moved to the
+`tjoel+…` addresses in `aa11682` (2026-08-31) and Set 1 was deleted in `ce4d968`
+(2026-09-15). `src/app/page.tsx` now renders one row of seven autofill buttons (dev
+builds, and only when the brand preset's `loginTestAccounts` is on), one per seeded
+account below. **Verified live 2026-10-14:** `POST /auth/login` succeeds for all seven.
 
-| Set | Emails | Exists in `prisma/seed.ts`? |
-|---|---|---|
-| Set 1 | `chika@firstatlantic.com`, `david@…`, `eniola@…`, `bola@…`, `femi@…`, `adaeze@schulltech.com` | ❌ No — these are `initialData.ts` fixture personas |
-| Set 2 | `boyebamiji+staff@schulltech.com` … password `Fixture123!` | ❌ No — the seed creates `tjoel+…` addresses |
+*Was:* two rows of autofill buttons — Set 1 (`chika@firstatlantic.com` etc., the
+`initialData.ts` fixture personas) and Set 2 (`boyebamiji+staff@schulltech.com` etc.) —
+none of which existed in the backend, so every button failed.
 
-The backend seed actually creates, all with password `Fixture123!`:
+The backend seed creates, all with password `Fixture123!`:
 
 ```
 tjoel+staff_finance@schulltech.com        → staff
@@ -1588,9 +1608,6 @@ tjoel+clientadmin@schulltech.com          → client_admin
 tjoel+schulltechadmin@schulltech.com      → schulltech_admin
 tjoel+auditor@schulltech.com              → internal_auditor
 ```
-
-**Every autofill button on the login screen fails against a freshly seeded backend.**
-This is a 10-minute fix and it is the first thing every new developer hits.
 
 ### 🟠 Backend build is currently broken locally
 
@@ -1633,7 +1650,7 @@ suspiciously few documents.
 | DRIFT-01 | 🟨 **Frontend fixed 2026-09-10** | `POST /auth/logout` missing | Backend | Sidebar sign-out now calls it with the bearer token; backend route + denylist still outstanding — confirmed still absent from `auth.router.ts` 2026-09-21 |
 | DRIFT-08 | ✅ **Resolved (frontend 2026-09-10, reaffirmed 2026-09-18)** | `/documents/:id/comments` + `/signatures` 404 | Frontend | Neither is a document operation. Comments = `comment` on `POST /tasks/:id/action`; signature = `signature` image on its `approve` action. `/doc/[id]` and the supervisor approvals queue rewired; a signature pad (`SignaturePad` + `useSignAndApprove`) captures/uploads the image. Dead `documents.service` methods + hooks removed. **2026-09-18 same-day update:** the dedicated `GET/POST /documents/:id/comments`/`/signatures` endpoints turned out to be real (not 404) and were briefly wired, then deliberately un-wired again — product wants one trail, not two. See BE-16/BE-17. |
 | DRIFT-04 | ✅ **Frontend resolved 2026-09-10** | Frontend role heuristics contradict backend grants | Frontend | Heuristic block deleted; gating is permission-key based (`routes.config` `anyPermissions`), `/platform` still role-gated by design |
-| DRIFT-12 | 🟠 Med | Login test accounts don't exist | Frontend | Every autofill button fails; blocks new-dev onboarding |
+| ~~DRIFT-12~~ | ✅ **Resolved (frontend, by 2026-09-15)**, verified live 2026-10-14 | Login test accounts didn't exist in the backend | Frontend | Was: every autofill button failed, blocking new-dev onboarding. The seven buttons now use the seeded `tjoel+…` accounts; this row went stale until 2026-10-14 |
 | — | 🟠 Med | Prisma client stale → all users forced to `department` scope | Backend | Run `npx prisma generate` |
 | ~~DRIFT-13~~ | ✅ **Resolved (frontend, 2026-09-21)** | `effStatus()` deleted from both `useStore.ts` and `helpers.ts`. Task rows (`staff/tasks`, `TaskRow`) now use `taskStatusLabel`/`isOverdue` (`@/utils/supervisor`) — already correct, just never imported. Document rows (`staff/cabinets`, `search`) get `documentStatusLabel` — casing fixed, no fabricated `Overdue` since `Document` has no due-date field anywhere in the backend schema. The fictional `Document.dueDate` field removed from `models.ts` | Frontend | Was: "Pending"/"Overdue" status filters on `/staff/tasks` matched nothing; badges showed raw lowercase status |
 | ~~DRIFT-07~~ | ✅ **Resolved (frontend, 2026-09-21)** | Client-side aggregation via `fetchAllPages` replaced by the server aggregation endpoints in all four management dashboards + Performance Overview | **Frontend** | Was: management dashboards fired up to 50 sequential requests; 7 of 8 aggregation endpoints had no caller |
@@ -1676,7 +1693,8 @@ re-diagnosed but still open and still item 1.*
    directly; `useAllTasks`/`useAllWorkflowInstances` deleted as dead code.
    `useAllDocuments` stays for its one legitimate remaining use (listing every document
    in one cabinet for a folder-assignment UI).
-8. Fix the login test-account emails to the `tjoel+…` set (DRIFT-12)
+8. ✅ ~~Fix the login test-account emails to the `tjoel+…` set~~ — **done** (DRIFT-12
+   resolved; verified live 2026-10-14)
 9. ✅ ~~Make `usePermissions` parse three-segment strings before anyone touches
    `/auth/me`~~ — **done**; backend now sends scoped `permissions` on login/`/auth/me`
    (DRIFT-03 resolved)

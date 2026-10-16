@@ -24,6 +24,9 @@ export interface WorkflowTaskActionsArgs {
   /** The task's documents the caller has no Action access to. They're never
    *  offered, and any action then names its documents. */
   heldBackDocuments?: { id: string; title: string }[];
+  /** The task's documents already actioned on it (a partial action keeps the
+   *  task open). Never offered, not even as a document to attach. */
+  actionedDocumentIds?: string[];
   /** Pre-ticked in the "Request changes" picker — the one being viewed. */
   selectedDocumentId?: string;
   /** Audit-log target — the workflow's primary document. */
@@ -49,6 +52,7 @@ export function useWorkflowTaskActions({
   stageLabel,
   documents,
   heldBackDocuments = [],
+  actionedDocumentIds = [],
   selectedDocumentId,
   auditTargetId,
   instanceId,
@@ -82,15 +86,17 @@ export function useWorkflowTaskActions({
       });
   };
 
-  // A review must come with at least one document — the reviewer's output
-  // (report, minutes, marked-up copy…). The backend's `review` action takes no
-  // documents, so they're attached to the workflow first
+  // A review may come with documents — the reviewer's output (report, minutes,
+  // marked-up copy…) — but needn't. The backend's `review` action takes no new
+  // documents, so any are attached to the workflow first
   // (`POST /workflow-instances/:id/documents`, allowed for the active task's
   // holder), then the review is sent.
   //
-  // Two steps in the one modal: 1) pick documents, 2) optional comment and
-  // confirm. "Next"/"Back" swap the modal's content and return `false` so the
-  // modal stays open; the selection and comment carry across both ways.
+  // Two steps in the one modal: 1) optionally pick documents, 2) optional
+  // comment and confirm. "Next"/"Back" swap the modal's content and return
+  // `false` so the modal stays open; the selection and comment carry across
+  // both ways. Without `workflow_instance:create` there's nothing to attach
+  // with, so it opens straight on step 2.
   const actReview = () => {
     if (!taskId) return;
     let picked: PickedDocument[] = [];
@@ -123,7 +129,9 @@ export function useWorkflowTaskActions({
         },
         {
           action: 'REVIEW',
-          detail: `Reviewed stage “${stageLabel}”, attaching ${picked.map((d) => d.title).join(', ')}`,
+          detail: `Reviewed stage “${stageLabel}”${
+            picked.length ? `, attaching ${picked.map((d) => d.title).join(', ')}` : ''
+          }`,
         },
         { message: 'Reviewed — advanced to next stage', kind: 'success' },
       );
@@ -132,26 +140,23 @@ export function useWorkflowTaskActions({
     const openStepOne = () =>
       openModal({
         title,
-        body: canAttachDocuments ? (
+        body: (
           <div>
-            <div className="caption mb-2">Step 1 of 2 — choose documents</div>
+            <div className="caption mb-2">Step 1 of 2 — attach documents (optional)</div>
             <div className="banner info mb-4">
-              Attach the document(s) from your review. They join this workflow and travel with it
-              to the next stage.
+              Attach anything from your review, such as a report or a marked-up copy. It joins this
+              workflow and travels with it to the next stage. Nothing to attach? Go on to Next.
             </div>
             <WorkflowDocumentPicker
-              // Every document already in the task, held back or not.
-              excludeIds={[...documents, ...heldBackDocuments].map((d) => d.id)}
+              // Every document already in the task, held back or actioned or not.
+              excludeIds={[
+                ...[...documents, ...heldBackDocuments].map((d) => d.id),
+                ...actionedDocumentIds,
+              ]}
               initialSelected={picked}
               uploadDefaults={uploadDefaults}
               onChange={(docs) => (picked = docs)}
             />
-          </div>
-        ) : (
-          <div className="banner error">
-            Reviewing this stage requires attaching a document, and your role can&apos;t add
-            documents to a workflow (it needs <code>workflow_instance:create</code>). Ask an
-            administrator to grant it, or delegate this stage.
           </div>
         ),
         actions: [
@@ -159,12 +164,7 @@ export function useWorkflowTaskActions({
           {
             label: 'Next',
             kind: 'btn-primary',
-            disabled: !canAttachDocuments,
             onClick: () => {
-              if (picked.length === 0) {
-                addToast('Choose at least one document to attach', 'error');
-                return false;
-              }
               openStepTwo();
               return false;
             },
@@ -177,15 +177,19 @@ export function useWorkflowTaskActions({
         title,
         body: (
           <div>
-            <div className="caption mb-2">Step 2 of 2 — add a comment</div>
-            <div className="field">
-              <label>Attaching</label>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: '12.5px' }}>
-                {picked.map((d) => (
-                  <li key={d.id}>{d.title}</li>
-                ))}
-              </ul>
-            </div>
+            {canAttachDocuments && (
+              <div className="caption mb-2">Step 2 of 2 — add a comment</div>
+            )}
+            {picked.length > 0 && (
+              <div className="field">
+                <label>Attaching</label>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: '12.5px' }}>
+                  {picked.map((d) => (
+                    <li key={d.id}>{d.title}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <DocumentScopeField
               documents={documents}
               chosen={reviewed}
@@ -208,15 +212,17 @@ export function useWorkflowTaskActions({
           </div>
         ),
         actions: [
+          canAttachDocuments
+            ? {
+                label: 'Back',
+                onClick: () => {
+                  openStepOne();
+                  return false;
+                },
+              }
+            : { label: 'Cancel' },
           {
-            label: 'Back',
-            onClick: () => {
-              openStepOne();
-              return false;
-            },
-          },
-          {
-            label: 'Attach & mark reviewed',
+            label: picked.length > 0 ? 'Attach & mark reviewed' : 'Mark reviewed',
             kind: 'btn-primary',
             onClick: () => {
               if (reviewed.size === 0) {
@@ -229,7 +235,8 @@ export function useWorkflowTaskActions({
         ],
       });
 
-    openStepOne();
+    if (canAttachDocuments) openStepOne();
+    else openStepTwo();
   };
 
   // Approving requires a signature image (backend 422s without one).

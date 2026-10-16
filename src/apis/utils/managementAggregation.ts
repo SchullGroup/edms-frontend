@@ -26,6 +26,18 @@ export function departmentOptions(
   return out;
 }
 
+/** Child id → parent id, for every sub-department in a `GET /departments` tree. */
+export function departmentParents(departments: Department[]): Map<string, string> {
+  const parents = new Map<string, string>();
+  const add = (dept: Department) =>
+    dept.children?.forEach((child) => {
+      parents.set(child.id, dept.id);
+      add(child);
+    });
+  departments.forEach(add);
+  return parents;
+}
+
 export function departmentName(
   departmentId: string | null | undefined,
   index: Map<string, Department>,

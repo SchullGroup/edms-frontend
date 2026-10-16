@@ -126,7 +126,7 @@ export function WorkflowToolbar({
           >
             {switcherWorkflows?.map((w) => (
               <option key={w.id} value={w.id}>
-                {w.name} (v{w.version}){w.status === 'archived' ? ' — archived' : ''}
+                {w.name}{w.status === 'archived' ? ' — archived' : ''}
               </option>
             ))}
           </select>
@@ -166,7 +166,7 @@ export function WorkflowToolbar({
             <Icon name="check" size={12} /> Saved
           </span>
           <span className={`badge ${statusBadgeClass}`}>
-            {statusLabel} · v{workflow.version}
+            {statusLabel}
           </span>
           <span className="caption">
             {stageCount} stage{stageCount === 1 ? '' : 's'}

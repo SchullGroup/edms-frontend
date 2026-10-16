@@ -2,7 +2,8 @@
 
 import { STAGE_ACTIONS } from './constants';
 import { Combobox } from '@/components/ui/Combobox';
-import type { WorkflowStageAction } from '@/types/models';
+import { StageDepartmentPicker } from './StageDepartmentPicker';
+import type { Department, WorkflowStageAction } from '@/types/models';
 
 export type AssigneeMode = 'role' | 'person' | 'department';
 
@@ -19,13 +20,13 @@ export interface StagePropertiesPanelProps {
   roles: { id: string; name: string }[];
   roleDraft: string;
   onRoleChange: (role: string) => void;
-  /** Flattened, with `label` showing the path ("Operations › Finance"). */
-  departments: { id: string; name: string; label: string }[];
+  /** `GET /departments` as returned: top-level departments with `children`. */
+  departments: Department[];
+  /** A top-level department; '' on a role stage means any department. */
   departmentDraft: string;
-  onDepartmentChange: (departmentId: string) => void;
-  /** Name of the department a role stage is also limited to, when it was set
-   *  outside the Designer (role + department isn't offered here yet). */
-  roleDepartmentName?: string | null;
+  /** One of its sub-departments, or '' for the department itself. */
+  subDepartmentDraft: string;
+  onDepartmentChange: (departmentId: string, subDepartmentId: string) => void;
   users: { id: string; name: string; email?: string }[];
   userDraft: string;
   onUserChange: (userId: string) => void;
@@ -58,8 +59,8 @@ export function StagePropertiesPanel({
   onRoleChange,
   departments,
   departmentDraft,
+  subDepartmentDraft,
   onDepartmentChange,
-  roleDepartmentName,
   users,
   userDraft,
   onUserChange,
@@ -72,6 +73,19 @@ export function StagePropertiesPanel({
   isFirstStage = false,
   bare,
 }: StagePropertiesPanelProps) {
+  const parent = departments.find((d) => d.id === departmentDraft);
+  const sub = parent?.children?.find((c) => c.id === subDepartmentDraft);
+  const departmentLabel = parent ? (sub ? `${parent.name} › ${sub.name}` : parent.name) : null;
+  const departmentPicker = (allowAny: boolean) => (
+    <StageDepartmentPicker
+      departments={departments}
+      departmentId={departmentDraft}
+      subDepartmentId={subDepartmentDraft}
+      onChange={onDepartmentChange}
+      allowAny={allowAny}
+    />
+  );
+
   const body = !selectedStage ? (
     <div className="card-body">
       <p className="muted" style={{ lineHeight: 1.6, fontSize: '12.5px' }}>
@@ -146,31 +160,26 @@ export function StagePropertiesPanel({
                     </option>
                   ))}
                 </select>
-                {roleDepartmentName && (
-                  <div className="help">
-                    Only people with this role in {roleDepartmentName}. That limit was set outside the
-                    Designer and is kept when you save.
-                  </div>
-                )}
+                <div className="mt-2">{departmentPicker(true)}</div>
+                <div className="help">
+                  {departmentLabel
+                    ? `Only people with this role in ${departmentLabel}.`
+                    : 'Anyone with this role, in any department.'}
+                </div>
               </>
             ) : assigneeMode === 'department' ? (
               <>
-                <select
-                  className="input"
-                  aria-label="Department"
-                  value={departmentDraft}
-                  onChange={(e) => onDepartmentChange(e.target.value)}
-                >
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="help">
-                  Anyone in this department can pick the task up, whatever their role. Only people
-                  directly in it: its sub-departments aren&apos;t included yet.
-                </div>
+                {departmentPicker(false)}
+                {parent && (
+                  <div className="help">
+                    Anyone in {departmentLabel} can pick the task up, whatever their role.{' '}
+                    {sub
+                      ? `People directly in ${parent.name} or in its other sub-departments don't get it.`
+                      : (parent.children?.length ?? 0) > 0
+                        ? 'Only people directly in it: its sub-departments aren’t included.'
+                        : ''}
+                  </div>
+                )}
               </>
             ) : (
               <Combobox

@@ -1,6 +1,6 @@
 # Backend API spec: changes the frontend is waiting on
 
-**Date:** 2026-10-08 · **Re-checked:** 2026-10-14 against `edms-backend` `origin/dev` at `9998e05` (PR #51) · **Author:** frontend
+**Date:** 2026-10-08 · **Re-checked:** 2026-10-16 against `edms-backend` `origin/dev` at `a88f279` (PR #52) · **Author:** frontend
 
 Each item says what is wrong today, the change, the contract, who may call it, and how we will
 know it is done. Code pointers are to `dev` at `2db7e19`. The frontend side of every item is
@@ -32,6 +32,8 @@ direct ask.
 | O2 | ✅ ~~Limit departments to one level of nesting~~ done: PR #51 (live 2026-10-14), 422 `DEPARTMENT_DEPTH` | `POST /departments`, `PATCH /departments/:id` | P2 | XS |
 | O3 | Return people's names alongside their ids | `GET /audit`, documents, versions, signatures, `GET /delegations` | P1 | S |
 | T1 | Optional signature on the review action | `POST /tasks/:id/action` | P2 | XS |
+| T2 | Return `actionedAt` on Restricted task documents | `GET /tasks/:id` | P2 | XS |
+| T3 | Don't add a document to a task that already holds it (409 on send-back) | `POST /tasks/:id/action` | **P1 bug** | S |
 | I1 | Keep OCR word positions | OCR worker + new read endpoint | P2 | M |
 | I2 | Office/email previews, text extraction, ZIP intake | upload pipeline | P2 | L |
 | X1 | **Decide:** watermark downloaded copies | download path | P3 | M |
@@ -410,6 +412,42 @@ store it the way approve does (`tasks.service.ts` line 1867).
 **Done when** a review with a signature shows it in `GET /workflow-history`, and a review without
 one still works.
 
+### T2. Return `actionedAt` on Restricted task documents
+
+**Problem.** Since PR #52 a partial action keeps the task open, and `GET /tasks/:id` still lists
+the documents already actioned on it, each with `actionedAt`. A document the caller can't view
+comes back in the reduced "Restricted document" shape (`tasks.service.ts` `getById`, the
+`!canView` branch), which leaves `actionedAt` out. The frontend then can't tell "actioned here"
+from "still waiting, but you lack access" by that field.
+
+**Change.** Add `actionedAt: taskDocument.actionedAt` to the reduced shape. It reveals nothing
+about the document itself.
+
+**Frontend today.** Works without it: a Restricted document with no `actionedAt` counts as
+actioned once its execution has left the task's stage (`isActionedTaskDocument`,
+`src/utils/workflowDocuments.ts`). With T2 that inference can go.
+
+**Done when** a Restricted document actioned on an open task returns `actionedAt` set.
+
+### T3. Don't add a document to a task that already holds it
+
+**Problem.** Task T at stage A holds documents X and Y. The holder actions X only (PR #52: T
+stays open with Y). X moves on to stage B, and stage B sends it back with Request changes.
+Routing X back to stage A calls `findCompatibleActiveTask` (`tasks.repository.ts`), which finds
+T, since T still has an unactioned document at stage A for the same assignment. Then
+`createTaskDocumentSnapshots` inserts `(T, X)` again and hits the
+`@@unique([taskId, workflowDocumentExecutionId])` constraint on `TaskDocument`. Prisma's
+P2002 becomes a 409 "A record with this value already exists", and the Request changes fails.
+The same applies to any route that brings an execution back to a stage whose open task already
+has a row for it (`instances.service.ts` line ~913 uses the same pair of calls).
+
+**Change.** Either skip a compatible task that already holds a row for the execution (create a
+new task instead), or re-open that row: set `actionedAt` back to null and update
+`documentVersionId` to the current version. The second keeps one task per assignment and stage,
+which matches the PR #52 design.
+
+**Done when** the scenario above returns 200 and X shows on a task at stage A as actionable.
+
 ---
 
 ## Ingestion and OCR
@@ -554,6 +592,12 @@ this department".
 > **Answer:** the backend will change it so that assigning a **parent** department makes the
 > task applicable to every sub-department too. Not built yet. The Designer's department
 > option (tracker 6.4, FE-3) waits until this and Q3 are live.
+>
+> **Superseded (2026-10-16):** PR #52 kept matching exact and added `sub_department_id`: a stage
+> names one department, either a top-level one or one of its sub-departments (sent as
+> `department_id` + `sub_department_id`). The product owner decided to keep that: **one
+> department per stage, exact match; a parent does not include its sub-departments.** No backend
+> change is wanted. Role + department means "this role, only within this (sub-)department".
 
 **Q3. How can the frontend tell whether a department-assigned task is the user's?**
 `/auth/me` and login don't return `departmentId` (see O1), and staff don't hold `user:view`,
@@ -649,3 +693,17 @@ D5, D6, O1 and O2 in one go. Frontend work it unblocked, all shipped 2026-10-14:
   §7, `documents.repository.ts`) — the prerequisite for cabinet/folder access requests.
   PR #51 did not touch document scope.
 
+## Notes on PR #52 (2026-10-16) — sub-department routing and partial actions
+
+`feat/workflow-conditional-routing`, merged as `a88f279` (2026-10-15), live by 2026-10-16 (the
+deployed Swagger documents `sub_department_id`). No routes added. Frontend work, shipped
+2026-10-16:
+
+| Change in PR #52 | Frontend change |
+|---|---|
+| Stage `sub_department_id` (a direct child of `department_id`; the task's `assignedDepartmentId` is the child) | Workflow Designer: Department picks a top-level department, then optionally one of its sub-departments; Role takes an optional department the same way (role + department). Stages saved earlier with a sub-department in `department_id` alone are read as the pair and saved that way. Department labels show the path ("Operations › Finance"), since names repeat across trees |
+| Partial actions keep the same task open; actioned rows stay on `GET /tasks/:id` with `actionedAt` and `canRoute: false` | The workflow page treats them as done ("· Done" tab), not as needing Action access; they're out of the actions, the held-back count and the deadline |
+| After Request changes, review/approve 409 `WORKFLOW_DOCUMENT_REVISION_REQUIRED` until a new version | Not pre-empted yet: the backend's message shows in the error toast |
+| Same-file upload 409 `WORKFLOW_REVISION_UNCHANGED_FILE`; restore 409 `WORKFLOW_REVISION_RESTORE_NOT_ALLOWED` during an active correction | No change: the toast shows the message |
+
+Asked of the backend: **T2** and **T3** above.
