@@ -753,9 +753,12 @@ still limited to the caller's `user:view` scope.
       The count drops from every user to the supervisors only, and the table goes back to
       page 1. A term matching nobody shows "No records match the current filters."
       *(Verified 2026-10-13: 12 → 3.)*
-- [x] **TP-S2.** `/admin/audit` → "All actors": type "finance". "Searching…" shows until
-      results arrive, then only matching people are offered. Picking one filters the trail
-      to them. Picking "All actors" clears it. *(Verified 2026-10-13.)*
+- [x] **TP-S2.** `/admin/audit` → the "All actors" search box: type "tj". It says "Type at
+      least 3 characters to search." and sends nothing. Type "o": `GET /users?search=tjo`
+      goes out and matching people are listed (max 300px tall, over the table). Pick one with
+      the mouse or ↓ + Enter: the box shows their name and the trail filters by `actorId`.
+      ✕ or emptying the box goes back to all actors. *(Verified 2026-10-16; the 2026-10-13
+      version was a dropdown.)*
 - [x] **TP-S3.** As `supervisor_finance`, `/delegations` → New delegation → "Delegate to":
       only active colleagues in your scope are offered, never yourself. Typing narrows the
       list. *(Verified 2026-10-13: Finance Staff User offered and picked.)*
@@ -850,7 +853,26 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
       *(Verified on instance `bdda387f…` with "New-Memo"; rejected as `staff_finance` through
       the API to confirm the backend accepts it.)*
 - [ ] **TP-W3.** Assign a stage to "Operations" (Finance's parent) and route: Finance users
-      should **not** get it yet. Expected until spec Q2 lands; re-test then.
+      should **not** get it. Matching stays exact (product decision 2026-10-16), so this is
+      the intended result, not a gap.
+- [x] **TP-W4.** Designer → a stage → Assign to → Department: pick Operations. A second
+      dropdown offers "No sub-department: Operations itself" and Finance. Pick Finance and
+      save: the stored stage has `department_id` = Operations and `sub_department_id` =
+      Finance, and the canvas reads "Operations › Finance · 24h". *(Verified 2026-10-16 on
+      "TEST — sub-department picker (draft)".)*
+- [x] **TP-W5.** Same stage → Role: the department dropdowns stay, with "Any department"
+      first. Saving with Operations › Finance stores `role` + both ids ("staff · Operations ›
+      Finance"); saving with Any department stores the role alone. *(Verified 2026-10-16.)*
+- [x] **TP-W6.** Open "TEST – department stage" (saved before PR #52 with Finance in
+      `department_id` alone): it shows Operations, then Finance, and isn't marked unsaved.
+      *(Verified 2026-10-16.)*
+- [ ] **TP-W7.** Route a document through a sub-department stage: only people in that
+      sub-department get the task; people directly in the parent don't.
+- [ ] **TP-W8.** On a task with two documents you can act on, act on one only (review,
+      approve or reject it). The page stays on the same task: that document's tab reads
+      "· Done", the other is selected and actionable, and there's no "needs Action access"
+      note. *(Checked 2026-10-16 with an edited `GET /tasks/:id`; not yet with a real
+      partial action.)*
 
 ## 19g. Phase X — Frontend spec items (backend PR #51, live 2026-10-14)
 
