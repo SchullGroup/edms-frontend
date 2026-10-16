@@ -2,6 +2,24 @@
 
 **Status:** Written 2026-08-29 against the current code.
 
+> **Re-checked 2026-10-15** against `edms-backend` `dev` (`9998e05`, 134 routes) and this
+> repo (58 pages). The dated revision notes below are history, and several of their
+> statements no longer hold:
+>
+> - **Notifications are emitted.** `notifyUser` / `notifyAssignment` / `notifyRole` are
+>   called from tasks, SLA, documents, checkout-overdue and circulars (DRIFT-10, resolved
+>   2026-09-21). *Not* "nothing calls `notifyUser`".
+> - **Workflow routes are guarded at the router too.** `workflows.router.ts` has 40
+>   `requirePermission` calls across 39 routes. *Not* "a route-level grep still shows zero".
+> - **DRIFT-14 has a different cause.** `WORKFLOW_DEFINITION_VIEW_ROLES` no longer exists.
+>   `GET /workflows` requires `workflow:view`, and the seed grants it only to
+>   `client_admin` and `schulltech_admin`. The symptom is unchanged.
+> - **OCR works, and the upload never went to the wrong bucket** (DRIFT-06's claim was
+>   retracted 2026-09-21). Search indexes at create since PR #51 (2026-10-14).
+> - **The management dashboards use the aggregation endpoints** (DRIFT-07, 2026-09-21).
+>
+> The role map, every role's rights block (re-counted from the seed), and the staff, supervisor, management and auditor sections and handoffs H3–H7 were corrected in place in this pass.
+
 **Revised 2026-09-04** against `edms-backend` @ `dev` (`b72e0bf`, 83 routes) and
 `EDMS-FRONTEND` @ `dev` (`f02c7b8`). Two findings changed: **document routing is fixed**
 (the two-call create-then-start sequence shipped) and **the notifications module now
@@ -74,14 +92,14 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
 ```
                       ┌──────────────────────────────┐
                       │  SCHULLTECH_ADMIN (Adaeze)   │  🟥 mock portal
-                      │  Vendor operations           │  3 permission grants only
+                      │  Vendor operations           │  18 grants, no document:*
                       │  /platform                   │  Cannot read customer documents
                       └──────────────┬───────────────┘
                                      │  H1: provisions the tenant
                                      │      + the first admin account
                                      ▼
                       ┌──────────────────────────────┐
-                      │  CLIENT_ADMIN (Bola)         │  45 grants, all global
+                      │  CLIENT_ADMIN (Bola)         │  72 grants, 71 global
                       │  Tenant system owner         │  Only role bypassing
                       │  /admin                      │  cabinet access checks
                       └──┬────────┬────────┬─────────┘
@@ -94,7 +112,7 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
         ▼                         ▼                           ▼
 ┌──────────────────┐   ┌──────────────────┐      ┌─────────────────────────┐
 │  STAFF (Chika)   │   │ SUPERVISOR(David)│      │  MANAGEMENT (Eniola)    │
-│  14 grants       │   │  18 grants       │      │  10 grants, read-only   │
+│  29 grants       │   │  40 grants       │      │  27 grants, read-mostly │
 │  own / department│   │  department      │      │  global                 │
 │  /staff          │   │  /supervisor     │      │  /management            │
 └────────┬─────────┘   └────────┬─────────┘      └────────────┬────────────┘
@@ -110,22 +128,28 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
          │                      │                              │
          └──────────┬───────────┴──────────────────────────────┘
                     │
-                    │  H7: every action above SHOULD emit an audit entry
-                    ▼            ⛔ nothing is ever written
+                    │  H7: every action above emits an audit entry
+                    ▼            ✅ written since 2026-09-18 (DRIFT-11)
          ┌──────────────────────────────┐
-         │  INTERNAL_AUDITOR (Femi)     │  10 grants, read-only global
-         │  Independent assurance       │  Cannot mutate anything, by design
-         │  /auditor                    │  🟥 portal reads SEED fixtures
+         │  INTERNAL_AUDITOR (Femi)     │  26 grants, read-mostly global
+         │  Independent assurance       │  No document/cabinet/user edits
+         │  /auditor                    │  🟨 trail real; dashboard SEED
          └──────────────────────────────┘
 ```
 
-**The two structural observations:**
+*Grant counts re-counted 2026-10-15 from `prisma/seed-system.ts` (they were 3 / 45 / 14 /
+18 / 10 / 10, the pre-2026-09-16 seed). "Read-mostly": management and the auditor read
+tenant-wide, and can also act on their own tasks, route their own documents and delegate.*
 
-1. **Every arrow into the auditor is broken.** H7 is the only handoff that is 100%
-   non-functional, and it is the one the product's compliance positioning depends on.
-2. **`client_admin` is a single point of failure.** Five of the seven handoffs originate
-   with them, and they are the only role that can perform any configuration. There is no
-   delegated administration, no "cabinet owner" role, no read-only admin.
+**The two structural observations** *(re-checked 2026-10-15)*:
+
+1. ~~**Every arrow into the auditor is broken.**~~ H7 works now: audit entries are written
+   automatically and `/auditor/trail` reads them (DRIFT-11). The auditor's *dashboard* and
+   *findings* are still fixture data.
+2. **`client_admin` is still close to a single point of failure.** Five of the seven
+   handoffs originate with them. Since 2026-10-06 a cabinet can be *delegated*: a user
+   granted `delete` on it manages its folders, metadata schema and access grants from
+   `/staff/cabinets`. There is still no read-only admin.
 
 ---
 
@@ -137,16 +161,20 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
 
 ### Identity and rights
 
-**Backend grants — exactly three:**
+**Backend grants — 18** *(re-counted 2026-10-15; this said "exactly three" — `workflow:view`,
+`workflow:route`, `audit:view` — before the 2026-09-16 RBAC refactor)*:
 
 ```
-workflow:view:global
-workflow:route:global
-audit:view:global
+workflow:          view, create, edit, publish, archive        (global)
+workflow_instance: view, create, route, close                  (global)
+task:              view, action, reassign                      (global)
+delegation:        view, end (global) · create (own)
+audit:             view, export                                (global)
+document_access_request: create
 ```
 
-That is the complete list. This role **cannot** call `GET /users`, `GET /documents`,
-`GET /cabinets`, or `GET /departments` — all return 403.
+This role still **cannot** call `GET /users`, `GET /documents`, `GET /cabinets`, or
+`GET /departments` — it holds no `user`, `document`, `cabinet` or `department` grant.
 
 **And that is correct.** `access-control.constants.ts` documents the reasoning explicitly:
 `schulltech_admin` is **deliberately excluded** from `CABINET_ACCESS_BYPASS_ROLES`, and the
@@ -158,16 +186,16 @@ impersonation flow* — its own mechanism, not a standing role grant.
 **The vendor cannot read customer documents.** For a multi-tenant SaaS handling regulated
 records, that is a serious and correct architectural decision.
 
-> ⛔ **The frontend contradicts this completely.** `usePermissions.ts:24` returns `true` for
-> every permission check when the user holds `schulltech_admin`, and `routes.config.ts`
-> opens the whole `/platform` prefix. The portal only *appears* to work because every
-> `/platform` page reads from `SEED` and never calls the API. See DRIFT-04 in doc 01.
+> ✅ ~~**The frontend contradicts this completely.** `usePermissions.ts:24` returns `true` for
+> every permission check when the user holds `schulltech_admin`~~ — fixed 2026-09-10
+> (DRIFT-04): the heuristic is gone and the UI derives this role's keys from its seeded
+> grants. The `/platform` pages still read `SEED`, so the portal works only as a prototype.
 
 ### Day one
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in | `/` | ✅ (⛔ the autofill button uses a non-existent email) |
+| 1 | Log in | `/` | ✅ (the dev-build autofill button signs in as `tjoel+schulltechadmin@…` — DRIFT-12 resolved) |
 | 2 | Land on the Tenant Directory | `/platform` | 🟥 `SEED.tenants` |
 | 3 | Review platform health | `/platform/sysconfig` | 🟥 `SEED` |
 | 4 | Check plans and entitlements | `/platform/plans` | 🟥 `SEED.plans` |
@@ -202,8 +230,8 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 ### Where it breaks, ranked
 
 1. ⛔ **Every screen is fixture data.** Nothing this role does persists.
-2. ⛔ **The frontend grants unlimited permissions** the backend explicitly withholds — a
-   correctness bug waiting to surface the day `/platform` is wired to real endpoints.
+2. ✅ ~~**The frontend grants unlimited permissions** the backend explicitly withholds~~ —
+   fixed 2026-09-10 (DRIFT-04).
 3. ⛔ **No control-plane database.** Phase 0 of doc 03 is entirely manual.
 4. 🟨 **`GET /audit` exists now** (confirmed 2026-09-18) **but is tenant-scoped** — there's
    no cross-tenant audit query, so `/platform/audit`'s "cross-tenant action log" framing
@@ -219,8 +247,10 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 
 ### Identity and rights
 
-**45 grants, every one `global` scope.** Documents, versions, locks, metadata, cabinets,
-metadata fields, cabinet access, folders, departments, users, roles, workflows, audit.
+**72 grants — 71 `global`, 1 `own`** *(re-counted 2026-10-15; was "45 grants, every one
+`global`")*. Documents (including comments, signatures and access requests), versions,
+locks, metadata, cabinets, metadata fields, cabinet access, folders, departments, users,
+roles, workflows, workflow instances, tasks, delegations, audit and circulars.
 
 Two unique properties:
 - The **only** role in `CABINET_ACCESS_BYPASS_ROLES` — sees every cabinet regardless of grants
@@ -235,15 +265,15 @@ This must be done in order; each step produces the input for the next.
 | # | Step | Screen | API | Status |
 |---|---|---|---|---|
 | 1 | Log in, land on Admin Home | `/admin` | `GET /users`, `GET /cabinets` | ✅ |
-| 2 | **Create the department tree** | `/management/departments` | `POST /departments` | ✅ |
+| 2 | **Create the department tree** | `/admin/departments` *(was `/management/departments` — that is the management report)* | `POST /departments` | ✅ One level of nesting since `4a1373c` (2026-10-12) |
 | 3 | **Create cabinets, assign to departments** | `/admin/cabinets` | `POST /cabinets` | ✅ |
 | 4 | **Delegate each cabinet** — grant its manager (a role or user) `upload`/`edit`/`delete` on it | `/admin/cabinets` → Access card | `POST /cabinets/:id/access` | ✅ (*was "⛔ no UI" here — stale since 2026-09-18, corrected 2026-10-06*) |
 | 5 | Define cabinet metadata fields | `/admin/cabinets` → Metadata schema card | `POST /cabinets/:id/metadata-fields` | ✅ (*same stale "⛔ no UI", corrected 2026-10-06*) |
 | 6 | Build folder trees — usually by the cabinet's manager, not the admin | `/staff/cabinets` | `POST /cabinets/:id/folders` | 🟨 moved here from `/admin/cabinets` 2026-10-06, not yet verified live |
 | 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles`, `POST /users/:id/invitation` | ✅ "Invite user" emails a set-password link; the user is **Pending** until they use it, then Active (PR #49). Resend invite is offered for pending users and for active users who never signed in |
-| 8 | **Design and publish workflows** | `/admin/workflows` | `POST /workflows`, `/publish` | 🟨 **no authorization** |
-| 9 | Set retention and confidentiality policy | `/admin/policies` | — | 🟥 `SEED.policies` |
-| 10 | Apply branding | `/admin/branding` | — | 🟥 `SEED.branding` |
+| 8 | **Design and publish workflows** | `/admin/workflows` | `POST /workflows`, `/publish` | ✅ authorized since 2026-09-04 (DRIFT-05). ⚠️ Only admins can *list* them — DRIFT-14 |
+| 9 | Set retention and confidentiality policy | `/admin/policies` | `GET`/`PATCH /sla/configuration`, `/sla/holidays` (SLA tab only) | 🟨 SLA tab real since 2026-10-08; retention and confidentiality tabs still `SEED.policies` |
+| 10 | Apply branding | `/admin/branding` | — | 🟥 saved in this browser only (since 2026-10-12); other users don't see it |
 | 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 12 | Review the tenant audit trail | `/admin/audit` | `GET /audit`, `/audit/verify` | ✅ wired 2026-09-18 (was `SEED.audit`) |
 
@@ -254,20 +284,20 @@ only to localStorage.
 
 | Task | Status | Note |
 |---|---|---|
-| Onboard staff in batches | 🟨 | Works — but Bola sets and communicates every password by hand |
-| Adjust the role permission matrix | 🟨 | `PUT /roles/:id/permissions` exists; **the UI writes to `SEED.rolesMatrix` instead** |
+| Onboard staff in batches | ✅ | Invitations are emailed; each user sets their own password. *(Was: "Bola sets and communicates every password by hand".)* |
+| Adjust the role permission matrix | ✅ | `/admin/roles` calls `PUT /roles/:id/permissions` (`useSetRolePermissions`); built-in roles are read-only. *(Was: "the UI writes to `SEED.rolesMatrix` instead".)* |
 | Create a new cabinet for a new business line | ✅ | |
 | Fix a workflow that stalls | ✅ | Create a new version; published definitions are immutable |
 | Deactivate a leaver | ✅ | `PATCH /users/:id {status:'inactive'}` → login returns 403 |
 | Reset someone's password | ✅ | Self-service via `POST /auth/forgot-password` → `/set-password`; was broken by a field-name bug until fixed 2026-09-18 (DRIFT-15). No admin-initiated "force reset" button, but `PATCH /users/:id` with a new password still works as a manual fallback. |
-| Answer "who can see the Contracts cabinet?" | ⛔ | `GET /cabinets/:id/access` exists; **no screen calls it** |
+| Answer "who can see the Contracts cabinet?" | ✅ | `/admin/cabinets` → Access card lists the grants from `GET /cabinets/:id/access`. *(Was ⛔ "no screen calls it".)* |
 | Configure retention | ⛔ | Model exists, no endpoint, no enforcement job |
 
 ### Steady state
 
 Bola opens the system a few times a week: add a joiner, remove a leaver, adjust a workflow,
-answer an access question. Most of that works. The access question is the one that
-consistently fails.
+answer an access question. All of that works now; the access question stopped failing
+once the Access card shipped.
 
 ### What they can and cannot do
 
@@ -276,29 +306,33 @@ consistently fails.
 | Full document CRUD across the tenant | ✅ | ✅ |
 | Manage users, roles, departments | ✅ | ✅ |
 | Manage cabinets and folders | ✅ | ✅ |
-| Manage cabinet metadata fields | ✅ | ⛔ |
-| Manage cabinet access grants | ✅ | ⛔ |
-| Manage workflow definitions | ✅ | ✅ ⚠️ *but so can everyone else* |
+| Manage cabinet metadata fields | ✅ | ✅ *(was ⛔)* |
+| Manage cabinet access grants | ✅ | ✅ *(was ⛔)* |
+| Manage workflow definitions | ✅ | ✅ — and since DRIFT-05 nobody else can |
 | Read `restricted` documents | ✅ | ✅ |
 | Read `top_secret` documents | ❌ **nobody can** | — |
 | Configure retention | ❌ | 🟥 |
+| Configure SLA settings | ✅ | ✅ `/admin/policies` SLA tab |
 | Configure branding | ❌ | 🟥 |
 | Publish circulars | ✅ `circular:*` at `global` scope | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | View the audit trail | ✅ | ✅ wired 2026-09-18 |
 
 ### Where it breaks, ranked
 
-1. ⛔ **The workflow designer they own has no authorization** — any `staff` account can
-   publish or archive the definitions Bola created (DRIFT-05).
-2. ⛔ **They cannot grant cabinet access**, which is the core of the need-to-know model
-   they are responsible for.
-3. ⛔ **The role matrix editor writes to localStorage**, so permission changes appear to
-   work and silently don't.
+*Re-ranked 2026-10-15. Items 1–3 were all fixed; kept struck through.*
+
+1. ✅ ~~**The workflow designer they own has no authorization**~~ — fixed 2026-09-04
+   (DRIFT-05). **New #1:** the workflows Bola publishes can't be listed by the staff and
+   supervisors who must route into them (DRIFT-14, a seed fix).
+2. ✅ ~~**They cannot grant cabinet access**~~ — the Access card on `/admin/cabinets` grants
+   and revokes. Grants are still not checked on document reads (doc 03 Phase 4).
+3. ✅ ~~**The role matrix editor writes to localStorage**~~ — `/admin/roles` is live on
+   `PUT /roles/:id/permissions`.
 4. ✅ ~~New-user creation hardcodes a default password.~~ **Corrected 2026-10-13:** creation
    has emailed an invitation since 2026-09-18 (no password is sent). Since PR #49 the user
    shows as **Pending** until they set their password.
-5. 🟥 **Branding and policies reset on cache clear.** (Circulars no longer do — they're
-   server state since 2026-10-05.)
+5. 🟥 **Branding lives in one browser, and retention/confidentiality policies are
+   fixtures.** (Circulars and the SLA settings are server state.)
 6. ✅ ~~Their audit view is fabricated data.~~ **Fixed 2026-09-18** — `/admin/audit` reads
    the real, hash-chained trail.
 
@@ -312,17 +346,24 @@ consistently fails.
 
 ### Identity and rights
 
-**14 grants, and the scopes are the important part:**
+**29 grants, and the scopes are the important part** *(re-counted 2026-10-15 from
+`prisma/seed-system.ts`; the previous 14-grant list predates the 2026-09-16 RBAC refactor)*:
 
 ```
-document:view:department          document:create:own
-document:search:department        document_version:view:department
-document_version:create:own       document_lock:create:own
-document_lock:delete:own          document_metadata:view:department
-document_metadata:edit:own        cabinet:view:department
-folder:view:department            workflow:view:global
-workflow:route:global
+document:          view, search, download, export, print (department) · create (own)
+document_version:  view (department) · create (own)
+document_lock:     create, delete (own)
+document_metadata: view (department)
+document_comment / document_signature: view (department) · create (own)
+document_access_request: create
+cabinet:view · folder:view · folder:create/edit (own) · department:view
+workflow_instance: view, create, route (own)
+task:              view, action (own)
+delegation:        view, create, end (own)
 ```
+
+Not granted: `document:edit`, `document_version:restore`, and **`workflow:view`** — the
+last is why the routing picker can't list workflows for staff (DRIFT-14).
 
 `department` scope resolves in SQL to `where.cabinet.departmentId = user.departmentId`.
 `own` resolves to `where.createdBy = user.id`.
@@ -336,13 +377,13 @@ workflow:route:global
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in with the password the admin gave them | `/` | ✅ ⚠️ no forced change |
+| 1 | Accept the emailed invitation and set a password, then log in | `/set-password` → `/` | ✅ *(was "Log in with the password the admin gave them"; invitations since 2026-09-18)* |
 | 2 | Land on the Staff Dashboard | `/staff` | ✅ tasks, workflow tiles and notifications from the API *(corrected 2026-10-12: notifications were listed ⛔ 404)* |
 | 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (added 2026-10-06, ✅ tested by the user 2026-10-08; each action needs the role permission **and** the cabinet level — see doc 05) |
 | 4 | Upload their first document | `/upload` | ✅ |
 | 5 | Watch it appear in the cabinet | `/staff/cabinets` | ✅ |
 | 6 | Open it and check the details | `/doc/[id]` | ✅ |
-| 7 | Route it for approval | `/doc/[id]` or `/search` | ✅ DRIFT-09 resolved; several documents per workflow confirmed in testing 2026-10-08. ⚠️ Since `3014b89` they can't see the workflow afterwards unless they hold one of its tasks (DRIFT-22) |
+| 7 | Route it for approval | `/doc/[id]` or `/search` | ✅ DRIFT-09 resolved; several documents per workflow confirmed in testing 2026-10-08. ⚠️ Since `3014b89` they can't see the workflow afterwards unless they hold one of its tasks (DRIFT-22). 🔴 **Unresolved conflict (2026-10-15):** the seed grants staff no `workflow:view`, which `GET /workflows` requires (DRIFT-14), so a seeded staff user should see "No published workflows". Either the 2026-10-08 test ran as an admin or the live database's grants differ from the seed. Re-test as `tjoel+staff_finance@…` |
 | 8 | Check their task queue | `/staff/tasks` | ✅ |
 | 9 | Read circulars | `/circulars` | ✅ `GET /circulars/inbox` — wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 10 | Check notifications | `/notifications` | 🟨 real API (list, mark read, delivery preferences); not clicked through end to end *(corrected 2026-10-12)* |
@@ -358,16 +399,16 @@ workflow:route:global
 | Upload a revised version | ✅ | Auto-increments the version number |
 | Route for approval | ✅ | DRIFT-09 resolved. ⚠️ DRIFT-22: the router loses sight of the workflow unless they hold a task in it |
 | Watch their own task queue | ✅ | Assignment notifications arrive in the bell (DRIFT-10 resolved) |
-| Check "my performance" | 🟨 | `/staff/performance` mixes API and `SEED` |
+| Check "my performance" | ✅ | `/staff/performance` reads `useTasks`, `useSlaBreaches`, `useSlaOutcomeSummary` — no `SEED` (doc 05). *(Was 🟨 "mixes API and `SEED`".)* |
 
 ### Steady state — the daily loop
 
 ```
-morning   → /staff        check dashboard   ⚠️ must remember to; nothing pings them
+morning   → /staff        check dashboard   ✅ the bell shows new assignments
           → /staff/tasks  work the queue    ✅
-during    → /upload       file arrivals     ✅  (⚠️ >2 MB rejected, PDF/images only)
-          → /doc/[id]     add context       ⛔ comments 404
-          → route         send for approval ⛔ 404
+during    → /upload       file arrivals     ✅  (≤100 MB; PDF, DOCX, XLSX, TIFF, JPEG, PNG)
+          → /doc/[id]     add context       ✅ comment on the workflow action (DRIFT-08)
+          → route         send for approval 🔴 DRIFT-14 — see Day one step 7
           → /search       find something    ✅ confirmed 2026-10-09
 end       → /staff/tasks  clear the queue   ✅
 ```
@@ -377,17 +418,17 @@ end       → /staff/tasks  clear the queue   ✅
 | Capability | Status | Note |
 |---|---|---|
 | Upload and file | ✅ | The best-built flow in the product |
-| See department documents | ✅ | ⚠️ but cabinet grants aren't enforced on reads, so scope is wider than intended |
-| Edit documents they created | ✅ | `document:edit` is `own`-scoped |
+| See department documents | ✅ | ⚠️ cabinet grants are enforced on cabinet/folder reads but not document reads, so scope is wider than intended |
+| Edit document details | ❌ | No `document:edit` grant in today's seed. *(Was "✅ `own`-scoped" — the pre-2026-09-16 seed.)* |
 | Check out / check in | ✅ | Their lock can be force-released by an admin/supervisor (`document_lock:delete`, global or same-department scope) once past `expectedReturnAt`; they get a `checkout.reminder` 24 h before and `checkout.overdue` after (2026-10-02, not yet verified e2e) |
 | Upload new versions | ✅ | |
-| Restore an old version | ⛔ | Backend works, no UI |
-| Search by content | ⛔ | Index never built |
-| Comment | ⛔ | 404 |
-| Route to a workflow | ⛔ | 404 |
+| Restore an old version | ❌ | The UI exists (`DocumentVersionsPanel` → Restore), but `document_version:restore` is granted to supervisors and admins, not staff. *(Was ⛔ "Backend works, no UI".)* |
+| Search by content | ✅ | Confirmed 2026-10-09; indexed at create since PR #51. *(Was ⛔ "Index never built".)* |
+| Comment | ✅ | On workflow actions (DRIFT-08). *(Was ⛔ 404.)* |
+| Route to a workflow | 🔴 | 404 fixed (DRIFT-09), but the picker needs `workflow:view` (DRIFT-14) |
 | Act on assigned tasks | ✅ | |
 | Delete a document | ❌ | Not granted — correct |
-| **Publish a workflow definition** | ⚠️ **YES** | **Should be ❌. No authorization on the endpoint (DRIFT-05).** |
+| Publish a workflow definition | ❌ | Correct — `workflow:publish` is admin-only. *(Was "⚠️ YES … no authorization on the endpoint" — DRIFT-05, fixed 2026-09-04.)* |
 
 ### Where it breaks, ranked
 
@@ -398,8 +439,12 @@ end       → /staff/tasks  clear the queue   ✅
 3. ~~⛔ **No notifications**~~ — resolved (DRIFT-10)
 4. ~~⛔ **Comments 404**~~ — comments go on workflow actions (DRIFT-08)
 4a. ~~⛔ **Request access was refused (422)**~~ after `3014b89` (DRIFT-20); fixed on both pages 2026-10-12
-5. ⚠️ **2 MB limit, PDF/images only** — many real documents rejected
-6. ⚠️ **No forced password change** on first login
+5. ~~⚠️ **2 MB limit, PDF/images only**~~ — chunked upload, 100 MB cap, Office formats
+   accepted
+6. ~~⚠️ **No forced password change** on first login~~ — users set their own password from
+   the invitation
+7. 🔴 **Routing may be blocked by DRIFT-14** — see Day one step 7 for the conflict to
+   resolve
 
 ---
 
@@ -411,29 +456,33 @@ end       → /staff/tasks  clear the queue   ✅
 
 ### Identity and rights
 
-**18 grants**, mostly `department`-scoped, plus two memberships that matter more than the
-grants, and one grant worth naming:
+**40 grants**, 34 of them `department`-scoped *(re-counted 2026-10-15; was "18 grants …
+plus two memberships")*. Three grants worth naming:
 
-- `TASK_VIEW_ALL_ROLES` → may request `GET /tasks?scope=all` and see the whole team's queue
-- `TASK_REASSIGN_ROLES` → may `PATCH /tasks/:id/reassign`
+- `task:view:department` → may request `GET /tasks?scope=all` and see the whole team's queue
+  *(was membership of `TASK_VIEW_ALL_ROLES`, which no longer exists)*
+- `task:reassign:department` → may `PATCH /tasks/:id/reassign` *(was `TASK_REASSIGN_ROLES`)*
 - `document:view_confidential:department` → may read `confidential`-tier documents in their
   own department's cabinets (a permission since `edms-backend` `0dab81a`, 2026-10-08; it was
   membership of `CONFIDENTIAL_TIER_ROLES` before, with no department limit)
 
-The two task constants — not the permission table — are what actually make supervision work.
+~~The two task constants — not the permission table — are what actually make supervision
+work.~~ Since the 2026-09-16 RBAC refactor the permission table *is* what makes supervision
+work. Supervisors also hold `workflow_instance:close`, `document_version:restore` and
+circular `create`/`publish`/`withdraw` — but **not `workflow:view`** (DRIFT-14).
 
 ### Day one
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in, land on Team Overview | `/supervisor` | 🟨 API + `SEED` mixed |
+| 1 | Log in, land on Team Overview | `/supervisor` | 🟨 all data from the API; Hybrid only because its audit hook is a no-op (doc 05) |
 | 2 | Open the approvals queue | `/supervisor/approvals` | ✅ |
-| 3 | Open a document, review | `/doc/[id]` | ✅ (⛔ no download, ⛔ comments 404) |
+| 3 | Open a document, review | `/doc/[id]` | ✅ download via signed `fileUrl`, gated and audited; comments go on the workflow action. *(Was "⛔ no download, ⛔ comments 404".)* |
 | 4 | Approve with a note | `POST /tasks/:id/action` | ✅ |
-| 5 | Check what's ageing | `/supervisor/bottlenecks` | 🟨 real documents, but **"Overdue" is always 0** (DRIFT-13); ignores `SlaBreach` |
-| 6 | Check team workload | `/supervisor/workload` | 🟨 works, but walks all pages client-side |
+| 5 | Check what's ageing | `/supervisor/bottlenecks` | ✅ server-side `GET /workflow-instances/bottlenecks-ageing`, including the breach count. *(Was 🟨 "Overdue is always 0 (DRIFT-13); ignores `SlaBreach`" — DRIFT-13 resolved 2026-09-21.)* |
+| 6 | Check team workload | `/supervisor/workload` | ✅ `GET /tasks/workload` (`useTaskWorkload`). *(Was 🟨 "walks all pages client-side".)* |
 | 7 | Reassign an overloaded person's task | `PATCH /tasks/:id/reassign` | ✅ |
-| 8 | Review exceptions | `/supervisor/exceptions` | 🟨 |
+| 8 | Review exceptions | `/supervisor/exceptions` | 🟥 inline fixture rows (doc 05) |
 | 9 | Review team performance | `/supervisor/performance` | ✅ real since 2026-10-13: on-time %, closures and turnaround per member over 30 days, from SLA outcomes and the team's tasks |
 
 ### First week
@@ -444,24 +493,27 @@ The two task constants — not the permission table — are what actually make s
 | Approve / reject / request changes | ✅ | On the workflow page (`/workflow-instances/[id]`, 2026-10-02). Request changes asks which of the task's documents need changes — DRIFT-18 fixed. All three *(confirmed by the product owner’s testing, 2026-10-09)* |
 | Release a team member's overdue checkout | 🟨 | Notified via `checkout.overdue` when a same-department holder misses `expectedReturnAt`; "Force check in" on `/doc/[id]` if they hold `document_lock:delete` at department scope for that cabinet's department (2026-10-02, not yet verified e2e) |
 | Follow a notification to its item | 🟨 | Task and workflow links (`/tasks/:id`, `/workflow-instances/:id`) open the workflow page; `/documents/:id` opens the document page (DRIFT-17); previously 404'd |
-| Spot ageing work | 🟨 | Ageing in days is real (computed from `createdAt` on live documents), but the **breach count is permanently zero**: `effStatus()` looks for a `due` field that `Document` does not have, and compares capitalized statuses against lowercase values (DRIFT-13). Separately, **`SlaBreach` rows exist in the DB and no screen reads them.** |
+| Spot ageing work | ✅ | `/supervisor/bottlenecks` reads server-side ageing and breach counts; the staff dashboard reads `GET /sla/breaches`. *(Was 🟨: "breach count is permanently zero … `effStatus()` …" — `effStatus()` was deleted 2026-09-21, DRIFT-13.)* |
 | Rebalance workload | ✅ | |
-| Delegate while on leave | ⛔ | **Backend is complete. No UI, no service file, no hook.** |
-| Get warned before a breach | ⛔ | The SLA worker detects it and tells nobody |
+| Delegate while on leave | 🟨 | `/delegations` (create, list, end) since 2026-09-04; not re-verified end to end. *(Was ⛔ "No UI".)* |
+| Get warned before a breach | 🟨 | `sla.breach` is sent to the supervisor role, `sla.warning` to the assignee (DRIFT-10); not clicked through. *(Was ⛔ "tells nobody".)* |
 | Export team stats | ✅ | `exportCsv` |
 
 ### Steady state
 
 ```
 morning   → /supervisor/approvals   clear the queue      ✅
-          → /supervisor/bottlenecks check ageing         🟨 breaches always 0
-weekly    → /supervisor/workload    rebalance            🟨 slow, client-side
+          → /supervisor/bottlenecks check ageing         ✅ server-side
+weekly    → /supervisor/workload    rebalance            ✅ GET /tasks/workload
           → /supervisor/performance review the team      ✅ real (2026-10-13)
 ad hoc    → reassign                                     ✅
-          → delegate before leave                        ⛔ impossible
+          → delegate before leave                        🟨 /delegations
 ```
 
-### The delegation gap deserves emphasis
+### ~~The delegation gap deserves emphasis~~ — closed 2026-09-04
+
+*Kept for history. `/delegations` now creates, lists and ends delegations (doc 02 C4); what
+remains is a marker on delegated tasks and a notification when a delegation starts.*
 
 The `Delegation` model is complete and thoughtful: `startsAt`/`endsAt`, an optional JSON
 `scope` limiting it to specific cabinets or workflows, an `isActive` flag, an index for a
@@ -475,15 +527,18 @@ being the approval bottleneck, this is the most consequential missing screen in 
 
 ### Where it breaks, ranked
 
-1. ⛔ **No delegation UI** — leave stalls the whole team's work
-2. ⛔ **SLA warnings reach nobody** — the engine works, the delivery doesn't
-3. 🔴 **Overdue is permanently zero** — `effStatus()` checks a `due` field the backend
-   never sends, and compares `'Closed'` against a lowercase `'closed'` (DRIFT-13).
-   Affects 8 call sites, not just this page.
-4. 🟨 **Bottlenecks recomputes ageing** instead of reading the real `SlaBreach` table
-5. 🟨 **Workload view walks up to 50 pages** client-side to compute counts
-6. ⛔ **No document download** for offline review
+*Re-checked 2026-10-15: items 1–6 are all resolved; kept struck through.*
+
+1. ~~⛔ **No delegation UI**~~ — `/delegations` since 2026-09-04
+2. ~~⛔ **SLA warnings reach nobody**~~ — notified since 2026-09-21 (DRIFT-10)
+3. ~~🔴 **Overdue is permanently zero** — `effStatus()`~~ — deleted 2026-09-21 (DRIFT-13)
+4. ~~🟨 **Bottlenecks recomputes ageing**~~ — reads `bottlenecks-ageing` server-side
+5. ~~🟨 **Workload view walks up to 50 pages**~~ — reads `GET /tasks/workload`
+6. ~~⛔ **No document download**~~ — signed `fileUrl`, gated and audited (2026-10-08)
 7. ✅ ~~**`/supervisor/performance` has no data source**~~ — real since 2026-10-13
+8. 🔴 **Cannot list workflow definitions** (DRIFT-14), so a supervisor can't route a
+   document either
+9. 🟥 **`/supervisor/exceptions` is fixture data**
 
 ---
 
@@ -491,39 +546,40 @@ being the approval bottleneck, this is the most consequential missing screen in 
 
 > **Persona:** Eniola · executive, divisional or C-suite
 > **Landing page:** `/management` · **Sidebar:** Management Portal
-> **Overall status:** 🟨 **Works today, will not scale**
+> **Overall status:** ✅ **Server-aggregated since 2026-09-21** (DRIFT-07) — findings and the compliance chart are still `SEED` *(was 🟨 "Works today, will not scale")*
 
 ### Identity and rights
 
-**10 grants, all `global`, all read-only** — plus one exception:
+**27 grants — 21 `global`, 6 `own`** *(re-counted 2026-10-15; this said "10 grants, all
+`global`, all read-only", the pre-2026-09-16 seed)*:
 
 ```
-document:view:global          document:search:global
-document_version:view:global  document_metadata:view:global
-cabinet:view:global           folder:view:global
-department:view:global        user:view:global
-workflow:view:global          workflow:route:global   ← the only non-read grant
+read (global):  document view/search/view_confidential/download/export/print,
+                document_version, document_metadata, document_comment,
+                document_signature, cabinet, folder, department, user,
+                workflow_instance, task, delegation, circular
+write:          workflow_instance create/route (own) · task action (own)
+                delegation create/end (own) · document_access_request create
+                circular create (own), publish, withdraw (global)
 ```
 
-**Management cannot create, edit or delete anything.** They see the whole tenant and change
-nothing.
+Management cannot create or edit documents, users or configuration. It **can** act on tasks
+assigned to it, route its own documents, delegate, and publish circulars. It holds **no
+`workflow:view`**, so it can't list definitions to route into (DRIFT-14).
 
-> ⛔ **The frontend disagrees.** `usePermissions.ts` grants `management` the actions
-> `view, approve, reject, route` on documents. The UI therefore offers approve/reject
-> affordances the backend never granted. Those actions currently *succeed* — but only
-> because the workflow routes have no permission checks at all (DRIFT-05). Fix DRIFT-05
-> and management's approve buttons will start returning 403. **Fix the frontend heuristic
-> at the same time**, or this will look like a regression.
+> ✅ ~~**The frontend disagrees.** `usePermissions.ts` grants `management` the actions
+> `view, approve, reject, route` on documents.~~ Fixed 2026-09-10 (DRIFT-04): the role
+> heuristic was deleted, and the UI gates on the permission keys the backend returns.
 
 ### Day one
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in, land on Organization Overview | `/management` | 🟨 real data, client-side aggregation |
-| 2 | Compare departments | `/management/departments` | 🟨 same |
-| 3 | Review trends | `/management/trends` | 🟨 same |
+| 1 | Log in, land on Organization Overview | `/management` | ✅ server-aggregated (DRIFT-07) |
+| 2 | Compare departments | `/management/departments` | ✅ same |
+| 3 | Review trends | `/management/trends` | ✅ same |
 | 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED`; the sensitive-activity panel needs `audit:view`, which `management` doesn't hold, so it says so (2026-10-13) |
-| 5 | Review performance | `/management/performance` | 🟨 43-line thin page |
+| 5 | Review performance | `/management/performance` | ✅ `useTaskStats`, server-aggregated (85 lines) |
 | 6 | Review findings | `/management/findings` | 🟥 re-export of `/auditor/findings` |
 | 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
 
@@ -531,17 +587,20 @@ nothing.
 
 | Question they ask | Answer today |
 |---|---|
-| "Which department is slowest?" | 🟨 Answerable — computed in the browser from up to 5,000 rows |
-| "Is turnaround improving?" | 🟨 `/management/trends` buckets by month from real timestamps |
-| "What's our SLA compliance?" | 🟨 Computed client-side; **ignores the real `SlaBreach` table** |
-| "How many documents this quarter?" | 🟨 Counted client-side |
+| "Which department is slowest?" | ✅ Server-aggregated (`GET /tasks/stats`, instance stats) |
+| "Is turnaround improving?" | ✅ `/management/trends` reads `useDocumentStats` / `useWorkflowInstanceStats` |
+| "What's our SLA compliance?" | 🟨 Server-side on-time/total per department from `GET /tasks/stats` — all-time, not per period |
+| "How many documents this quarter?" | ✅ `GET /documents/stats` |
 | "Show me open audit findings" | 🟥 Re-exports the auditor's findings screen, which runs on `SEED.findings`. **No `Finding` model exists.** |
 | "Export this for the board" | ✅ CSV |
-| "Email me this weekly" | ⛔ No scheduling, no mail transport |
+| "Email me this weekly" | ⛔ No report scheduling. A mail transport exists now (`src/config/mailer.ts`) |
 
-### The scaling problem, quantified
+### ~~The scaling problem, quantified~~ — resolved 2026-09-21 (DRIFT-07)
 
-Every management page uses `fetchAllPages`:
+*Kept for history. The management pages read the aggregation endpoints now, and
+`useAllTasks`/`useAllWorkflowInstances` were deleted. The text below described 2026-08-29.*
+
+~~Every management page uses `fetchAllPages`:~~
 
 ```
 useAllDocuments()          → up to 50 requests × 100 records
@@ -558,17 +617,20 @@ server-side aggregation… reconstructing in the browser what a single SQL aggre
 would do on the server. Replace call sites with real aggregation endpoints once the backend
 adds them, and delete this file."*
 
-**The backend has no aggregation, statistics or reporting endpoints of any kind.** This is
-the single largest backend gap for this role, and it is invisible at demo scale.
+~~**The backend has no aggregation, statistics or reporting endpoints of any kind.**~~ Eight
+existed by 2026-09-04 evening.
 
 ### Where it breaks, ranked
 
-1. 🔴 **No aggregation endpoints** — dashboards degrade linearly with tenant size
+*Re-ranked 2026-10-15.*
+
+1. ~~🔴 **No aggregation endpoints**~~ — resolved (DRIFT-07)
 2. 🟥 **Findings page re-exports the auditor's screen** — `SEED` data, and no
    management-oriented framing (ownership, ageing, department rollup)
-3. ⛔ **SLA compliance ignores the real breach data** that already exists
-4. ⛔ **Frontend promises approve/reject rights** the backend withholds
+3. ~~⛔ **SLA compliance ignores the real breach data**~~ — server-side now; all-time only
+4. ~~⛔ **Frontend promises approve/reject rights**~~ — resolved (DRIFT-04)
 5. ⛔ **No scheduled or emailed reports**
+6. 🔴 **Cannot list workflow definitions** (DRIFT-14)
 
 ---
 
@@ -586,24 +648,30 @@ the single largest backend gap for this role, and it is invisible at demo scale.
 
 ### Identity and rights
 
-**10 grants, all `global`, all read-only:**
+**26 grants — 21 `global`, 5 `own`** *(re-counted 2026-10-15; this said "10 grants, all
+`global`, all read-only" with `workflow:view:global`)*:
 
 ```
-document:view:global          document:search:global
-document_version:view:global  document_metadata:view:global
-cabinet:view:global           cabinet_access:view:global
-folder:view:global            department:view:global
-workflow:view:global          audit:view:global
+read (global):  document view/search/view_confidential/download/export/print,
+                document_version, document_metadata, document_comment,
+                document_signature, cabinet, cabinet_access, folder,
+                department, workflow_instance, task, delegation, circular
+audit:          view, export (global)
+write:          workflow_instance create/route (own) · task action (own)
+                delegation create/end (own) · document_access_request create
 ```
 
-Plus `document:view_confidential:global`, so they can read `confidential`-tier documents
-(a permission since `edms-backend` `0dab81a`; it was a role list before). **Deliberately cannot mutate anything** — that independence is the point of the
-role.
+`document:view_confidential:global` lets them read `confidential`-tier documents (a
+permission since `edms-backend` `0dab81a`; it was a role list before). They cannot change
+documents, cabinets, users or configuration. ~~**Deliberately cannot mutate anything**~~ —
+no longer strictly true: the seed lets the auditor route their own documents, act on tasks
+assigned to them, and delegate. Worth confirming with the product owner that this is
+intended for an independent role. No `workflow:view` (DRIFT-14).
 
 One of these grants now has a real screen behind it, and one still doesn't:
 - `audit:view:global` → `GET /audit` **exists and works**, and `/auditor/trail` reads it
   as of 2026-09-18 (alongside `/admin/audit` for client_admin)
-- `cabinet_access:view:global` → the endpoint exists, but **no screen calls it**
+- `cabinet_access:view:global` → `GET /cabinets/:id/access` exists, but **no auditor screen calls it** (the admin Access card does)
 
 ### Day one
 
@@ -622,12 +690,12 @@ One of these grants now has a real screen behind it, and one still doesn't:
 |---|---|
 | "Show me everything Chika did last month" | ✅ `/auditor/trail` migrated 2026-09-18 — `actorId`/`action`/`from` filters against the real trail |
 | "Who viewed this confidential contract?" | ✅ confirmed live 2026-09-18 — `document.viewed` is a real, auto-emitted action (seen in a live 78-entry sample); `/auditor/trail`'s action filter surfaces it, though there's no per-document "who viewed this one" view yet, only actor/action/date |
-| "Who downloaded it?" | ⛔ There is no download endpoint to log. |
+| "Who downloaded it?" | ✅ `document.downloaded` is written by `documents.router.ts` (download gated and audited since 2026-10-08); filter by action on `/auditor/trail`. *(Was ⛔ "no download endpoint to log".)* |
 | "Prove the trail hasn't been altered" | ✅ `GET /audit/verify` exists and works, confirmed live; `/admin/audit`'s "Verify integrity" button calls it. Not yet surfaced on `/auditor/trail` itself. |
-| "Who can see the Contracts cabinet?" | ⛔ `cabinet_access:view` granted; no screen calls the endpoint. |
+| "Who can see the Contracts cabinet?" | ⛔ `cabinet_access:view` granted and `GET /cabinets/:id/access` exists; no auditor screen calls it. |
 | "Track this finding to closure" | 🟥 No `Finding` model in Prisma. Everything is lost on cache clear. |
 | "Verify separation of duties" | ⛔ No SoD logic exists in either codebase. |
-| "Export evidence for the regulator" | ⛔ Would export fixture data. |
+| "Export evidence for the regulator" | ✅ `/auditor/trail` exports the real trail as CSV (`GET /audit/export`). Findings would still export fixture data. *(Was ⛔ "Would export fixture data".)* |
 
 ### The gap between design and reality (historical — see correction above)
 
@@ -665,16 +733,17 @@ this role's own screens reading it — a frontend migration, not a backend build
 2. 🔴 **No `Finding` model** — 367 lines of UI over localStorage
 3. ✅ ~~No `/audit` endpoint despite the permission being granted~~ — **exists now**
 4. 🟥 **`/auditor/compliance` re-exports the management page** — partly `SEED`-backed
-5. ⛔ **Search is empty**, so document sampling by content is impossible
+5. ~~⛔ **Search is empty**~~ — search works (confirmed 2026-10-09; indexed at create since PR #51)
 6. ⛔ **No SoD enforcement** despite it being claimed in the older docs
 
 ---
 
 ## The seven handoffs
 
-Each handoff is a seam where work or data crosses a role boundary. **Four of seven are
-broken or partly broken** (was five — H4 was fixed on 2026-09-04), and every one of them
-is a seam rather than a screen, which is why role-by-role testing misses them.
+Each handoff is a seam where work or data crosses a role boundary, which is why
+role-by-role testing misses them. **Re-checked 2026-10-15:** H6 and H7 work, H2, H3 and H5
+are partial, H1 is mock, and **H4 is blocked again by DRIFT-14** for the roles that route.
+*(Was: "Four of seven are broken or partly broken".)*
 
 ---
 
@@ -683,9 +752,10 @@ is a seam rather than a screen, which is why role-by-role testing misses them.
 **What passes:** a provisioned tenant, an isolated database, a commercial plan, and the
 first `client_admin` account with credentials.
 
-**Reality:** none of it. No control-plane DB, no provisioning, no plan model, no mail
-transport. Today this handoff is a manual engineering task: run migrations, run the seed,
-create the admin with a script.
+**Reality:** none of it. No control-plane DB, no provisioning, no plan model. (A mail
+transport does exist now — `src/config/mailer.ts` — and user invitations use it.) Today this
+handoff is a manual engineering task: run migrations, run the seed, create the admin with a
+script.
 
 **To fix:** Phase 2 multi-tenancy work — control-plane database, `resolveTenant`
 middleware, `req.db` injection. `docs/edms_architecture.md` §2 scopes it as one line per
@@ -722,29 +792,33 @@ assignment and removal, deactivation.
 **What passes:** the cabinets, folders, metadata schema, access grants and workflow
 definitions that everyone else operates inside.
 
-**Works:** cabinets, folders, workflow definitions.
+**Works** *(re-checked 2026-10-15)*: cabinets, folders, the metadata schema (captured on
+upload since 2026-10-09), cabinet access grants, and workflow definitions — authorized
+since DRIFT-05.
 
 **Broken:**
-- ⛔ **Metadata fields have no UI** → no cabinet has any → the upload form captures title
-  and type only → metadata search has nothing to search
-- ⛔ **Cabinet access grants have no UI** → no tenant has any grants → need-to-know is not
-  established
-- ⛔ **Workflow definitions have no authorization** → any staff user can rewrite the
-  process the admin designed
+- ~~⛔ **Metadata fields have no UI**~~ — the Metadata schema card and the upload form
+  both use them
+- ~~⛔ **Cabinet access grants have no UI**~~ — the Access card grants them; still not
+  checked on document reads (doc 03 Phase 4)
+- ~~⛔ **Workflow definitions have no authorization**~~ — fixed 2026-09-04 (DRIFT-05)
+- 🔴 **Published definitions can't be listed by the roles that route** (DRIFT-14) — the
+  structure reaches staff and supervisors, the process doesn't
 - 🟥 **Retention policy is mock** → nothing ever expires
 - ⚠️ **`folderId` isn't validated against `cabinetId`** → the folder tree can cross cabinets
 
 ---
 
-### H4 · Staff → Supervisor (routing for approval) · ✅ **FIXED 2026-09-04**
+### H4 · Staff → Supervisor (routing for approval) · 🔴 **Blocked for non-admins (DRIFT-14)** *(the 404 was fixed 2026-09-04)*
 
 **What passes:** a filed document enters a workflow; a task appears in the supervisor's
 queue with a deadline.
 
-**This is the most important handoff in the product, and it now works.**
+**This is the most important handoff in the product.** The call sequence below works; what
+stops it today is the definition list it needs first (item 3 below).
 
 ```
-Chika routes from /staff/cabinets
+Chika routes from /staff/cabinets, /doc/[id], /upload or /search
   → useStartWorkflowInstance()
   → workflowInstancesService.createAndStart(workflowId, documentIds)
   → 1. POST /workflow-instances        { workflowDefinitionId, documents: [{ documentId }] }
@@ -761,17 +835,22 @@ of one wrong URL. It was the highest impact-to-effort fix in either codebase.
 
 **⚠️ Two problems this fix did not solve, and one it made worse:**
 
-1. ⛔ The supervisor is **still never notified** (DRIFT-10) — the task lands silently.
+1. ✅ ~~The supervisor is **still never notified**~~ — `task.assigned` is sent since
+   2026-09-21 (DRIFT-10).
 2. ✅ **Authorization is now checked** (2026-09-04) — all five workflow services assert
    roles and return a named `403`. DRIFT-05 resolved.
 3. 🔴 **But routing is blocked again (DRIFT-14).** The commit that closed DRIFT-05 also
    restricted *reading* workflow definitions to `client_admin` and `schulltech_admin`, so
    `staff` and `supervisor` — the roles that hold `workflow:route` — can no longer list
    the definitions they route into. This handoff is once again non-functional in
-   practice, for a new reason. **The fix is a one-line constant split.**
+   practice, for a new reason. ~~**The fix is a one-line constant split.**~~ *Re-checked
+   2026-10-15:* the constant is gone; `GET /workflows` needs `workflow:view`, which the seed
+   grants only to the two admin roles. The fix is four seed rows (doc 03, fix 3b). See also
+   the unresolved conflict with the 2026-10-08 routing test, noted in the staff Day one
+   table.
 
-**Still missing:** a workflow picker on `/doc/[id]`. Routing works from the cabinets
-screen only, so the natural place a user would look for it does not offer it.
+~~**Still missing:** a workflow picker on `/doc/[id]`.~~ The shared picker is on
+`/staff/cabinets`, `/doc/[id]`, `/upload` and `/search`.
 
 ---
 
@@ -780,36 +859,40 @@ screen only, so the natural place a user would look for it does not offer it.
 **What passes:** work returns downward — rejected, changes requested, or reassigned to a
 different person.
 
-**Works:** `PATCH /tasks/:id/reassign` gated by `TASK_REASSIGN_ROLES`;
-`POST /tasks/:id/action` with `reject` / `request_changes`; both write history.
+**Works:** `PATCH /tasks/:id/reassign` gated by `task:reassign` *(was `TASK_REASSIGN_ROLES`)*;
+`POST /tasks/:id/action` with `reject` / `request_changes`; both write history. The person
+receiving the work is notified (`task.reassigned`, `workflow.rejected`,
+`workflow.changes_requested`) since 2026-09-21 (DRIFT-10), not yet clicked through.
 
 **Broken:**
-- ⛔ **No notification** to the person receiving the work back — they discover it by
-  chance. The notifications module now exists and the UI is wired to it, but
-  `tasks.service` never calls `notifyUser`, so nothing is delivered (DRIFT-10).
+- ~~⛔ **No notification** to the person receiving the work back~~ — resolved, see above.
+  The *previous* assignee of a reassigned task is still not told.
 - ✅ ~~No delegation UI, so a supervisor on leave cannot hand over at all~~ — **stale.**
   `/delegations` (344 lines) is wired to `useDelegations`/`useCreateDelegation`/
   `useEndDelegation` against the real `GET/POST /delegations`, `POST /delegations/:id/end`
   endpoints. Not verified end-to-end in this pass — flagging the correction, not
   re-confirming the whole flow.
-- 🟨 Only `WorkflowHistory` is confirmed written here — a different table, different
-  purpose, no hash chain. `audit_entries` is real and auto-written now (DRIFT-11 revised,
-  2026-09-18), but whether a task action itself produces an entry is unverified
+- ✅ Task actions are audited: `workflows.router.ts` maps each action to an audit event
+  (`workflow.approved`, `.rejected`, `.changes_requested`, `task.reviewed`,
+  `task.delegated`) and reassignment writes `task.reassigned` — read from the code
+  2026-10-15, not seen in a live pull yet. *(Was: "whether a task action itself produces an
+  entry is unverified".)*
 
 ---
 
-### H6 · Staff + Supervisor → Management (aggregate reporting) · 🟨 **Partial**
+### H6 · Staff + Supervisor → Management (aggregate reporting) · ✅ **Works** *(was 🟨 — re-checked 2026-10-15)*
 
 **What passes:** operational activity becomes executive-level numbers.
 
-**Works:** the numbers are real — derived from actual documents, tasks and instances, with
-correct department attribution through the cabinet→department hop.
+**Works:** the numbers are real and server-aggregated (`/documents/stats`, `/tasks/stats`,
+instance stats, open-items-by-cabinet — DRIFT-07, 2026-09-21), with department attribution
+through the cabinet→department hop. Management reports confirmed in the product owner's
+testing 2026-10-09.
 
-**Broken:**
-- 🔴 **Computed entirely in the browser.** Up to 150 sequential requests per dashboard.
-- ⛔ **SLA compliance is recomputed client-side** and ignores the `SlaBreach` table that
-  already holds the answer.
-- ⛔ **No aggregation endpoints exist** on the backend.
+**Was broken (2026-08-29), kept for history:**
+- ~~🔴 **Computed entirely in the browser.** Up to 150 sequential requests per dashboard.~~
+- ~~⛔ **SLA compliance is recomputed client-side**~~ — server-side now, all-time only
+- ~~⛔ **No aggregation endpoints exist** on the backend.~~
 
 ---
 
@@ -836,8 +919,10 @@ Chika edits a document        → ✅ confirmed  ("document.edited")
 Chika views a document        → ✅ confirmed  ("document.viewed")
 Bola changes a permission     → ✅ confirmed  ("role.permissions_updated")
 Access is requested/granted/denied → ✅ confirmed ("document.access_requested/_granted/_denied")
-David approves a workflow     → unverified — no workflow/task action seen in the sample pulled
-Anyone downloads              → unverified — no download endpoint exists yet regardless
+David approves a workflow     → in code ("workflow.approved", router audit map) — not yet
+                                 seen in a live pull
+Anyone downloads              → in code ("document.downloaded", since 2026-10-08) — not
+                                 yet seen in a live pull
 ```
 
 *(Confirmed 2026-09-18 against a 78-entry live sample — full distinct list also included
@@ -873,18 +958,20 @@ acted yet.
 | Department assignment | `client_admin` | Staff and supervisors silently collapse from `department` to `own` scope |
 | Cabinets | `client_admin` | Staff have nowhere to file; upload is impossible |
 | Folders | `client_admin` | Documents pile into a flat cabinet |
-| Metadata fields | `client_admin` (⛔ no UI) | Documents captured with title and type only |
-| Cabinet access grants | `client_admin` (⛔ no UI) | Need-to-know is not enforced (⚠️ and reads don't check it anyway) |
+| Metadata fields | `client_admin` or a cabinet's delegated manager | Documents captured with title and type only |
+| Cabinet access grants | `client_admin` or a cabinet's delegated manager | Non-admins see only org-wide and own-department cabinets (⚠️ document reads don't check grants) |
+| Readable workflow definitions | the RBAC seed (`workflow:view`) | Staff and supervisors can't route — today's state (DRIFT-14) |
 | Published workflows | `client_admin` | Staff cannot route; supervisors get no tasks |
 | Filed documents | `staff` | Supervisors have nothing to approve; management has nothing to report |
 | Approval decisions | `supervisor` | Documents never close; management sees permanent backlog |
 | Task activity | `staff` + `supervisor` | Management dashboards are empty |
-| Audit entries | ✅ backend, auto-written | Real now (see H7) — but the auditor's own pages don't read them yet, so in practice they still have nothing to audit |
+| Audit entries | ✅ backend, auto-written | Real, and `/auditor/trail` reads them (H7) |
 | Findings | `internal_auditor` (🟥 mock) | `/management/findings` just re-exports the auditor's screen, so both roles see the same `SEED` fixtures |
 
 **Read the table bottom-up and the shape of the product becomes clear:** the operational
-layer (staff → supervisor → management) is largely wired; the governance layer
-(auditor ← everyone) is not wired at all.
+layer (staff → supervisor → management) is wired, apart from DRIFT-14. The governance layer
+is half wired: the audit trail is real, and findings, retention and SoD are not.
+*(Was: "the governance layer … is not wired at all" — re-checked 2026-10-15.)*
 
 ---
 

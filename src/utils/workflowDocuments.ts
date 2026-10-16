@@ -51,6 +51,37 @@ export function documentsLabel(titles: string[]): string {
 
 // --- Tasks -------------------------------------------------------------------
 
+const ACTIVE_TASK_STATUSES: readonly string[] = ['pending', 'escalated'];
+
+type TaskDocumentRow = NonNullable<Task['documents']>[number];
+
+/**
+ * Whether a document on an open task was already actioned there (edms-backend
+ * PR #52: a partial action keeps the task open, and `GET /tasks/:id` still
+ * lists the actioned rows). `actionedAt` says so for every document the viewer
+ * can see; a Restricted one omits it, so it counts as actioned once its
+ * execution has left this task's stage. It can't come back to this task while
+ * the task is open, since the backend never adds an execution to a task twice.
+ * A closed task's documents are never "actioned" here: its history is whole.
+ */
+export function isActionedTaskDocument(
+  doc: TaskDocumentRow,
+  task: Partial<Pick<Task, 'status' | 'stage'>>,
+): boolean {
+  if (!task.status || !ACTIVE_TASK_STATUSES.includes(task.status)) return false;
+  if (doc.actionedAt !== undefined) return doc.actionedAt !== null;
+  const execution = doc.workflowDocumentExecution;
+  if (!execution.currentStage && !execution.status) return false;
+  return !isActiveExecution(execution) || execution.currentStage !== task.stage;
+}
+
+/** An open task's documents still waiting on it: every document of a closed task. */
+export function pendingTaskDocuments(
+  task: Pick<Task, 'documents'> & Partial<Pick<Task, 'status' | 'stage'>>,
+) {
+  return (task.documents ?? []).filter((d) => !isActionedTaskDocument(d, task));
+}
+
 /** The documents a task covers, as plain summaries, in the order the task holds them. */
 export function taskDocuments(task: Pick<Task, 'documents'>) {
   return (task.documents ?? []).map(
@@ -79,10 +110,12 @@ export function taskUrgency(task: Pick<Task, 'documents'>): string | undefined {
 }
 
 /** A task's deadline: the earliest `stageDueAt` among its documents still in
- *  progress. Null when none has one. */
-export function taskDueAt(task: Pick<Task, 'documents'>): string | null {
+ *  progress and not yet actioned on it. Null when none has one. */
+export function taskDueAt(
+  task: Pick<Task, 'documents'> & Partial<Pick<Task, 'status' | 'stage'>>,
+): string | null {
   return earliest(
-    (task.documents ?? [])
+    pendingTaskDocuments(task)
       .map((d) => d.workflowDocumentExecution)
       .filter(isActiveExecution)
       .map((e) => e.stageDueAt),
@@ -90,8 +123,11 @@ export function taskDueAt(task: Pick<Task, 'documents'>): string | null {
 }
 
 /** How many of a task's documents are past their deadline. */
-export function overdueDocumentCount(task: Pick<Task, 'documents'>, now = Date.now()): number {
-  return (task.documents ?? [])
+export function overdueDocumentCount(
+  task: Pick<Task, 'documents'> & Partial<Pick<Task, 'status' | 'stage'>>,
+  now = Date.now(),
+): number {
+  return pendingTaskDocuments(task)
     .map((d) => d.workflowDocumentExecution)
     .filter((e) => isActiveExecution(e) && !!e.stageDueAt && Date.parse(e.stageDueAt) < now).length;
 }

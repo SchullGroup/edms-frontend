@@ -6,7 +6,7 @@ import {
 } from '@/apis/services/departments.service';
 import { CreateDepartmentRequest, UpdateDepartmentRequest } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
-import { buildDepartmentIndex } from '@/apis/utils/managementAggregation';
+import { departmentOptions } from '@/apis/utils/managementAggregation';
 
 export const departmentKeys = {
   all: ['departments'] as const,
@@ -17,11 +17,16 @@ export const departmentKeys = {
 
 /** Department id → name, for labelling department-assigned work. Every role
  *  can read `GET /departments`. It returns a tree, so sub-departments are found
- *  too. Returns undefined until it loads. */
+ *  too, and are named with their parent ("Finance › Payables"): two
+ *  sub-departments in different trees may share a name. Returns undefined
+ *  until it loads. */
 export function useDepartmentNames() {
   const { data } = useDepartments();
-  const byId = useMemo(() => buildDepartmentIndex(data?.data ?? []), [data]);
-  return useCallback((id: string) => byId.get(id)?.name, [byId]);
+  const byId = useMemo(
+    () => new Map(departmentOptions(data?.data ?? []).map((d) => [d.id, d.label])),
+    [data],
+  );
+  return useCallback((id: string) => byId.get(id), [byId]);
 }
 
 export function useDepartments(params: DepartmentFilters = {}) {

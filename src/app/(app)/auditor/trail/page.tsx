@@ -6,7 +6,7 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useAuditEntries, useExportAuditCsv } from '@/apis/hooks/useAudit';
 import { useAllUsers } from '@/apis/hooks/useUsers';
-import { UserPicker } from '@/components/common/UserPicker';
+import { UserSearchCombobox } from '@/components/common/UserSearchCombobox';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
@@ -225,18 +225,17 @@ export default function AuditorTrailPage() {
               setPage(1);
             }}
           />
-          <div style={{ width: 200 }}>
-            <UserPicker
-              value={actorId}
-              onChange={(id) => {
-                setActorId(id);
-                setPage(1);
-              }}
-              allLabel="All actors"
-              ariaLabel="Filter by actor"
-              controlStyle={{ height: 32 }}
-            />
-          </div>
+          <UserSearchCombobox
+            value={actorId}
+            onChange={(id) => {
+              setActorId(id);
+              setPage(1);
+            }}
+            placeholder="All actors"
+            ariaLabel="Filter by actor"
+            compact
+            style={{ width: 220 }}
+          />
           <select
             className="input"
             style={{ width: 'auto', height: '32px' }}

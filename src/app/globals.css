@@ -396,6 +396,16 @@ textarea.input { height: auto; padding: 10px 12px; min-height: 76px; resize: ver
 .combobox-opt-hint { font-size: 11px; color: var(--muted); }
 .combobox-empty { padding: 10px; font-size: 12px; color: var(--muted); text-align: center; }
 .combobox-footer { flex-shrink: 0; margin-top: 6px; padding: 6px 10px 2px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+/* Search-as-you-type picker (UserSearchCombobox): an input, not a button. Its
+   list sits above modals, drawers and toasts, and never grows past 300px. */
+.searchbox { position: relative; display: flex; align-items: center; }
+.searchbox-icon { position: absolute; left: 10px; display: inline-flex; color: var(--muted); pointer-events: none; }
+.searchbox-input { padding-left: 30px; padding-right: 28px; }
+.searchbox.is-compact .searchbox-input { height: 32px; }
+.searchbox-clear { position: absolute; right: 6px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 99px; }
+.searchbox-clear:hover { background: var(--surface); color: var(--ink); }
+.searchbox-pop { z-index: 1100; max-height: 300px; }
+.combobox-opt.is-active { background: var(--surface); }
 
 /* ---------- Date pickers (react-day-picker) ---------- */
 .datefield { position: relative; }

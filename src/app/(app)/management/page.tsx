@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
+import { usePermissions } from '@/hooks/usePermissions';
+import { scopeAtLeast } from '@/lib/permissions';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { useDocumentStats } from '@/apis/hooks/useDocuments';
 import { useTaskStats } from '@/apis/hooks/useTasks';
@@ -34,6 +36,9 @@ interface DeptRow {
 export default function ManagementDashboard() {
   const router = useRouter();
   const { setPageTitle } = useUIStore();
+  // The Workflow Monitor's department filter is for tenant-wide viewers only.
+  const { scopeFor } = usePermissions();
+  const canOpenWorkflows = scopeAtLeast(scopeFor('workflow_instance', 'view'), 'global');
 
   const [st, setSt] = useState({ dept: 'All', range: 7 });
 
@@ -187,18 +192,30 @@ export default function ManagementDashboard() {
     {
       key: 'deptId',
       label: 'Records',
-      // The bar click scopes this dashboard to a department; this opens the
-      // documents behind it, filtered by the `departmentId` list filter
-      // (edms-backend PR #51) on the search page.
+      // The bar click scopes this dashboard to a department; these open the
+      // documents and workflows behind it, through the `departmentId` list
+      // filters (edms-backend PR #51).
       render: (r) => (
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          title={`Open ${r.dept}'s documents`}
-          onClick={() => router.push(`/search?dept=${r.deptId}`)}
-        >
-          View
-        </button>
+        <div className="flex gap-1">
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            title={`Open ${r.dept}'s documents`}
+            onClick={() => router.push(`/search?dept=${r.deptId}`)}
+          >
+            Documents
+          </button>
+          {canOpenWorkflows && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              title={`Open ${r.dept}'s workflows`}
+              onClick={() => router.push(`/supervisor/instances?dept=${r.deptId}`)}
+            >
+              Workflows
+            </button>
+          )}
+        </div>
       ),
     },
   ];

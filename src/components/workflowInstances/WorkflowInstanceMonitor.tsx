@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { scopeAtLeast } from '@/lib/permissions';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useWorkflowInstances } from '@/apis/hooks/useWorkflowInstances';
 import { useWorkflows } from '@/apis/hooks/useWorkflows';
+import { useDepartments } from '@/apis/hooks/useDepartments';
+import { departmentOptions } from '@/apis/utils/managementAggregation';
 import { useWorkflowInstanceLifecycle } from '@/hooks/useWorkflowInstanceLifecycle';
 import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
@@ -54,11 +56,14 @@ interface Row {
  */
 export function WorkflowInstanceMonitor() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { openDrawer, closeDrawer } = useUIStore();
   const { confirmHold, confirmResume, confirmClose, isPending } = useWorkflowInstanceLifecycle();
 
   const [status, setStatus] = useState<'' | WorkflowInstanceStatus>('in_progress');
   const [workflowId, setWorkflowId] = useState('');
+  // `?dept=` arrives from the management dashboards' department links.
+  const [departmentId, setDepartmentId] = useState(() => searchParams?.get('dept') ?? '');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
 
@@ -72,12 +77,22 @@ export function WorkflowInstanceMonitor() {
   // view` wider than `own`): the API refuses `all` to anyone else (403).
   const { scopeFor } = usePermissions();
   const hasOversight = scopeAtLeast(scopeFor('workflow_instance', 'view'), 'department');
+  // Only a tenant-wide viewer can pick a department (edms-backend PR #51). A
+  // department-scoped one already sees just their own, and asking for any
+  // other is a 403 `WORKFLOW_DEPARTMENT_SCOPE_FORBIDDEN`.
+  const tenantWide = scopeAtLeast(scopeFor('workflow_instance', 'view'), 'global');
+  const { data: departmentsData } = useDepartments();
+  const deptOptions = useMemo(
+    () => (tenantWide ? departmentOptions(departmentsData?.data ?? []) : []),
+    [tenantWide, departmentsData],
+  );
   const { data, isLoading } = useWorkflowInstances({
     scope: hasOversight ? 'all' : 'mine',
     page,
     limit: PAGE_SIZE,
     ...(status ? { status } : {}),
     ...(workflowId ? { workflowDefinitionId: workflowId } : {}),
+    ...(tenantWide && departmentId ? { departmentId } : {}),
   });
 
   const instances = data?.data || [];
@@ -260,6 +275,25 @@ export function WorkflowInstanceMonitor() {
             ))}
           </div>
           <div className="flex gap-2 items-center flex-wrap">
+            {tenantWide && (
+              <select
+                className="input"
+                style={{ width: 'auto' }}
+                value={departmentId}
+                onChange={(e) => {
+                  setDepartmentId(e.target.value);
+                  setPage(1);
+                }}
+                aria-label="Filter by department"
+              >
+                <option value="">All departments</option>
+                {deptOptions.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <select
               className="input"
               style={{ width: 'auto' }}

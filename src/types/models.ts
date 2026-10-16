@@ -376,12 +376,16 @@ export type WorkflowStageAction =
 export interface WorkflowStage {
   id: string;
   name: string;
-  /** Exactly one assignment: `user_id`; `role`; `department_id` (anyone whose
-   *  department is exactly this one — sub-departments aren't included yet);
-   *  or `role` + `department_id` (not offered in the Designer yet). */
+  /** One of: `user_id` alone; `role`; a department; or `role` + a department.
+   *  A department is `department_id` (a top-level one), or `department_id` +
+   *  `sub_department_id` (one of its sub-departments, edms-backend PR #52).
+   *  Matching is exact: a stage for Finance doesn't reach Finance › Payables.
+   *  Stages saved before PR #52 may hold a sub-department in `department_id`. */
   role?: string;
   user_id?: string;
   department_id?: string;
+  /** A direct child of `department_id`; the task goes to people in it. */
+  sub_department_id?: string;
   sla_hours: number;
   actions?: WorkflowStageAction[];
 }
@@ -773,7 +777,8 @@ export interface Task {
   assigneeId?: string | null;
   assignedRoleId?: string | null;
   /** Set for a department-assigned stage, alone or with a role (edms-backend
-   *  `3014b89`). Matched exactly: sub-departments aren't included yet. */
+   *  `3014b89`): the stage's sub-department when it names one (PR #52), else
+   *  its department. Matched exactly against the user's department. */
   assignedDepartmentId?: string | null;
   action?: string | null;
   status: TaskStatus;
@@ -802,6 +807,10 @@ export interface TaskDocumentSnapshot {
   /** `GET /tasks/:id` only; null for a Restricted document. */
   documentVersionId?: string | null;
   createdAt: string;
+  /** `GET /tasks/:id` only: set once this document was actioned on this task
+   *  (edms-backend PR #52). A partial action leaves the task open with the
+   *  rest; actioned rows stay listed. Absent on a Restricted document. */
+  actionedAt?: string | null;
   /** `GET /tasks/:id` only (edms-backend `3014b89`). */
   access?: WorkflowDocumentAccess;
   /** Stage, status and deadline: `GET /tasks/:id` only (requested on the list). */
@@ -869,8 +878,9 @@ export type TaskActionRequest =
       comment?: string;
       note?: string;
       /** Which of the task's documents this covers (edms-backend `919d0ef`).
-       *  Omitted = all of them. The rest stay at this stage in a new task for
-       *  the same assignee. Same on `review` and `reject`. */
+       *  Omitted = all of them. Since PR #52 the same task stays open with the
+       *  rest; it completes once every document is actioned. Same on `review`
+       *  and `reject`. */
       documents?: { documentId: string }[];
     }
   | {

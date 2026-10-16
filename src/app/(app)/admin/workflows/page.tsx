@@ -13,7 +13,7 @@ import {
 import { useRoles } from '@/apis/hooks/useRoles';
 import { useAllUsers } from '@/apis/hooks/useUsers';
 import { useDepartments } from '@/apis/hooks/useDepartments';
-import { departmentOptions } from '@/apis/utils/managementAggregation';
+import { departmentOptions, departmentParents } from '@/apis/utils/managementAggregation';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
 import { WorkflowToolbar } from '@/components/workflows/WorkflowToolbar';
@@ -71,12 +71,30 @@ export default function WorkflowDesignerPage() {
   const [assigneeMode, setAssigneeMode] = useState<AssigneeMode>('role');
   const [roleDraft, setRoleDraft] = useState('');
   const [userDraft, setUserDraft] = useState('');
+  // A stage's department: a top-level one, plus optionally one of its
+  // sub-departments (edms-backend PR #52). '' on a role stage = any department.
   const [departmentDraft, setDepartmentDraft] = useState('');
+  const [subDepartmentDraft, setSubDepartmentDraft] = useState('');
   const { data: departmentsData } = useDepartments();
-  // `GET /departments` is a tree; flatten it so sub-departments can be chosen.
-  const departments = departmentOptions(departmentsData?.data || []);
+  // `GET /departments` is a tree of top-level departments with `children`.
+  const departmentTree = departmentsData?.data || [];
+  const departments = departmentOptions(departmentTree);
+  const parentOf = departmentParents(departmentTree);
+  // Labelled with the path: sub-departments in different trees may share a name.
   const departmentName = (id?: string | null) =>
-    (id && departments.find((d) => d.id === id)?.name) || null;
+    (id && departments.find((d) => d.id === id)?.label) || null;
+
+  // Stages saved before PR #52 hold a sub-department in `department_id` alone;
+  // read them as the parent + sub-department pair the picker shows (and saves).
+  const stageDepartment = (stage: WorkflowStage | null) => {
+    if (!stage?.department_id) return { departmentId: '', subDepartmentId: '' };
+    if (stage.sub_department_id)
+      return { departmentId: stage.department_id, subDepartmentId: stage.sub_department_id };
+    const parentId = parentOf.get(stage.department_id);
+    return parentId
+      ? { departmentId: parentId, subDepartmentId: stage.department_id }
+      : { departmentId: stage.department_id, subDepartmentId: '' };
+  };
   const [slaDraft, setSlaDraft] = useState(48);
   const [actionsDraft, setActionsDraft] = useState<WorkflowStageAction[]>([]);
 
@@ -104,34 +122,54 @@ export default function WorkflowDesignerPage() {
     );
     setRoleDraft(stage?.role || '');
     setUserDraft(stage?.user_id || '');
-    setDepartmentDraft(stage?.department_id || '');
+    const { departmentId, subDepartmentId } = stageDepartment(stage);
+    setDepartmentDraft(departmentId);
+    setSubDepartmentDraft(subDepartmentId);
     setSlaDraft(stage?.sla_hours ?? 48);
     setActionsDraft(stage?.actions || []);
   };
 
+  // Also once departments load: an older stage's sub-department is only
+  // recognised as one with the tree in hand.
   useEffect(() => {
     resetStageDrafts(selectedStage);
-  }, [selectedStageId]);
+  }, [selectedStageId, departmentsData]);
 
   const updateWorkflow = (id: string, updates: Partial<WorkflowDefinition>) => {
     updateWfMutation.mutate({ id, updates });
   };
 
+  // The stage's assignment as the drafts would save it. A stage has exactly one
+  // kind; the fields of the others are cleared.
+  const assignmentDraft = (): Pick<
+    WorkflowStage,
+    'role' | 'user_id' | 'department_id' | 'sub_department_id'
+  > => {
+    const department = {
+      department_id: departmentDraft || undefined,
+      sub_department_id: (departmentDraft && subDepartmentDraft) || undefined,
+    };
+    if (assigneeMode === 'role') return { role: roleDraft, user_id: undefined, ...department };
+    if (assigneeMode === 'department') return { role: undefined, user_id: undefined, ...department };
+    return { role: undefined, user_id: userDraft, department_id: undefined, sub_department_id: undefined };
+  };
+
   const nameDirty = nameDraft !== (wf?.name || '');
   const stageDirty =
     !!selectedStage &&
-    (stageNameDraft !== (selectedStage.name || '') ||
-      JSON.stringify(actionsDraft) !== JSON.stringify(selectedStage.actions || []) ||
-      slaDraft !== (selectedStage.sla_hours ?? 48) ||
-      (assigneeMode === 'role'
-        ? roleDraft !== (selectedStage.role || '') || !!selectedStage.user_id
-        : assigneeMode === 'department'
-          ? departmentDraft !== (selectedStage.department_id || '') ||
-            !!selectedStage.role ||
-            !!selectedStage.user_id
-          : userDraft !== (selectedStage.user_id || '') ||
-            !!selectedStage.role ||
-            !!selectedStage.department_id));
+    (() => {
+      const draft = assignmentDraft();
+      const saved = stageDepartment(selectedStage);
+      return (
+        stageNameDraft !== (selectedStage.name || '') ||
+        JSON.stringify(actionsDraft) !== JSON.stringify(selectedStage.actions || []) ||
+        slaDraft !== (selectedStage.sla_hours ?? 48) ||
+        (draft.role || '') !== (selectedStage.role || '') ||
+        (draft.user_id || '') !== (selectedStage.user_id || '') ||
+        (draft.department_id || '') !== saved.departmentId ||
+        (draft.sub_department_id || '') !== saved.subDepartmentId
+      );
+    })();
 
   useEffect(() => {
     setPageTitle('Workflow Designer');
@@ -304,7 +342,10 @@ export default function WorkflowDesignerPage() {
     if (mode === 'role') {
       setRoleDraft(roleDraft || roles?.[0]?.name || 'staff');
     } else if (mode === 'department') {
-      setDepartmentDraft(departmentDraft || departments[0]?.id || '');
+      if (!departmentDraft) {
+        setDepartmentDraft(departmentTree[0]?.id || '');
+        setSubDepartmentDraft('');
+      }
     } else {
       setUserDraft(userDraft || users[0]?.id || '');
     }
@@ -322,21 +363,16 @@ export default function WorkflowDesignerPage() {
       stages[0]?.id === selectedStage.id
         ? actionsDraft.filter((a) => a !== 'request_changes')
         : actionsDraft;
-    // A stage has exactly one assignment, so the others are cleared. The one
-    // exception: a role stage already limited to a department (role +
-    // department, set outside the Designer) keeps that department.
-    const base = { name: stageNameDraft, actions, sla_hours: slaDraft };
-    const patch =
-      assigneeMode === 'role'
-        ? {
-            ...base,
-            role: roleDraft,
-            user_id: undefined,
-            department_id: selectedStage.role ? selectedStage.department_id : undefined,
-          }
-        : assigneeMode === 'department'
-          ? { ...base, department_id: departmentDraft, role: undefined, user_id: undefined }
-          : { ...base, user_id: userDraft, role: undefined, department_id: undefined };
+    if (assigneeMode === 'department' && !departmentDraft) {
+      addToast('Pick a department', 'error');
+      return;
+    }
+    const patch = {
+      name: stageNameDraft,
+      actions,
+      sla_hours: slaDraft,
+      ...assignmentDraft(),
+    };
     const updatedStages = stages.map((s) => (s.id === selectedStage.id ? { ...s, ...patch } : s));
     updateWorkflow(wf.id, { definition: { ...wf.definition, stages: updatedStages } });
   };
@@ -357,7 +393,8 @@ export default function WorkflowDesignerPage() {
       const u = users.find((u) => u.id === s.user_id);
       return u ? u.name : 'Assigned person';
     }
-    const department = s.department_id ? departmentName(s.department_id) || 'A department' : null;
+    const departmentId = s.sub_department_id || s.department_id;
+    const department = departmentId ? departmentName(departmentId) || 'A department' : null;
     const role = s.role ? s.role.replace(/_/g, ' ') : null;
     if (role && department) return `${role} · ${department}`;
     return role || department || 'Unassigned';
@@ -458,13 +495,13 @@ export default function WorkflowDesignerPage() {
             roles: roles || [],
             roleDraft,
             onRoleChange: setRoleDraft,
-            departments,
+            departments: departmentTree,
             departmentDraft,
-            onDepartmentChange: setDepartmentDraft,
-            roleDepartmentName:
-              selectedStage?.role && selectedStage.department_id
-                ? departmentName(selectedStage.department_id) || 'one department'
-                : null,
+            subDepartmentDraft,
+            onDepartmentChange: (departmentId: string, subDepartmentId: string) => {
+              setDepartmentDraft(departmentId);
+              setSubDepartmentDraft(subDepartmentId);
+            },
             users,
             userDraft,
             onUserChange: setUserDraft,

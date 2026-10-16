@@ -5,6 +5,7 @@ import { useStartWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useStore } from '@/store/useStore';
 
 export interface RoutableDocument {
   id: string;
@@ -13,6 +14,9 @@ export interface RoutableDocument {
    *  `on_hold` mean it's already in a running workflow (the backend keeps the
    *  two in step), possibly one the user can't see. */
   status?: string | null;
+  /** Who uploaded it, when the caller has it: at `own` scope only the uploader
+   *  may route a document. */
+  createdBy?: string | null;
 }
 
 const IN_WORKFLOW_STATUSES = ['in_progress', 'on_hold'];
@@ -32,6 +36,20 @@ export function useRouteToWorkflow() {
   // start it (`workflow_instance:route`). Holding only the first would leave a
   // workflow stuck in "pending" with no task, so every entry point needs both.
   const canRoute = can('workflow_instance', 'create') && can('workflow_instance', 'route');
+  const { scopeFor } = usePermissions();
+  const { currentUser } = useStore();
+  const createScope = scopeFor('workflow_instance', 'create');
+
+  /**
+   * Whether the backend lets the caller start a workflow on this document
+   * (`instances.service.ts` `create`): any document at `global` scope, only
+   * documents they uploaded at `own` (staff, management, auditors). At
+   * `department` scope it wants the document's cabinet in the caller's
+   * department; that's left to the backend. Unknown uploader: allowed.
+   */
+  const mayRouteDocument = (doc: Pick<RoutableDocument, 'createdBy'>) =>
+    canRoute &&
+    (createScope !== 'own' || !doc.createdBy || doc.createdBy === currentUser?.id);
   const { data, isLoading } = useWorkflows();
   const { mutateAsync: startWorkflow } = useStartWorkflowInstance();
   const createAuditLog = useCreateAuditLog();
@@ -45,14 +63,20 @@ export function useRouteToWorkflow() {
       addToast("You don't have permission to route documents to a workflow", 'error');
       return;
     }
-    // A document already moving through a workflow isn't routed into another.
+    // A document already moving through a workflow isn't routed into another,
+    // and at `own` scope one someone else uploaded can't be routed at all.
     const alreadyRouted = requested.filter((d) => IN_WORKFLOW_STATUSES.includes(d.status ?? ''));
-    const docs = requested.filter((d) => !alreadyRouted.includes(d));
+    const notMine = requested.filter((d) => !alreadyRouted.includes(d) && !mayRouteDocument(d));
+    const docs = requested.filter((d) => !alreadyRouted.includes(d) && !notMine.includes(d));
     if (docs.length === 0) {
       addToast(
-        alreadyRouted.length === 1
-          ? 'That document is already in a workflow'
-          : 'Those documents are already in workflows',
+        notMine.length > 0
+          ? notMine.length === 1 && alreadyRouted.length === 0
+            ? 'You can only route documents you uploaded'
+            : 'None of these can be routed: you can only route documents you uploaded, and not ones already in a workflow'
+          : alreadyRouted.length === 1
+            ? 'That document is already in a workflow'
+            : 'Those documents are already in workflows',
         'error',
       );
       return;
@@ -84,7 +108,7 @@ export function useRouteToWorkflow() {
                 >
                   {publishedWorkflows.map((w) => (
                     <option key={w.id} value={w.id}>
-                      {w.name} (v{w.version})
+                      {w.name}
                     </option>
                   ))}
                 </select>
@@ -93,6 +117,13 @@ export function useRouteToWorkflow() {
                     {alreadyRouted.length === 1
                       ? '1 selected document is already in a workflow and is left out.'
                       : `${alreadyRouted.length} selected documents are already in workflows and are left out.`}
+                  </div>
+                )}
+                {notMine.length > 0 && (
+                  <div className="banner info" style={{ marginBottom: 10 }}>
+                    {notMine.length === 1
+                      ? '1 selected document was uploaded by someone else and is left out: you can only route documents you uploaded.'
+                      : `${notMine.length} selected documents were uploaded by someone else and are left out: you can only route documents you uploaded.`}
                   </div>
                 )}
                 <div className="help">
@@ -143,5 +174,5 @@ export function useRouteToWorkflow() {
     });
   };
 
-  return { routeDocuments, canRoute, publishedWorkflows, isLoading };
+  return { routeDocuments, canRoute, mayRouteDocument, publishedWorkflows, isLoading };
 }

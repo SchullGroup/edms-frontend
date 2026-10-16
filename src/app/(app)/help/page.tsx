@@ -208,7 +208,8 @@ const TOPICS: Topic[] = [
             comment. Moves the documents to the next stage.
           </li>
           <li>
-            <b>Review</b>: attach at least one document, then mark it reviewed.
+            <b>Review</b>: mark it reviewed, optionally attaching documents from your review
+            (a report or a marked-up copy).
           </li>
           <li>
             <b>Request changes</b>: send chosen documents back to the previous stage with a reason.

@@ -116,12 +116,15 @@ export default function SearchPage() {
   // folders and cabinets end up in one workflow.
   const { routeDocuments, canRoute } = useRouteToWorkflow();
   const [selected, setSelected] = useState<
-    Map<string, { id: string; title: string; status?: string | null }>
+    Map<string, { id: string; title: string; status?: string | null; createdBy?: string | null }>
   >(() => new Map());
-  const toggleSelected = (d: Pick<Document, 'id' | 'title' | 'status'>, on: boolean) =>
+  const toggleSelected = (
+    d: Pick<Document, 'id' | 'title' | 'status' | 'createdBy'>,
+    on: boolean,
+  ) =>
     setSelected((cur) => {
       const next = new Map(cur);
-      if (on) next.set(d.id, { id: d.id, title: d.title, status: d.status });
+      if (on) next.set(d.id, { id: d.id, title: d.title, status: d.status, createdBy: d.createdBy });
       else next.delete(d.id);
       return next;
     });
@@ -191,7 +194,9 @@ export default function SearchPage() {
     setSelected((cur) => {
       const next = new Map(cur);
       results.forEach((d) =>
-        on ? next.set(d.id, { id: d.id, title: d.title, status: d.status }) : next.delete(d.id),
+        on
+          ? next.set(d.id, { id: d.id, title: d.title, status: d.status, createdBy: d.createdBy })
+          : next.delete(d.id),
       );
       return next;
     });
