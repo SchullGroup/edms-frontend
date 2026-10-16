@@ -78,7 +78,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const printDocument = usePrintDocument();
   const checkoutDocument = useCheckoutDocument();
   const checkinDocument = useCheckinDocument();
-  const { routeDocuments, canRoute: hasRoutePermission } = useRouteToWorkflow();
+  const { routeDocuments, canRoute: hasRoutePermission, mayRouteDocument } = useRouteToWorkflow();
   const { promptRequestAccess, isRequesting } = useRequestAccessPrompt();
 
   const [zoom, setZoom] = useState(1);
@@ -231,7 +231,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     userById(users, doc.checkoutLock?.lockedBy)?.name ||
     'another user';
 
-  const routeThisDocument = () => routeDocuments([{ id: doc.id, title: doc.title }]);
+  const routeThisDocument = () =>
+    routeDocuments([{ id: doc.id, title: doc.title, createdBy: doc.createdBy }]);
+  // At `own` scope only the uploader may route it (the backend 403s otherwise).
+  const mayRouteThis = mayRouteDocument({ createdBy: doc.createdBy });
 
   const actDownload = () => {
     if (!canDownload) {
@@ -486,7 +489,12 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             The backend refuses only archived documents and ones already in a
             running instance of that workflow. */}
         {canRoute && hasRoutePermission && (
-          <button className="btn btn-primary" onClick={routeThisDocument}>
+          <button
+            className="btn btn-primary"
+            onClick={routeThisDocument}
+            disabled={!mayRouteThis}
+            title={!mayRouteThis ? 'You can only route documents you uploaded' : undefined}
+          >
             <Icon name="flow" size={14} /> Route to workflow
           </button>
         )}

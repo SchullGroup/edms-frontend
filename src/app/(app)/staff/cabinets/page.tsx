@@ -285,7 +285,7 @@ export default function CabinetBrowserPage() {
 
   const handleRouteModal = () =>
     routeDocuments(
-      selected.map((d) => ({ id: d.id, title: d.title, status: d.status })),
+      selected.map((d) => ({ id: d.id, title: d.title, status: d.status, createdBy: d.createdBy })),
       { onSuccess: () => setSelected([]) },
     );
 
