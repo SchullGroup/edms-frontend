@@ -2,6 +2,12 @@
 
 **Status:** Written 2026-08-29. Grounded in `EDMS-FRONTEND` and `edms-backend` as they exist today.
 
+> **Re-checked 2026-10-16** against the live API: **DRIFT-14 does not block the live
+> tenant.** `staff`, `supervisor`, `management` and `internal_auditor` accounts there hold
+> `workflow:view:global` and get 200 from `GET /workflows`, so C1 completes on the live
+> tenant. Only the seed (`prisma/seed-system.ts`) lacks the grant, so a freshly seeded
+> database would still hit it. Persona grants below describe the **seed**.
+
 **Revised 2026-09-04** against `edms-backend` @ `dev` (`b72e0bf`) and `EDMS-FRONTEND` @
 `dev` (`f02c7b8`). Three stories changed status — **C1 broken → done**,
 **J3 broken → partial**, **B3 gained a fixed confidentiality gate**. Counts in
@@ -130,7 +136,7 @@ in a supervisor's queue; having to re-key metadata a machine could have read.
 `own`; metadata, comments and signatures (view `department`, create `own`);
 `document_access_request:create`; `cabinet:view`, `department:view`; folders (view, create
 and edit `own`); `workflow_instance:view/create/route:own`; `task:view/action:own`;
-`delegation:view/create/end:own`. **No `workflow:view`** — see DRIFT-14.
+`delegation:view/create/end:own`. **No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)*
 *(Was "14 grants … `workflow:view`, `workflow:route`" — the pre-2026-09-16 seed.)*
 Note the scopes — staff see their **department's** documents, not the whole tenant.
 
@@ -157,7 +163,7 @@ and `view_confidential`; versions including `restore`; locks, metadata, comments
 signatures; `user:view:department`; `workflow_instance:view/create/route/close:department`;
 `task:view/action/reassign:department` — which is what lets him see and reassign other
 people's tasks; delegation; and circulars (`create:own`, `publish`/`withdraw:department`).
-**No `workflow:view`** — see DRIFT-14. *(Was "18 grants … plus membership of
+**No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)* *(Was "18 grants … plus membership of
 `TASK_VIEW_ALL_ROLES` and `TASK_REASSIGN_ROLES`" — those role lists no longer exist in the
 backend; `task:view`/`task:reassign` grants replaced them.)*
 
@@ -183,7 +189,7 @@ read across documents (view, search, `view_confidential`, download, export, prin
 versions, metadata, comments, signatures, cabinets, folders, departments, users, workflow
 instances, tasks and delegations — plus a small set of writes: `workflow_instance:create/route:own`,
 `task:action:own`, `delegation:create/end:own`, `document_access_request:create`, and
-circulars (`create:own`, `publish`, `withdraw`). **No `workflow:view`** — see DRIFT-14.
+circulars (`create:own`, `publish`, `withdraw`). **No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)*
 ~~**Management cannot create, edit, or delete anything.**~~ *(Was "10 grants, all
 read-only" — no longer true: management can act on its own tasks, route its own documents,
 delegate, and publish circulars. It still cannot create or edit documents.)* (Fixed 2026-09-10: the
@@ -213,7 +219,7 @@ findings that quietly die.
 hash-chained `GET /audit` since 2026-09-18 — DRIFT-11), `cabinet_access:view` and
 `circular:view`. `document:view_confidential:global` lets them read confidential-tier
 documents (a permission since `edms-backend` `0dab81a`; it was a role list before).
-**No `workflow:view`** — see DRIFT-14. *(Was "10 grants, read-only … `audit:view` (for which
+**No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)* *(Was "10 grants, read-only … `audit:view` (for which
 no endpoint exists)" and "deliberately cannot mutate anything". The seed now also grants
 `workflow_instance:create/route:own`, `task:action:own`, `delegation:create/end:own` and
 `document_access_request:create`. The auditor still cannot change documents, cabinets or
@@ -634,7 +640,10 @@ built and unreachable.
       routes — the checks live in the services, so grep `_FORBIDDEN`.)*~~ *(2026-10-15:
       `workflows.router.ts` now has 40 `requirePermission` calls across its 39 routes —
       the router-level checks landed with the 2026-09-16 RBAC refactor.)*
-- [ ] 🔴 ⚠️ **Blocked again, by a different cause (DRIFT-14).** `GET /workflows` — the
+- [x] 🟨 **Not blocked on the live tenant (re-tested 2026-10-16)** — its four non-admin
+      roles hold `workflow:view:global` and get 200 from `GET /workflows`. The gap below
+      is real in the **seed**, so a freshly seeded database would still hit it (DRIFT-14,
+      now 🟠 latent). *Was:* 🔴 ⚠️ **Blocked again, by a different cause (DRIFT-14).** `GET /workflows` — the
       list `useRouteToWorkflow` needs to build its picker — requires `workflow:view`, and
       `prisma/seed-system.ts` grants that only to `client_admin` and `schulltech_admin`
       (re-checked 2026-10-15). `staff`, `supervisor`, `management` and `internal_auditor`
@@ -752,7 +761,8 @@ lifecycle.
       every method: `assertCanView` on list/getById, `assertCanManage` on
       create/update/publish/archive, with `WORKFLOW_DEFINITION_MANAGE_ROLES` =
       `client_admin` + `schulltech_admin`. DRIFT-05 resolved.
-- [ ] 🔴 **Read access is over-restricted (DRIFT-14).** `GET /workflows` requires
+- [ ] 🟠 **Read access is over-restricted in the seed (DRIFT-14)** — *not on the live
+      tenant, whose roles still hold `workflow:view:global` (re-tested 2026-10-16).* `GET /workflows` requires
       `workflow:view`, which the seed grants only to `client_admin` and
       `schulltech_admin` (re-checked 2026-10-15), so `staff`, `supervisor`, `management`
       and `internal_auditor` cannot list definitions to route into. *(Was described as
@@ -1569,7 +1579,7 @@ error paths and workers).
 |---|---|---|---|---|---|
 | A — Capture & Filing | 2 | 1 | 0 | 1 | Core works; enrichment missing |
 | B — Retrieval & Search | 1 | 3 | 0 | 0 | Search indexes every document since PR #51 (2026-10-14); download gated and audited (2026-10-08) |
-| C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; workflow routes authorized (DRIFT-05); routing **blocked for non-admins** by the RBAC seed (DRIFT-14) |
+| C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; workflow routes authorized (DRIFT-05); ~~routing **blocked for non-admins** by the RBAC seed~~ routing works on the live tenant; the seed lacks `workflow:view` for non-admins, so a fresh database would block it (DRIFT-14, re-tested 2026-10-16) |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
 | F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; SLA warnings and breaches notify (in code, DRIFT-10) |
@@ -1587,9 +1597,11 @@ the story headings, not carried forward.)*
 — capture, filing, versioning, checkout, classification, search, task execution and
 approval — is genuinely built and mostly works. Audit, notifications and circulars have
 since moved onto real backends. What is still a UI over fixture data is policies (except
-the SLA tab), findings, branding and platform operations. The one defect that still sits
+the SLA tab), findings, branding and platform operations. ~~The one defect that still sits
 across the seam is **DRIFT-14**: the roles that route documents cannot list workflow
-definitions, because the RBAC seed grants `workflow:view` only to the two admin roles.
+definitions, because the RBAC seed grants `workflow:view` only to the two admin roles.~~
+*Re-tested 2026-10-16:* DRIFT-14 doesn't affect the live tenant, whose roles still hold
+`workflow:view:global`; it is a seed gap that a freshly seeded database would hit.
 
 *Superseded (written 2026-08-29):* "Two defects … **workflow routes have no authorization at
 all**, and **the audit trail … has never recorded a single event.**" The first was fixed

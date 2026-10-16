@@ -2,6 +2,13 @@
 
 **Status:** Written 2026-08-29 against the current code.
 
+> **Re-checked 2026-10-16** against the live API: **DRIFT-14 does not block the live
+> tenant.** Its `staff`, `supervisor`, `management` and `internal_auditor` accounts hold
+> `workflow:view:global` and get 200 from `GET /workflows`, so routing works there (as the
+> 2026-10-08 test found). The seed still lacks those grants, and this document is about
+> standing up a tenant — **a tenant seeded fresh from `prisma/seed-system.ts` would still be
+> blocked at Phase 8**, so fix 3b stays a must-do before provisioning one.
+
 > **Re-checked 2026-10-15** against `edms-backend` `dev` (`9998e05`, 134 routes) and this
 > repo (58 pages). The dated revision notes below are history, and several of their
 > statements no longer hold:
@@ -128,7 +135,7 @@ PHASE 7   Every role  ·  ✅ REAL (test accounts fixed — DRIFT-12)
                                     │
                                     ▼
 PHASE 8   Staff → Supervisor → (Management/Auditor observe)
-          Upload ✅ → OCR ✅ → Route ⛔ non-admins (DRIFT-14) → Approve ✅ → Close ✅
+          Upload ✅ → OCR ✅ → Route ✅ live / ⛔ fresh seed (DRIFT-14) → Approve ✅ → Close ✅
           ─────────────────────────────────────────────────────────────────
                                     │
                                     ▼
@@ -224,7 +231,9 @@ the seed before the 2026-09-16 RBAC refactor.*
 | `internal_auditor` | 26 | `global` read + `audit:view/export`; own-scope routing, task action and delegation |
 | `schulltech_admin` | 18 | Workflow definitions, instances, tasks, delegation, audit — **no `document:*` grant** |
 
-Only `client_admin` and `schulltech_admin` hold `workflow:view` — the cause of DRIFT-14.
+In the seed, only `client_admin` and `schulltech_admin` hold `workflow:view` — the cause of
+DRIFT-14. *(Re-tested 2026-10-16: the live tenant's non-admin roles still hold
+`workflow:view:global`, so it doesn't bite there; a tenant seeded fresh from this file would.)*
 
 **73 permissions** across 20 resources: `document`, `document_version`, `document_lock`,
 `document_metadata`, `document_comment`, `document_signature`, `document_access_request`,
@@ -570,7 +579,8 @@ is a client-side `useEffect` (DRIFT-02) — anyone can call the API directly.
 before any pilot, and it is a small change: add `requirePermission('workflow', …)` to the
 23 routes and role checks to the two services.~~ Done — see the re-check above.
 
-**What still blocks this phase's output from being used:** DRIFT-14. The definitions Bola
+**What would block this phase's output on a freshly seeded tenant:** DRIFT-14 *(not on the
+live tenant, whose roles hold the grant — re-tested 2026-10-16)*. The definitions Bola
 publishes here can be listed only by `client_admin` and `schulltech_admin`, because the
 seed grants `workflow:view` to no other role, so staff and supervisors can't route into them
 (Phase 8).
@@ -710,9 +720,9 @@ it succeeds and where it stops.
 │   ~~STILL MISSING: a workflow picker on /doc/[id]~~ — the shared             │
 │      useRouteToWorkflow picker is on /staff/cabinets, /doc/[id], /upload     │
 │      and /search.                                                            │
-│   🔴 DRIFT-14: the picker's GET /workflows needs workflow:view, which only   │
-│      client_admin and schulltech_admin hold — so Chika sees "No published   │
-│      workflows". Routing completes today only for an admin.                 │
+│   🟠 DRIFT-14: the picker's GET /workflows needs workflow:view. The live     │
+│      tenant's roles hold it (re-tested 2026-10-16); a freshly seeded        │
+│      tenant's don't, and there Chika would see "No published workflows".    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
 ┌─ STEP 4 · Backend starts the instance ────────────────────────── ✅ WORKS ──┐
@@ -778,7 +788,7 @@ it succeeds and where it stops.
 |---|---|---|
 | 1. Upload and file | ✅ works | ✅ |
 | 2. OCR and index | ✅ OCR works; indexed at create (PR #51). 🟨 stuck jobs aren't retried (DRIFT-06) | ⛔ always fails; unsearchable forever |
-| 3. Route to workflow | 🔴 works for admins; **blocked for staff/supervisor by DRIFT-14** | ✅ fixed 2026-09 |
+| 3. Route to workflow | ✅ works on the live tenant (staff routing confirmed in testing 2026-10-08; `GET /workflows` 200 for every role 2026-10-16). 🟠 A freshly seeded tenant would block staff/supervisor (DRIFT-14, seed gap) | ✅ fixed 2026-09 |
 | 4. Instance start | ✅ works, authorized | ✅ but **unauthorized** |
 | 5. Task appears | ✅ appears, assignee notified (not clicked through) | 🟨 nobody notified |
 | 6. Approve / reject | ✅ works | ✅ |
@@ -792,7 +802,8 @@ upload bucket, which unblocks OCR *and* search together) and **two backend build
 is no longer a build — it exists and works; only the call sites are missing.
 *(2026-10-15: all three have since landed — upload/OCR (2026-08-31 / retracted 2026-09-21),
 notifications (2026-09-21), audit (confirmed 2026-09-18). The one break left in the chain
-is step 3 for non-admin roles: DRIFT-14.)*
+is step 3 for non-admin roles: DRIFT-14.)* *(2026-10-16: not on the live tenant — only on a
+freshly seeded one.)*
 
 ---
 
@@ -872,11 +883,11 @@ Phase 3  Cabinets + folders      ✅            → ✅ metadata designer (since
 Phase 4  Cabinet access grants   🟨            → ✅ UI; ⚠️ not enforced on document reads
 Phase 5  Users                   🟨            → ⛔ no login rate limit (invite + reset exist)
 Phase 6  Workflows               ✅            → ✅ authorization FIXED 09-04
-                                               → ⛔ but staff/supervisor/management/
-                                                 auditor can't READ definitions (DRIFT-14)
+                                               → 🟠 seed lacks workflow:view for staff/
+                                                 supervisor/mgmt/auditor (DRIFT-14; live OK)
 Phase 7  First login             ✅            → ✅ test accounts FIXED (DRIFT-12)
-Phase 8  First document          🟨            → ✅ OCR works; ⛔ routing blocked for
-                                                 non-admins (DRIFT-14)
+Phase 8  First document          🟨            → ✅ OCR works; 🟠 routing blocked on a
+                                                 fresh seed only (DRIFT-14)
 Phase 9  Steady state            ✅            → ✅ search; 🟨 notifications emitted,
                                                     not clicked through
 Phase 10 Governance              🟨            → ✅ audit trail real; ⛔ findings,
@@ -896,7 +907,7 @@ Ordered by *(impact ÷ effort)*, highest first:
 | 1 | `npx prisma generate` | Backend | 2 min | The build; un-narrows every user's scope | ✅ done |
 | 2 | Two-call create-then-start in `workflowInstancesService` | Frontend | 1 hr | **The entire approval half of the product** | ✅ done |
 | 3 | ~~Authorization on the workflow routes~~ | Backend | ~~1 day~~ | Closed the critical authorization hole | ✅ **done** — in the services, and since 2026-09-16 also `requirePermission` on every route |
-| 3b | **Grant `workflow:view` to `staff`, `supervisor`, `management` and `internal_auditor` in `prisma/seed-system.ts`** so the roles holding `workflow_instance:route` can read definitions *(was "Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`" — that constant is gone; the seed is now the cause)* | Backend | **4 seed rows + re-seed** | **Document routing** — unreachable for every non-admin role | 🔴 **open, most urgent** (DRIFT-14) |
+| 3b | **Grant `workflow:view` to `staff`, `supervisor`, `management` and `internal_auditor` in `prisma/seed-system.ts`** so the roles holding `workflow_instance:route` can read definitions *(was "Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`" — that constant is gone; the seed is now the cause)* | Backend | **4 seed rows + re-seed** | **Document routing** — unreachable for every non-admin role on a freshly seeded tenant | 🟠 **open — seed only** (DRIFT-14). Re-tested 2026-10-16: the live tenant's roles hold the grant, so nothing is blocked there. Still a must-do before provisioning a new tenant |
 | 4 | Fix login test-account emails to the `tjoel+…` set | Frontend | 10 min | New-developer onboarding | ✅ done by 2026-09-15 (DRIFT-12) |
 | 5 | ~~Presigned-upload endpoint + async Textract~~ + unconditional search indexing | Both | 3 days | OCR **and** search, together | ✅ the upload (2026-08-31) and OCR (retracted 2026-09-21) were never the blocker; indexing done in PR #51 (2026-10-14). 🟨 Stuck-job retry still open (DRIFT-06) |
 | 6 | ~~Build the notifications module~~ → **call `notifyUser` from real events** | Backend | ~~3 days~~ **~2 days** | Task assignment, SLA warnings, returned work | ✅ done 2026-09-21 (DRIFT-10) |
@@ -951,7 +962,7 @@ npm run dev                # Web   :3000
 | 4 | Delegate each cabinet — grant its manager `upload`/`edit`/`delete` | `/admin/cabinets` → Access | Grants to users need step 6 first; grants to roles don't. Cabinet and folder reads honour grants; document reads don't (Phase 4, re-checked 2026-10-15) |
 | 5 | Build folder trees (or leave to each cabinet's manager) | `/staff/cabinets` — not in a client_admin's sidebar; reach it via the URL or the Designer's "Open in Cabinets" | `folderId` isn't validated against `cabinetId`. 🟨 moved 2026-10-06, not verified live |
 | 6 | Invite users, assign departments and roles | `/admin/users` | Invitations are emailed (since 2026-09-18); the user sets their own password. *(Was: "You will set and communicate each password by hand.")* |
-| 7 | Design and publish workflows | `/admin/workflows` | Only `client_admin`/`schulltech_admin` can publish or archive (DRIFT-05, fixed 09-04). **Only they can list them, too** — staff and supervisors can't route until DRIFT-14 is fixed. |
+| 7 | Design and publish workflows | `/admin/workflows` | Only `client_admin`/`schulltech_admin` can publish or archive (DRIFT-05, fixed 09-04). **On a freshly seeded tenant only they can list them, too** — staff and supervisors can't route until DRIFT-14's seed rows are added. The live tenant's roles hold the grant (re-tested 2026-10-16). |
 | 8 | Set branding | `/admin/branding` | 🟥 **Saved in this browser only** — survives a reload since 2026-10-12, but other users and the login page don't see it. |
 | 9 | ~~Set retention policy~~ | ⛔ | Mock. No enforcement job exists. |
 
@@ -961,8 +972,9 @@ npm run dev                # Web   :3000
 
 - ✅ Upload and filing work
 - ✅ Search works (indexes every document since PR #51). ~~**Search returns nothing.**~~
-- ⛔ **Routing to a workflow fails for staff and supervisors** — DRIFT-14 (no
-  `workflow:view` in the seed). An admin can route. ~~fails until the two-call fix ships~~
+- 🟠 **On a freshly seeded tenant, routing to a workflow fails for staff and supervisors** —
+  DRIFT-14 (no `workflow:view` in the seed). An admin can route. On the live tenant it works
+  (re-tested 2026-10-16). ~~fails until the two-call fix ships~~
   (that fix shipped 2026-09-04).
 - 🟨 Notifications are sent for task assignment, returned work, SLA warnings and breaches,
   but have not been clicked through end to end. ~~**No notifications.**~~

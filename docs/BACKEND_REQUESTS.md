@@ -205,6 +205,11 @@ guessing is currently possible. `express-rate-limit` on that one route would clo
 
 ## 🔴 BE-12 · Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`
 
+> **Superseded — history only.** The constant was removed 2026-09-16; the gap moved to the
+> RBAC seed (DRIFT-14 in doc 01). **Re-tested live 2026-10-16:** the live tenant's
+> non-admin roles hold `workflow:view:global` and get 200 from `GET /workflows`, so nothing
+> is blocked there. The seed still lacks those four rows, so a freshly seeded tenant would be.
+
 **This is now the most serious item in this document, and it is one line.**
 
 ### What we found

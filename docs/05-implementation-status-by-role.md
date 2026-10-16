@@ -2,6 +2,25 @@
 
 **Status:** Written 2026-08-29. Every row verified against the source.
 
+> **Re-checked 2026-10-16** — every open backlog item, against `edms-backend` `origin/dev`
+> (`a88f279`), this repo, and the live API signed in as the seeded test accounts.
+>
+> **Wrong, now corrected:**
+> - **DRIFT-14 does not block the live tenant** (P0 #3). `staff_finance`,
+>   `supervisor_finance`, `management_ops` and `auditor` hold `workflow:view:global` and get
+>   200 from `GET /workflows`. Only the seed lacks the grant, so a freshly seeded tenant
+>   would be blocked. 🔴 → 🟠.
+> - **#19b is done.** List deadlines and `GET /sla/outcomes/summary` shipped in backend PR
+>   #50 (live 2026-10-13, verified in TEST_PLAN Phase U).
+> - **#20 understated the signed-URL bypass:** the version list leaks signed URLs too.
+>
+> **Re-confirmed still open:** P0 #5 (an unknown route returns a `text/html` 404, checked
+> live), #12 (document list/detail/search check no cabinet grants), #15 (no login rate
+> limiting), #17 (no `Finding` model), #19a (`review` takes no signature), #22
+> (`RetentionPolicy` model only — no router, no job), #23 (no branding model), #26 (see the
+> row), #30 (no tests in either repo), the OCR stuck-job sweep (DRIFT-06: 3 attempts with
+> backoff, nothing re-queues a job stuck at `pending`), and the 14 mock pages.
+
 > **Re-checked 2026-10-15** against `edms-backend` `dev` (`9998e05`, 134 routes) and this
 > repo (58 pages). The dated revision notes below are history, and several of their
 > statements no longer hold:
@@ -355,7 +374,7 @@ destination (request doc item 7).
 | ~~`POST /documents/:id/access-requests` with `permission`~~ | ✅ **DRIFT-20 fixed 2026-10-12** — `/doc/[id]` sends `view`; the workflow page sends `view` and/or `route` (verified live) | — |
 | ~~`POST /documents/:id/comments`~~ | Not a real endpoint — use the `comment` field on `POST /tasks/:id/action` | — |
 | ~~`GET /documents/:id/download`~~ | ✅ Not needed — downloads go through `GET /documents/:id/versions/:versionId`, which checks `document:download` + clearance (`0dab81a`); see What's left #5 *(row stale until 2026-10-15)* | — |
-| `workflow:view` for non-admin roles | 🔴 **Seed gap (DRIFT-14)** — `GET /workflows` needs it, and the seed grants it only to `client_admin`/`schulltech_admin` | The route picker can't list workflows for staff *(added 2026-10-15)* |
+| `workflow:view` for non-admin roles | 🟠 **Seed gap (DRIFT-14)** — `GET /workflows` needs it, and the seed grants it only to `client_admin`/`schulltech_admin` | On a freshly seeded tenant, the route picker can't list workflows for staff. The live tenant's staff role holds the grant (re-tested 2026-10-16) *(added 2026-10-15)* |
 | ~~`GET /circulars`, `POST /circulars/:id/ack`~~ | ✅ **Built** (backend `circulars` module) and wired 2026-10-05 — the real routes are `/circulars/inbox*` (see APIs wired) | — |
 
 ### Dummy data 🟥
@@ -376,7 +395,7 @@ destination (request doc item 7).
 | Open a document, view metadata + versions | ✅ | |
 | Check out → edit → check in | ✅ | ⚠️ only the holder can release the lock |
 | Upload a new version | ✅ | Auto-increments |
-| **Route for approval** | 🟨 | Two-call create-then-start; several documents per workflow since 2026-10-07 (DRIFT-19), confirmed in testing 2026-10-08. 🔴 *2026-10-15:* the seed gives staff no `workflow:view`, so a seeded staff user's picker should be empty (DRIFT-14). Re-test as `tjoel+staff_finance@…` to settle which is true |
+| **Route for approval** | 🟨 | Two-call create-then-start; several documents per workflow since 2026-10-07 (DRIFT-19), confirmed in testing 2026-10-08. ~~🔴 *2026-10-15:* the seed gives staff no `workflow:view`, so a seeded staff user's picker should be empty (DRIFT-14). Re-test as `tjoel+staff_finance@…` to settle which is true~~ *Settled 2026-10-16:* the live `staff_finance` holds `workflow:view:global` and gets 200 from `GET /workflows`; only a freshly seeded tenant would be blocked (DRIFT-14) |
 | Search by content | ✅ | **Corrected 2026-10-14.** Was "⛔ Index never built (OCR always fails)" — wrong since the 2026-09-21 retraction, and fixed properly by edms-backend PR #51 (live 2026-10-14): indexed at create, on title/metadata change, on restore, and on a final OCR failure. A version stranded at `pending` *before* that deploy has no backfill |
 | Work the task queue | ✅ | Prioritised by urgency then due date |
 | Act on a task | ✅ | |
@@ -398,7 +417,7 @@ destination (request doc item 7).
 7. ~~**Render cabinet metadata fields** in the upload form.~~ **Done 2026-10-09**, sent with the upload and verified live.
 8. ~~**Drive the My Tasks badge from the API**~~ — **done 2026-10-12**, verified live.
 9. ~~**Raise the file-size cap** and support the document types the allowlist already claims.~~ **Done** — chunked upload, 100 MB cap, PDF/DOCX/XLSX/TIFF/JPEG/PNG (`src/constants/uploadTypes.ts`, `c8e9d24`, 2026-10-02); stale until 2026-10-15.
-10. **Get `workflow:view` seeded for staff** (DRIFT-14) — backend seed change; see doc 03 fix 3b.
+10. **Get `workflow:view` seeded for staff** (DRIFT-14) — backend seed change; see doc 03 fix 3b. *(2026-10-16: the live tenant's role already holds it; this is so a freshly seeded tenant works.)*
 
 ---
 
@@ -450,7 +469,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 | `GET /sla/breaches` | ✅ **Wired** (`sla.service.ts`). `/supervisor/bottlenecks` now reads the server's `bottlenecks-ageing` endpoint, which carries the breach count (corrected 2026-10-12) | — |
 | `GET/POST /delegations`, `POST /delegations/:id/end` | ✅ **Wired** — `/delegations` (344 lines, `useDelegations`/`useCreateDelegation`/`useEndDelegation`) exists; was stale here. Not re-verified end-to-end in this pass. | — |
 | ~~Team aggregation endpoint~~ | ✅ **Exists and wired** — `GET /tasks/workload` and `GET /workflow-instances/team-status-matrix` feed `/supervisor/workload` and `/supervisor` *(row stale until 2026-10-15)*. Only `/supervisor/performance` still walks `GET /tasks?scope=all` with `fetchAllPages` | — |
-| `workflow:view` for supervisors | 🔴 **Seed gap (DRIFT-14)** | Supervisors can't list workflows to route into *(added 2026-10-15)* |
+| `workflow:view` for supervisors | 🟠 **Seed gap (DRIFT-14)** | On a freshly seeded tenant, supervisors can't list workflows to route into; the live tenant's can (re-tested 2026-10-16) *(added 2026-10-15)* |
 | ~~Notifications~~ | ✅ Built — SLA warning/breach notifications fire (doc 01 DRIFT-10, resolved 2026-09-21; row stale until 2026-10-12) | — |
 
 ### Dummy data 🟥
@@ -528,7 +547,7 @@ already holds warning and escalation rows written by the SLA worker.
    lock is past `expectedReturnAt`**. Supervisors are also notified (`checkout.overdue`) when a
    team member's checkout goes overdue. Not yet verified end to end — a lock with no
    `expectedReturnAt` can never become forceable from the UI (by design, per product call).
-9. **Get `workflow:view` seeded for supervisors** (DRIFT-14).
+9. **Get `workflow:view` seeded for supervisors** (DRIFT-14). *(2026-10-16: the live tenant's role already holds it; this is so a freshly seeded tenant works.)*
 
 ---
 
@@ -605,7 +624,7 @@ so they were deleted rather than left dead.
 | `GET /findings` | 🟥 No `Finding` model exists — affects this section, `/auditor/findings`, and `/management/findings` alike |
 | `GET /audit` (for the findings/compliance panel specifically — the sensitive-activity half already reads it) | Partially addressed — see `/management/compliance` above |
 | Scheduled/emailed reports | No report scheduler. A mail transport exists now (`src/config/mailer.ts`, used for invitations and notification emails) *(re-checked 2026-10-15)* |
-| `workflow:view` for management | 🔴 Seed gap (DRIFT-14) — management holds `workflow_instance:route:own` but can't list definitions *(added 2026-10-15)* |
+| `workflow:view` for management | 🟠 Seed gap (DRIFT-14) — on a freshly seeded tenant management holds `workflow_instance:route:own` but can't list definitions; the live tenant's management role can (re-tested 2026-10-16) *(added 2026-10-15)* |
 | A department × document-status cross-tab | Doesn't exist — `/management`'s per-department Pending/In-Progress/Closed table derives `Closed` as `total − (pending + inProgress)` rather than an exact count, because no single endpoint returns document status broken out by department |
 
 ### One trade-off from the rewiring, not hidden
@@ -652,7 +671,7 @@ approximation, not a silent one.
 4. ~~**Correct the frontend permission heuristic**~~ — **done 2026-09-10** (DRIFT-04): the
    role heuristic was deleted; the UI gates on the permission keys from `GET /roles`. Stale
    here until 2026-10-15.
-5. **Get `workflow:view` seeded for management** (DRIFT-14).
+5. **Get `workflow:view` seeded for management** (DRIFT-14). *(2026-10-16: the live tenant's role already holds it; this is so a freshly seeded tenant works.)*
 
 ---
 
@@ -751,7 +770,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 | Assign / remove roles | ✅ | |
 | Deactivate a user | ✅ | Login then 403 |
 | Edit the role permission matrix | ✅ | `PUT /roles/:id/permissions` via `useSetRolePermissions` — row was stale, caught 2026-09-18 |
-| Design and publish a workflow | ✅ | Admin-only since DRIFT-05 (2026-09-04). ⚠️ Non-admins can't *list* published workflows to route into (DRIFT-14). *(Was "⛔ but so can any authenticated user".)* |
+| Design and publish a workflow | ✅ | Admin-only since DRIFT-05 (2026-09-04). ⚠️ On a freshly seeded tenant, non-admins can't *list* published workflows to route into (DRIFT-14); the live tenant's roles can (re-tested 2026-10-16). *(Was "⛔ but so can any authenticated user".)* |
 | Configure retention policy | 🟥 | |
 | Apply branding | 🟥 | Applies visually and persists in this browser only (since 2026-10-12) |
 | Publish a circular | ✅ | Wired 2026-10-05 at `/circulars/manage` — draft → publish now or schedule → recipients' inbox, acknowledgement report, reminders, withdraw, revise. *(confirmed by the product owner’s testing, 2026-10-09)* |
@@ -771,7 +790,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
    emailed an invitation since 2026-09-18 (stale here until 2026-10-15). Login rate
    limiting is still unaddressed.
 5. ~~**Add authorization to the workflow endpoints**~~ — **done 2026-09-04** (DRIFT-05).
-   **Replacement item:** seed `workflow:view` for the non-admin roles (DRIFT-14).
+   **Replacement item:** seed `workflow:view` for the non-admin roles (DRIFT-14). *(2026-10-16: the live tenant's role already holds it; this is so a freshly seeded tenant works.)*
 6. **Build branding**: model, endpoints, logo upload.
 7. ~~**Build circulars**: model, endpoints, audience targeting, acknowledgement tracking.~~
    **Wired 2026-10-05**; confirmed in the product owner's testing 2026-10-09.
@@ -1115,7 +1134,7 @@ for as long as it did.
 |---|---|---|---|---|
 | 1 | ✅ ~~`npx prisma generate`~~ — **done** (doc 03 fix 1); ticked 2026-10-15 | Backend | — | Was: unblocks the build; stops every user being silently narrowed to `department` scope |
 | 2 | ✅ ~~Two-call create-then-start in `workflowInstancesService.start()`~~ — **done**: `createAndStart` posts the instance then `/:id/start` (ticked 2026-10-08; the row was stale) | Frontend | — | Was: unblocks the approval half of the product |
-| 3 | ~~Authorization on the workflow routes~~ — ✅ **done 2026-09-04**, enforced in all five workflow services (and by `requirePermission` on every route since 2026-09-16). **New:** grant `workflow:view` to `staff`, `supervisor`, `management` and `internal_auditor` in `prisma/seed-system.ts`, then re-seed (DRIFT-14). *(Was "split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`" — that constant is gone; re-checked 2026-10-15.)* | Backend | 4 seed rows | **Routing is blocked for every non-admin role that holds `workflow_instance:route`** |
+| 3 | ~~Authorization on the workflow routes~~ — ✅ **done 2026-09-04**, enforced in all five workflow services (and by `requirePermission` on every route since 2026-09-16). **New:** grant `workflow:view` to `staff`, `supervisor`, `management` and `internal_auditor` in `prisma/seed-system.ts`, then re-seed (DRIFT-14). *(Was "split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`" — that constant is gone; re-checked 2026-10-15.)* | Backend | 4 seed rows | ~~**Routing is blocked for every non-admin role that holds `workflow_instance:route`**~~ *Re-tested 2026-10-16:* not on the live tenant, whose roles hold `workflow:view:global`; a freshly seeded tenant would be blocked |
 | 4 | ✅ ~~Fix the 12 login test-account emails to the `tjoel+…` set~~ — **done**: 7 autofill buttons, all matching the backend seed (ticked 2026-10-08) | Frontend | — | Was: every autofill button failed |
 | 5 | JSON 404 handler in `app.ts` | Backend | 5 min | Makes 8 broken calls fail legibly |
 | 6 | ✅ ~~Make `usePermissions` parse three-segment strings~~ — **done 2026-09-10, backend caught up 2026-09-15.** `src/lib/permissions.ts` normalises/matches on `resource:action`, parses scope separately; role-name heuristics removed; gating now permission-key based (`routes.config` `anyPermissions`). Login + `GET /auth/me` now return a live, scoped `permissions` array — that's the source of truth; `useHydratePermissions` (from `GET /roles`) only tops up keys it's missing | Frontend + Backend | — | Was: every `<Guard>` would go dark the moment `/auth/me` returned `permissions`; that day has arrived and it didn't |
@@ -1126,6 +1145,8 @@ for as long as it did.
 
 *Re-checked 2026-10-15: every P0 item is done except **3** (the DRIFT-14 seed rows) and
 **5** (the JSON 404 handler, still missing from `app.ts`). Both are small backend changes.*
+*Re-checked 2026-10-16: still both open. **3** blocks only a freshly seeded tenant — the live
+one's roles hold the grant. **5** confirmed live: an unknown route returns a `text/html` 404.*
 
 ### 🟠 P1 — the next two to three weeks
 
@@ -1152,15 +1173,15 @@ for as long as it did.
 | 18 | ✅ ~~Cabinet metadata-field designer + dynamic upload form~~ — **done 2026-10-09**: fields offered to every uploader and sent with `POST /documents` / `/batch` (edms-backend `dd10017`), verified live as `staff`. The workflow picker's upload form does the same (confirmed by the product owner's testing 2026-10-09) | Frontend |
 | 19 | ✅ ~~Comments and signatures endpoints~~ — task-action fields suffice (`comment` string on any action, `approve`'s required `signature` image). Dedicated `GET/POST /documents/:id/comments`/`/signatures` exist and were briefly wired 2026-09-18, then deliberately un-wired the same day: product wants one workflow trail, not a second task-independent thread. | — |
 | 19a | Optional `signature` on the `review` task action (BE-16) — "Mark reviewed" already has an optional-comment modal; needs the backend to accept a signature there too, the same way `approve` does | Backend |
-| 19b | 🟨 ~~Support more than one document per workflow instance (BE-17)~~ — **backend done** (`5144fc7`, then per-document routing and SLA in `919d0ef`, 2026-10-06). **Frontend done 2026-10-07, confirmed in testing 2026-10-08** (DRIFT-19): routing several documents makes one workflow; the workflow page lists its documents with each one's stage and deadline; approve/reject/review/request-changes act on chosen documents. Open on the backend: deadlines in the task and instance **lists**, and an on-time endpoint — until then list due dates, the Monitor's stage/due columns and SLA % show "—" | Frontend |
-| 20 | 🟨 Document download/export/print — **backend done** (`0dab81a`, 2026-10-08): `document:download`/`export`/`print` permissions plus per-tier `document:view_*` clearance, `GET /documents/:id/export` and `/print`, and old-version reads audited as downloads. **Frontend done 2026-10-08:** Download (not clicked through), Print in the pdf.js viewer (verified against the live API), Export on `/doc/[id]` (not clicked through). **Still open on the backend:** `GET /documents/:id` and the lists hand everyone a signed URL, so download permission can be bypassed | Frontend |
+| 19b | ✅ ~~Support more than one document per workflow instance (BE-17)~~ — **backend done** (`5144fc7`, then per-document routing and SLA in `919d0ef`, 2026-10-06). **Frontend done 2026-10-07, confirmed in testing 2026-10-08** (DRIFT-19): routing several documents makes one workflow; the workflow page lists its documents with each one's stage and deadline; approve/reject/review/request-changes act on chosen documents. ~~Open on the backend: deadlines in the task and instance **lists**, and an on-time endpoint — until then list due dates, the Monitor's stage/due columns and SLA % show "—"~~ **Done:** backend PR #50 (live 2026-10-13) puts each document's `stageDueAt` in both lists (re-checked live 2026-10-16) and adds `GET /sla/outcomes/summary`; verified in TEST_PLAN Phase U. This row was stale until 2026-10-16 | Frontend |
+| 20 | 🟨 Document download/export/print — **backend done** (`0dab81a`, 2026-10-08): `document:download`/`export`/`print` permissions plus per-tier `document:view_*` clearance, `GET /documents/:id/export` and `/print`, and old-version reads audited as downloads. **Frontend done 2026-10-08:** Download (not clicked through), Print in the pdf.js viewer (verified against the live API), Export on `/doc/[id]` (not clicked through). **Still open on the backend:** `GET /documents/:id`, the document list **and the version list** (`GET /documents/:id/versions`) hand everyone a signed URL, so download permission can be bypassed *(re-checked 2026-10-16 on `dev` `a88f279`: `getDocumentById`, `listDocuments` and `listVersions` all attach a signed `fileUrl` behind only `requireConfidentiality('view')`)* | Frontend |
 | 20a | **Full ingestion format support** (logged 2026-10-08). The PRD and tracker require PDF, Office (Word/Excel/PowerPoint), JPG/PNG/TIFF and email (EML/MSG), plus ZIP archives expanded on ingestion, all with validation and preview rendering, and OCR on image-based/scanned files. **Today:** upload accepts PDF, DOCX, XLSX, TIFF, JPG, PNG; only PDF and JPG/PNG preview; PowerPoint, legacy .doc/.xls/.ppt, EML, MSG and ZIP are refused. Every file is sent to Textract, which fails on DOCX/XLSX, and the search index is only built after OCR succeeds — so DOCX/XLSX (and any file whose OCR fails) are **not searchable at all, not even by title**. **Agreed approach:** *backend* — at upload, render a PDF preview copy (LibreOffice for Office; message header + body for email, each attachment filed as its own linked document), extract text directly from born-digital files, OCR only images and scanned PDFs, and index title + metadata even when there's no text; *frontend* — accept the new types, expand ZIPs in the browser into one upload card per file (nested ZIPs too, unsupported entries flagged), show the preview copy in the existing PDF viewer, and until then a readable fallback ("Word documents can't be previewed yet" + Download) instead of the raw MIME type. Rejected: Microsoft's Office viewer (sends documents to a third party). Optional stopgap if the backend is far off: in-browser previews for DOCX/XLSX/TIFF only | Both |
 | 21 | ✅ ~~Circulars: model, endpoints, audience targeting, ack tracking~~ — **backend module built; frontend wired 2026-10-05** (inbox, reader, manage area), *(confirmed by the product owner’s testing, 2026-10-09)*. (The Roles editor already offers `circular:*` — its matrix is built from the `GET /roles` union, and the backend accepts any seeded key — grouped under "Communication" in `MODULE_MAP`) | Frontend |
 | 22 | Retention policy endpoints + enforcement job | Backend |
 | 23 | Branding model + endpoints + logo upload | Both |
 | 24 | ✅ ~~Version-restore and archive buttons~~ — **done 2026-09-10.** `/doc/[id]` right column has a `DocumentVersionsPanel` (list · open · restore · upload new version) and an "Archive document" item in the More menu; `DocumentDetailsPanel` gains an inline metadata editor when the user holds `document:edit` | Frontend |
 | 25 | ✅ ~~`GET /workflow-history` tab on `/doc/[id]`~~ — **already done**, this row was inconsistent with the page's own feature table above (which correctly marked it ✅) | — |
-| 26 | Paginate cabinets, folders, roles, departments | Backend |
+| 26 | Paginate cabinets, folders, roles, departments — *re-checked 2026-10-16:* none of the four takes `page`/`limit`; each list is silently cut off (cabinets 100, roles 100, departments 200, folders 500 per cabinet) | Backend |
 | 27 | ✅ ~~Remove `@ts-nocheck`~~ — **done 2026-10-08**: `search` lost it in its 2026-09-30 rebuild, `admin/workflows` on 2026-10-08. No file carries it now | Frontend |
 | 28 | ✅ ~~Fix `/platform/flags` re-exporting the wrong page~~ — **done 2026-10-08** | Frontend |
 | 29 | ✅ ~~Role switcher in the Topbar for multi-role users~~ — **built 2026-10-08, verified live 2026-10-09** (a `staff` user given `supervisor` for the test, then removed: switched portals both ways, choice survived a reload): one portal per built-in role held, choice kept per user in `prefs` (doc 04, Multi-role users) | Frontend |
@@ -1196,11 +1217,15 @@ above): Platform (6/6, by design), the auditor's dashboard and findings, managem
 findings re-export, branding, `/supervisor/exceptions`, and the retention/confidentiality
 tabs of `/admin/policies`.
 
-**One defect sits on the seam and matters more than any individual gap: DRIFT-14.** The
-roles that route documents can't list workflow definitions, because the RBAC seed grants
-`workflow:view` only to `client_admin` and `schulltech_admin`. It is four seed rows and a
-re-seed. There's an open question to settle first: a 2026-10-08 test reported staff routing
-working, which the seed says shouldn't be possible (doc 04, staff Day one step 7).
+**DRIFT-14 is a provisioning gap, not an outage** *(re-tested 2026-10-16)*. On the live
+tenant the roles that route documents hold `workflow:view:global` and can list workflow
+definitions — which is why the 2026-10-08 staff routing test passed. The RBAC seed grants
+`workflow:view` only to `client_admin` and `schulltech_admin`, so a freshly seeded tenant
+would block routing for everyone else. It is four seed rows, and it must land before a new
+tenant is provisioned.
+
+*Superseded (2026-10-15):* "One defect sits on the seam and matters more than any individual
+gap: DRIFT-14 … There's an open question to settle first" — settled 2026-10-16 as above.
 
 *Superseded (2026-08-29 / 2026-09-04):* "Four defects … workflow routes have **no
 authorization at all**; the audit trail … has **never recorded a single event**; document

@@ -46,7 +46,7 @@ regression that this scan's earlier passes never tested for:
 | Finding | Change | Where |
 |---|---|---|
 | **DRIFT-16 (new)** — frontend route guard referenced permission keys no backend role can ever hold | ✅ **Resolved (frontend, 2026-09-21)** — real supervisors and management users were being redirected to `/unauthorized` by the app's own guard | [§4](#4-authorization-four-independent-layers) |
-| DRIFT-14 — workflow definitions unreadable by the roles that route documents | 🔄 **Re-diagnosed** — the hardcoded role list is gone, but the RBAC seed data that replaced it has the same gap. **Owner: Backend**, unchanged | [§4](#4-authorization-four-independent-layers) |
+| DRIFT-14 — workflow definitions unreadable by the roles that route documents | 🔄 **Re-diagnosed** — the hardcoded role list is gone, but the RBAC seed data that replaced it has the same gap. **Owner: Backend**, unchanged *(→ 🟠 latent 2026-10-16: the live tenant holds the grant; only the seed lacks it)* | [§4](#4-authorization-four-independent-layers) |
 | DRIFT-10 — nothing ever called `notifyUser` | ✅ **RESOLVED** — task assignment, reassignment, delegation, access-request grant/deny and SLA warning/breach all notify now | [§7](#7-the-complete-api-drift-matrix) |
 | DRIFT-07 — client-side aggregation via `fetchAllPages` | ✅ **RESOLVED (frontend)** — the four management dashboards and Performance Overview now read the server aggregation endpoints directly; `useAllTasks`/`useAllWorkflowInstances` and `tasksService.getAllPages` deleted as dead code | [§6](#6-state-architecture-on-the-frontend) |
 | **New** — `auditor/trail` never stopped loading | ✅ **Resolved (frontend, 2026-09-21)** — an unmemoized `Date.now()` changed the query key every render | [§7](#7-the-complete-api-drift-matrix) |
@@ -54,6 +54,19 @@ regression that this scan's earlier passes never tested for:
 | Cabinet access-grant CRUD "has no UI" | ✅ **Corrected — already built.** `admin/cabinets` has a full "Access" card (grant modal, revoke button) wired to `useCabinetAccessGrants`/`useGrantCabinetAccess`/`useRevokeCabinetAccess`. The doc's claim was stale, not the product. | [§7](#7-the-complete-api-drift-matrix) |
 | **DRIFT-06 — retracted.** Live-verified 2026-09-21 against the deployed backend: OCR works. The "third-party gateway writes to a bucket Textract can't read" claim was never checked against a real document and was wrong — every real upload's `fileUrl` resolves to `env.S3_BUCKET`. One document out of eight was stuck at `ocrStatus: 'pending'` for 3 days — a real, narrower reliability gap, not the systemic break this doc previously asserted. | 🟡 **Re-diagnosed**, no backend fix built (the planned one would have solved a non-problem) | [§5](#5-the-document-storage-path-and-why-ocr-cannot-work) |
 | **Upload mechanism — the whole "what the code does" step 1 was describing dead code.** The chunked multipart uploader (`uploader.ts`/`useMultipartUploader.ts`) replaced the single-shot base64 flow on **2026-08-31** — two days after this doc's original 2026-08-29 write-up. Every revision since (both 2026-09-04 scans, 2026-09-18, 2026-09-21) kept describing the pre-08-31 mechanism; `s3.service.ts#uploadFile()` has had zero real callers this entire time. Found while checking whether the upload progress bar reflects real percentages (it does — real `XMLHttpRequest` byte progress per 5 MB part, not simulated) | ✅ **Corrected (frontend, 2026-09-21)** — no behavior changed, only the documentation | [§5](#5-the-document-storage-path-and-why-ocr-cannot-work) |
+
+> **Re-checked 2026-10-16** against `edms-backend` `origin/dev` (`a88f279`) and the live API,
+> signed in as the seeded `tjoel+…` test accounts. Three statements below were wrong:
+>
+> - **DRIFT-14 does not block the live tenant.** `staff_finance`, `supervisor_finance`,
+>   `management_ops` and `auditor` all hold `workflow:view:global`, and `GET /workflows`
+>   returns 200 for each — which is why staff routing worked in the 2026-10-08 test. The seed
+>   still lacks those rows, so a freshly seeded database would show the bug. Downgraded from
+>   🔴 Critical to 🟠 latent; see the DRIFT-14 section.
+> - **DRIFT-19 is resolved.** Deadlines in the task and workflow lists and the on-time
+>   endpoint (`GET /sla/outcomes/summary`) shipped in backend PR #50 (live 2026-10-13); §7
+>   already said so, but the register still listed them as missing.
+> - **DRIFT-10b re-confirmed live:** an unknown route returns a `text/html` 404.
 
 This document describes **what actually exists in the code today**, not the target design.
 Where the two systems disagree, the disagreement is named explicitly and marked with a
@@ -657,7 +670,7 @@ unrestricted.
 > grep is meaningful again, and the service-layer `_FORBIDDEN` checks remain as a second
 > layer.
 
-### 🔴 DRIFT-14 — Workflow definitions became unreadable by the roles that route documents
+### 🟠 DRIFT-14 — Workflow definitions unreadable by the roles that route documents *(seed only — re-tested live 2026-10-16)*
 
 **Re-diagnosed 2026-09-21.** The mechanism changed; the symptom didn't. The original
 finding (below) was a hardcoded constant in the frontend-facing sense that
@@ -693,6 +706,18 @@ question: doc 04 records staff routing as confirmed in testing on 2026-10-08, wh
 finding says a seeded staff account can't do. Either that test ran as an admin, or the live
 database's grants differ from `seed-system.ts`. A re-test as
 `tjoel+staff_finance@schulltech.com` would settle it.
+
+**Re-tested live 2026-10-16 — settled: the live database differs from the seed.** Signed in
+as `tjoel+staff_finance`, `supervisor_finance`, `management_ops` and `auditor`, each login
+returns `workflow:view:global` in `permissions` and `GET /workflows` returns 200. Routing
+works on the live tenant, and the 2026-10-08 test was right. The seed on `dev` (`a88f279`)
+still grants `workflow:view` only to the two admin roles. `seed-system.ts` upserts
+permissions and never deletes any, so the live rows are most likely left over from the
+pre-2026-09-16 seed, which granted `workflow:view` — not proven, since that seed's
+`workflow:route` grants are gone from the live tenant. **So nobody is blocked today, but a
+freshly seeded database (a new tenant, a reset, a local setup) would hit this.** The seed fix
+below is still the fix; it is a provisioning gap, not an outage. Downgraded from 🔴 Critical
+to 🟠.
 
 **Owner: Backend, unchanged.** This is not a frontend bug and there is nothing to fix
 on this side — the frontend's `GET /workflows` call, its 403 handling, and its empty
@@ -735,8 +760,10 @@ both granted `workflow:view:global` in `prisma/seed-system.ts`, and both are ref
 this hardcoded list. The RBAC table says yes; the constant says no.
 
 *(That constant-based fix no longer applies — see the 2026-09-21 re-diagnosis above for
-the current fix: a seed-data change, not a code change.)* **This remains the
-highest-severity open finding**, because it silently disables the product's core loop.
+the current fix: a seed-data change, not a code change.)* ~~**This remains the
+highest-severity open finding**, because it silently disables the product's core loop.~~
+*Re-tested 2026-10-16: it doesn't on the live tenant, which holds the grant (see above); it
+would on a freshly seeded database.*
 
 ### ✅ DRIFT-16 — Frontend route guard referenced permission keys no backend role can hold — **Resolved (frontend, 2026-09-21)**
 
@@ -1141,8 +1168,9 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 > ✅ ~~**Two of the compounding problems remain.** The endpoint still performs
 > **no authorization check** (DRIFT-05), and the assignee is still **never notified**
 > (DRIFT-10)~~ — both resolved: authorization 2026-09-04 (DRIFT-05) and `task.assigned`
-> notifications 2026-09-21 (DRIFT-10). Re-checked 2026-10-15. What blocks routing today
-> is DRIFT-14.
+> notifications 2026-09-21 (DRIFT-10). Re-checked 2026-10-15. ~~What blocks routing today
+> is DRIFT-14.~~ *Re-tested 2026-10-16: nothing blocks routing on the live tenant; DRIFT-14 is
+> a seed-only gap.*
 
 ### Identity
 
@@ -1629,7 +1657,7 @@ suspiciously few documents.
 
 | ID | Severity | Title | Owner | Blast radius |
 |---|---|---|---|---|
-| **DRIFT-14** | 🔴 **Critical** | Workflow definitions are readable only by `client_admin`/`schulltech_admin`, so `staff` and `supervisor` cannot list the workflows they hold `workflow_instance:route` for | Backend | **Document routing is unreachable again.** The picker reports "no published workflows", which is neither true nor the reason. Re-diagnosed 2026-09-21: the hardcoded role list is gone (replaced by real `requirePermission`), but the RBAC seed data that replaced it never re-granted `workflow:view` to non-admin roles |
+| **DRIFT-14** | 🟠 **Med — latent** *(was 🔴 Critical; re-tested live 2026-10-16)* | Workflow definitions are readable only by `client_admin`/`schulltech_admin`, so `staff` and `supervisor` cannot list the workflows they hold `workflow_instance:route` for | Backend | *2026-10-16:* **not affecting the live tenant**, whose four roles still hold `workflow:view:global` (most likely left over from the pre-2026-09-16 seed) and get 200 from `GET /workflows`. On a freshly seeded database, **document routing is unreachable.** The picker reports "no published workflows", which is neither true nor the reason. Re-diagnosed 2026-09-21: the hardcoded role list is gone (replaced by real `requirePermission`), but the RBAC seed data that replaced it never re-granted `workflow:view` to non-admin roles |
 | ~~DRIFT-20~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `POST /documents/:id/access-requests` requires `permission: 'view' \| 'route'` since `edms-backend` `3014b89`; `documentsService.requestAccess` sent only `{ reason }` | Frontend | Was: **Request access refused for everyone (422)**, on `/doc/[id]` and the workflow page. Fix: send `view` from the document page; on the workflow page, ask for whichever of `view`/`route` the document's `access` lacks. Show the permission in `/admin/access-requests` |
 | ~~DRIFT-21~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `GET /tasks/:id` and `GET /workflow-instances/:id` now return documents the caller can't see, redacted ("Restricted document", `confidentiality: null`, no version) with an `access` object | Frontend | **The workflow page throws** for anyone whose task holds such a document: the access overlay renders `ConfBadge` with `null`, and `titleCase(null)` calls `.replace` on null. Fix: drive the overlay from `access`/`isLocked`, guard null fields, and keep locked documents out of the action pickers unless `canRoute`. Workflow history also blanks comments, notes and signatures in workflows holding such a document (by design) |
 | **DRIFT-22** | 🟠 Med (found 2026-10-12; **intended**, per the backend developer the same day) | At `own` scope, workflow visibility (`buildInstanceAccessFilter`, `canActorAccessInstance`) follows task assignment only; `3014b89` dropped the "created one of its documents" clause | Backend (decision) | A `staff` user who routes a document to a supervisor stage can't see or open that workflow; `/doc/[id]`'s Workflows card goes empty and offers "Route to workflow" again. Confirmed intended; the frontend follow-up is explaining the empty state (doc 05 backlog 14b) |
@@ -1645,7 +1673,7 @@ suspiciously few documents.
 | ~~DRIFT-02~~ | ✅ **Resolved (frontend, 2026-09-21)** | `src/proxy.ts` (Next.js 16's `middleware.ts` replacement) resolves real roles/permissions from `GET /auth/me` server-side on every protected navigation, fails closed only on a confirmed 401/403, fails open on an unreachable backend — backed by `SessionExpiredModal` and `ServiceUnavailableOverlay` so fail-open doesn't mean "silently broken." Live-verified against a real dev server, including a genuinely unreachable backend. | Frontend | Was: any role forgeable via localStorage; fully exposed all `SEED`-backed portals |
 | ~~DRIFT-09~~ | ✅ **Resolved** | ~~`POST /workflow-instances/start` 404s~~ — two-call sequence shipped 2026-09 | Frontend | Was: document routing did not work from the UI at all |
 | ~~DRIFT-10~~ | ✅ **Resolved (verified 2026-09-21)** | Notifications module and UI both exist, and `notifyUser`/`notifyAssignment`/`notifyRole` are now called from task assignment, reassignment, delegation, task outcomes, access-request grant/deny, and SLA warning/breach | Backend | Was: task assignment, SLA warnings and returned work were all silent |
-| DRIFT-10b | 🟠 Med | No JSON 404 handler — Express returns HTML | Backend | Any missing route surfaces as an axios parse error, not a clean 404 |
+| DRIFT-10b | 🟠 Med | No JSON 404 handler — Express returns HTML *(re-confirmed live 2026-10-16: an unknown route returns a `text/html` 404)* | Backend | Any missing route surfaces as an axios parse error, not a clean 404 |
 | DRIFT-03 | ✅ **Resolved 2026-09-15** | `resource:action` vs `resource:action:scope` | — | `src/lib/permissions.ts` compares first two segments + parses scope; backend now sends scoped `permissions` on login + `/auth/me` |
 | DRIFT-01 | 🟨 **Frontend fixed 2026-09-10** | `POST /auth/logout` missing | Backend | Sidebar sign-out now calls it with the bearer token; backend route + denylist still outstanding — confirmed still absent from `auth.router.ts` 2026-09-21 |
 | DRIFT-08 | ✅ **Resolved (frontend 2026-09-10, reaffirmed 2026-09-18)** | `/documents/:id/comments` + `/signatures` 404 | Frontend | Neither is a document operation. Comments = `comment` on `POST /tasks/:id/action`; signature = `signature` image on its `approve` action. `/doc/[id]` and the supervisor approvals queue rewired; a signature pad (`SignaturePad` + `useSignAndApprove`) captures/uploads the image. Dead `documents.service` methods + hooks removed. **2026-09-18 same-day update:** the dedicated `GET/POST /documents/:id/comments`/`/signatures` endpoints turned out to be real (not 404) and were briefly wired, then deliberately un-wired again — product wants one trail, not two. See BE-16/BE-17. |
@@ -1658,21 +1686,23 @@ suspiciously few documents.
 | ~~— Cabinet access-grant CRUD has no UI~~ | ✅ **Corrected (2026-09-21) — already built** | `admin/cabinets` has a full "Access" card: grant modal (role/user picker + permission select), grant table, revoke button with confirm. Wired to `useCabinetAccessGrants`/`useGrantCabinetAccess`/`useRevokeCabinetAccess`, which already existed too. This doc's claim was stale, not a real gap | — | — |
 | ~~— Enum casing mismatch~~ | ✅ **Resolved (frontend, 2026-09-22)** | `StatusBadge`/`ConfBadge`/`UrgBadge` now run a shared `titleCase()` (`@/utils/helpers`) on their display text — handles snake_case → words and lowercase → Title Case in one pass, idempotent on already-correct input, so every current and future caller is right regardless of which casing its data source used. Also fixed a real functional bug this uncovered: `search/page.tsx`'s facet filter/count used a naive `charAt(0).toUpperCase() + slice(1)`, which mishandled `'top_secret'` (→ `"Top_secret"`, matching nothing in the Title-Case facet list) — a `top_secret` document could never be found via that filter, and its count always showed 0 | Frontend | Was: badges showed raw lowercase/snake_case text on some pages; `top_secret` documents were invisible to the confidentiality facet specifically |
 | — | 🟡 Low | `roles` has three shapes across endpoints | Both | Defensive shims scattered through components |
-| DRIFT-19 | 🟠 Med | Multi-document workflows (`edms-backend` `919d0ef`): list responses carry no stage or deadline | Both | **Frontend done 2026-10-07, confirmed in testing 2026-10-08:** routing sends `documents[]` (one workflow per routed group); types rebuilt (`WorkflowDocumentExecution`); `@/utils/workflowDocuments` derives titles, deadlines and stages; the workflow page and Monitor drawer rebuild each document's position from workflow history; approve/reject/review can act on chosen documents. **Still missing (backend):** deadlines in `GET /tasks` and executions in `GET /workflow-instances`, so task due labels, the Overdue filter (now backed by open SLA breaches), the Monitor's stage/due columns show "—"; and no endpoint over `workflow_sla_outcomes`, so on-time % shows "—". Requested 2026-10-07 |
+| ~~DRIFT-19~~ | ✅ **Resolved (backend PR #50, live 2026-10-13)** — this row was stale until 2026-10-16 | Multi-document workflows (`edms-backend` `919d0ef`): list responses carry no stage or deadline | Both | **Frontend done 2026-10-07, confirmed in testing 2026-10-08:** routing sends `documents[]` (one workflow per routed group); types rebuilt (`WorkflowDocumentExecution`); `@/utils/workflowDocuments` derives titles, deadlines and stages; the workflow page and Monitor drawer rebuild each document's position from workflow history; approve/reject/review can act on chosen documents. ~~**Still missing (backend):** deadlines in `GET /tasks` and executions in `GET /workflow-instances`, so task due labels, the Overdue filter (now backed by open SLA breaches), the Monitor's stage/due columns show "—"; and no endpoint over `workflow_sla_outcomes`, so on-time % shows "—". Requested 2026-10-07~~ **Shipped in PR #50:** both lists carry each document's execution with `stageDueAt` (re-checked live 2026-10-16), read by `taskDueAt`/`instanceDueAt` in `@/utils/workflowDocuments`; `GET /sla/outcomes/summary` gives on-time %. Verified 2026-10-13 (TEST_PLAN Phase U: TP-U1, U3, U4) |
 | ~~— Duplicate `NEXT_PUBLIC_API_URL` in `.env`~~ | ✅ **Corrected (2026-09-22) — not real, doc was stale** | The user checked the live `.env` directly: one `NEXT_PUBLIC_API_URL` key, no duplicate, no dead `API_URL`/`LOCAL_API_URL`/`STAGING_URL` keys either. See §9. | — | — |
 
 ### Suggested order of attack
 
 *Re-ordered 2026-09-21. DRIFT-07, DRIFT-10 and DRIFT-16 are done; DRIFT-14 is
-re-diagnosed but still open and still item 1.*
+re-diagnosed but still open and still item 1.* *2026-10-16: item 1 no longer blocks the live
+tenant, which holds the grant; it is still needed so a freshly seeded database works.*
 
 **Do first — one seed-data change, and the core loop comes back (backend)**
 1. 🔴 **Add `workflow:view` back to `staff`, `supervisor`, `management` and
    `internal_auditor` in `prisma/seed-system.ts`** (DRIFT-14). Not a code change — the
    router-level `requirePermission('workflow', 'view')` is already correct; the RBAC
    seed just never re-granted it to non-admin roles when `workflow:route` was split into
-   `workflow_instance:route`/`task:*`/`delegation:*` on 2026-09-16. **This one seed
-   change currently blocks document routing entirely.** `MANAGE` (`create`/`edit`/
+   `workflow_instance:route`/`task:*`/`delegation:*` on 2026-09-16. ~~**This one seed
+   change currently blocks document routing entirely.**~~ *(2026-10-16: only on a freshly
+   seeded database; the live tenant holds the grant.)* `MANAGE` (`create`/`edit`/
    `publish`/`archive`) should stay `client_admin` + `schulltech_admin` only.
 2. ✅ ~~`npx prisma generate`~~ — done
 3. ✅ ~~Add authorization to the workflow routes~~ — **done**, twice over: the five

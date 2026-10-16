@@ -32,7 +32,9 @@ are numbered so a bug report can cite one (`TP-C3`, `TP-I2`, …).
       `GET /workflows?status=published`. If this 403s or returns empty for a workflow you
       know is published, stop — routing will fail at step TP-B3 for a reason that has
       nothing to do with your test, and it's worth confirming before you build anything on
-      top of it.
+      top of it. *(Passed 2026-10-16: `GET /workflows` returned 200 for `staff_finance`,
+      `supervisor_finance`, `management_ops` and `auditor`. A freshly seeded database would
+      fail this check — the seed lacks the grant; see DRIFT-14.)*
 - [ ] Note that `sla_hours` has a **minimum of 1** (hour) — you cannot script a sub-hour
       SLA breach. Phase I is designed around this; budget real wall-clock time for it or
       run it separately/overnight.
