@@ -10,13 +10,13 @@ export interface StagePanelProps {
   selectedStage: WorkflowStage | null;
   stages: WorkflowStage[];
   transitions: WorkflowTransition[];
-  onSaveTransitions: (stageId: string, outgoing: WorkflowTransition[]) => void;
+  onSaveTransitions: (definition: { stages: WorkflowStage[]; transitions: WorkflowTransition[] }) => void;
   saving: boolean;
   canEdit: boolean;
   propertiesProps: Omit<StagePropertiesPanelProps, 'selectedStage' | 'bare'>;
-  /** Whether this stage has any conditional branch — shown as a small dot on
-   *  the Transitions tab so a stage's routing isn't invisible from the
-   *  Properties tab. */
+  /** Whether this stage branches (conditionally or in parallel) — shown as a
+   *  small dot on the Transitions tab so a stage's routing isn't invisible
+   *  from the Properties tab. */
   hasConditionalBranch: boolean;
   /** Controlled from the page, not local state — clicking a branch line's
    *  label on the canvas needs to force this to 'transitions', which a
@@ -73,7 +73,7 @@ export function StagePanel({
         </button>
         <button type="button" role="tab" aria-selected={tab === 'transitions'} className={tab === 'transitions' ? 'active' : ''} onClick={() => onTabChange('transitions')}>
           Transitions
-          {hasConditionalBranch && <span className="wfd-tab-dot" aria-label="Has a conditional branch" />}
+          {hasConditionalBranch && <span className="wfd-tab-dot" aria-label="This stage branches" />}
         </button>
       </div>
 

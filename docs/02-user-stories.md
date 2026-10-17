@@ -770,7 +770,13 @@ lifecycle.
       `workflow:view:global` grant". That constant is gone, and no non-admin role holds
       `workflow:view` in today's seed.)*
 - [x] ✅ `// @ts-nocheck` removed 2026-10-08 — the page type-checks
-- [ ] Parallel branches — still not supported
+- [ ] 🟨 Parallel branches — backend merged 2026-10-16 (edms-backend PR #54: unconditional
+      fan-out, child executions with their own task and SLA, `join: 'all'` barrier stages).
+      Designer since 2026-10-17: **"+ Add parallel branch"** and **Branches meet at** in
+      `BranchEditorCard`; `applyStageRouting` saves the fork, its branches' onward routes and
+      the join in one PATCH, and `validateParallelRouting` mirrors the backend's checks. The
+      backend accepted and rejected the same definitions as the frontend in a live API check
+      (2026-10-17); not yet clicked through in a browser or run end to end (TEST_PLAN TP-Q15–Q20)
 - [x] Conditional branches — backend conditional routing merged 2026-10-06
       (`definitions.validation.ts` condition rules, `matchesWorkflowCondition` in
       `tasks.service.ts`), and the designer has a branch editor since 2026-09-29

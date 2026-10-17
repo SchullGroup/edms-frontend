@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { actionLabel, computeStageLayout, describeCondition } from './constants';
+import { actionLabel, computeStageLayout, describeCondition, isParallelFork } from './constants';
 import type { WorkflowStage, WorkflowTransition } from '@/types/models';
 
 const NODE_WIDTH = 176;
@@ -22,13 +22,16 @@ interface PositionedNode {
   y: number;
 }
 
+type EdgeKind = 'plain' | 'conditional' | 'fallback' | 'parallel';
+const EDGE_KINDS: EdgeKind[] = ['plain', 'conditional', 'fallback', 'parallel'];
+
 interface Edge {
   transition: WorkflowTransition;
   d: string;
   /** Where the branch label sits — the curve's midpoint. */
   labelX: number;
   labelY: number;
-  kind: 'plain' | 'conditional' | 'fallback';
+  kind: EdgeKind;
 }
 
 export interface WorkflowCanvasProps {
@@ -90,6 +93,11 @@ export function WorkflowCanvas({
     transitions.forEach((t) =>
       outgoingCountByStage.set(t.from, (outgoingCountByStage.get(t.from) || 0) + 1),
     );
+    const forks = new Set(
+      transitions
+        .map((t) => t.from)
+        .filter((from) => isParallelFork(transitions.filter((t) => t.from === from))),
+    );
 
     return transitions
       .map((t): Edge | null => {
@@ -97,7 +105,13 @@ export function WorkflowCanvas({
         const to = nodeById.get(t.to);
         if (!from || !to) return null;
         const isBranch = (outgoingCountByStage.get(t.from) || 0) > 1;
-        const kind: Edge['kind'] = t.condition ? 'conditional' : isBranch ? 'fallback' : 'plain';
+        const kind: EdgeKind = t.condition
+          ? 'conditional'
+          : forks.has(t.from)
+            ? 'parallel'
+            : isBranch
+              ? 'fallback'
+              : 'plain';
 
         const x1 = from.x + NODE_WIDTH;
         const y1 = from.y + NODE_HEIGHT / 2;
@@ -205,7 +219,7 @@ export function WorkflowCanvas({
         <div className="wfd-canvas-graph" style={{ width: bounds.width, height: bounds.height }}>
           <svg className="wfd-connectors" style={{ width: bounds.width, height: bounds.height }}>
             <defs>
-              {(['plain', 'conditional', 'fallback'] as const).map((kind) => (
+              {EDGE_KINDS.map((kind) => (
                 <marker
                   key={kind}
                   id={`wfd-arrow-${kind}`}
@@ -243,6 +257,11 @@ export function WorkflowCanvas({
               <div className="wf-node-name">{stage.name || stage.id}</div>
               <div className="wf-node-meta">
                 {assigneeSummary(stage)} · {stage.sla_hours || 48}h
+                {stage.join === 'all' && (
+                  <span className="wf-node-join" title="Opens once every parallel branch has arrived">
+                    {' '}· waits for all
+                  </span>
+                )}
               </div>
               <div className="wf-node-tags">
                 {(stage.actions || []).map((a) => (
@@ -260,12 +279,14 @@ export function WorkflowCanvas({
               const text =
                 edge.kind === 'conditional'
                   ? describeCondition(edge.transition.condition, metadataFieldName)
-                  : 'Fallback';
+                  : edge.kind === 'parallel'
+                    ? 'Parallel'
+                    : 'Fallback';
               return (
                 <button
                   key={i}
                   type="button"
-                  className={`wfd-branch-label ${edge.kind === 'conditional' ? 'conditional' : 'fallback'}`}
+                  className={`wfd-branch-label ${edge.kind}`}
                   style={{ left: edge.labelX, top: edge.labelY + bounds.offsetY }}
                   onClick={() => onEditBranch(edge.transition.from)}
                   title={`${text} — click to edit this stage's transitions`}
@@ -279,8 +300,8 @@ export function WorkflowCanvas({
 
       <div className="caption" style={{ padding: '10px 20px 14px' }}>
         Click a stage to configure it on the right; drag the background to move around. Where a
-        stage branches, amber lines are conditions and the dashed green line is the fallback — click
-        a label to jump to that stage&rsquo;s Transitions tab.
+        stage branches, amber lines are conditions, the dashed green line is the fallback and blue
+        lines run in parallel — click a label to jump to that stage&rsquo;s Transitions tab.
       </div>
     </div>
   );

@@ -22,7 +22,12 @@ import { useAllMetadataFields } from '@/apis/hooks/useMetadataFields';
 import { StagePanel, type StageTab } from '@/components/workflows/StagePanel';
 import type { AssigneeMode } from '@/components/workflows/StagePropertiesPanel';
 import { WorkflowDesignerGuide } from '@/components/workflows/WorkflowDesignerGuide';
-import { DEFAULT_WORKFLOW_DEFINITION, reconcileTransitions } from '@/components/workflows/constants';
+import {
+  DEFAULT_WORKFLOW_DEFINITION,
+  isParallelFork,
+  normalizeJoins,
+  reconcileTransitions,
+} from '@/components/workflows/constants';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import type {
   WorkflowDefinition,
@@ -269,9 +274,7 @@ export default function WorkflowDesignerPage() {
       actions: ['review'],
     };
     const updatedStages = [...stages, newStage];
-    updateWorkflow(wf.id, {
-      definition: { stages: updatedStages, transitions: reconcileTransitions(updatedStages, wf.definition.transitions || []) },
-    });
+    updateWorkflow(wf.id, { definition: restructure(updatedStages) });
     setSelectedStageId(newStage.id);
     addToast('Stage added — configure it on the right', 'success');
   };
@@ -290,12 +293,7 @@ export default function WorkflowDesignerPage() {
         return updateWfMutation
           .mutateAsync({
             id: wf.id,
-            updates: {
-              definition: {
-                stages: updatedStages,
-                transitions: reconcileTransitions(updatedStages, wf.definition.transitions || []),
-              },
-            },
+            updates: { definition: restructure(updatedStages) },
           })
           .then(() => {
             if (selectedStageId === stage.id) setSelectedStageId(null);
@@ -381,11 +379,18 @@ export default function WorkflowDesignerPage() {
     resetStageDrafts(selectedStage);
   };
 
-  // Replaces just this stage's own outgoing transitions, leaving every other
-  // stage's transitions (including any of its own branches) untouched.
-  const handleSaveTransitions = (stageId: string, outgoing: WorkflowTransition[]) => {
-    const otherTransitions = (wf.definition.transitions || []).filter((t) => t.from !== stageId);
-    updateWorkflow(wf.id, { definition: { ...wf.definition, transitions: [...otherTransitions, ...outgoing] } });
+  // The Transitions tab hands back the whole definition (`applyStageRouting`):
+  // usually just this stage's branches changed, but a parallel fork also points
+  // its branches on to where they meet and marks that stage as the join.
+  const handleSaveTransitions = (definition: { stages: WorkflowStage[]; transitions: WorkflowTransition[] }) => {
+    updateWorkflow(wf.id, { definition: { ...wf.definition, ...definition } });
+  };
+
+  // After adding or deleting a stage: re-link the chain, and drop a join flag
+  // whose branches no longer meet there (the backend would 422 the save).
+  const restructure = (updatedStages: WorkflowStage[]) => {
+    const transitions = reconcileTransitions(updatedStages, wf.definition.transitions || []);
+    return { stages: normalizeJoins(updatedStages, transitions), transitions };
   };
 
   const assigneeSummary = (s: WorkflowStage) => {
@@ -480,9 +485,10 @@ export default function WorkflowDesignerPage() {
           canEdit={canEditWorkflow}
           tab={stagePanelTab}
           onTabChange={setStagePanelTab}
-          hasConditionalBranch={(wf.definition.transitions || []).some(
-            (t) => t.from === selectedStage?.id && !!t.condition,
-          )}
+          hasConditionalBranch={(() => {
+            const outgoing = (wf.definition.transitions || []).filter((t) => t.from === selectedStage?.id);
+            return outgoing.some((t) => !!t.condition) || isParallelFork(outgoing);
+          })()}
           propertiesProps={{
             saving: updateWfMutation.isPending,
             dirty: stageDirty,

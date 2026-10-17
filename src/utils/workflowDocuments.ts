@@ -59,9 +59,10 @@ type TaskDocumentRow = NonNullable<Task['documents']>[number];
  * Whether a document on an open task was already actioned there (edms-backend
  * PR #52: a partial action keeps the task open, and `GET /tasks/:id` still
  * lists the actioned rows). `actionedAt` says so for every document the viewer
- * can see; a Restricted one omits it, so it counts as actioned once its
- * execution has left this task's stage. It can't come back to this task while
- * the task is open, since the backend never adds an execution to a task twice.
+ * can see; a Restricted one omits it, so it counts as actioned while its
+ * execution is away from this task's stage. A document sent back by "Request
+ * changes" can return to the same open task: the backend reuses the task and
+ * clears `actionedAt` (edms-backend PR #54), so it counts as pending again.
  * A closed task's documents are never "actioned" here: its history is whole.
  */
 export function isActionedTaskDocument(

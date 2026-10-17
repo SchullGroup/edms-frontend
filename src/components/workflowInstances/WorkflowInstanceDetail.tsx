@@ -47,8 +47,12 @@ export function WorkflowInstanceDetail({
   if (!instance) return <div className="caption">This workflow instance could not be loaded.</div>;
 
   const stages = instance.workflowDefinition?.definition?.stages;
-  const pendingTask = instance.tasks?.find((t) => t.status === 'pending');
-  const actorName = pendingTask ? taskHolderLabel(pendingTask, departmentName) : 'Unassigned';
+  // Parallel branches are held by different people at once.
+  const pendingTasks = (instance.tasks ?? []).filter((t) => t.status === 'pending');
+  const pendingTask = pendingTasks[0];
+  const actorName = pendingTasks.length
+    ? [...new Set(pendingTasks.map((t) => taskHolderLabel(t, departmentName)))].join(', ')
+    : 'Unassigned';
   const closed = instance.status === 'closed';
   const nearestDue = positions
     .flatMap((p) => p.active.map((e) => e.stageDueAt))
@@ -118,8 +122,10 @@ export function WorkflowInstanceDetail({
       {stages?.length ? (
         <WorkflowStageProgress
           stages={stages}
+          transitions={instance.workflowDefinition?.definition?.transitions}
           positions={positions}
           status={instance.status}
+          tasks={instance.tasks}
           currentActorName={actorName}
         />
       ) : (

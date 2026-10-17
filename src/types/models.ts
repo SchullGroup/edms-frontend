@@ -387,6 +387,10 @@ export interface WorkflowStage {
   /** A direct child of `department_id`; the task goes to people in it. */
   sub_department_id?: string;
   sla_hours: number;
+  /** `'all'`: where parallel branches meet. Each branch of a document waits
+   *  here until every one has arrived, then one task opens (edms-backend PR
+   *  #54). Only valid on a stage with two or more incoming transitions. */
+  join?: 'all';
   actions?: WorkflowStageAction[];
 }
 
@@ -432,7 +436,9 @@ export interface WorkflowTransition {
    * transitions (no `condition`) cannot carry one — the backend rejects it.
    */
   priority?: number;
-  /** Absent = the required, unconditional fallback for its `from` stage. */
+  /** Absent = unconditional: the required fallback when the stage has
+   *  conditional branches, or one of its parallel branches when it has two or
+   *  more unconditional transitions and no conditions. */
   condition?: WorkflowCondition;
 }
 

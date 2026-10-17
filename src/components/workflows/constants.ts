@@ -313,6 +313,217 @@ export function reconcileTransitions(
   return filled;
 }
 
+// --- Parallel routing ----------------------------------------------------
+// edms-backend PR #54: two or more unconditional transitions from one stage run
+// at once, each branch with its own task and SLA. Branches that meet again must
+// meet at a stage marked `join: 'all'`, which waits for every branch before one
+// task opens there. The backend revalidates the whole graph on every save, so a
+// fork, its branches' onward routes and its join have to change in ONE save:
+// added one at a time, each step in between is a 422.
+
+/** Two or more outgoing transitions, none conditional: they all run at once. */
+export const isParallelFork = (outgoing: WorkflowTransition[]) =>
+  outgoing.length > 1 && outgoing.every((t) => !t.condition);
+
+/** Every stage reachable from `start`, `start` included — the backend's
+ *  `getReachableStages`. */
+export function reachableFrom(start: string, transitions: WorkflowTransition[]): Set<string> {
+  const seen = new Set<string>();
+  const stack = [start];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    transitions.forEach((t) => t.from === current && stack.push(t.to));
+  }
+  return seen;
+}
+
+/** Stages, in `stages` order, that every branch of the fork at `forkId` can
+ *  reach — where the branches meet again. Empty when they never do. */
+export function branchMeetingStages(
+  stages: WorkflowStage[],
+  transitions: WorkflowTransition[],
+  forkId: string,
+): WorkflowStage[] {
+  const starts = transitions.filter((t) => t.from === forkId).map((t) => t.to);
+  const reach = starts.map((s) => reachableFrom(s, transitions));
+  return stages.filter((s) => reach.every((r) => r.has(s.id)));
+}
+
+/** The join stage the backend will use for a fork: the first meeting stage
+ *  marked `join: 'all'`. */
+export function forkJoinStage(
+  stages: WorkflowStage[],
+  transitions: WorkflowTransition[],
+  forkId: string,
+): WorkflowStage | undefined {
+  return branchMeetingStages(stages, transitions, forkId).find((s) => s.join === 'all');
+}
+
+/** Where a new fork's branches most likely meet: its current join, else the
+ *  nearest stage every branch reaches that isn't itself a branch. */
+export function suggestJoinStage(
+  stages: WorkflowStage[],
+  transitions: WorkflowTransition[],
+  forkId: string,
+): string | null {
+  const starts = new Set(transitions.filter((t) => t.from === forkId).map((t) => t.to));
+  const meeting = branchMeetingStages(stages, transitions, forkId).filter(
+    (s) => s.id !== forkId && !starts.has(s.id),
+  );
+  if (meeting.length === 0) return null;
+  const existing = meeting.find((s) => s.join === 'all');
+  if (existing) return existing.id;
+  const column = new Map(computeStageLayout(stages, transitions).map((l) => [l.id, l.column]));
+  return [...meeting].sort((a, b) => (column.get(a.id) ?? 0) - (column.get(b.id) ?? 0))[0].id;
+}
+
+/**
+ * Marks exactly the stages that are some fork's join with `join: 'all'` and
+ * clears it everywhere else. `chosen` names the join for particular forks
+ * (null = its branches never meet); any other fork keeps the join it has. A
+ * stale flag would be a 422 on save (a join with one incoming route) or, where
+ * conditional branches meet, a 422 when a document arrives
+ * (`WORKFLOW_JOIN_WITHOUT_FORK`), so it never survives an edit.
+ */
+export function normalizeJoins(
+  stages: WorkflowStage[],
+  transitions: WorkflowTransition[],
+  chosen: Map<string, string | null> = new Map(),
+): WorkflowStage[] {
+  const joins = new Set<string>();
+  stages.forEach((stage) => {
+    const outgoing = transitions.filter((t) => t.from === stage.id);
+    if (!isParallelFork(outgoing)) return;
+    const join = chosen.has(stage.id)
+      ? chosen.get(stage.id)
+      : forkJoinStage(stages, transitions, stage.id)?.id;
+    if (join) joins.add(join);
+  });
+  return stages.map((stage) => {
+    if (joins.has(stage.id)) return stage.join === 'all' ? stage : { ...stage, join: 'all' };
+    if (stage.join === undefined) return stage;
+    const { join: _removed, ...rest } = stage;
+    return rest;
+  });
+}
+
+/**
+ * The whole definition after replacing one stage's outgoing transitions.
+ *
+ * When that makes the stage a fork with a join, each branch is pointed on to
+ * the join so the fork saves in one go: a branch's routes into a sibling
+ * branch are dropped (the default chain has Finance → Legal, which would run
+ * Legal twice), and a branch left with nowhere to go is sent to the join. A
+ * branch that already has its own route on is left alone.
+ */
+export function applyStageRouting(
+  definition: { stages: WorkflowStage[]; transitions: WorkflowTransition[] },
+  stageId: string,
+  outgoing: WorkflowTransition[],
+  joinStageId: string | null,
+): { stages: WorkflowStage[]; transitions: WorkflowTransition[] } {
+  let transitions = [...definition.transitions.filter((t) => t.from !== stageId), ...outgoing];
+  const parallel = isParallelFork(outgoing);
+
+  if (parallel && joinStageId) {
+    const branches = new Set(outgoing.map((t) => t.to));
+    transitions = transitions.filter((t) => !(branches.has(t.from) && branches.has(t.to)));
+    branches.forEach((branch) => {
+      if (branch !== joinStageId && !transitions.some((t) => t.from === branch)) {
+        transitions.push({ from: branch, to: joinStageId });
+      }
+    });
+  }
+
+  const chosen = new Map<string, string | null>();
+  if (parallel) chosen.set(stageId, joinStageId);
+  return { stages: normalizeJoins(definition.stages, transitions, chosen), transitions };
+}
+
+/**
+ * What the backend's `workflowDefinitionJsonSchema` would reject about a whole
+ * definition's reachability and parallel routing, in its order and with the
+ * stages named — so the designer can block a save that would come back 422.
+ * Per-stage branch rules (fallback, priorities) stay in
+ * `validateStageTransitions`.
+ */
+export function validateParallelRouting(definition: {
+  stages: WorkflowStage[];
+  transitions: WorkflowTransition[];
+}): string[] {
+  const { stages, transitions } = definition;
+  const ids = new Set(stages.map((s) => s.id));
+  const valid = transitions.filter((t) => ids.has(t.from) && ids.has(t.to));
+  const name = (id: string) => {
+    const stage = stages.find((s) => s.id === id);
+    return stage?.name || id;
+  };
+  const outgoing = (id: string) => valid.filter((t) => t.from === id);
+  const issues: string[] = [];
+
+  if (stages[0]) {
+    const reachable = reachableFrom(stages[0].id, valid);
+    stages
+      .filter((s) => !reachable.has(s.id))
+      .forEach((s) => issues.push(`Nothing routes to ${name(s.id)} any more — no document could reach it.`));
+  }
+
+  stages
+    .filter((s) => s.join === 'all' && valid.filter((t) => t.to === s.id).length < 2)
+    .forEach((s) =>
+      issues.push(`${name(s.id)} waits for parallel branches but fewer than two routes lead into it.`),
+    );
+
+  stages
+    .filter((s) => isParallelFork(outgoing(s.id)))
+    .forEach((fork) => {
+      const meeting = branchMeetingStages(stages, valid, fork.id);
+      const join = meeting.find((s) => s.join === 'all');
+      if (!join) {
+        if (meeting.length > 0) {
+          const starts = new Set(outgoing(fork.id).map((t) => t.to));
+          const where = meeting.find((s) => !starts.has(s.id));
+          issues.push(
+            where
+              ? `The parallel branches from ${name(fork.id)} meet again at ${name(where.id)}, which has to wait for all of them — choose it under "Branches meet at".`
+              : `One parallel branch from ${name(fork.id)} leads into another — point each branch somewhere else first.`,
+          );
+        }
+        return;
+      }
+
+      const ended = new Set<string>();
+      const nested = new Set<string>();
+      outgoing(fork.id).forEach(({ to: start }) => {
+        const seen = new Set<string>();
+        const stack = [start];
+        while (stack.length > 0) {
+          const current = stack.pop()!;
+          if (current === join.id || seen.has(current)) continue;
+          seen.add(current);
+          const next = outgoing(current);
+          if (next.length === 0) ended.add(current);
+          if (isParallelFork(next)) nested.add(current);
+          next.forEach((t) => stack.push(t.to));
+        }
+      });
+      ended.forEach((id) =>
+        issues.push(
+          `A branch from ${name(fork.id)} can end at ${name(id)} without reaching ${name(join.id)}.`,
+        ),
+      );
+      nested.forEach((id) =>
+        issues.push(
+          `${name(id)} splits into parallel branches again before ${name(join.id)} — a branch can't split further.`,
+        ),
+      );
+    });
+
+  return issues;
+}
+
 export interface StageLayoutPosition {
   id: string;
   /** Hops from the first stage along the routing graph. */

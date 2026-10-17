@@ -93,8 +93,8 @@ export function StagePropertiesPanel({
       </p>
       <div className="divider"></div>
       <div className="banner success" style={{ marginBottom: 0 }}>
-        Only one stage is active on a document at a time — but a stage can route to different
-        next stages depending on conditions you set on the Transitions tab.
+        On a stage&rsquo;s Transitions tab you can send documents down different branches
+        depending on conditions, or down several branches at once in parallel.
       </div>
     </div>
   ) : (
@@ -103,6 +103,14 @@ export function StagePropertiesPanel({
             <label>Stage name</label>
             <input className="input" value={nameDraft} onChange={(e) => onNameChange(e.target.value)} />
           </div>
+
+          {selectedStage.join === 'all' && (
+            <div className="banner info" style={{ marginBottom: '14px' }}>
+              Parallel branches meet here: a document waits at this stage until every branch has
+              arrived, then one task opens. Change it from the Transitions tab of the stage where
+              the branches start.
+            </div>
+          )}
 
           <div className="field">
             <label>Allowed actions</label>

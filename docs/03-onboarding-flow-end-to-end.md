@@ -553,7 +553,9 @@ a transition can carry condition rules on `urgency`, `confidentiality` or a cabi
 `metadata` field, combined with `all`/`any` (`WORKFLOW_CONDITION_*` in
 `workflow.constants.ts`). The designer has edited branches since 2026-09-29
 (`BranchEditorCard`). Since 2026-10-13 a stage can also be assigned to a department alone.
-Parallel branches still don't exist.)*
+2026-10-17: parallel branches exist too — two or more unconditional transitions run at once,
+meeting at a `join: 'all'` stage (edms-backend PR #54); the designer builds them with
+"+ Add parallel branch".)*
 
 ### ✅ ~~The critical defect~~ — resolved 2026-09-04 (DRIFT-05), kept for history
 

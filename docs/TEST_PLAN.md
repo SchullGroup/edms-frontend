@@ -622,8 +622,8 @@ just have to be undone.)*
 the frontend Workflow Designer never exposed it — it only ever built a straight `stage 1 → stage
 2 → … ` chain. This phase covers the new authoring UI: a stage can now route conditionally on
 the document's urgency, confidentiality, or a metadata field, with a required fallback for
-anything that doesn't match. **True parallel routing (more than one *unconditional* branch from
-a stage) is still not supported, on either side of the stack — don't go looking for it.**
+anything that doesn't match. **Parallel routing** (two or more *unconditional* branches from a
+stage, all running at once) arrived with edms-backend PR #54 and is covered by TP-Q15–TP-Q20.
 
 Log in as `client_admin` (`workflow:edit` is required to reach this page at all). Open
 `/admin/workflows` and select or create a workflow with **at least 3 stages** — a couple of these
@@ -635,8 +635,9 @@ steps need a stage to have more than one other stage available to route to.
       switch to Transitions, then switch back to Properties. Confirm your unsaved name edit is
       still sitting there — tab-switching must not silently discard it.
 - [ ] **TP-Q2 (the default shape).** On the Transitions tab of a stage with no authored branches,
-      confirm you see exactly one card, badge **"Fallback"**, pointing at the next stage in
-      sequence, plus a **"+ Add conditional branch"** button. This is the same default chain the
+      confirm you see exactly one card, badge **"Next"** (it becomes **"Fallback"** once the stage
+      has a conditional branch), pointing at the next stage in sequence, plus **"+ Add
+      conditional branch"** and **"+ Add parallel branch"** buttons. This is the same default chain the
       designer has always built, just now visible/editable as a real transition instead of an
       implicit assumption.
 - [ ] **TP-Q3 (adding a branch).** Click **"+ Add conditional branch"**. Confirm a new card
@@ -694,6 +695,42 @@ steps need a stage to have more than one other stage available to route to.
       what each line color means), and that Escape, clicking the backdrop, and the **×** all
       close it — same behavior as every other modal in the app, since this one reuses the shared
       modal system rather than a one-off implementation.
+
+**Parallel routing (edms-backend PR #54, frontend 2026-10-17).** Use a fresh draft with four
+stages in the default chain — e.g. Intake → Finance review → Legal review → Final approval —
+with Intake assigned to `staff`, Finance to `supervisor`, Legal to `staff` and Final to
+`management`.
+
+- [ ] **TP-Q15 (making a fork).** On Intake's Transitions tab click **"+ Add parallel branch"**
+      and point the new card at Legal review. Confirm both cards read **"Parallel"** with a ✕,
+      **"+ Add conditional branch"** is greyed out, and **Branches meet at** shows **Final
+      approval**. The note under it lists what else the save changes: *Finance review goes on to
+      Final approval*, *Finance review no longer goes to Legal review*, *Final approval waits for
+      every branch*. Save — it must succeed (one save, no 422).
+- [ ] **TP-Q16 (the canvas).** Confirm Intake's two lines are blue and labelled **"Parallel"**,
+      Finance and Legal sit side by side, and Final approval's card reads **"· waits for all"**.
+      Select Final approval: its Properties tab says parallel branches meet there.
+- [ ] **TP-Q17 (blocked before the backend sees it).** On Intake, set **Branches meet at** to
+      **"Nowhere"**. Confirm a warning says the branches meet again at Final approval and
+      **Save transitions** is disabled. Discard.
+- [ ] **TP-Q18 (undoing a fork).** Remove the Legal branch from Intake. Confirm the warning says
+      nothing routes to Legal review any more, and the save is blocked until Legal is reachable
+      again. Discard. Delete the Legal review stage instead: the save succeeds, and Final
+      approval no longer reads "waits for all".
+- [ ] **TP-Q19 (running it).** Publish the TP-Q15 workflow and route a document into it as
+      `staff_finance`. After Intake is marked reviewed, confirm the workflow page's stage rail
+      shows Finance *and* Legal as current, each with its own holder and deadline. Mark Finance
+      reviewed as `supervisor_finance`: Finance reads done, Final approval reads **"waiting for
+      the other branches"** with no deadline, and no management task exists yet. Mark Legal
+      reviewed: Final approval becomes current for `management_ops`.
+- [ ] **TP-Q20 (request changes inside a branch — suspected backend gap).** On a fresh run,
+      request changes on Finance review. The document goes back to Intake for that branch only;
+      Legal's task is untouched. Now re-review at Intake and record what happens. **Reading
+      `tasks.service.ts` on `origin/dev` (2026-10-17), Intake forks that branch again** into new
+      Finance *and* Legal branches, while the original Legal branch waits at Final approval for a
+      sibling that has gone back to Intake — so it would wait forever, and since `waiting` counts
+      as active the workflow would never close. If that's what you see, it's a backend issue to
+      raise (re-review at a fork stage should resume the one branch, not fork again).
 
 ---
 

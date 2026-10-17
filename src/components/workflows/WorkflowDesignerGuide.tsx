@@ -30,8 +30,16 @@ const GUIDE_BODY = (
       <b>priority</b> — they're checked in that order, first match wins.
     </li>
     <li>
-      An amber line is a conditional branch, a green line is a required fallback, and a plain gray
-      line means this stage doesn't branch at all. Stages are positioned by where they sit in the
+      Add a <b>parallel branch</b> instead when a document should go to several stages{' '}
+      <i>at once</i> — e.g. Finance and Legal review side by side. Each branch gets its own task
+      and SLA. Under <b>Branches meet at</b>, pick the stage that waits for every branch before
+      its task opens; the designer points each branch on to it when you save. A stage can branch
+      on conditions or in parallel, not both, and a branch can&apos;t split in parallel again
+      before the branches meet.
+    </li>
+    <li>
+      An amber line is a conditional branch, a green line is a required fallback, a blue line is a
+      parallel branch, and a plain gray line means this stage doesn't branch at all. Stages are positioned by where they sit in the
       routing, not by the order you created them, so a branch and its fallback never draw a line
       through an unrelated stage.
     </li>
@@ -40,7 +48,7 @@ const GUIDE_BODY = (
 
 /**
  * A short, on-demand explanation of how routing works on this page — added
- * because conditional branching (priority, fallback, match mode) isn't
+ * because conditional and parallel branching (priority, fallback, joins) isn't
  * self-explanatory the first time someone opens this designer, and there's
  * nowhere else in the product that documents it. Uses the app's existing
  * generic modal (`useUIStore`'s `openModal`/`UIProviders`) rather than a new
