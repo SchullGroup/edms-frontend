@@ -776,7 +776,9 @@ lifecycle.
       `BranchEditorCard`; `applyStageRouting` saves the fork, its branches' onward routes and
       the join in one PATCH, and `validateParallelRouting` mirrors the backend's checks. The
       backend accepted and rejected the same definitions as the frontend in a live API check
-      (2026-10-17); not yet clicked through in a browser or run end to end (TEST_PLAN TP-Q15–Q20)
+      (2026-10-17), and the designer was clicked through in a browser on 2026-10-18 (TEST_PLAN
+      TP-Q2, Q15–Q18). ⛔ **Running a parallel workflow fails on the live backend:** the first
+      action at a fork stage returns 500, even on a minimal fork with no join (2026-10-18)
 - [x] Conditional branches — backend conditional routing merged 2026-10-06
       (`definitions.validation.ts` condition rules, `matchesWorkflowCondition` in
       `tasks.service.ts`), and the designer has a branch editor since 2026-09-29

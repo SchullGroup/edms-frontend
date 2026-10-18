@@ -34,13 +34,19 @@ const toDrafts = (outgoing: WorkflowTransition[]): DraftTransition[] =>
 
 type Definition = { stages: WorkflowStage[]; transitions: WorkflowTransition[] };
 
-const transitionKey = (t: WorkflowTransition) => JSON.stringify(t);
-/** Order-insensitive, so moving a stage's transitions to the end of the list
- *  on save doesn't count as a change. */
+/** JSON with object keys sorted: the saved definition comes back from a
+ *  Postgres `jsonb` column, which reorders keys (`{"to":…,"from":…}`). */
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_key, v) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]]))
+      : v,
+  );
+/** Insensitive to key order and to transition order, so moving a stage's
+ *  transitions to the end of the list on save doesn't count as a change. */
 const sameDefinition = (a: Definition, b: Definition) =>
-  JSON.stringify(a.stages) === JSON.stringify(b.stages) &&
-  JSON.stringify(a.transitions.map(transitionKey).sort()) ===
-    JSON.stringify(b.transitions.map(transitionKey).sort());
+  canonical(a.stages) === canonical(b.stages) &&
+  canonical(a.transitions.map(canonical).sort()) === canonical(b.transitions.map(canonical).sort());
 
 /** What saving changes beyond this stage's own branches, in plain words. */
 function describeSideEffects(before: Definition, after: Definition, stageId: string): string[] {

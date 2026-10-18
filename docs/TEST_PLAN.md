@@ -634,7 +634,7 @@ steps need a stage to have more than one other stage available to route to.
       **Properties** and **Transitions** tabs. On Properties, change the stage name (don't save),
       switch to Transitions, then switch back to Properties. Confirm your unsaved name edit is
       still sitting there — tab-switching must not silently discard it.
-- [ ] **TP-Q2 (the default shape).** On the Transitions tab of a stage with no authored branches,
+- [x] **TP-Q2 (the default shape).** *(2026-10-18, browser.)* On the Transitions tab of a stage with no authored branches,
       confirm you see exactly one card, badge **"Next"** (it becomes **"Fallback"** once the stage
       has a conditional branch), pointing at the next stage in sequence, plus **"+ Add
       conditional branch"** and **"+ Add parallel branch"** buttons. This is the same default chain the
@@ -701,29 +701,29 @@ stages in the default chain — e.g. Intake → Finance review → Legal review 
 with Intake assigned to `staff`, Finance to `supervisor`, Legal to `staff` and Final to
 `management`.
 
-- [ ] **TP-Q15 (making a fork).** On Intake's Transitions tab click **"+ Add parallel branch"**
+- [x] **TP-Q15 (making a fork).** *(2026-10-18, browser: PATCH 200, side-effect list as described.)* On Intake's Transitions tab click **"+ Add parallel branch"**
       and point the new card at Legal review. Confirm both cards read **"Parallel"** with a ✕,
       **"+ Add conditional branch"** is greyed out, and **Branches meet at** shows **Final
       approval**. The note under it lists what else the save changes: *Finance review goes on to
       Final approval*, *Finance review no longer goes to Legal review*, *Final approval waits for
       every branch*. Save — it must succeed (one save, no 422).
-- [ ] **TP-Q16 (the canvas).** Confirm Intake's two lines are blue and labelled **"Parallel"**,
+- [x] **TP-Q16 (the canvas).** *(2026-10-18, browser.)* Confirm Intake's two lines are blue and labelled **"Parallel"**,
       Finance and Legal sit side by side, and Final approval's card reads **"· waits for all"**.
       Select Final approval: its Properties tab says parallel branches meet there.
-- [ ] **TP-Q17 (blocked before the backend sees it).** On Intake, set **Branches meet at** to
+- [x] **TP-Q17 (blocked before the backend sees it).** *(2026-10-18, browser.)* On Intake, set **Branches meet at** to
       **"Nowhere"**. Confirm a warning says the branches meet again at Final approval and
       **Save transitions** is disabled. Discard.
-- [ ] **TP-Q18 (undoing a fork).** Remove the Legal branch from Intake. Confirm the warning says
+- [ ] **TP-Q18 (undoing a fork).** *(2026-10-18: the blocked removal passed in the browser; the stage delete is still to click through.)* Remove the Legal branch from Intake. Confirm the warning says
       nothing routes to Legal review any more, and the save is blocked until Legal is reachable
       again. Discard. Delete the Legal review stage instead: the save succeeds, and Final
       approval no longer reads "waits for all".
-- [ ] **TP-Q19 (running it).** Publish the TP-Q15 workflow and route a document into it as
+- [ ] **TP-Q19 (running it).** ⛔ *2026-10-18: blocked by the backend — marking Intake reviewed returns 500, every time, also on a minimal fork with no join.* Publish the TP-Q15 workflow and route a document into it as
       `staff_finance`. After Intake is marked reviewed, confirm the workflow page's stage rail
       shows Finance *and* Legal as current, each with its own holder and deadline. Mark Finance
       reviewed as `supervisor_finance`: Finance reads done, Final approval reads **"waiting for
       the other branches"** with no deadline, and no management task exists yet. Mark Legal
       reviewed: Final approval becomes current for `management_ops`.
-- [ ] **TP-Q20 (request changes inside a branch — suspected backend gap).** On a fresh run,
+- [ ] **TP-Q20 (request changes inside a branch — suspected backend gap).** ⛔ *Blocked by the same 500 as TP-Q19.* On a fresh run,
       request changes on Finance review. The document goes back to Intake for that branch only;
       Legal's task is untouched. Now re-review at Intake and record what happens. **Reading
       `tasks.service.ts` on `origin/dev` (2026-10-17), Intake forks that branch again** into new
