@@ -29,7 +29,7 @@ export interface TaskFilters {
   stage?: string;
   scope?: 'mine' | 'all';
   /** `dueAt`: earliest document deadline first, tasks without one last.
-   *  Omitted: most urgent first, then oldest. */
+   *  Omitted (or `createdAt`): oldest first. */
   sort?: 'createdAt' | 'dueAt';
   /** `true`: active tasks holding a document past its stage deadline;
    *  `false`: everything else. */

@@ -176,6 +176,8 @@ above was found; and the three "7-line stub" pages are **re-exports**, one of wh
 
 **Corrected 2026-10-14 (later):** doc 02's C2 story still had an open criterion saying the sidebar badge counts came from `SEED.documents`, with `approvalsCount` hardcoded to one user. Doc 05 recorded the fix on 2026-10-12 (`GET /tasks?scope=mine&status=pending&limit=1`), verified live then; doc 02 now matches. Found while adding the My Tasks `overdue`/`sort` criteria to the same story.
 
+**Corrected 2026-10-19:** doc 02's C2 story said `tasks.repository` "prioritises by document urgency then due date" and ticked "Paginated". On `origin/dev`, `listTasks` orders by `createdAt` unless `sort=dueAt` is passed, and has no urgency order or filter; `/staff/tasks` fetched only the default first page (20, oldest first) with no paging. C2 is now 🟨 Partial. Found while checking whether My Tasks' filters use the API.
+
 **Correction (2026-09-10).** Doc 05 stated `/admin/users` "writes the role matrix to
 `SEED`" and listed `useRole`/`useUpdateRole`/`useDeleteRole` etc. as dead — both were
 stale. The matrix already used `PUT /roles/{id}/permissions` via `useSetRolePermissions`;

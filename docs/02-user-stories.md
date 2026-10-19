@@ -658,23 +658,29 @@ built and unreachable.
 
 ---
 
-### C2 — Work my task queue · ✅ **Done**
+### C2 — Work my task queue · 🟨 **Partial**
 
 > **As** David (Supervisor),
 > **I want** a single prioritised list of everything waiting on me, with the most urgent
 > and most overdue at the top,
 > **so that** I work the right thing first instead of whatever is most recent.
 
-**Current state:** genuinely well built on both sides. `tasks.repository` prioritises by
-document urgency then due date; `tasks.service` correctly resolves both direct assignment
-and role-pool assignment, and honours active delegations.
+**Current state:** assignment is well built: `tasks.service` resolves both direct
+assignment and role-pool assignment, and honours active delegations. Prioritising is
+not: `GET /tasks` sorts oldest-created first, or by earliest deadline with `sort=dueAt`;
+it has no urgency order or filter. *(Corrected 2026-10-19 — this said `tasks.repository`
+"prioritises by document urgency then due date"; on `origin/dev` `listTasks` orders by
+`createdAt` unless asked for `dueAt`.)*
 
 **Acceptance criteria**
 - [x] `GET /tasks` returns tasks assigned to me directly **or** to a role I hold
 - [x] Oversight roles can request `scope=all` (holders of `task:view` wider than `own`; was `TASK_VIEW_ALL_ROLES`, removed 2026-09-16)
-- [x] Prioritised by urgency then due date
+- [ ] 🟨 Prioritised — by due date only (`sort=dueAt`, most overdue first). The backend
+      has no urgency sort, and My Tasks dropped its in-browser urgency sort and filter on
+      2026-10-19: they only ever reordered the 20 tasks loaded
 - [x] Due/overdue state visible per row
-- [x] Paginated
+- [x] Paginated — `/staff/tasks` pages through `GET /tasks` (20 a page, Prev/Next) since
+      2026-10-19. *Was:* it loaded only the first 20, oldest first, with no way to see more
 - [x] Frontend: `/staff/tasks`, `/supervisor/approvals` both live
 - [x] `/staff/tasks`'s Overdue filter and "Sort: Due date" are applied server-side
       (`overdue`, `sort=dueAt`, edms-backend PR #50), so they cover the whole queue, not
@@ -1587,7 +1593,7 @@ error paths and workers).
 |---|---|---|---|---|---|
 | A — Capture & Filing | 2 | 1 | 0 | 1 | Core works; enrichment missing |
 | B — Retrieval & Search | 1 | 3 | 0 | 0 | Search indexes every document since PR #51 (2026-10-14); download gated and audited (2026-10-08) |
-| C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; workflow routes authorized (DRIFT-05); ~~routing **blocked for non-admins** by the RBAC seed~~ routing works on the live tenant; the seed lacks `workflow:view` for non-admins, so a fresh database would block it (DRIFT-14, re-tested 2026-10-16) |
+| C — Routing & Approval | 2 | 3 | 0 | 0 | Task execution solid; workflow routes authorized (DRIFT-05); ~~routing **blocked for non-admins** by the RBAC seed~~ routing works on the live tenant; the seed lacks `workflow:view` for non-admins, so a fresh database would block it (DRIFT-14, re-tested 2026-10-16) |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
 | F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; SLA warnings and breaches notify (in code, DRIFT-10) |
@@ -1596,9 +1602,10 @@ error paths and workers).
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **15** | **17** | **8** | **2** | 42 functional stories |
+| **Total** | **14** | **18** | **8** | **2** | 42 functional stories |
 
-*(2026-10-15: H1 moved 🟥 → 🟨, so Partial 16 → 17 and Mock 9 → 8. Totals re-tallied from
+*(2026-10-15: H1 moved 🟥 → 🟨, so Partial 16 → 17 and Mock 9 → 8. 2026-10-19: C2 moved
+✅ → 🟨 (no urgency ordering), so Done 15 → 14 and Partial 17 → 18. Totals re-tallied from
 the story headings, not carried forward.)*
 
 **The honest one-paragraph summary (revised 2026-10-15):** the *document* half of this EDMS
