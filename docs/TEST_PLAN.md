@@ -761,6 +761,18 @@ If a save ever does reach the backend and fail, the red toast shows the backend'
 example *"Parallel stage 'intake' has converging branches but no join: 'all' stage"*), not just
 "Validation failed".
 
+*Reordering stages*
+
+- [x] **TP-Q28 (Move earlier / Move later).** *(2026-10-19, browser.)* On a draft chain Alpha →
+      Bravo → Charlie → Delta, select Charlie → Properties → **Position**. **↑ Move earlier**: it
+      saves at once and the canvas reads Alpha → Charlie → Bravo → Delta. Again: Charlie is now
+      the first stage (where documents start), and a toast says "Request changes" was removed
+      from it. On the first stage **Move earlier** is disabled ("This is already the first
+      stage."); on the last, **Move later** ("This is the last stage — nothing comes after it.").
+      On a stage that branches, or one where routes meet, the buttons are disabled and hovering
+      says why. Moving the stage where parallel branches meet later makes its new predecessor
+      the one that "waits for all".
+
 *Running it.* Rebuild the TP-Q15 workflow (or undo TP-Q22–Q25), then **Publish**. Route a
 document **you own**: as `staff_finance`, upload a new document and use **Route to workflow** on
 it. Routing someone else's document fails with *"You do not have permission to create a

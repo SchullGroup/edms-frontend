@@ -25,6 +25,7 @@ import { WorkflowDesignerGuide } from '@/components/workflows/WorkflowDesignerGu
 import {
   DEFAULT_WORKFLOW_DEFINITION,
   isParallelFork,
+  moveStage,
   normalizeJoins,
   reconcileTransitions,
   validateParallelRouting,
@@ -391,6 +392,38 @@ export default function WorkflowDesignerPage() {
     updateWorkflow(wf.id, { definition: { ...wf.definition, stages: updatedStages } });
   };
 
+  // Reordering (removed with drag-and-drop when branching arrived): swap the
+  // selected stage with its neighbour along the route, saved straight away.
+  const stageMove = (direction: 'earlier' | 'later') =>
+    selectedStage
+      ? moveStage({ stages, transitions: wf.definition.transitions || [] }, selectedStage.id, direction)
+      : { reason: 'Select a stage first.' };
+  const blockedReason = (direction: 'earlier' | 'later') => {
+    const result = stageMove(direction);
+    return 'reason' in result ? result.reason : null;
+  };
+  const handleMoveStage = (direction: 'earlier' | 'later') => {
+    const result = stageMove(direction);
+    if ('reason' in result || updateWfMutation.isPending) return;
+    // The first stage can't send work back, so a stage moved to the start
+    // loses "Request changes" (same rule as saving the first stage).
+    const [first, ...rest] = result.definition.stages;
+    const lostSendBack = !!first?.actions?.includes('request_changes');
+    const movedStages = lostSendBack
+      ? [{ ...first, actions: first.actions!.filter((a) => a !== 'request_changes') }, ...rest]
+      : result.definition.stages;
+    updateWorkflow(wf.id, {
+      definition: { ...wf.definition, stages: movedStages, transitions: result.definition.transitions },
+    });
+    if (lostSendBack) {
+      // Keep the open form in step, or it reads as unsaved.
+      if (first.id === selectedStage?.id) {
+        setActionsDraft((prev) => prev.filter((a) => a !== 'request_changes'));
+      }
+      addToast(`${first.name} is now the first stage, so "Request changes" was removed from it`, 'info');
+    }
+  };
+
   const handleDiscardStage = () => {
     resetStageDrafts(selectedStage);
   };
@@ -532,6 +565,9 @@ export default function WorkflowDesignerPage() {
             onSave: handleSaveStage,
             onDiscard: handleDiscardStage,
             onDelete: () => selectedStage && handleDeleteStage(selectedStage),
+            onMove: handleMoveStage,
+            moveEarlierBlocked: blockedReason('earlier'),
+            moveLaterBlocked: blockedReason('later'),
             canEdit: canEditWorkflow,
             isFirstStage: !!selectedStage && stages[0]?.id === selectedStage.id,
           }}

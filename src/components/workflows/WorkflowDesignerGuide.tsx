@@ -38,6 +38,12 @@ const GUIDE_BODY = (
       before the branches meet.
     </li>
     <li>
+      To reorder, select a stage and use <b>Move earlier</b> or <b>Move later</b> on its
+      Properties tab: it swaps places with the stage next to it along the route, and the first
+      stage is where every document starts. A stage that branches, or where routes meet, can't
+      swap — hover the button to see why.
+    </li>
+    <li>
       An amber line is a conditional branch, a green line is a required fallback, a blue line is a
       parallel branch, and a plain gray line means this stage doesn't branch at all. Stages are positioned by where they sit in the
       routing, not by the order you created them, so a branch and its fallback never draw a line

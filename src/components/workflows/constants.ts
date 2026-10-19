@@ -524,6 +524,89 @@ export function validateParallelRouting(definition: {
   return issues;
 }
 
+/**
+ * Swaps a stage with its neighbour along the route: moving C earlier in
+ * A → B → C → D gives A → C → B → D. Every route into the earlier stage now
+ * leads into the later one (conditions and all), and the later stage's onward
+ * routes move to the earlier one. The pair also swaps places in `stages`, so
+ * moving a stage up to the start makes it the first stage — where the backend
+ * starts every document.
+ *
+ * Only a straight link swaps: the earlier stage has one route out, the later
+ * one route in. Anywhere else (a fork, a conditional branch, a stage where
+ * routes meet) "the stage before" isn't one stage, so it returns the reason
+ * instead. Where parallel branches meet moves with the position: if the
+ * earlier stage waited for every branch, the later one now does. The result is
+ * checked like any other routing edit.
+ */
+export function moveStage(
+  definition: { stages: WorkflowStage[]; transitions: WorkflowTransition[] },
+  stageId: string,
+  direction: 'earlier' | 'later',
+):
+  | { definition: { stages: WorkflowStage[]; transitions: WorkflowTransition[] } }
+  | { reason: string } {
+  const { stages, transitions } = definition;
+  const name = (id: string) => stages.find((s) => s.id === id)?.name || id;
+  const into = (id: string) => transitions.filter((t) => t.to === id);
+  const outOf = (id: string) => transitions.filter((t) => t.from === id);
+
+  let earlier: string;
+  let later: string;
+  if (direction === 'earlier') {
+    const incoming = into(stageId);
+    if (stages[0]?.id === stageId) return { reason: 'This is already the first stage.' };
+    if (incoming.length === 0) return { reason: 'Nothing routes to this stage yet.' };
+    if (incoming.length > 1) {
+      return { reason: 'Several routes lead into this stage, so there’s no single stage before it to swap with.' };
+    }
+    earlier = incoming[0].from;
+    later = stageId;
+    if (outOf(earlier).length > 1) {
+      return { reason: `${name(earlier)} branches here, so it can’t swap with this stage.` };
+    }
+  } else {
+    const outgoing = outOf(stageId);
+    if (outgoing.length === 0) return { reason: 'This is the last stage — nothing comes after it.' };
+    if (outgoing.length > 1) {
+      return { reason: 'This stage branches, so there’s no single next stage to swap with.' };
+    }
+    earlier = stageId;
+    later = outgoing[0].to;
+    if (into(later).length > 1) {
+      return { reason: `Several routes lead into ${name(later)}, so it can’t swap with this stage.` };
+    }
+  }
+  if (outOf(later).some((t) => t.to === earlier)) {
+    return { reason: `${name(earlier)} and ${name(later)} route back to each other.` };
+  }
+
+  const nextTransitions = transitions.map((t): WorkflowTransition => {
+    if (t.from === earlier && t.to === later) return { from: later, to: earlier };
+    if (t.to === earlier) return { ...t, to: later };
+    if (t.from === later) return { ...t, from: earlier };
+    return t;
+  });
+
+  const earlierIndex = stages.findIndex((s) => s.id === earlier);
+  const laterIndex = stages.findIndex((s) => s.id === later);
+  const earlierWaits = stages[earlierIndex].join === 'all';
+  const swapped = stages.map((s, i) => {
+    const stage = i === earlierIndex ? stages[laterIndex] : i === laterIndex ? stages[earlierIndex] : s;
+    if (!earlierWaits) return stage;
+    if (stage.id === later) return { ...stage, join: 'all' as const };
+    if (stage.id === earlier) {
+      const { join: _moved, ...rest } = stage;
+      return rest;
+    }
+    return stage;
+  });
+
+  const next = { stages: normalizeJoins(swapped, nextTransitions), transitions: nextTransitions };
+  const problem = validateParallelRouting(next)[0];
+  return problem ? { reason: problem } : { definition: next };
+}
+
 export interface StageLayoutPosition {
   id: string;
   /** Hops from the first stage along the routing graph. */

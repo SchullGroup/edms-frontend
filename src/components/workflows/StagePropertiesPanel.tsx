@@ -35,6 +35,11 @@ export interface StagePropertiesPanelProps {
   onSave: () => void;
   onDiscard: () => void;
   onDelete: () => void;
+  /** Swaps the stage with its neighbour along the route (`moveStage`). */
+  onMove: (direction: 'earlier' | 'later') => void;
+  /** Why the stage can't move that way, or null when it can. */
+  moveEarlierBlocked: string | null;
+  moveLaterBlocked: string | null;
   canEdit: boolean;
   /** The workflow's first stage — it has no earlier stage to send work back
    *  to, so "Request changes" can't apply (the backend rejects it with 409). */
@@ -69,6 +74,9 @@ export function StagePropertiesPanel({
   onSave,
   onDiscard,
   onDelete,
+  onMove,
+  moveEarlierBlocked,
+  moveLaterBlocked,
   canEdit,
   isFirstStage = false,
   bare,
@@ -211,6 +219,35 @@ export function StagePropertiesPanel({
               value={slaDraft}
               onChange={(e) => onSlaChange(+e.target.value)}
             />
+          </div>
+
+          <div className="field">
+            <label>Position</label>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => onMove('earlier')}
+                disabled={!canEdit || saving || !!moveEarlierBlocked}
+                title={!canEdit ? "You don't have permission to edit workflows" : (moveEarlierBlocked ?? 'Swap with the stage before it')}
+              >
+                ↑ Move earlier
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => onMove('later')}
+                disabled={!canEdit || saving || !!moveLaterBlocked}
+                title={!canEdit ? "You don't have permission to edit workflows" : (moveLaterBlocked ?? 'Swap with the stage after it')}
+              >
+                ↓ Move later
+              </button>
+            </div>
+            <div className="help">
+              {moveEarlierBlocked && moveLaterBlocked
+                ? `Can't move: ${moveEarlierBlocked.replace(/\.$/, '')}; ${moveLaterBlocked.charAt(0).toLowerCase()}${moveLaterBlocked.slice(1)}`
+                : 'Swaps this stage with its neighbour along the route and saves straight away.'}
+            </div>
           </div>
 
           <div className="flex gap-2" style={{ marginTop: '4px' }}>
