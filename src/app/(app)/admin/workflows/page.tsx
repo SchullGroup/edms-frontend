@@ -27,6 +27,7 @@ import {
   isParallelFork,
   normalizeJoins,
   reconcileTransitions,
+  validateParallelRouting,
 } from '@/components/workflows/constants';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import type {
@@ -135,10 +136,13 @@ export default function WorkflowDesignerPage() {
   };
 
   // Also once departments load: an older stage's sub-department is only
-  // recognised as one with the tree in hand.
+  // recognised as one with the tree in hand. And once a just-added stage
+  // arrives from the server: it's selected before the save lands, so the
+  // first reset sees no stage and left its drafts empty — "unsaved".
+  const selectedStageLoaded = !!selectedStage;
   useEffect(() => {
     resetStageDrafts(selectedStage);
-  }, [selectedStageId, departmentsData]);
+  }, [selectedStageId, selectedStageLoaded, departmentsData]);
 
   const updateWorkflow = (id: string, updates: Partial<WorkflowDefinition>) => {
     updateWfMutation.mutate({ id, updates });
@@ -273,27 +277,39 @@ export default function WorkflowDesignerPage() {
       sla_hours: 48,
       actions: ['review'],
     };
-    const updatedStages = [...stages, newStage];
-    updateWorkflow(wf.id, { definition: restructure(updatedStages) });
+    const definition = restructure([...stages, newStage]);
+    const problem = validateParallelRouting(definition)[0];
+    if (problem) {
+      addToast(`Can't add a stage here: ${problem}`, 'error');
+      return;
+    }
+    updateWorkflow(wf.id, { definition });
     setSelectedStageId(newStage.id);
     addToast('Stage added — configure it on the right', 'success');
   };
 
   const handleDeleteStage = (stage: WorkflowStage) => {
+    // Deleting where parallel branches meet, say, leaves them converging with
+    // nowhere to wait — say why here instead of letting the save 422.
+    const definition = restructure(stages.filter((s) => s.id !== stage.id));
+    const problem = validateParallelRouting(definition)[0];
+    if (problem) {
+      addToast(`Can't delete "${stage.name}": ${problem}`, 'error');
+      return;
+    }
     openConfirm({
       title: `Delete stage "${stage.name}"?`,
       message: 'This stage will be removed. The remaining sequence will be reconnected.',
       confirmLabel: 'Delete stage',
       danger: true,
       onConfirm: () => {
-        const updatedStages = stages.filter((s) => s.id !== stage.id);
         // Returning the mutation promise lets the confirm button show a
         // loading state and keeps the modal open until the delete actually
         // completes (or failed and can be retried).
         return updateWfMutation
           .mutateAsync({
             id: wf.id,
-            updates: { definition: restructure(updatedStages) },
+            updates: { definition },
           })
           .then(() => {
             if (selectedStageId === stage.id) setSelectedStageId(null);

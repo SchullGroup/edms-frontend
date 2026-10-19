@@ -107,15 +107,23 @@ export function useBranchDraft(
   const plainDrafts = drafts.map(({ _key, ...t }) => t);
   const parallel = isParallelFork(plainDrafts);
   const current: Definition = { stages, transitions };
-  const savedJoin = stage ? (forkJoinStage(stages, transitions, stage.id)?.id ?? null) : null;
+  // Only a stage that is already a fork has a join; otherwise the "meeting
+  // stage" of its single route is just wherever that route leads.
+  const savedJoin =
+    stage && isParallelFork(outgoing)
+      ? (forkJoinStage(stages, transitions, stage.id)?.id ?? null)
+      : null;
   const draftTransitions = stage
     ? [...transitions.filter((t) => t.from !== stage.id), ...plainDrafts]
     : transitions;
+  // A branch can't also be where the branches meet.
+  const notABranch = (id: string | null) =>
+    id && !plainDrafts.some((t) => t.to === id) ? id : null;
   const joinStageId = !parallel || !stage
     ? null
     : joinDraft !== undefined
-      ? joinDraft
-      : (savedJoin ?? suggestJoinStage(stages, draftTransitions, stage.id));
+      ? notABranch(joinDraft)
+      : (notABranch(savedJoin) ?? suggestJoinStage(stages, draftTransitions, stage.id));
   const next = stage ? applyStageRouting(current, stage.id, plainDrafts, joinStageId) : current;
   const sideEffects = stage ? describeSideEffects(current, next, stage.id) : [];
   // Where branches can meet: any stage after this one that isn't a branch
