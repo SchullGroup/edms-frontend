@@ -7,7 +7,6 @@ import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
 import type { TaskFilters } from '@/apis/services/tasks.service';
 import { byUrgencyThenDue, taskStatusLabel } from '@/utils/supervisor';
-import { taskDocuments } from '@/utils/workflowDocuments';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -19,7 +18,6 @@ export default function MyTasksPage() {
   const { setPageTitle } = useUIStore();
 
   const [statusF, setStatusF] = useState('All');
-  const [urgF, setUrgF] = useState('All');
   const [sortBy, setSortBy] = useState('urgency');
 
   useEffect(() => {
@@ -56,11 +54,6 @@ export default function MyTasksPage() {
     list = list.filter((t) => taskStatusLabel(t) === statusF);
   }
 
-  // A task matches when any of its documents has that urgency.
-  if (urgF !== 'All') {
-    list = list.filter((t) => taskDocuments(t).some((d) => d.urgency === urgF.toLowerCase()));
-  }
-
   // 'due' keeps the server's order. The backend can only sort oldest-first,
   // so 'created' (newest first) sorts the fetched page here.
   if (sortBy === 'urgency') {
@@ -68,8 +61,6 @@ export default function MyTasksPage() {
   } else if (sortBy === 'created') {
     list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }
-
-  const URG_LEVELS = ['Critical', 'High', 'Normal', 'Low'];
 
   return (
     <div>
@@ -89,19 +80,6 @@ export default function MyTasksPage() {
             {['All', 'Pending', 'In Progress', 'Overdue', 'On Hold'].map((o) => (
               <option key={o} value={o}>
                 {o === 'All' ? 'Status: All' : o}
-              </option>
-            ))}
-          </select>
-          <select
-            className="input"
-            style={{ width: 'auto', height: '32px' }}
-            value={urgF}
-            onChange={(e) => setUrgF(e.target.value)}
-            aria-label="Urgency"
-          >
-            {['All', ...URG_LEVELS].map((o) => (
-              <option key={o} value={o}>
-                {o === 'All' ? 'Urgency: All' : o}
               </option>
             ))}
           </select>
