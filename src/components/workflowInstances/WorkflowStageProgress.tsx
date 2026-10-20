@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { dueLabel } from '@/utils/helpers';
-import { reachableFrom } from '@/components/workflows/constants';
+import { indexGraph, reachableFrom } from '@/components/workflows/workflowGraph';
 import { useDepartmentNames } from '@/apis/hooks/useDepartments';
 import { ACTIVE_TASK_STATUSES, taskHolderLabel } from '@/utils/supervisor';
 import type {
@@ -28,18 +28,8 @@ export interface WorkflowStageProgressProps {
   currentActorName?: string;
 }
 
-/**
- * The stage rail shared by the workflow page and the workflow monitor. A
- * workflow's documents move through the stages on their own (edms-backend
- * `919d0ef`), and a parallel fork runs one document at several stages at once
- * (edms-backend PR #54), so any stage holding a document is "current", with
- * how many, who holds it and the nearest deadline. A stage is done once nothing
- * sits on it and a stage after it is occupied; without the routing, stages
- * before the earliest occupied one are. A closed workflow marks every stage
- * done — the engine doesn't say which stage a `reject`/`close` ended on. A
- * branch that reached its join before the others shows as waiting there. With
- * more than one document, a per-document list follows the rail.
- */
+/** The stage rail for the workflow page and monitor: every stage holding a document is
+ *  current; a stage is done once empty with an occupied stage after it (closed: all). */
 export function WorkflowStageProgress({
   stages,
   transitions,
@@ -58,11 +48,12 @@ export function WorkflowStageProgress({
     .map((e) => stageIndex.get(e.currentStage))
     .filter((i): i is number => i !== undefined);
   const firstOccupied = occupiedIdx.length ? Math.min(...occupiedIdx) : -1;
+  const graph = indexGraph({ stages, transitions: transitions ?? [] });
   const isDone = (stage: WorkflowStage, i: number) => {
     if (status === 'closed') return true;
     if (occupied.has(stage.id)) return false;
     if (!transitions?.length) return firstOccupied > -1 && i < firstOccupied;
-    const ahead = reachableFrom(stage.id, transitions);
+    const ahead = reachableFrom(graph, stage.id);
     return [...occupied].some((id) => ahead.has(id));
   };
   const holderAt = (stageId: string) => {
@@ -134,7 +125,7 @@ export function WorkflowStageProgress({
           {positions.map((p) => {
             const stageNames = p.active
               .map((e) => {
-                const name = stages.find((s) => s.id === e.currentStage)?.name || e.currentStage;
+                const name = graph.name(e.currentStage);
                 return e.status === 'waiting' ? `${name} (waiting)` : name;
               })
               .join(' + ');

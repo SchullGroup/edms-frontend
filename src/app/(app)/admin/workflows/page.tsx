@@ -22,20 +22,22 @@ import { useAllMetadataFields } from '@/apis/hooks/useMetadataFields';
 import { StagePanel, type StageTab } from '@/components/workflows/StagePanel';
 import type { AssigneeMode } from '@/components/workflows/StagePropertiesPanel';
 import { WorkflowDesignerGuide } from '@/components/workflows/WorkflowDesignerGuide';
+import { DEFAULT_WORKFLOW_DEFINITION } from '@/components/workflows/constants';
 import {
-  DEFAULT_WORKFLOW_DEFINITION,
+  indexGraph,
   isParallelFork,
   moveStage,
   normalizeJoins,
   reconcileTransitions,
-  validateParallelRouting,
-} from '@/components/workflows/constants';
+  validateDefinition,
+  type MoveDirection,
+} from '@/components/workflows/workflowGraph';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import type {
   WorkflowDefinition,
+  WorkflowDefinitionJson,
   WorkflowStage,
   WorkflowStageAction,
-  WorkflowTransition,
 } from '@/types/models';
 
 export default function WorkflowDesignerPage() {
@@ -64,15 +66,12 @@ export default function WorkflowDesignerPage() {
   // the Transitions tab's rule picker uses).
   const { data: metadataFields } = useAllMetadataFields();
   const [stagePanelTab, setStagePanelTab] = useState<StageTab>('properties');
-  // There's no real delete-workflow endpoint on the backend — only archive.
-  // Archived workflows drop out of the switcher by default so archiving
-  // reads as "gone" day-to-day, without pretending it's actually deleted.
+  // The backend can only archive a workflow, not delete it; archived ones are
+  // hidden from the switcher by default.
   const [showArchived, setShowArchived] = useState(false);
 
-  // Local drafts decouple typing from the network round-trip: they update
-  // instantly on every keystroke, but nothing is written back until an
-  // explicit Save. They only resync from server data when the *selection*
-  // changes or a save actually lands, never on every keystroke.
+  // Local drafts: typing is instant and nothing is written until Save. They
+  // resync from the server only when the selection changes or a save lands.
   const [nameDraft, setNameDraft] = useState('');
   const [stageNameDraft, setStageNameDraft] = useState('');
   const [assigneeMode, setAssigneeMode] = useState<AssigneeMode>('role');
@@ -136,10 +135,8 @@ export default function WorkflowDesignerPage() {
     setActionsDraft(stage?.actions || []);
   };
 
-  // Also once departments load: an older stage's sub-department is only
-  // recognised as one with the tree in hand. And once a just-added stage
-  // arrives from the server: it's selected before the save lands, so the
-  // first reset sees no stage and left its drafts empty — "unsaved".
+  // Also reset once departments load (to recognise a sub-department) and once a
+  // just-added stage arrives, or its drafts stay empty and read as unsaved.
   const selectedStageLoaded = !!selectedStage;
   useEffect(() => {
     resetStageDrafts(selectedStage);
@@ -239,11 +236,8 @@ export default function WorkflowDesignerPage() {
     });
   };
 
-  // There's no real delete endpoint for a workflow — archive is the closest
-  // the API has, so it's framed here as the practical "remove this" action:
-  // archived workflows drop out of the switcher (see switcherWorkflows) and
-  // can no longer be routed to, but stay reversible and auditable rather
-  // than gone.
+  // Archive is the API's nearest thing to delete: the workflow leaves the switcher
+  // and can't be routed to, but stays reversible and auditable.
   const handleArchive = () => {
     openConfirm({
       title: `Archive "${wf.name}"?`,
@@ -278,8 +272,8 @@ export default function WorkflowDesignerPage() {
       sla_hours: 48,
       actions: ['review'],
     };
-    const definition = restructure([...stages, newStage]);
-    const problem = validateParallelRouting(definition)[0];
+    const definition = relinkStages([...stages, newStage]);
+    const problem = validateDefinition(definition)[0];
     if (problem) {
       addToast(`Can't add a stage here: ${problem}`, 'error');
       return;
@@ -290,10 +284,10 @@ export default function WorkflowDesignerPage() {
   };
 
   const handleDeleteStage = (stage: WorkflowStage) => {
-    // Deleting where parallel branches meet, say, leaves them converging with
-    // nowhere to wait — say why here instead of letting the save 422.
-    const definition = restructure(stages.filter((s) => s.id !== stage.id));
-    const problem = validateParallelRouting(definition)[0];
+    // A delete can break routing elsewhere (a join, a conditional stage's
+    // fallback); say why here instead of letting the save 422.
+    const definition = relinkStages(stages.filter((s) => s.id !== stage.id));
+    const problem = validateDefinition(definition)[0];
     if (problem) {
       addToast(`Can't delete "${stage.name}": ${problem}`, 'error');
       return;
@@ -304,9 +298,8 @@ export default function WorkflowDesignerPage() {
       confirmLabel: 'Delete stage',
       danger: true,
       onConfirm: () => {
-        // Returning the mutation promise lets the confirm button show a
-        // loading state and keeps the modal open until the delete actually
-        // completes (or failed and can be retried).
+        // Returning the promise keeps the modal open, with the button loading,
+        // until the delete completes or fails and can be retried.
         return updateWfMutation
           .mutateAsync({
             id: wf.id,
@@ -337,10 +330,8 @@ export default function WorkflowDesignerPage() {
     setSelectedStageId(id);
   };
 
-  // A branch line's own label was clicked on the canvas, not just its stage
-  // card — unambiguous intent to look at that stage's routing, so jump
-  // straight to the Transitions tab instead of leaving it on whichever tab
-  // happened to be open.
+  // A branch label (not a stage card) was clicked on the canvas: open that
+  // stage's Transitions tab.
   const handleEditBranch = (id: string) => {
     selectStage(id);
     setStagePanelTab('transitions');
@@ -394,15 +385,15 @@ export default function WorkflowDesignerPage() {
 
   // Reordering (removed with drag-and-drop when branching arrived): swap the
   // selected stage with its neighbour along the route, saved straight away.
-  const stageMove = (direction: 'earlier' | 'later') =>
+  const stageMove = (direction: MoveDirection) =>
     selectedStage
       ? moveStage({ stages, transitions: wf.definition.transitions || [] }, selectedStage.id, direction)
       : { reason: 'Select a stage first.' };
-  const blockedReason = (direction: 'earlier' | 'later') => {
+  const blockedReason = (direction: MoveDirection) => {
     const result = stageMove(direction);
     return 'reason' in result ? result.reason : null;
   };
-  const handleMoveStage = (direction: 'earlier' | 'later') => {
+  const handleMoveStage = (direction: MoveDirection) => {
     const result = stageMove(direction);
     if ('reason' in result || updateWfMutation.isPending) return;
     // The first stage can't send work back, so a stage moved to the start
@@ -428,18 +419,17 @@ export default function WorkflowDesignerPage() {
     resetStageDrafts(selectedStage);
   };
 
-  // The Transitions tab hands back the whole definition (`applyStageRouting`):
-  // usually just this stage's branches changed, but a parallel fork also points
-  // its branches on to where they meet and marks that stage as the join.
-  const handleSaveTransitions = (definition: { stages: WorkflowStage[]; transitions: WorkflowTransition[] }) => {
+  // The Transitions tab hands back the whole definition (`applyStageRouting`),
+  // since a parallel fork also changes its branches' routes and the join.
+  const handleSaveTransitions = (definition: WorkflowDefinitionJson) => {
     updateWorkflow(wf.id, { definition: { ...wf.definition, ...definition } });
   };
 
   // After adding or deleting a stage: re-link the chain, and drop a join flag
   // whose branches no longer meet there (the backend would 422 the save).
-  const restructure = (updatedStages: WorkflowStage[]) => {
+  const relinkStages = (updatedStages: WorkflowStage[]) => {
     const transitions = reconcileTransitions(updatedStages, wf.definition.transitions || []);
-    return { stages: normalizeJoins(updatedStages, transitions), transitions };
+    return { stages: normalizeJoins(indexGraph({ stages: updatedStages, transitions })), transitions };
   };
 
   const assigneeSummary = (s: WorkflowStage) => {
@@ -534,7 +524,7 @@ export default function WorkflowDesignerPage() {
           canEdit={canEditWorkflow}
           tab={stagePanelTab}
           onTabChange={setStagePanelTab}
-          hasConditionalBranch={(() => {
+          stageBranches={(() => {
             const outgoing = (wf.definition.transitions || []).filter((t) => t.from === selectedStage?.id);
             return outgoing.some((t) => !!t.condition) || isParallelFork(outgoing);
           })()}

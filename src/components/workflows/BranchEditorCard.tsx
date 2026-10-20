@@ -2,26 +2,34 @@
 
 import { CONDITION_FIELDS, operatorsForField } from './constants';
 import { RuleValueInput } from './RuleValueInput';
-import { useBranchDraft } from '@/hooks/useBranchDraft';
-import type { WorkflowConditionField, WorkflowStage, WorkflowTransition } from '@/types/models';
+import { transitionKind, type TransitionKind } from './workflowGraph';
+import { useBranchDraft, type DraftTransition } from '@/hooks/useBranchDraft';
+import type {
+  WorkflowConditionField,
+  WorkflowDefinitionJson,
+  WorkflowStage,
+  WorkflowTransition,
+} from '@/types/models';
 
 export interface BranchEditorCardProps {
   stage: WorkflowStage;
   stages: WorkflowStage[];
   transitions: WorkflowTransition[];
   /** The whole definition, since a parallel branch can change other stages. */
-  onSave: (definition: { stages: WorkflowStage[]; transitions: WorkflowTransition[] }) => void;
+  onSave: (definition: WorkflowDefinitionJson) => void;
   saving: boolean;
   canEdit: boolean;
 }
 
-/**
- * The actual routing editor — every outgoing transition for one stage,
- * shown as a card per branch (target, and, for a conditional one, its rule
- * builder). Purely presentational: all state and validation come from
- * `useBranchDraft`, so this component itself has no business logic to keep
- * in sync anywhere else.
- */
+/** Each branch's tag; a conditional one shows its priority instead. */
+const TAGS: Record<Exclude<TransitionKind, 'conditional'>, { className: string; text: string }> = {
+  parallel: { className: 'wfd-tag-parallel', text: 'Parallel' },
+  fallback: { className: 'wfd-tag-fallback', text: 'Fallback' },
+  plain: { className: 'wfd-tag-fallback', text: 'Next' },
+};
+
+/** The routing editor: a card per outgoing branch (target, and rules if
+ *  conditional). Presentational; state and validation live in `useBranchDraft`. */
 export function BranchEditorCard({ stage, stages, transitions, onSave, saving, canEdit }: BranchEditorCardProps) {
   const {
     drafts,
@@ -55,14 +63,12 @@ export function BranchEditorCard({ stage, stages, transitions, onSave, saving, c
 
   const hasConditional = drafts.some((d) => d.condition);
   const hasUnconditional = drafts.some((d) => !d.condition);
-  const tagFor = (isConditional: boolean, priority?: number) =>
-    isConditional
-      ? { className: 'wfd-tag-conditional', text: `Priority ${priority ?? '?'}` }
-      : parallel
-        ? { className: 'wfd-tag-parallel', text: 'Parallel' }
-        : hasConditional
-          ? { className: 'wfd-tag-fallback', text: 'Fallback' }
-          : { className: 'wfd-tag-fallback', text: 'Next' };
+  const tagFor = (draft: DraftTransition) => {
+    const kind = transitionKind(draft, drafts);
+    return kind === 'conditional'
+      ? { className: 'wfd-tag-conditional', text: `Priority ${draft.priority ?? '?'}` }
+      : TAGS[kind];
+  };
 
   return (
     <>
@@ -74,7 +80,7 @@ export function BranchEditorCard({ stage, stages, transitions, onSave, saving, c
         <div className="flex flex-col gap-3">
           {drafts.map((d) => {
             const isConditional = !!d.condition;
-            const tag = tagFor(isConditional, d.priority);
+            const tag = tagFor(d);
             return (
               <div key={d._key} className="wfd-transition-card">
                 <div className="flex items-center gap-2" style={{ marginBottom: isConditional ? '10px' : 0 }}>

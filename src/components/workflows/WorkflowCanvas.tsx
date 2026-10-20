@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { actionLabel, computeStageLayout, describeCondition, isParallelFork } from './constants';
+import { actionLabel, describeCondition } from './constants';
+import { computeStageLayout, indexGraph, transitionKind, type TransitionKind } from './workflowGraph';
 import type { WorkflowStage, WorkflowTransition } from '@/types/models';
 
 const NODE_WIDTH = 176;
@@ -22,7 +23,7 @@ interface PositionedNode {
   y: number;
 }
 
-type EdgeKind = 'plain' | 'conditional' | 'fallback' | 'parallel';
+type EdgeKind = TransitionKind;
 const EDGE_KINDS: EdgeKind[] = ['plain', 'conditional', 'fallback', 'parallel'];
 
 interface Edge {
@@ -39,10 +40,8 @@ export interface WorkflowCanvasProps {
   transitions: WorkflowTransition[];
   selectedStageId: string | null;
   onSelect: (id: string) => void;
-  /** A branch line's own label was clicked, not just its stage card — selects
-   *  the stage same as `onSelect`, but the caller also jumps straight to the
-   *  Transitions tab in the side panel, since that's unambiguously what a
-   *  click on a routing line means. */
+  /** A branch label was clicked: selects the stage like `onSelect`, and the
+   *  caller opens its Transitions tab. */
   onEditBranch: (id: string) => void;
   assigneeSummary: (stage: WorkflowStage) => string;
   /** Names a metadata field in branch labels ("Invoice Amount > 5000000"). */
@@ -53,19 +52,8 @@ export interface WorkflowCanvasProps {
 const bezierMid = (p0: number, c1: number, c2: number, p1: number) =>
   (p0 + 3 * c1 + 3 * c2 + p1) / 8;
 
-/**
- * Stages laid out by their position in the routing graph (`computeStageLayout`:
- * column = longest path from the first stage, row = siblings in a column), so
- * a fork and the stage it reconverges on read left to right. A line that skips
- * a column is routed above or below any card in its way, never through it.
- *
- * The canvas is a fixed-height viewport that scrolls on its own — adding stages
- * grows the graph inside it, not the page — and dragging its empty background
- * pans it. Cards themselves don't drag: their position comes from the routing,
- * so moving one by hand couldn't change where its lines go and would only
- * mislead. Editing happens in the side panel (`StagePanel`); clicking a branch
- * label jumps straight to that stage's Transitions tab.
- */
+/** Stages placed by `computeStageLayout` in a fixed-height viewport that pans; cards
+ *  don't drag, since routing sets their place. Editing happens in `StagePanel`. */
 export function WorkflowCanvas({
   stages,
   transitions,
@@ -75,8 +63,9 @@ export function WorkflowCanvas({
   assigneeSummary,
   metadataFieldName,
 }: WorkflowCanvasProps) {
+  const graph = useMemo(() => indexGraph({ stages, transitions }), [stages, transitions]);
   const nodes: PositionedNode[] = useMemo(() => {
-    const layout = computeStageLayout(stages, transitions);
+    const layout = computeStageLayout(graph);
     const rowOffset = new Map(layout.map((l) => [l.id, l.row]));
     const colByStage = new Map(layout.map((l) => [l.id, l.column]));
     return stages.map((stage) => ({
@@ -84,34 +73,18 @@ export function WorkflowCanvas({
       x: ORIGIN_X + (colByStage.get(stage.id) ?? 0) * COL_GAP,
       y: ORIGIN_Y + (rowOffset.get(stage.id) ?? 0) * ROW_GAP,
     }));
-  }, [stages, transitions]);
+  }, [graph, stages]);
 
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.stage.id, n])), [nodes]);
 
   const edges: Edge[] = useMemo(() => {
-    const outgoingCountByStage = new Map<string, number>();
-    transitions.forEach((t) =>
-      outgoingCountByStage.set(t.from, (outgoingCountByStage.get(t.from) || 0) + 1),
-    );
-    const forks = new Set(
-      transitions
-        .map((t) => t.from)
-        .filter((from) => isParallelFork(transitions.filter((t) => t.from === from))),
-    );
 
     return transitions
       .map((t): Edge | null => {
         const from = nodeById.get(t.from);
         const to = nodeById.get(t.to);
         if (!from || !to) return null;
-        const isBranch = (outgoingCountByStage.get(t.from) || 0) > 1;
-        const kind: EdgeKind = t.condition
-          ? 'conditional'
-          : forks.has(t.from)
-            ? 'parallel'
-            : isBranch
-              ? 'fallback'
-              : 'plain';
+        const kind = transitionKind(t, graph.outgoing(t.from));
 
         const x1 = from.x + NODE_WIDTH;
         const y1 = from.y + NODE_HEIGHT / 2;
@@ -157,7 +130,7 @@ export function WorkflowCanvas({
         };
       })
       .filter((e): e is Edge => e !== null);
-  }, [transitions, nodeById, nodes]);
+  }, [transitions, graph, nodeById, nodes]);
 
   const bounds = useMemo(() => {
     const maxX = Math.max(NODE_WIDTH, ...nodes.map((n) => n.x + NODE_WIDTH));

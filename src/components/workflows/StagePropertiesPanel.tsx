@@ -3,6 +3,7 @@
 import { STAGE_ACTIONS } from './constants';
 import { Combobox } from '@/components/ui/Combobox';
 import { StageDepartmentPicker } from './StageDepartmentPicker';
+import type { MoveDirection } from './workflowGraph';
 import type { Department, WorkflowStageAction } from '@/types/models';
 
 export type AssigneeMode = 'role' | 'person' | 'department';
@@ -36,7 +37,7 @@ export interface StagePropertiesPanelProps {
   onDiscard: () => void;
   onDelete: () => void;
   /** Swaps the stage with its neighbour along the route (`moveStage`). */
-  onMove: (direction: 'earlier' | 'later') => void;
+  onMove: (direction: MoveDirection) => void;
   /** Why the stage can't move that way, or null when it can. */
   moveEarlierBlocked: string | null;
   moveLaterBlocked: string | null;
