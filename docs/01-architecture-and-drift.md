@@ -1303,6 +1303,12 @@ on both sides."
   `useExportAuditCsv`, `useVerifyAuditChain` in `useAudit.ts`), and `/admin/audit` (Tenant
   Audit) now reads and paginates the real trail, with a "Verify integrity" action.
 
+*Update 2026-10-20:* `GET /audit` and `GET /audit/:id` return `actor {id,name,email}` next to
+`actorId` (edms-backend PR #53; null for system entries and deleted users). The Actor
+column on `/admin/audit`, `/auditor/trail` and the compliance activity panel reads it.
+Before, they looked actors up in `GET /users`, a 403 for `internal_auditor`, so the
+auditor's own trail showed UUIDs. Verified live as `auditor` and `client_admin`.
+
 *Update 2026-09-18 (later the same day):* `auditor/trail` and `management/compliance`'s
 "sensitive activity" panel are both migrated now. Pulled a 78-entry live sample first to
 get the *real* action vocabulary (`user.login`, `document.access_denied`,

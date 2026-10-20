@@ -1529,6 +1529,8 @@ export interface AuditEntry {
   seq: number;
   /** Null for system-originated actions. */
   actorId: string | null;
+  /** Who `actorId` is; null for system entries and for a deleted user. */
+  actor?: PersonSummary | null;
   actorType: 'user' | 'system';
   /** e.g. `"document.uploaded"`. */
   action: string;
