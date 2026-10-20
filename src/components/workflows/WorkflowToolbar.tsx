@@ -1,30 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/Icons';
-import { Copy, MoreVertical, Trash2 } from 'lucide-react';
+import { WorkflowActionsMenu } from '@/components/workflows/WorkflowActionsMenu';
+import type { WorkflowDefinition } from '@/types/models';
 
 export interface WorkflowToolbarProps {
-  workflow: any;
+  workflow: WorkflowDefinition;
   stageCount: number;
   nameDraft: string;
   onNameChange: (name: string) => void;
   nameDirty: boolean;
   onSaveName: () => void;
   saving: boolean;
-  switcherWorkflows: any[];
-  archivedCount: number;
-  showArchived: boolean;
-  onToggleShowArchived: () => void;
-  onSwitchWorkflow: (id: string) => void;
-  onCreateNew: () => void;
+  onBack: () => void;
   onClone: () => void;
   onArchive: () => void;
   onUnarchive: () => void;
   onDelete: () => void;
   onPublish: () => void;
-  creating: boolean;
+  cloning: boolean;
   archiving: boolean;
   unarchiving: boolean;
   deleting: boolean;
@@ -35,8 +30,8 @@ export interface WorkflowToolbarProps {
   canPublish: boolean;
 }
 
-/** Switcher row above this workflow's toolbar. The primary button follows the status
- *  (Publish a draft, Unarchive an archived one); Clone, Archive and Delete sit in the menu. */
+/** A back link to the workflow list above this workflow's toolbar. The primary button
+ *  follows the status (Publish a draft, Unarchive an archived one); the rest sit in ⋮. */
 export function WorkflowToolbar({
   workflow,
   stageCount,
@@ -45,18 +40,13 @@ export function WorkflowToolbar({
   nameDirty,
   onSaveName,
   saving,
-  switcherWorkflows,
-  archivedCount,
-  showArchived,
-  onToggleShowArchived,
-  onSwitchWorkflow,
-  onCreateNew,
+  onBack,
   onClone,
   onArchive,
   onUnarchive,
   onDelete,
   onPublish,
-  creating,
+  cloning,
   archiving,
   unarchiving,
   deleting,
@@ -67,42 +57,17 @@ export function WorkflowToolbar({
   canPublish,
 }: WorkflowToolbarProps) {
   const statusBadgeClass =
-    workflow.status === 'published' ? 'b-status-closed' : workflow.status === 'archived' ? 'b-status-overdue' : 'b-status-pending';
-  const statusLabel = workflow.status === 'published' ? 'Active' : workflow.status === 'archived' ? 'Archived' : 'Draft';
-
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const menuBtnRef = useRef<HTMLButtonElement>(null);
-  const menuPopRef = useRef<HTMLDivElement>(null);
-  const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
-
-  const syncMenuRect = useCallback(() => {
-    if (menuBtnRef.current) setMenuRect(menuBtnRef.current.getBoundingClientRect());
-  }, []);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    syncMenuRect();
-    const handleClickOutside = (event: MouseEvent) => {
-      const t = event.target as Node;
-      if (menuRef.current?.contains(t) || menuPopRef.current?.contains(t)) return;
-      setMenuOpen(false);
-    };
-    const onReflow = () => syncMenuRect();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', onReflow, true);
-    window.addEventListener('resize', onReflow);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', onReflow, true);
-      window.removeEventListener('resize', onReflow);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [menuOpen, syncMenuRect]);
+    workflow.status === 'published'
+      ? 'b-status-closed'
+      : workflow.status === 'archived'
+        ? 'b-status-overdue'
+        : 'b-status-pending';
+  const statusLabel =
+    workflow.status === 'published'
+      ? 'Active'
+      : workflow.status === 'archived'
+        ? 'Archived'
+        : 'Draft';
 
   // Flashes a brief "Saved" confirmation whenever a save that was in flight
   // completes, rather than leaving success entirely silent.
@@ -120,31 +85,11 @@ export function WorkflowToolbar({
   return (
     <div className="wfd-toolbar">
       <div className="wfd-crumbrow">
-        <span className="caption font-semibold">Workflows</span>
+        <button type="button" className="caption font-semibold wfd-back" onClick={onBack}>
+          Workflows
+        </button>
         <Icon name="chevR" size={12} />
-        <div className="wfd-crumb-switch">
-          <select
-            className="input"
-            value={workflow.id}
-            onChange={(e) => onSwitchWorkflow(e.target.value)}
-            aria-label="Switch workflow"
-          >
-            {switcherWorkflows?.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}{w.status === 'archived' ? ' — archived' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        {archivedCount > 0 && (
-          <button
-            type="button"
-            className="caption wfd-archived-toggle"
-            onClick={onToggleShowArchived}
-          >
-            {showArchived ? 'Hide' : 'Show'} archived ({archivedCount})
-          </button>
-        )}
+        <span className="caption">{workflow.name}</span>
       </div>
 
       <div className="wfd-toolrow">
@@ -170,24 +115,13 @@ export function WorkflowToolbar({
           <span className={`wfd-saved-pill ${justSaved ? 'show' : ''}`}>
             <Icon name="check" size={12} /> Saved
           </span>
-          <span className={`badge ${statusBadgeClass}`}>
-            {statusLabel}
-          </span>
+          <span className={`badge ${statusBadgeClass}`}>{statusLabel}</span>
           <span className="caption">
-            {stageCount} stage{stageCount === 1 ? '' : 's'}
+            v{workflow.version} · {stageCount} stage{stageCount === 1 ? '' : 's'}
           </span>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={onCreateNew}
-            disabled={creating || !canCreate}
-            title={!canCreate ? "You don't have permission to create workflows" : undefined}
-          >
-            <Icon name="plus" size={15} /> New workflow
-          </button>
           {workflow.status === 'archived' ? (
             <button
               className="btn btn-primary btn-sm"
@@ -207,88 +141,15 @@ export function WorkflowToolbar({
               {workflow.status === 'published' ? 'Published' : 'Publish'}
             </button>
           )}
-          <div ref={menuRef} style={{ position: 'relative' }}>
-            <button
-              type="button"
-              ref={menuBtnRef}
-              className="btn btn-secondary btn-sm"
-              style={{ width: '32px', padding: 0, justifyContent: 'center' }}
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-label="More workflow actions"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-            >
-              <MoreVertical />
-            </button>
-            {menuOpen &&
-              menuRect &&
-              typeof document !== 'undefined' &&
-              createPortal(
-                <div
-                  className="menu"
-                  ref={menuPopRef}
-                  style={{
-                    position: 'fixed',
-                    top: menuRect.bottom + 8,
-                    right: Math.max(8, window.innerWidth - menuRect.right),
-                    minWidth: '190px',
-                  }}
-                  role="menu"
-                >
-                  <button
-                    className="menu-item"
-                    role="menuitem"
-                    disabled={creating || !canCreate}
-                    title={!canCreate ? "You don't have permission to create workflows" : undefined}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onClone();
-                    }}
-                  >
-                    <Copy name="copy" size={15} /> Clone this workflow
-                  </button>
-                  {workflow.status === 'draft' && (
-                    <>
-                      <div className="menu-sep"></div>
-                      <button
-                        className="menu-item danger"
-                        role="menuitem"
-                        disabled={deleting || !canDelete}
-                        title={
-                          !canDelete ? "You don't have permission to delete workflows" : undefined
-                        }
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onDelete();
-                        }}
-                      >
-                        <Trash2 size={15} /> Delete draft
-                      </button>
-                    </>
-                  )}
-                  {workflow.status === 'published' && (
-                    <>
-                      <div className="menu-sep"></div>
-                      <button
-                        className="menu-item danger"
-                        role="menuitem"
-                        disabled={archiving || !canArchive}
-                        title={
-                          !canArchive ? "You don't have permission to archive workflows" : undefined
-                        }
-                        onClick={() => {
-                          setMenuOpen(false);
-                          onArchive();
-                        }}
-                      >
-                        <Icon name="alert" size={15} /> Archive
-                      </button>
-                    </>
-                  )}
-                </div>,
-                document.body,
-              )}
-          </div>
+          <WorkflowActionsMenu
+            status={workflow.status}
+            ariaLabel="More workflow actions"
+            onClone={onClone}
+            onArchive={onArchive}
+            onDelete={onDelete}
+            busy={{ cloning, archiving, unarchiving, deleting }}
+            can={{ create: canCreate, archive: canArchive, delete: canDelete }}
+          />
         </div>
       </div>
     </div>

@@ -675,8 +675,10 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
 
 .wfd-toolbar { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
 .wfd-crumbrow { padding: 10px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-.wfd-crumb-select { appearance: none; background: transparent repeat scroll 0 0 / auto padding-box border-box; border: none; font: inherit; font-weight: 700; font-size: 13px; color: var(--ink); cursor: pointer; padding: 2px 18px 2px 2px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23878FA1' stroke-width='1.5' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right center; }
-.wfd-archived-toggle { background: none; border: 0; padding: 0; cursor: pointer; color: var(--focus); margin-left: auto; }
+.wfd-back { background: none; border: 0; padding: 0; cursor: pointer; color: var(--focus); }
+.wfd-back:hover { text-decoration: underline; }
+.wf-name-link { color: var(--ink); }
+.wf-name-link:hover { text-decoration: underline; }
 .wfd-toolrow { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .wfd-saved-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--status-closed); opacity: 0; transform: translateY(2px); transition: opacity .2s cubic-bezier(.2,0,0,1), transform .2s cubic-bezier(.2,0,0,1); pointer-events: none; }
 .wfd-saved-pill.show { opacity: 1; transform: translateY(0); }

@@ -164,7 +164,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
-| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 58 pages (54 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-15, was 46 |
+| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 59 pages (55 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-20 (+1: the `/admin/workflows` list, with the designer moved to `/admin/workflows/[id]`); 58 on 2026-10-15, 46 before |
 | API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 134 routes over 11 router files — re-counted 2026-10-15, was 90. Swagger at `/api-docs` |
 | Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |

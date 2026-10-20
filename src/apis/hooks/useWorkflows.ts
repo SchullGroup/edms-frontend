@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { workflowsService } from '@/apis/services/workflows.service';
 import { WorkflowDefinition } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
@@ -20,6 +20,8 @@ export function useWorkflows(filters: Record<string, any> = {}) {
   return useQuery({
     queryKey: workflowKeys.list(filters),
     queryFn: () => workflowsService.getAll(filters),
+    // A new tab, search or page keeps the current rows up until it arrives.
+    placeholderData: keepPreviousData,
   });
 }
 

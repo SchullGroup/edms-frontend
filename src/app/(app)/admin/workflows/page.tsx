@@ -1,594 +1,254 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useStore } from '@/store/useStore';
+import React, { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
-import {
-  useWorkflows,
-  useUpdateWorkflow,
-  useCreateWorkflow,
-  usePublishWorkflow,
-  useArchiveWorkflow,
-  useUnarchiveWorkflow,
-  useDeleteWorkflow,
-} from '@/apis/hooks/useWorkflows';
-import { useRoles } from '@/apis/hooks/useRoles';
-import { useAllUsers } from '@/apis/hooks/useUsers';
-import { useDepartments } from '@/apis/hooks/useDepartments';
-import { departmentOptions, departmentParents } from '@/apis/utils/managementAggregation';
+import { useCreateWorkflow, useWorkflows } from '@/apis/hooks/useWorkflows';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
-import { WorkflowToolbar } from '@/components/workflows/WorkflowToolbar';
-import { WorkflowCanvas } from '@/components/workflows/WorkflowCanvas';
-import { useAllMetadataFields } from '@/apis/hooks/useMetadataFields';
-import { StagePanel, type StageTab } from '@/components/workflows/StagePanel';
-import type { AssigneeMode } from '@/components/workflows/StagePropertiesPanel';
-import { WorkflowDesignerGuide } from '@/components/workflows/WorkflowDesignerGuide';
+import { Table, Column } from '@/components/ui/Table';
+import { Pagination } from '@/components/ui/Pagination';
+import { SkeletonPage, SkeletonTable } from '@/components/common/Skeleton';
+import { WorkflowActionsMenu } from '@/components/workflows/WorkflowActionsMenu';
+import { useWorkflowActions } from '@/components/workflows/useWorkflowActions';
 import { DEFAULT_WORKFLOW_DEFINITION } from '@/components/workflows/constants';
-import {
-  indexGraph,
-  isParallelFork,
-  moveStage,
-  normalizeJoins,
-  reconcileTransitions,
-  validateDefinition,
-  type MoveDirection,
-} from '@/components/workflows/workflowGraph';
-import { SkeletonPage } from '@/components/common/Skeleton';
-import type {
-  WorkflowDefinition,
-  WorkflowDefinitionJson,
-  WorkflowStage,
-  WorkflowStageAction,
-} from '@/types/models';
+import { timeAgo } from '@/utils/helpers';
+import type { WorkflowDefinition } from '@/types/models';
 
-export default function WorkflowDesignerPage() {
-  const { auditAction } = useStore();
-  const { setPageTitle, openConfirm, addToast } = useUIStore();
+type StatusTab = WorkflowDefinition['status'];
+
+const TABS: { value: StatusTab; label: string; empty: string }[] = [
+  {
+    value: 'published',
+    label: 'Published',
+    empty: 'No published workflows. Publish a draft to route documents through it.',
+  },
+  { value: 'draft', label: 'Drafts', empty: 'No drafts. New workflows and clones start here.' },
+  { value: 'archived', label: 'Archived', empty: 'Nothing archived.' },
+];
+const PAGE_SIZE = 20;
+
+export default function WorkflowsPage() {
+  // useSearchParams needs a Suspense boundary above it.
+  return (
+    <Suspense
+      fallback={
+        <SkeletonPage columns={['Name', 'Status', 'Version', 'Stages', 'Edited', '']} rows={6} />
+      }
+    >
+      <WorkflowList />
+    </Suspense>
+  );
+}
+
+/** Every workflow, by status, with search; a row opens the designer. The tab and
+ *  search live in the URL, so coming back from the designer lands where you were. */
+function WorkflowList() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { setPageTitle } = useUIStore();
   const { can } = usePermissions();
-  const canCreateWorkflow = can('workflow', 'create');
-  const canEditWorkflow = can('workflow', 'edit');
-  const canPublishWorkflow = can('workflow', 'publish');
-  const canArchiveWorkflow = can('workflow', 'archive');
+  const canCreate = can('workflow', 'create');
+  const actions = useWorkflowActions();
+  const createMutation = useCreateWorkflow();
 
-  const { data: workflowsData, isLoading, error } = useWorkflows();
-  const workflows = workflowsData?.data || [];
-  const { data: roles } = useRoles();
-  const { data: usersResult } = useAllUsers();
-  const users = usersResult?.items || [];
+  const status = (TABS.find((t) => t.value === searchParams.get('status'))?.value ??
+    'published') as StatusTab;
+  const query = searchParams.get('q') ?? '';
+  const [search, setSearch] = useState(query);
+  const [page, setPage] = useState(1);
 
-  const updateWfMutation = useUpdateWorkflow();
-  const createWfMutation = useCreateWorkflow();
-  const publishWfMutation = usePublishWorkflow();
-  const archiveWfMutation = useArchiveWorkflow();
-  const unarchiveWfMutation = useUnarchiveWorkflow();
-  const deleteWfMutation = useDeleteWorkflow();
-
-  const [wfId, setWfId] = useState<string | null>(null);
-  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
-  // Names metadata fields in the canvas's branch labels (same cached query
-  // the Transitions tab's rule picker uses).
-  const { data: metadataFields } = useAllMetadataFields();
-  const [stagePanelTab, setStagePanelTab] = useState<StageTab>('properties');
-  // Archived workflows are hidden from the switcher by default.
-  const [showArchived, setShowArchived] = useState(false);
-
-  // Local drafts: typing is instant and nothing is written until Save. They
-  // resync from the server only when the selection changes or a save lands.
-  const [nameDraft, setNameDraft] = useState('');
-  const [stageNameDraft, setStageNameDraft] = useState('');
-  const [assigneeMode, setAssigneeMode] = useState<AssigneeMode>('role');
-  const [roleDraft, setRoleDraft] = useState('');
-  const [userDraft, setUserDraft] = useState('');
-  // A stage's department: a top-level one, plus optionally one of its
-  // sub-departments (edms-backend PR #52). '' on a role stage = any department.
-  const [departmentDraft, setDepartmentDraft] = useState('');
-  const [subDepartmentDraft, setSubDepartmentDraft] = useState('');
-  const { data: departmentsData } = useDepartments();
-  // `GET /departments` is a tree of top-level departments with `children`.
-  const departmentTree = departmentsData?.data || [];
-  const departments = departmentOptions(departmentTree);
-  const parentOf = departmentParents(departmentTree);
-  // Labelled with the path: sub-departments in different trees may share a name.
-  const departmentName = (id?: string | null) =>
-    (id && departments.find((d) => d.id === id)?.label) || null;
-
-  // Stages saved before PR #52 hold a sub-department in `department_id` alone;
-  // read them as the parent + sub-department pair the picker shows (and saves).
-  const stageDepartment = (stage: WorkflowStage | null) => {
-    if (!stage?.department_id) return { departmentId: '', subDepartmentId: '' };
-    if (stage.sub_department_id)
-      return { departmentId: stage.department_id, subDepartmentId: stage.sub_department_id };
-    const parentId = parentOf.get(stage.department_id);
-    return parentId
-      ? { departmentId: parentId, subDepartmentId: stage.department_id }
-      : { departmentId: stage.department_id, subDepartmentId: '' };
-  };
-  const [slaDraft, setSlaDraft] = useState(48);
-  const [actionsDraft, setActionsDraft] = useState<WorkflowStageAction[]>([]);
-
-  useEffect(() => {
-    if (workflows.length > 0 && !wfId) {
-      setWfId(workflows[0].id);
+  const setParams = (next: { status?: StatusTab; q?: string }) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next.status) params.set('status', next.status);
+    if (next.q !== undefined) {
+      if (next.q) params.set('q', next.q);
+      else params.delete('q');
     }
-  }, [workflows, wfId]);
+    setPage(1);
+    router.replace(`/admin/workflows?${params.toString()}`, { scroll: false });
+  };
 
-  const wf = workflows?.find((w) => w.id === wfId) || workflows?.[0];
-  const stages = wf?.definition?.stages || [];
-  const switcherWorkflows = showArchived ? workflows : workflows.filter((w) => w.status !== 'archived' || w.id === wf?.id);
-  const archivedCount = workflows.filter((w) => w.status === 'archived').length;
-
+  // Debounce the search box so each keystroke isn't a request.
   useEffect(() => {
-    setNameDraft(wf?.name || '');
-  }, [wf?.id, wf?.name]);
+    if (search.trim() === query) return;
+    const t = window.setTimeout(() => setParams({ q: search.trim() }), 300);
+    return () => window.clearTimeout(t);
+  }, [search]);
 
-  const selectedStage = stages.find((s) => s.id === selectedStageId) ?? null;
-
-  const resetStageDrafts = (stage: WorkflowStage | null) => {
-    setStageNameDraft(stage?.name || '');
-    setAssigneeMode(
-      stage?.user_id ? 'person' : !stage?.role && stage?.department_id ? 'department' : 'role',
-    );
-    setRoleDraft(stage?.role || '');
-    setUserDraft(stage?.user_id || '');
-    const { departmentId, subDepartmentId } = stageDepartment(stage);
-    setDepartmentDraft(departmentId);
-    setSubDepartmentDraft(subDepartmentId);
-    setSlaDraft(stage?.sla_hours ?? 48);
-    setActionsDraft(stage?.actions || []);
-  };
-
-  // Also reset once departments load (to recognise a sub-department) and once a
-  // just-added stage arrives, or its drafts stay empty and read as unsaved.
-  const selectedStageLoaded = !!selectedStage;
-  useEffect(() => {
-    resetStageDrafts(selectedStage);
-  }, [selectedStageId, selectedStageLoaded, departmentsData]);
-
-  const updateWorkflow = (id: string, updates: Partial<WorkflowDefinition>) => {
-    updateWfMutation.mutate({ id, updates });
-  };
-
-  // The stage's assignment as the drafts would save it. A stage has exactly one
-  // kind; the fields of the others are cleared.
-  const assignmentDraft = (): Pick<
-    WorkflowStage,
-    'role' | 'user_id' | 'department_id' | 'sub_department_id'
-  > => {
-    const department = {
-      department_id: departmentDraft || undefined,
-      sub_department_id: (departmentDraft && subDepartmentDraft) || undefined,
-    };
-    if (assigneeMode === 'role') return { role: roleDraft, user_id: undefined, ...department };
-    if (assigneeMode === 'department') return { role: undefined, user_id: undefined, ...department };
-    return { role: undefined, user_id: userDraft, department_id: undefined, sub_department_id: undefined };
-  };
-
-  const nameDirty = nameDraft !== (wf?.name || '');
-  const stageDirty =
-    !!selectedStage &&
-    (() => {
-      const draft = assignmentDraft();
-      const saved = stageDepartment(selectedStage);
-      return (
-        stageNameDraft !== (selectedStage.name || '') ||
-        JSON.stringify(actionsDraft) !== JSON.stringify(selectedStage.actions || []) ||
-        slaDraft !== (selectedStage.sla_hours ?? 48) ||
-        (draft.role || '') !== (selectedStage.role || '') ||
-        (draft.user_id || '') !== (selectedStage.user_id || '') ||
-        (draft.department_id || '') !== saved.departmentId ||
-        (draft.sub_department_id || '') !== saved.subDepartmentId
-      );
-    })();
+  const { data, isLoading, isError, isPlaceholderData, refetch } = useWorkflows({
+    status,
+    search: query || undefined,
+    page,
+    limit: PAGE_SIZE,
+  });
+  const workflows = data?.data || [];
 
   useEffect(() => {
     setPageTitle('Workflow Designer');
   }, [setPageTitle]);
 
-  if (isLoading) {
-    return <SkeletonPage columns={['Workflow', 'Stages', 'Status', '']} rows={5} />;
-  }
+  const open = (id: string) => router.push(`/admin/workflows/${id}`);
 
-  if (error) {
-    return (
-      <div className="p-8 text-center" style={{ color: 'var(--status-overdue)' }}>
-        Failed to load workflows. Please try again.
-      </div>
-    );
-  }
-
-  const handleCreateWorkflow = () => {
-    createWfMutation.mutate(
-      { name: 'New workflow', description: 'A new sequential workflow', definition: DEFAULT_WORKFLOW_DEFINITION },
+  const handleCreate = () => {
+    createMutation.mutate(
       {
-        onSuccess: (data) => {
-          setWfId(data.id);
-          setSelectedStageId(null);
-          addToast('Workflow created', 'success');
-        },
+        name: 'New workflow',
+        description: 'A new sequential workflow',
+        definition: DEFAULT_WORKFLOW_DEFINITION,
       },
+      { onSuccess: (wf) => open(wf.id) },
     );
   };
 
-  if (!wf && workflows.length === 0) {
-    return (
-      <div className="p-8">
-        <div className="card card-pad text-center">
-          <div className="h3 mb-2">No workflows yet</div>
-          <div className="caption mb-4">Create your first workflow to get started.</div>
-          <button
-            className="btn btn-primary"
-            onClick={handleCreateWorkflow}
-            disabled={!canCreateWorkflow}
-            title={!canCreateWorkflow ? "You don't have permission to create workflows" : undefined}
-          >
-            Create workflow
-          </button>
+  const cols: Column<WorkflowDefinition>[] = [
+    {
+      key: 'name',
+      label: 'Name',
+      render: (w) => (
+        <div style={{ minWidth: 0 }}>
+          <Link href={`/admin/workflows/${w.id}`} className="font-semibold wf-name-link">
+            {w.name}
+          </Link>
+          {w.description && <div className="caption truncate">{w.description}</div>}
         </div>
-      </div>
-    );
-  }
-
-  if (!wf) return null;
-
-  const handlePublish = () => {
-    publishWfMutation.mutate(wf.id, {
-      onSuccess: () => {
-        auditAction('WORKFLOW_PUBLISH', wf.id, `Published ${wf.name}`);
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (w) => (
+        <span
+          className={`badge ${w.status === 'published' ? 'b-status-closed' : w.status === 'archived' ? 'b-status-overdue' : 'b-status-pending'}`}
+        >
+          {w.status === 'published' ? 'Active' : w.status === 'archived' ? 'Archived' : 'Draft'}
+        </span>
+      ),
+    },
+    { key: 'version', label: 'Version', render: (w) => `v${w.version}` },
+    { key: 'definition', label: 'Stages', render: (w) => w.definition?.stages?.length ?? 0 },
+    {
+      key: 'updatedAt',
+      label: 'Edited',
+      render: (w) => {
+        const at = Date.parse(w.updatedAt) || Date.parse(w.createdAt);
+        if (!at) return <span className="caption">—</span>;
+        return (
+          <span className="caption" title={new Date(at).toLocaleString()}>
+            {timeAgo(at)}
+          </span>
+        );
       },
-    });
-  };
+    },
+    {
+      key: 'id',
+      label: '',
+      render: (w) => (
+        <WorkflowActionsMenu
+          status={w.status}
+          ariaLabel={`More actions for ${w.name}`}
+          onClone={() => actions.clone(w, open)}
+          onArchive={() => actions.archive(w)}
+          onUnarchive={() => actions.unarchive(w)}
+          onDelete={() => actions.remove(w)}
+          busy={actions}
+          can={{
+            create: canCreate,
+            archive: can('workflow', 'archive'),
+            delete: can('workflow', 'edit'),
+          }}
+        />
+      ),
+    },
+  ];
 
-  // Only a published workflow can be archived; it stays reversible with Unarchive.
-  const handleArchive = () => {
-    openConfirm({
-      title: `Archive "${wf.name}"?`,
-      message:
-        "It'll drop out of this list and can no longer be routed to for new documents. Files already in flight are unaffected. You can unarchive it later from \"Show archived\".",
-      confirmLabel: 'Archive',
-      danger: true,
-      onConfirm: () =>
-        archiveWfMutation.mutateAsync(wf.id).then(() => {
-          auditAction('WORKFLOW_ARCHIVE', wf.id, `Archived ${wf.name}`);
-        }),
-    });
-  };
-
-  const handleUnarchive = () => {
-    unarchiveWfMutation.mutate(wf.id);
-  };
-
-  // Only a draft can be deleted, and the backend also refuses one that was ever started (409).
-  const handleDelete = () => {
-    openConfirm({
-      title: `Delete "${wf.name}"?`,
-      message:
-        "This draft has never been published, so it's deleted for good. This can't be undone.",
-      confirmLabel: 'Delete draft',
-      danger: true,
-      onConfirm: () =>
-        deleteWfMutation.mutateAsync(wf.id).then(() => {
-          setWfId(workflows.find((w) => w.id !== wf.id && w.status !== 'archived')?.id ?? null);
-          setSelectedStageId(null);
-        }),
-    });
-  };
-
-  const handleClone = () => {
-    const copy = { name: wf.name + ' (copy)', description: 'Cloned from ' + wf.name, definition: wf.definition };
-    createWfMutation.mutate(copy, {
-      onSuccess: (data) => {
-        setWfId(data.id);
-        setSelectedStageId(null);
-        auditAction('WORKFLOW_CLONE', data.id, 'Cloned from ' + wf.name);
-      },
-    });
-  };
-
-  const handleAddStage = () => {
-    if (updateWfMutation.isPending) return;
-    const newStage: WorkflowStage = {
-      id: `stage_${Date.now()}`,
-      name: 'New stage',
-      role: roles?.[0]?.name || 'staff',
-      sla_hours: 48,
-      actions: ['review'],
-    };
-    const definition = relinkStages([...stages, newStage]);
-    const problem = validateDefinition(definition)[0];
-    if (problem) {
-      addToast(`Can't add a stage here: ${problem}`, 'error');
-      return;
-    }
-    updateWorkflow(wf.id, { definition });
-    setSelectedStageId(newStage.id);
-    addToast('Stage added — configure it on the right', 'success');
-  };
-
-  const handleDeleteStage = (stage: WorkflowStage) => {
-    // A delete can break routing elsewhere (a join, a conditional stage's
-    // fallback); say why here instead of letting the save 422.
-    const definition = relinkStages(stages.filter((s) => s.id !== stage.id));
-    const problem = validateDefinition(definition)[0];
-    if (problem) {
-      addToast(`Can't delete "${stage.name}": ${problem}`, 'error');
-      return;
-    }
-    openConfirm({
-      title: `Delete stage "${stage.name}"?`,
-      message: 'This stage will be removed. The remaining sequence will be reconnected.',
-      confirmLabel: 'Delete stage',
-      danger: true,
-      onConfirm: () => {
-        // Returning the promise keeps the modal open, with the button loading,
-        // until the delete completes or fails and can be retried.
-        return updateWfMutation
-          .mutateAsync({
-            id: wf.id,
-            updates: { definition },
-          })
-          .then(() => {
-            if (selectedStageId === stage.id) setSelectedStageId(null);
-            addToast('Stage deleted', 'info');
-          });
-      },
-    });
-  };
-
-  // Selecting a different stage discards whatever's still sitting unsaved
-  // in the properties panel — confirm first so that isn't a silent loss.
-  const selectStage = (id: string) => {
-    if (id === selectedStageId) return;
-    if (stageDirty) {
-      openConfirm({
-        title: 'Discard unsaved changes?',
-        message: 'You have unsaved changes to this stage. Discard them and switch stages?',
-        confirmLabel: 'Discard changes',
-        danger: true,
-        onConfirm: () => setSelectedStageId(id),
-      });
-      return;
-    }
-    setSelectedStageId(id);
-  };
-
-  // A branch label (not a stage card) was clicked on the canvas: open that
-  // stage's Transitions tab.
-  const handleEditBranch = (id: string) => {
-    selectStage(id);
-    setStagePanelTab('transitions');
-  };
-
-  const toggleAction = (action: WorkflowStageAction) => {
-    if (!selectedStage) return;
-    setActionsDraft((prev) => (prev.includes(action) ? prev.filter((a) => a !== action) : [...prev, action]));
-  };
-
-  const handleAssigneeModeChange = (mode: AssigneeMode) => {
-    if (!selectedStage) return;
-    setAssigneeMode(mode);
-    if (mode === 'role') {
-      setRoleDraft(roleDraft || roles?.[0]?.name || 'staff');
-    } else if (mode === 'department') {
-      if (!departmentDraft) {
-        setDepartmentDraft(departmentTree[0]?.id || '');
-        setSubDepartmentDraft('');
-      }
-    } else {
-      setUserDraft(userDraft || users[0]?.id || '');
-    }
-  };
-
-  const handleSaveName = () => {
-    if (!nameDirty) return;
-    updateWorkflow(wf.id, { name: nameDraft });
-  };
-
-  const handleSaveStage = () => {
-    if (!selectedStage || !stageDirty) return;
-    // The first stage can't send work back — drop a stale "Request changes".
-    const actions =
-      stages[0]?.id === selectedStage.id
-        ? actionsDraft.filter((a) => a !== 'request_changes')
-        : actionsDraft;
-    if (assigneeMode === 'department' && !departmentDraft) {
-      addToast('Pick a department', 'error');
-      return;
-    }
-    const patch = {
-      name: stageNameDraft,
-      actions,
-      sla_hours: slaDraft,
-      ...assignmentDraft(),
-    };
-    const updatedStages = stages.map((s) => (s.id === selectedStage.id ? { ...s, ...patch } : s));
-    updateWorkflow(wf.id, { definition: { ...wf.definition, stages: updatedStages } });
-  };
-
-  // Reordering (removed with drag-and-drop when branching arrived): swap the
-  // selected stage with its neighbour along the route, saved straight away.
-  const stageMove = (direction: MoveDirection) =>
-    selectedStage
-      ? moveStage({ stages, transitions: wf.definition.transitions || [] }, selectedStage.id, direction)
-      : { reason: 'Select a stage first.' };
-  const blockedReason = (direction: MoveDirection) => {
-    const result = stageMove(direction);
-    return 'reason' in result ? result.reason : null;
-  };
-  const handleMoveStage = (direction: MoveDirection) => {
-    const result = stageMove(direction);
-    if ('reason' in result || updateWfMutation.isPending) return;
-    // The first stage can't send work back, so a stage moved to the start
-    // loses "Request changes" (same rule as saving the first stage).
-    const [first, ...rest] = result.definition.stages;
-    const lostSendBack = !!first?.actions?.includes('request_changes');
-    const movedStages = lostSendBack
-      ? [{ ...first, actions: first.actions!.filter((a) => a !== 'request_changes') }, ...rest]
-      : result.definition.stages;
-    updateWorkflow(wf.id, {
-      definition: { ...wf.definition, stages: movedStages, transitions: result.definition.transitions },
-    });
-    if (lostSendBack) {
-      // Keep the open form in step, or it reads as unsaved.
-      if (first.id === selectedStage?.id) {
-        setActionsDraft((prev) => prev.filter((a) => a !== 'request_changes'));
-      }
-      addToast(`${first.name} is now the first stage, so "Request changes" was removed from it`, 'info');
-    }
-  };
-
-  const handleDiscardStage = () => {
-    resetStageDrafts(selectedStage);
-  };
-
-  // The Transitions tab hands back the whole definition (`applyStageRouting`),
-  // since a parallel fork also changes its branches' routes and the join.
-  const handleSaveTransitions = (definition: WorkflowDefinitionJson) => {
-    updateWorkflow(wf.id, { definition: { ...wf.definition, ...definition } });
-  };
-
-  // After adding or deleting a stage: re-link the chain, and drop a join flag
-  // whose branches no longer meet there (the backend would 422 the save).
-  const relinkStages = (updatedStages: WorkflowStage[]) => {
-    const transitions = reconcileTransitions(updatedStages, wf.definition.transitions || []);
-    return { stages: normalizeJoins(indexGraph({ stages: updatedStages, transitions })), transitions };
-  };
-
-  const assigneeSummary = (s: WorkflowStage) => {
-    if (s.user_id) {
-      const u = users.find((u) => u.id === s.user_id);
-      return u ? u.name : 'Assigned person';
-    }
-    const departmentId = s.sub_department_id || s.department_id;
-    const department = departmentId ? departmentName(departmentId) || 'A department' : null;
-    const role = s.role ? s.role.replace(/_/g, ' ') : null;
-    if (role && department) return `${role} · ${department}`;
-    return role || department || 'Unassigned';
-  };
+  const tab = TABS.find((t) => t.value === status)!;
+  const total = data?.pagination?.total;
 
   return (
     <div>
-      <WorkflowToolbar
-        workflow={wf}
-        stageCount={stages.length}
-        nameDraft={nameDraft}
-        onNameChange={setNameDraft}
-        nameDirty={nameDirty}
-        onSaveName={handleSaveName}
-        saving={updateWfMutation.isPending}
-        switcherWorkflows={switcherWorkflows}
-        archivedCount={archivedCount}
-        showArchived={showArchived}
-        onToggleShowArchived={() => setShowArchived((v) => !v)}
-        onSwitchWorkflow={(id) => {
-          if (nameDirty || stageDirty) {
-            openConfirm({
-              title: 'Discard unsaved changes?',
-              message: 'You have unsaved changes. Switch workflow anyway?',
-              confirmLabel: 'Switch workflow',
-              danger: true,
-              onConfirm: () => {
-                setWfId(id);
-                setSelectedStageId(null);
-              },
-            });
-            return;
-          }
-          setWfId(id);
-          setSelectedStageId(null);
-        }}
-        onCreateNew={handleCreateWorkflow}
-        onClone={handleClone}
-        onArchive={handleArchive}
-        onUnarchive={handleUnarchive}
-        onDelete={handleDelete}
-        onPublish={handlePublish}
-        creating={createWfMutation.isPending}
-        archiving={archiveWfMutation.isPending}
-        unarchiving={unarchiveWfMutation.isPending}
-        deleting={deleteWfMutation.isPending}
-        publishing={publishWfMutation.isPending}
-        canCreate={canCreateWorkflow}
-        canArchive={canArchiveWorkflow}
-        canDelete={canEditWorkflow}
-        canPublish={canPublishWorkflow}
-      />
-
-      <WorkflowDesignerGuide />
-
-      <div className="wfd-layout">
-        <div className="card">
-          <div className="card-head">
-            <span className="h3">Stages</span>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={handleAddStage}
-              disabled={updateWfMutation.isPending || !canEditWorkflow}
-              title={!canEditWorkflow ? "You don't have permission to edit workflows" : undefined}
-            >
-              <Icon name="plus" size={14} /> Add stage
-            </button>
-          </div>
-          <div className="card-body" style={{ padding: 0 }}>
-            <WorkflowCanvas
-              stages={stages}
-              transitions={wf.definition.transitions || []}
-              selectedStageId={selectedStageId}
-              onSelect={selectStage}
-              onEditBranch={handleEditBranch}
-              assigneeSummary={assigneeSummary}
-              metadataFieldName={(id) => metadataFields?.find((f) => f.id === id)?.name}
-            />
+      <div className="page-head">
+        <div>
+          <div className="page-title">Workflows</div>
+          <div className="page-sub">
+            The routes documents take through review and approval. Open one to edit its stages.
           </div>
         </div>
+        <div className="actions">
+          <button
+            className="btn btn-primary flex items-center"
+            onClick={handleCreate}
+            disabled={createMutation.isPending || !canCreate}
+            title={!canCreate ? "You don't have permission to create workflows" : undefined}
+          >
+            <span style={{ marginRight: '8px' }}>
+              <Icon name="plus" size={15} />
+            </span>{' '}
+            New workflow
+          </button>
+        </div>
+      </div>
 
-        <StagePanel
-          selectedStage={selectedStage}
-          stages={stages}
-          transitions={wf.definition.transitions || []}
-          onSaveTransitions={handleSaveTransitions}
-          saving={updateWfMutation.isPending}
-          canEdit={canEditWorkflow}
-          tab={stagePanelTab}
-          onTabChange={setStagePanelTab}
-          stageBranches={(() => {
-            const outgoing = (wf.definition.transitions || []).filter((t) => t.from === selectedStage?.id);
-            return outgoing.some((t) => !!t.condition) || isParallelFork(outgoing);
-          })()}
-          propertiesProps={{
-            saving: updateWfMutation.isPending,
-            dirty: stageDirty,
-            nameDraft: stageNameDraft,
-            onNameChange: setStageNameDraft,
-            actionsDraft,
-            onToggleAction: toggleAction,
-            assigneeMode,
-            onAssigneeModeChange: handleAssigneeModeChange,
-            roles: roles || [],
-            roleDraft,
-            onRoleChange: setRoleDraft,
-            departments: departmentTree,
-            departmentDraft,
-            subDepartmentDraft,
-            onDepartmentChange: (departmentId: string, subDepartmentId: string) => {
-              setDepartmentDraft(departmentId);
-              setSubDepartmentDraft(subDepartmentId);
-            },
-            users,
-            userDraft,
-            onUserChange: setUserDraft,
-            slaDraft,
-            onSlaChange: setSlaDraft,
-            onSave: handleSaveStage,
-            onDiscard: handleDiscardStage,
-            onDelete: () => selectedStage && handleDeleteStage(selectedStage),
-            onMove: handleMoveStage,
-            moveEarlierBlocked: blockedReason('earlier'),
-            moveLaterBlocked: blockedReason('later'),
-            canEdit: canEditWorkflow,
-            isFirstStage: !!selectedStage && stages[0]?.id === selectedStage.id,
-          }}
-        />
+      <div className="card">
+        <div className="card-head">
+          <div className="seg" role="group" aria-label="Filter by status">
+            {TABS.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                className={status === t.value ? 'active' : ''}
+                aria-pressed={status === t.value}
+                onClick={() => setParams({ status: t.value })}
+              >
+                {t.label}
+                {status === t.value && total !== undefined ? ` · ${total}` : ''}
+              </button>
+            ))}
+          </div>
+          <input
+            className="input"
+            style={{ width: 240, height: '32px' }}
+            type="search"
+            placeholder="Search by name…"
+            aria-label="Search workflows by name"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        {isLoading ? (
+          <SkeletonTable columns={['Name', 'Status', 'Version', 'Stages', 'Edited', '']} rows={6} />
+        ) : isError ? (
+          <div className="card-body caption flex items-center gap-2">
+            Couldn&apos;t load workflows.
+            <button className="btn btn-ghost btn-sm" onClick={() => refetch()}>
+              Try again
+            </button>
+          </div>
+        ) : (
+          <div
+            aria-busy={isPlaceholderData}
+            style={{ opacity: isPlaceholderData ? 0.6 : 1, transition: 'opacity 150ms ease-out' }}
+          >
+            <Table
+              cols={cols}
+              rows={workflows}
+              onRow={(w) => open(w.id)}
+              emptyMsg={
+                query ? `No ${tab.label.toLowerCase()} workflows match "${query}".` : tab.empty
+              }
+            />
+            {data?.pagination && data.pagination.totalPages > 1 && (
+              <Pagination
+                page={data.pagination.page}
+                totalPages={data.pagination.totalPages}
+                total={data.pagination.total}
+                limit={data.pagination.limit}
+                onPageChange={setPage}
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

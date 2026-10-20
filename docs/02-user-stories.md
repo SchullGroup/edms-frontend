@@ -758,7 +758,9 @@ one activates.
 > long they have,
 > **so that** the process is enforced by the system rather than remembered by people.
 
-**Current state:** `/admin/workflows` is a substantial 493-line designer wired to the real
+**Current state:** `/admin/workflows` lists every workflow by status (Published / Drafts /
+Archived, with search) and opens each in the designer at `/admin/workflows/[id]` (since
+2026-10-20; before, a dropdown that only saw the first 20). The designer is wired to the real
 `/workflows` endpoints. Definitions are versioned JSON with `draft → published → archived`
 lifecycle.
 
