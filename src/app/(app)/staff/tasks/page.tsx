@@ -13,18 +13,15 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 
 const PAGE_SIZE = 20;
 
-/**
- * Every filter, sort and page here is `GET /tasks`'s own (`overdue`,
- * `sort=dueAt`, `page`/`limit`), so each page is exactly what the server
- * returns. Anything the API can't do — a workflow-state split, urgency or
- * newest-first order — would only rearrange the current page, so it isn't
- * offered.
- */
+/** Every filter, sort and page is `GET /tasks`'s own, so each page is what the server
+ *  returns; anything the API can't do would only reorder one page, so isn't offered. */
 export default function MyTasksPage() {
   const { currentUser } = useStore();
   const { setPageTitle } = useUIStore();
 
-  const [overdueOnly, setOverdueOnly] = useState(false);
+  // Open by default, or completed tasks fill the oldest-first pages. `status`
+  // takes one value, so escalated tasks show only under All.
+  const [view, setView] = useState<'open' | 'overdue' | 'all'>('open');
   const [sortBy, setSortBy] = useState<'createdAt' | 'dueAt'>('createdAt');
   const [page, setPage] = useState(1);
 
@@ -33,7 +30,8 @@ export default function MyTasksPage() {
   }, [setPageTitle]);
 
   const filters: TaskFilters = { scope: 'mine', page, limit: PAGE_SIZE, sort: sortBy };
-  if (overdueOnly) filters.overdue = true;
+  if (view === 'open') filters.status = 'pending';
+  if (view === 'overdue') filters.overdue = true;
 
   const { data: tasksData, isLoading, isError, refetch } = useTasks(filters);
   const tasks = tasksData?.data || [];
@@ -52,15 +50,16 @@ export default function MyTasksPage() {
           <select
             className="input"
             style={{ width: 'auto', height: '32px' }}
-            value={overdueOnly ? 'overdue' : 'all'}
+            value={view}
             onChange={(e) => {
-              setOverdueOnly(e.target.value === 'overdue');
+              setView(e.target.value as 'open' | 'overdue' | 'all');
               setPage(1);
             }}
             aria-label="Status"
           >
-            <option value="all">Status: All</option>
+            <option value="open">Status: Open</option>
             <option value="overdue">Overdue</option>
+            <option value="all">All</option>
           </select>
           <select
             className="input"
