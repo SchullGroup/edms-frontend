@@ -499,7 +499,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 
 | Task | Status | Note |
 |---|---|---|
-| Clear the approvals queue daily | ✅ | Prioritised by urgency then due date — genuinely good |
+| Clear the approvals queue daily | ✅ | Nearest deadline first (`GET /tasks/approvals?sort=dueAt`, 2026-10-20); there is no urgency order. *Corrected 2026-10-20: said "prioritised by urgency then due date"; the queue was actually oldest first* |
 | Approve / reject / request changes | ✅ | On the workflow page (`/workflow-instances/[id]`, 2026-10-02). Request changes asks which of the task's documents need changes — DRIFT-18 fixed. All three *(confirmed by the product owner’s testing, 2026-10-09)* |
 | Release a team member's overdue checkout | 🟨 | Notified via `checkout.overdue` when a same-department holder misses `expectedReturnAt`; "Force check in" on `/doc/[id]` if they hold `document_lock:delete` at department scope for that cabinet's department (2026-10-02, not yet verified e2e) |
 | Follow a notification to its item | 🟨 | Task and workflow links (`/tasks/:id`, `/workflow-instances/:id`) open the workflow page; `/documents/:id` opens the document page (DRIFT-17); previously 404'd |

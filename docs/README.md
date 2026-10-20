@@ -178,6 +178,8 @@ above was found; and the three "7-line stub" pages are **re-exports**, one of wh
 
 **Corrected 2026-10-19:** doc 02's C2 story said `tasks.repository` "prioritises by document urgency then due date" and ticked "Paginated". On `origin/dev`, `listTasks` orders by `createdAt` unless `sort=dueAt` is passed, and has no urgency order or filter; `/staff/tasks` fetched only the default first page (20, oldest first) with no paging. C2 is now 🟨 Partial. Found while checking whether My Tasks' filters use the API.
 
+**Corrected 2026-10-20:** two lines still described the old My Tasks after the 2026-10-19 change: doc 05's `GET /tasks` wired-API line (`?overdue=true|false&sort=dueAt`; it now sends `page`, `limit`, `overdue=true` and `sort=createdAt|dueAt`) and doc 05's staff journey row "Prioritised by urgency then due date". Doc 04's supervisor row "Clear the approvals queue … Prioritised by urgency then due date" was wrong the same way: `GET /tasks/approvals` also orders by `createdAt` unless `sort=dueAt` is passed. Separately, docs 02 and 05 said `validateParallelRouting` "mirrors the backend's checks"; it lacked the per-stage fallback rule and the backend's "cannot reach a terminal stage" loop check, so stage add/delete could still 422. Both now run in `validateDefinition`.
+
 **Correction (2026-09-10).** Doc 05 stated `/admin/users` "writes the role matrix to
 `SEED`" and listed `useRole`/`useUpdateRole`/`useDeleteRole` etc. as dead — both were
 stale. The matrix already used `PUT /roles/{id}/permissions` via `useSetRolePermissions`;

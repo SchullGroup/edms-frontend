@@ -779,7 +779,7 @@ it. Routing someone else's document fails with *"You do not have permission to c
 workflow instance for this document"*.
 
 - [ ] **TP-Q19 (the normal run).** ⛔ *Blocked by the backend (2026-10-18, re-checked
-      2026-10-19).* As `staff_finance`, open the task and **Mark reviewed** at Intake. **Today
+      2026-10-19, and over the API 2026-10-20: BE-19 in BACKEND_REQUESTS).* As `staff_finance`, open the task and **Mark reviewed** at Intake. **Today
       you get a red toast, "An unexpected error occurred" (HTTP 500), and the task stays at
       Intake** — on every fork, even the simplest. Once the backend is fixed: the stage rail
       shows Finance review *and* Legal review as current, each with its own holder and deadline,

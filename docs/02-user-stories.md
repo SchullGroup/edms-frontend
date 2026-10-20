@@ -677,7 +677,9 @@ it has no urgency order or filter. *(Corrected 2026-10-19 — this said `tasks.r
 - [x] Oversight roles can request `scope=all` (holders of `task:view` wider than `own`; was `TASK_VIEW_ALL_ROLES`, removed 2026-09-16)
 - [ ] 🟨 Prioritised — by due date only (`sort=dueAt`, most overdue first). The backend
       has no urgency sort, and My Tasks dropped its in-browser urgency sort and filter on
-      2026-10-19: they only ever reordered the 20 tasks loaded
+      2026-10-19: they only ever reordered the 20 tasks loaded. Since 2026-10-20 My Tasks
+      opens on Open tasks (`status=pending`) and `/supervisor/approvals` asks for
+      `sort=dueAt` (it was oldest first)
 - [x] Due/overdue state visible per row
 - [x] Paginated — `/staff/tasks` pages through `GET /tasks` (20 a page, Prev/Next) since
       2026-10-19. *Was:* it loaded only the first 20, oldest first, with no way to see more
@@ -780,7 +782,9 @@ lifecycle.
       fan-out, child executions with their own task and SLA, `join: 'all'` barrier stages).
       Designer since 2026-10-17: **"+ Add parallel branch"** and **Branches meet at** in
       `BranchEditorCard`; `applyStageRouting` saves the fork, its branches' onward routes and
-      the join in one PATCH, and `validateParallelRouting` mirrors the backend's checks. The
+      the join in one PATCH, and `validateParallelRouting` mirrors the backend's graph checks
+      (`validateDefinition` adds each stage's fallback rules for stage add/delete/move,
+      2026-10-20). The
       backend accepted and rejected the same definitions as the frontend in a live API check
       (2026-10-17), and the designer was clicked through in a browser on 2026-10-18 (TEST_PLAN
       TP-Q2, Q15–Q18). ⛔ **Running a parallel workflow fails on the live backend:** the first
