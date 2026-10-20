@@ -996,8 +996,14 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
 - [ ] **TP-W8.** On a task with two documents you can act on, act on one only (review,
       approve or reject it). The page stays on the same task: that document's tab reads
       "· Done", the other is selected and actionable, and there's no "needs Action access"
-      note. *(Checked 2026-10-16 with an edited `GET /tasks/:id`; not yet with a real
-      partial action.)*
+      note. *(Checked 2026-10-16 with an edited `GET /tasks/:id`. A real partial action was
+      made on 2026-10-20 for TP-W9 and the task stayed open, but the page wasn't looked at
+      before the send-back, so the "· Done" tab is still unverified with live data.)*
+- [x] **TP-W9.** Backend ask T3: on a task at stage A with two documents, review one only; at
+      stage B, Request changes on it. Expect 200, the same task at A holding both documents,
+      the returned one actionable with its changes-requested marker. *(Verified 2026-10-20 on
+      "ZZ test — T3 send-back recheck": instance `724841a3…`, task `a5108094…`; closed and
+      archived afterwards, both documents back to `closed`.)*
 
 ## 19g. Phase X — Frontend spec items (backend PR #51, live 2026-10-14)
 

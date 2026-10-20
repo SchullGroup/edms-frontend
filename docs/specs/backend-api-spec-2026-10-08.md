@@ -30,10 +30,10 @@ direct ask.
 | D6 | ✅ ~~All filters on full-text search~~ done: PR #51 (live 2026-10-14) | `GET /documents/search` | P2 | S |
 | O1 | ✅ ~~`departmentId` on the signed-in user~~ done: `/auth/me` in PR #50 (live 2026-10-13), **login** in PR #51 (live 2026-10-14), adopted by the frontend | `POST /auth/login`, `GET /auth/me` | P1 | XS |
 | O2 | ✅ ~~Limit departments to one level of nesting~~ done: PR #51 (live 2026-10-14), 422 `DEPARTMENT_DEPTH` | `POST /departments`, `PATCH /departments/:id` | P2 | XS |
-| O3 | Return people's names alongside their ids | `GET /audit`, documents, versions, signatures, `GET /delegations` | P1 | S |
+| O3 | ✅ ~~Return people's names alongside their ids~~ done: PR #53 (live 2026-10-20) | `GET /audit`, documents, versions, signatures, `GET /delegations` | P1 | S |
 | T1 | Optional signature on the review action | `POST /tasks/:id/action` | P2 | XS |
 | T2 | Return `actionedAt` on Restricted task documents | `GET /tasks/:id` | P2 | XS |
-| T3 | Don't add a document to a task that already holds it (409 on send-back) | `POST /tasks/:id/action` | **P1 bug** | S |
+| T3 | ✅ ~~Don't add a document to a task that already holds it (409 on send-back)~~ done: `3832e4b`, PR #54 (verified live 2026-10-20) | `POST /tasks/:id/action` | **P1 bug** | S |
 | I1 | Keep OCR word positions | OCR worker + new read endpoint | P2 | M |
 | I2 | Office/email previews, text extraction, ZIP intake | upload pipeline | P2 | L |
 | X1 | **Decide:** watermark downloaded copies | download path | P3 | M |
@@ -367,7 +367,13 @@ fewer options in the UI than the API would allow.
 
 ---
 
-### O3. Return people's names alongside their ids
+### O3. Return people's names alongside their ids — ✅ **done** (PR #53, live 2026-10-20)
+
+**2026-10-20:** `GET /audit` returns `actor`, the document lists, detail and search return
+`creator`, and versions return `uploader` (PR #53); signatures already embed `signer` and
+delegations `delegator`/`delegate`. The frontend reads them on `/doc/[id]`, `/staff/cabinets`,
+`/admin/audit`, `/auditor/trail` and `/management/compliance`, which no longer need
+`GET /users` for names.
 
 **Problem.** Several responses give a person only as an id, so the frontend looks the name up
 through `GET /users`. Staff and the auditor have no `user:view`, so the lookup 403s and they see
@@ -429,7 +435,12 @@ actioned once its execution has left the task's stage (`isActionedTaskDocument`,
 
 **Done when** a Restricted document actioned on an open task returns `actionedAt` set.
 
-### T3. Don't add a document to a task that already holds it
+### T3. Don't add a document to a task that already holds it — ✅ **done** (`3832e4b`, PR #54)
+
+**2026-10-20, verified live:** `TaskDocument` rows are upserted, so a document coming back to
+a stage whose task is still open re-opens its row on that task (`actionedAt: null`, current
+version). The scenario below returned 200 and the document showed on the task at stage A
+as actionable.
 
 **Problem.** Task T at stage A holds documents X and Y. The holder actions X only (PR #52: T
 stays open with Y). X moves on to stage B, and stage B sends it back with Request changes.
