@@ -11,6 +11,11 @@ export const workflowKeys = {
   detail: (id: string) => [...workflowKeys.details(), id] as const,
 };
 
+/** A 422 says only "Validation failed" in `message`; the reason — e.g. "Parallel
+ *  stage 'a' has converging branches but no join: 'all' stage" — is in `errors`. */
+const saveErrorMessage = (err: any, fallback: string) =>
+  err?.response?.data?.errors?.[0]?.message || err?.response?.data?.message || fallback;
+
 export function useWorkflows(filters: Record<string, any> = {}) {
   return useQuery({
     queryKey: workflowKeys.list(filters),
@@ -37,7 +42,7 @@ export function useCreateWorkflow() {
       addToast('Workflow created successfully', 'success');
     },
     onError: (err: any) => {
-      addToast(err.response?.data?.message || 'Failed to create workflow', 'error');
+      addToast(saveErrorMessage(err, 'Failed to create workflow'), 'error');
     },
   });
 }
@@ -55,7 +60,7 @@ export function useUpdateWorkflow() {
       addToast('Workflow updated successfully', 'success');
     },
     onError: (err: any) => {
-      addToast(err.response?.data?.message || 'Failed to update workflow', 'error');
+      addToast(saveErrorMessage(err, 'Failed to update workflow'), 'error');
     },
   });
 }

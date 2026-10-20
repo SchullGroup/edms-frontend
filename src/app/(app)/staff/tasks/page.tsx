@@ -1,75 +1,43 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useTasks } from '@/apis/hooks/useTasks';
 import type { TaskFilters } from '@/apis/services/tasks.service';
-import { byUrgencyThenDue, taskStatusLabel } from '@/utils/supervisor';
-import { taskDocuments } from '@/utils/workflowDocuments';
 import { Icon } from '@/components/ui/Icons';
 import { TaskRow } from '@/components/ui/TaskRow';
+import { Pagination } from '@/components/ui/Pagination';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 
+const PAGE_SIZE = 20;
+
+/** Every filter, sort and page is `GET /tasks`'s own, so each page is what the server
+ *  returns; anything the API can't do would only reorder one page, so isn't offered. */
 export default function MyTasksPage() {
-  const router = useRouter();
   const { currentUser } = useStore();
   const { setPageTitle } = useUIStore();
 
-  const [statusF, setStatusF] = useState('All');
-  const [urgF, setUrgF] = useState('All');
-  const [sortBy, setSortBy] = useState('urgency');
+  // Open by default, or completed tasks fill the oldest-first pages. `status`
+  // takes one value, so escalated tasks show only under All.
+  const [view, setView] = useState<'open' | 'overdue' | 'all'>('open');
+  const [sortBy, setSortBy] = useState<'createdAt' | 'dueAt'>('createdAt');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     setPageTitle('My Tasks');
   }, [setPageTitle]);
 
-  // Overdue and due-date order are decided server-side (edms-backend PR #50),
-  // so they cover every task, not just the page that was fetched.
-  // Pending, In Progress and On Hold aren't task statuses: they come from the
-  // workflow's state (`taskStatusLabel`), so fetch open tasks that aren't
-  // overdue and split them below.
-  const labelledByWorkflow = ['Pending', 'In Progress', 'On Hold'].includes(statusF);
-  const backendFilters: TaskFilters = { scope: 'mine' };
-  if (statusF === 'Overdue') {
-    backendFilters.overdue = true;
-  } else if (labelledByWorkflow) {
-    backendFilters.status = 'pending';
-    backendFilters.overdue = false;
-  }
-  if (sortBy === 'due') backendFilters.sort = 'dueAt';
+  const filters: TaskFilters = { scope: 'mine', page, limit: PAGE_SIZE, sort: sortBy };
+  if (view === 'open') filters.status = 'pending';
+  if (view === 'overdue') filters.overdue = true;
 
-  const {
-    data: tasksData,
-    isLoading,
-    isError,
-    refetch,
-  } = useTasks(backendFilters);
+  const { data: tasksData, isLoading, isError, refetch } = useTasks(filters);
   const tasks = tasksData?.data || [];
+  const pagination = tasksData?.pagination;
 
   if (!currentUser) return null;
-
-  let list = [...tasks];
-  if (labelledByWorkflow) {
-    list = list.filter((t) => taskStatusLabel(t) === statusF);
-  }
-
-  // A task matches when any of its documents has that urgency.
-  if (urgF !== 'All') {
-    list = list.filter((t) => taskDocuments(t).some((d) => d.urgency === urgF.toLowerCase()));
-  }
-
-  // 'due' keeps the server's order. The backend can only sort oldest-first,
-  // so 'created' (newest first) sorts the fetched page here.
-  if (sortBy === 'urgency') {
-    list.sort(byUrgencyThenDue);
-  } else if (sortBy === 'created') {
-    list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  }
-
-  const URG_LEVELS = ['Critical', 'High', 'Normal', 'Low'];
 
   return (
     <div>
@@ -82,39 +50,29 @@ export default function MyTasksPage() {
           <select
             className="input"
             style={{ width: 'auto', height: '32px' }}
-            value={statusF}
-            onChange={(e) => setStatusF(e.target.value)}
+            value={view}
+            onChange={(e) => {
+              setView(e.target.value as 'open' | 'overdue' | 'all');
+              setPage(1);
+            }}
             aria-label="Status"
           >
-            {['All', 'Pending', 'In Progress', 'Overdue', 'On Hold'].map((o) => (
-              <option key={o} value={o}>
-                {o === 'All' ? 'Status: All' : o}
-              </option>
-            ))}
-          </select>
-          <select
-            className="input"
-            style={{ width: 'auto', height: '32px' }}
-            value={urgF}
-            onChange={(e) => setUrgF(e.target.value)}
-            aria-label="Urgency"
-          >
-            {['All', ...URG_LEVELS].map((o) => (
-              <option key={o} value={o}>
-                {o === 'All' ? 'Urgency: All' : o}
-              </option>
-            ))}
+            <option value="open">Status: Open</option>
+            <option value="overdue">Overdue</option>
+            <option value="all">All</option>
           </select>
           <select
             className="input"
             style={{ width: 'auto', height: '32px' }}
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
+            onChange={(e) => {
+              setSortBy(e.target.value as 'createdAt' | 'dueAt');
+              setPage(1);
+            }}
             aria-label="Sort"
           >
-            <option value="urgency">Sort: Urgency then due</option>
-            <option value="due">Sort: Due date</option>
-            <option value="created">Sort: Newest</option>
+            <option value="createdAt">Sort: Oldest first</option>
+            <option value="dueAt">Sort: Due date</option>
           </select>
         </div>
       </div>
@@ -126,12 +84,23 @@ export default function MyTasksPage() {
           </div>
         ) : isLoading ? (
           <SkeletonTaskRows rows={6} />
-        ) : list.length > 0 ? (
-          <div className="rowlist">
-            {list.map((t: any) => (
-              <TaskRow key={t.id} item={t} />
-            ))}
-          </div>
+        ) : tasks.length > 0 ? (
+          <>
+            <div className="rowlist">
+              {tasks.map((t) => (
+                <TaskRow key={t.id} item={t} />
+              ))}
+            </div>
+            {pagination && (
+              <Pagination
+                page={pagination.page}
+                totalPages={pagination.totalPages}
+                total={pagination.total}
+                limit={pagination.limit}
+                onPageChange={setPage}
+              />
+            )}
+          </>
         ) : (
           <div className="empty">
             <Icon name="inbox" size={32} />

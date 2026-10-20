@@ -2,25 +2,34 @@
 
 import { CONDITION_FIELDS, operatorsForField } from './constants';
 import { RuleValueInput } from './RuleValueInput';
-import { useBranchDraft } from '@/hooks/useBranchDraft';
-import type { WorkflowConditionField, WorkflowStage, WorkflowTransition } from '@/types/models';
+import { transitionKind, type TransitionKind } from './workflowGraph';
+import { useBranchDraft, type DraftTransition } from '@/hooks/useBranchDraft';
+import type {
+  WorkflowConditionField,
+  WorkflowDefinitionJson,
+  WorkflowStage,
+  WorkflowTransition,
+} from '@/types/models';
 
 export interface BranchEditorCardProps {
   stage: WorkflowStage;
   stages: WorkflowStage[];
   transitions: WorkflowTransition[];
-  onSave: (stageId: string, outgoing: WorkflowTransition[]) => void;
+  /** The whole definition, since a parallel branch can change other stages. */
+  onSave: (definition: WorkflowDefinitionJson) => void;
   saving: boolean;
   canEdit: boolean;
 }
 
-/**
- * The actual routing editor — every outgoing transition for one stage,
- * shown as a card per branch (target, and, for a conditional one, its rule
- * builder). Purely presentational: all state and validation come from
- * `useBranchDraft`, so this component itself has no business logic to keep
- * in sync anywhere else.
- */
+/** Each branch's tag; a conditional one shows its priority instead. */
+const TAGS: Record<Exclude<TransitionKind, 'conditional'>, { className: string; text: string }> = {
+  parallel: { className: 'wfd-tag-parallel', text: 'Parallel' },
+  fallback: { className: 'wfd-tag-fallback', text: 'Fallback' },
+  plain: { className: 'wfd-tag-fallback', text: 'Next' },
+};
+
+/** The routing editor: a card per outgoing branch (target, and rules if
+ *  conditional). Presentational; state and validation live in `useBranchDraft`. */
 export function BranchEditorCard({ stage, stages, transitions, onSave, saving, canEdit }: BranchEditorCardProps) {
   const {
     drafts,
@@ -30,9 +39,15 @@ export function BranchEditorCard({ stage, stages, transitions, onSave, saving, c
     issues,
     availableTargets,
     metadataFields,
+    parallel,
+    joinStageId,
+    joinOptions,
+    setJoinStageId,
+    sideEffects,
     updateDraft,
     removeDraft,
     addConditionalBranch,
+    addParallelBranch,
     addRule,
     removeRule,
     updateRule,
@@ -46,6 +61,15 @@ export function BranchEditorCard({ stage, stages, transitions, onSave, saving, c
     handleDiscard,
   } = useBranchDraft(stage, stages, transitions, onSave);
 
+  const hasConditional = drafts.some((d) => d.condition);
+  const hasUnconditional = drafts.some((d) => !d.condition);
+  const tagFor = (draft: DraftTransition) => {
+    const kind = transitionKind(draft, drafts);
+    return kind === 'conditional'
+      ? { className: 'wfd-tag-conditional', text: `Priority ${draft.priority ?? '?'}` }
+      : TAGS[kind];
+  };
+
   return (
     <>
       {drafts.length === 0 ? (
@@ -56,12 +80,11 @@ export function BranchEditorCard({ stage, stages, transitions, onSave, saving, c
         <div className="flex flex-col gap-3">
           {drafts.map((d) => {
             const isConditional = !!d.condition;
+            const tag = tagFor(d);
             return (
               <div key={d._key} className="wfd-transition-card">
                 <div className="flex items-center gap-2" style={{ marginBottom: isConditional ? '10px' : 0 }}>
-                  <span className={`tag ${isConditional ? 'wfd-tag-conditional' : 'wfd-tag-fallback'}`}>
-                    {isConditional ? `Priority ${d.priority ?? '?'}` : 'Fallback'}
-                  </span>
+                  <span className={`tag ${tag.className}`}>{tag.text}</span>
                   <span className="muted" style={{ fontSize: '11px' }}>
                     →
                   </span>
@@ -78,7 +101,7 @@ export function BranchEditorCard({ stage, stages, transitions, onSave, saving, c
                       </option>
                     ))}
                   </select>
-                  {isConditional && (
+                  {(isConditional || parallel) && (
                     <button
                       type="button"
                       className="icon-btn"
@@ -228,19 +251,82 @@ export function BranchEditorCard({ stage, stages, transitions, onSave, saving, c
         </div>
       )}
 
-      <button
-        type="button"
-        className="btn btn-secondary btn-sm mt-4"
-        disabled={!canEdit || availableTargets.length === 0}
-        title={availableTargets.length === 0 ? "Every other stage is already a target of one of this stage's branches" : undefined}
-        onClick={addConditionalBranch}
-      >
-        + Add conditional branch
-      </button>
+      {parallel && (
+        <label className="field mt-4" style={{ marginBottom: 0 }}>
+          <span>Branches meet at</span>
+          <select
+            className="input"
+            style={{ fontSize: '12.5px', padding: '4px 8px' }}
+            value={joinStageId ?? ''}
+            disabled={!canEdit}
+            onChange={(e) => setJoinStageId(e.target.value || null)}
+          >
+            <option value="">Nowhere — each branch finishes on its own</option>
+            {joinOptions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name || s.id}
+              </option>
+            ))}
+          </select>
+          <div className="help">
+            {joinStageId
+              ? `Every branch runs at once, each with its own task and SLA. ${
+                  joinOptions.find((s) => s.id === joinStageId)?.name || 'That stage'
+                } opens only once all of them reach it.`
+              : 'Every branch runs at once, each with its own task and SLA. The workflow closes once every branch has finished.'}
+          </div>
+        </label>
+      )}
+
+      <div className="flex gap-2 flex-wrap mt-4">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          disabled={!canEdit || availableTargets.length === 0 || parallel}
+          title={
+            parallel
+              ? 'Parallel branches all run, so they can’t also be chosen by a condition — remove branches until one is left first'
+              : availableTargets.length === 0
+                ? "Every other stage is already a target of one of this stage's branches"
+                : undefined
+          }
+          onClick={addConditionalBranch}
+        >
+          + Add conditional branch
+        </button>
+        {hasUnconditional && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={!canEdit || availableTargets.length === 0 || hasConditional}
+            title={
+              hasConditional
+                ? 'A stage with conditional branches sends each document down one of them — remove the conditions to run branches in parallel'
+                : availableTargets.length === 0
+                  ? "Every other stage is already a target of one of this stage's branches"
+                  : 'Send documents down another branch at the same time'
+            }
+            onClick={addParallelBranch}
+          >
+            + Add parallel branch
+          </button>
+        )}
+      </div>
       {availableTargets.length === 0 && otherStages.length > 0 && (
         <div className="help">
-          Add another stage to route to before creating a conditional branch here — the backend
-          won&apos;t allow two branches from the same stage to the same target.
+          Add another stage to route to before adding a branch here — the backend won&apos;t allow
+          two branches from the same stage to the same target.
+        </div>
+      )}
+
+      {dirty && sideEffects.length > 0 && issues.length === 0 && (
+        <div className="help mt-4">
+          Saving also changes:
+          <ul style={{ margin: '4px 0 0', paddingLeft: '18px' }}>
+            {sideEffects.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
         </div>
       )}
 

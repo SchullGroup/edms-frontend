@@ -5,13 +5,24 @@ import {
   defaultRuleValue,
   operatorsForField,
   ruleValueIssue,
-  validateStageTransitions,
+  trimRuleValues,
 } from '@/components/workflows/constants';
+import {
+  applyStageRouting,
+  forkJoinStage,
+  indexGraph,
+  isParallelFork,
+  reachableFrom,
+  suggestJoinStage,
+  validateParallelRouting,
+  validateStageTransitions,
+} from '@/components/workflows/workflowGraph';
 import { useAllMetadataFields } from '@/apis/hooks/useMetadataFields';
 import type {
   WorkflowConditionField,
   WorkflowConditionOperator,
   WorkflowConditionRule,
+  WorkflowDefinitionJson,
   WorkflowStage,
   WorkflowTransition,
 } from '@/types/models';
@@ -26,40 +37,109 @@ export interface DraftTransition extends WorkflowTransition {
 const toDrafts = (outgoing: WorkflowTransition[]): DraftTransition[] =>
   outgoing.map((t) => ({ ...t, _key: nextDraftKey() }));
 
-/**
- * All the state and rules for editing one stage's outgoing transitions —
- * split out of the editor UI (`BranchEditorCard`) so the validation/mutation
- * logic isn't tied to any particular presentation. It used to live inside a
- * side-panel component; it works identically inside a canvas-anchored
- * popover, which is the entire point of pulling it out.
- */
+/** JSON with object keys sorted: the saved definition comes back from a
+ *  Postgres `jsonb` column, which reorders keys (`{"to":…,"from":…}`). */
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_key, v) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]]))
+      : v,
+  );
+/** Insensitive to key order and to transition order, so moving a stage's
+ *  transitions to the end of the list on save doesn't count as a change. */
+const sameDefinition = (a: WorkflowDefinitionJson, b: WorkflowDefinitionJson) =>
+  canonical(a.stages) === canonical(b.stages) &&
+  canonical(a.transitions.map(canonical).sort()) === canonical(b.transitions.map(canonical).sort());
+
+/** What saving changes beyond this stage's own branches, in plain words. */
+function describeSideEffects(before: WorkflowDefinitionJson, after: WorkflowDefinitionJson, stageId: string): string[] {
+  const { name } = indexGraph(after);
+  const key = (t: WorkflowTransition) => `${t.from}->${t.to}`;
+  const others = (d: WorkflowDefinitionJson) => d.transitions.filter((t) => t.from !== stageId);
+  const beforeKeys = new Set(others(before).map(key));
+  const afterKeys = new Set(others(after).map(key));
+  const notes: string[] = [];
+  others(after)
+    .filter((t) => !beforeKeys.has(key(t)))
+    .forEach((t) => notes.push(`${name(t.from)} goes on to ${name(t.to)}`));
+  others(before)
+    .filter((t) => !afterKeys.has(key(t)))
+    .forEach((t) => notes.push(`${name(t.from)} no longer goes to ${name(t.to)}`));
+  after.stages.forEach((s) => {
+    const was = before.stages.find((b) => b.id === s.id)?.join === 'all';
+    if (s.join === 'all' && !was) notes.push(`${name(s.id)} waits for every branch`);
+    if (s.join !== 'all' && was) notes.push(`${name(s.id)} stops waiting for branches`);
+  });
+  return notes;
+}
+
+/** State and rules for editing one stage's outgoing transitions, kept out of
+ *  `BranchEditorCard` so any editor UI can use them. */
 export function useBranchDraft(
   stage: WorkflowStage | null,
   stages: WorkflowStage[],
   transitions: WorkflowTransition[],
-  onSave: (stageId: string, outgoing: WorkflowTransition[]) => void,
+  /** The whole definition: a parallel branch can change other stages too. */
+  onSave: (definition: WorkflowDefinitionJson) => void,
 ) {
   const { data: metadataFields } = useAllMetadataFields();
 
-  const outgoing = stage ? transitions.filter((t) => t.from === stage.id) : [];
+  const current: WorkflowDefinitionJson = { stages, transitions };
+  const graph = indexGraph(current);
+  const outgoing = stage ? graph.outgoing(stage.id) : [];
   const [drafts, setDrafts] = useState<DraftTransition[]>(() => toDrafts(outgoing));
+  // Where parallel branches meet: undefined = not chosen yet (the current join,
+  // else a suggestion), null = they never meet.
+  const [joinDraft, setJoinDraft] = useState<string | null | undefined>(undefined);
 
-  // Only resync from server data when the *selection* changes (or a save
-  // lands and the popover reopens for the same stage) — never clobber an
-  // in-progress edit on a background refetch.
+  // Resync only when the selection changes (or a save reopens the same stage),
+  // so a background refetch never clobbers an edit in progress.
   useEffect(() => {
-    setDrafts(toDrafts(stage ? transitions.filter((t) => t.from === stage.id) : []));
+    setDrafts(toDrafts(stage ? graph.outgoing(stage.id) : []));
+    setJoinDraft(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage?.id]);
 
   const otherStages = stage ? stages.filter((s) => s.id !== stage.id) : [];
   const isTerminal = !!stage && stages[stages.length - 1]?.id === stage.id && drafts.length === 0;
 
-  const dirty = JSON.stringify(drafts.map(({ _key, ...t }) => t)) !== JSON.stringify(outgoing);
+  // Rule values trimmed as the backend stores them, or a value saved with a
+  // trailing space comes back different and the tab reads as unsaved.
+  const plainDrafts = drafts.map(({ _key, ...t }): WorkflowTransition =>
+    t.condition ? { ...t, condition: { ...t.condition, rules: t.condition.rules.map(trimRuleValues) } } : t,
+  );
+  const parallel = isParallelFork(plainDrafts);
+  // Only a stage that is already a fork has a join; otherwise the "meeting
+  // stage" of its single route is just wherever that route leads.
+  const savedJoin =
+    stage && isParallelFork(outgoing)
+      ? (forkJoinStage(graph, stage.id)?.id ?? null)
+      : null;
+  const draftTransitions = stage
+    ? [...transitions.filter((t) => t.from !== stage.id), ...plainDrafts]
+    : transitions;
+  // A branch can't also be where the branches meet.
+  const notABranch = (id: string | null) =>
+    id && !plainDrafts.some((t) => t.to === id) ? id : null;
+  const joinStageId = !parallel || !stage
+    ? null
+    : joinDraft !== undefined
+      ? notABranch(joinDraft)
+      : (notABranch(savedJoin) ?? suggestJoinStage(indexGraph({ stages, transitions: draftTransitions }), stage.id));
+  const next = stage ? applyStageRouting(current, stage.id, plainDrafts, joinStageId) : current;
+  const sideEffects = stage ? describeSideEffects(current, next, stage.id) : [];
+  // Where branches can meet: any stage after this one that isn't a branch
+  // itself (a stage leading back here would loop).
+  const joinOptions = otherStages.filter(
+    (s) =>
+      !plainDrafts.some((t) => t.to === s.id) &&
+      !(stage && reachableFrom(graph, s.id).has(stage.id)),
+  );
+
+  const dirty = !sameDefinition(next, current);
   const fieldById = (id?: string) => metadataFields?.find((f) => f.id === id);
-  // A value that doesn't fit its field (a word in a number field, a date that
-  // isn't one) blocks the save here rather than failing later — for metadata,
-  // possibly only when a document reaches the stage.
+  // A value that doesn't fit its field blocks the save here, rather than failing
+  // later (for metadata, maybe only when a document reaches the stage).
   const ruleIssue = (rule: WorkflowConditionRule) =>
     ruleValueIssue(rule, rule.field === 'metadata' ? fieldById(rule.metadata_field_id) : undefined);
   const ruleIssueCount = drafts.reduce(
@@ -69,6 +149,11 @@ export function useBranchDraft(
   const issues = stage
     ? [
         ...validateStageTransitions(stage.id, drafts),
+        // Only once something changed: an untouched stage shouldn't show
+        // problems elsewhere in the workflow it can't fix.
+        ...(dirty
+          ? validateParallelRouting(indexGraph(next)).map((message) => ({ stageId: stage.id, message }))
+          : []),
         ...(ruleIssueCount > 0
           ? [
               {
@@ -80,11 +165,8 @@ export function useBranchDraft(
       ]
     : [];
 
-  // The backend rejects a second transition to a stage another one of this
-  // stage's branches already targets, so there's no point offering "+ Add
-  // conditional branch" when every other stage is already spoken for (most
-  // visibly on a 2-stage workflow, where the single fallback already uses
-  // the only other stage there is).
+  // The backend refuses two branches to the same stage, so don't offer another
+  // branch once every other stage is a target (e.g. a 2-stage workflow).
   const usedTargets = new Set(drafts.map((d) => d.to));
   const availableTargets = otherStages.filter((s) => !usedTargets.has(s.id));
 
@@ -110,6 +192,14 @@ export function useBranchDraft(
         condition: { mode: 'all', rules: [defaultRule()] },
       },
     ]);
+  };
+
+  /** Another unconditional transition: with two or more and no conditions,
+   *  every one of them runs at once. */
+  const addParallelBranch = () => {
+    const target = availableTargets[0];
+    if (!target || !stage) return;
+    setDrafts((prev) => [...prev, { _key: nextDraftKey(), from: stage.id, to: target.id }]);
   };
 
   const addRule = (key: string) => {
@@ -188,14 +278,12 @@ export function useBranchDraft(
 
   const handleSave = () => {
     if (!stage || issues.length > 0) return;
-    onSave(
-      stage.id,
-      drafts.map(({ _key, ...t }) => t),
-    );
+    onSave(next);
   };
 
   const handleDiscard = () => {
     setDrafts(toDrafts(outgoing));
+    setJoinDraft(undefined);
   };
 
   return {
@@ -206,9 +294,15 @@ export function useBranchDraft(
     issues,
     availableTargets,
     metadataFields,
+    parallel,
+    joinStageId,
+    joinOptions,
+    setJoinStageId: setJoinDraft,
+    sideEffects,
     updateDraft,
     removeDraft,
     addConditionalBranch,
+    addParallelBranch,
     addRule,
     removeRule,
     updateRule,

@@ -9,6 +9,9 @@
 contracts PR #50 published to `/auth/me`, `/tasks` and `GET /sla/outcomes/summary` and PR #51
 to `/auth/login`, `/documents`, `/documents/search`, `/workflow-instances` and
 `/departments` — those rows only, not the whole route inventory.
+**Re-checked 2026-10-16** — every open backlog item in doc 05, against `edms-backend`
+`origin/dev` (`a88f279`), this repo and the live API. Three corrections; see "Where the
+numbers come from".
 
 > **What changed on 2026-09-04.** Three scans happened in one day, because both
 > codebases moved. In order:
@@ -29,7 +32,8 @@ to `/auth/login`, `/documents`, `/documents/search`, `/workflow-instances` and
 >   readable only by `client_admin` and `schulltech_admin` — so `staff` and `supervisor`,
 >   who hold `workflow:route`, can no longer list the workflows they need to route into.
 >   **Document routing is broken again**, by a different cause. *(→ Still open 2026-10-15
->   as DRIFT-14; the cause is now the RBAC seed, not a constant.)*
+>   as DRIFT-14; the cause is now the RBAC seed, not a constant. → 2026-10-16: seed only —
+>   the live tenant's roles hold the grant.)*
 > - 🔄 **Two findings changed owner from backend to frontend.** OCR now uses the
 >   asynchronous Textract API against the correct bucket; the only remaining problem is
 >   that the frontend still uploads elsewhere. And eight server-side aggregation endpoints
@@ -104,19 +108,22 @@ The GOVERNANCE half is now half real
 ### The four defects that matter most
 
 *Re-checked 2026-10-15: #2, #3 and #4 are resolved; #1 is the one still open.*
+*Re-tested live 2026-10-16: #1 is open in the seed only — it doesn't affect the live tenant.*
 
 | # | Defect | Where | Effect |
 |---|---|---|---|
-| 1 | **Staff, supervisors, management and auditors cannot read workflow definitions** (DRIFT-14) | `GET /workflows` requires `workflow:view`, and `prisma/seed-system.ts` grants it only to `client_admin` and `schulltech_admin`. *(Was: "`WORKFLOW_DEFINITION_VIEW_ROLES` is set equal to `MANAGE_ROLES`" — that constant was removed 2026-09-16; the seed now causes the same symptom.)* | **Document routing is unreachable for the roles that do it.** `useRouteToWorkflow` gets a `403`, so its picker says "no published workflows" — neither true nor the reason |
+| 1 | 🟠 **On a freshly seeded tenant, staff, supervisors, management and auditors cannot read workflow definitions** (DRIFT-14) — *the live tenant's roles hold `workflow:view:global` and get 200 from `GET /workflows` (re-tested 2026-10-16)* | `GET /workflows` requires `workflow:view`, and `prisma/seed-system.ts` grants it only to `client_admin` and `schulltech_admin`. *(Was: "`WORKFLOW_DEFINITION_VIEW_ROLES` is set equal to `MANAGE_ROLES`" — that constant was removed 2026-09-16; the seed now causes the same symptom.)* | **Document routing is unreachable for the roles that do it.** `useRouteToWorkflow` gets a `403`, so its picker says "no published workflows" — neither true nor the reason |
 | ~~2~~ | ✅ **Resolved 2026-09-18.** ~~The real audit trail is invisible to the role whose job is to read it~~ | Backend is real and auto-writing (DRIFT-11 in doc 01); `/admin/audit`, `/auditor/trail` and `management/compliance` all read it now. `/platform/audit` stays mocked by design — no cross-tenant backend exists to read | The compliance story now has real data behind it, and the auditor role can see it |
 | ~~3~~ | ✅ **Resolved 2026-09-21 (DRIFT-10).** ~~Nothing ever creates a notification~~ | `notifyUser` / `notifyAssignment` / `notifyRole` are now called from tasks, SLA, documents, checkout-overdue and circulars | Task assignment, returned work, SLA warnings and breaches notify. Not yet clicked through end to end |
 | ~~4~~ | ✅ **Resolved 2026-09-21 (DRIFT-13).** ~~`effStatus()` is a no-op on real data~~ | `effStatus()` was deleted; task rows use `taskStatusLabel`/`isOverdue` | Overdue indicators read real data |
 
-**#1 is four seed rows and a re-seed, and it currently disables the product's core loop**
-for every non-admin role: grant `workflow:view` to `staff`, `supervisor`, `management` and
-`internal_auditor` in `prisma/seed-system.ts`. *(Was "a one-line fix … give read its own
-role list".)* Before fixing it, settle one open question: doc 04 records staff routing as
-confirmed in testing on 2026-10-08, which a seeded staff account shouldn't be able to do.
+**#1 is four seed rows and a re-seed.** Grant `workflow:view` to `staff`, `supervisor`,
+`management` and `internal_auditor` in `prisma/seed-system.ts`. *(Was "a one-line fix … give
+read its own role list".)* ~~It currently disables the product's core loop for every
+non-admin role.~~ *Re-tested 2026-10-16:* it doesn't on the live tenant, whose roles still
+hold the grant — which settles the open question about the 2026-10-08 staff routing test. A
+freshly seeded tenant would be blocked, so the seed fix must land before a new tenant is
+provisioned.
 ~~**#3 is much smaller than it was**~~ — done. ~~**#4 is roughly two hours**~~ — done.
 
 > ✅ **Resolved since 2026-08-29.** Two items have left this list.
@@ -168,6 +175,10 @@ above was found; and the three "7-line stub" pages are **re-exports**, one of wh
 **Corrected 2026-10-14 (later):** DRIFT-12 was still listed as open in doc 01 (section heading, register and order of attack), doc 03 (Phase 7 and its demo-accounts section) and doc 04 (Schulltech admin's day one), all saying every login autofill button fails. The code has been right since 2026-09-15: Set 2 moved to the `tjoel+…` accounts in `aa11682` and Set 1 was deleted in `ce4d968`. Doc 05 had already ticked it on 2026-10-08 without the other docs following. Re-verified live by signing in as all seven accounts.
 
 **Corrected 2026-10-14 (later):** doc 02's C2 story still had an open criterion saying the sidebar badge counts came from `SEED.documents`, with `approvalsCount` hardcoded to one user. Doc 05 recorded the fix on 2026-10-12 (`GET /tasks?scope=mine&status=pending&limit=1`), verified live then; doc 02 now matches. Found while adding the My Tasks `overdue`/`sort` criteria to the same story.
+
+**Corrected 2026-10-19:** doc 02's C2 story said `tasks.repository` "prioritises by document urgency then due date" and ticked "Paginated". On `origin/dev`, `listTasks` orders by `createdAt` unless `sort=dueAt` is passed, and has no urgency order or filter; `/staff/tasks` fetched only the default first page (20, oldest first) with no paging. C2 is now 🟨 Partial. Found while checking whether My Tasks' filters use the API.
+
+**Corrected 2026-10-20:** two lines still described the old My Tasks after the 2026-10-19 change: doc 05's `GET /tasks` wired-API line (`?overdue=true|false&sort=dueAt`; it now sends `page`, `limit`, `overdue=true` and `sort=createdAt|dueAt`) and doc 05's staff journey row "Prioritised by urgency then due date". Doc 04's supervisor row "Clear the approvals queue … Prioritised by urgency then due date" was wrong the same way: `GET /tasks/approvals` also orders by `createdAt` unless `sort=dueAt` is passed. Separately, docs 02 and 05 said `validateParallelRouting` "mirrors the backend's checks"; it lacked the per-stage fallback rule and the backend's "cannot reach a terminal stage" loop check, so stage add/delete could still 422. Both now run in `validateDefinition`.
 
 **Correction (2026-09-10).** Doc 05 stated `/admin/users` "writes the role matrix to
 `SEED`" and listed `useRole`/`useUpdateRole`/`useDeleteRole` etc. as dead — both were
@@ -550,6 +561,31 @@ The main ones:
 
 Dated revision banners at the top of each doc were left as history. Docs 03–05 gained a
 "Re-checked 2026-10-15" block listing which of their statements no longer hold.
+
+**2026-10-16 — every open backlog item re-checked**, against `edms-backend` `origin/dev`
+(`a88f279`), this repo, and the live API signed in as the seeded `tjoel+…` accounts. Three
+statements were wrong:
+
+- **DRIFT-14 was ranked 🔴 Critical but blocks nobody on the live tenant.** The 2026-10-15
+  pass read the seed and inferred the live state from it. Signed in, `staff_finance`,
+  `supervisor_finance`, `management_ops` and `auditor` all hold `workflow:view:global`, and
+  `GET /workflows` returns 200 for each — the 2026-10-08 routing test was right. The seed
+  upserts and never deletes, so the live rows are most likely left over from the
+  pre-2026-09-16 seed (not proven: that seed's `workflow:route` grants are gone). Downgraded
+  to 🟠 latent: a freshly seeded tenant would still hit it. Corrected in docs 01–05. **Lesson:
+  for a permission question, check the live `permissions` array, not just the seed.**
+- **DRIFT-19 / backlog #19b were still listed as waiting on the backend.** List deadlines
+  (`stageDueAt` in `GET /tasks` and `GET /workflow-instances`) and `GET /sla/outcomes/summary`
+  shipped in PR #50 and were verified 2026-10-13 (TEST_PLAN Phase U). Doc 01 §7 already listed
+  the endpoint; the register row and doc 05 #19b never caught up.
+- **Backlog #20 understated the signed-URL bypass.** It named `GET /documents/:id` and the
+  lists; `GET /documents/:id/versions` (`listVersions`) hands out signed URLs at view rights
+  too. Doc 02 B3 already said so.
+
+Re-confirmed open, no change: the JSON 404 handler (HTML 404 live), cabinet grants on
+document reads, login rate limiting, the `review` signature, retention (model only), the
+pagination caps, the OCR stuck-job sweep, `Finding`, branding, SoD, tests, and the 14 mock
+pages.
 
 ---
 

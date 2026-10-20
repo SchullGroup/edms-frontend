@@ -32,7 +32,9 @@ are numbered so a bug report can cite one (`TP-C3`, `TP-I2`, …).
       `GET /workflows?status=published`. If this 403s or returns empty for a workflow you
       know is published, stop — routing will fail at step TP-B3 for a reason that has
       nothing to do with your test, and it's worth confirming before you build anything on
-      top of it.
+      top of it. *(Passed 2026-10-16: `GET /workflows` returned 200 for `staff_finance`,
+      `supervisor_finance`, `management_ops` and `auditor`. A freshly seeded database would
+      fail this check — the seed lacks the grant; see DRIFT-14.)*
 - [ ] Note that `sla_hours` has a **minimum of 1** (hour) — you cannot script a sub-hour
       SLA breach. Phase I is designed around this; budget real wall-clock time for it or
       run it separately/overnight.
@@ -620,8 +622,8 @@ just have to be undone.)*
 the frontend Workflow Designer never exposed it — it only ever built a straight `stage 1 → stage
 2 → … ` chain. This phase covers the new authoring UI: a stage can now route conditionally on
 the document's urgency, confidentiality, or a metadata field, with a required fallback for
-anything that doesn't match. **True parallel routing (more than one *unconditional* branch from
-a stage) is still not supported, on either side of the stack — don't go looking for it.**
+anything that doesn't match. **Parallel routing** (two or more *unconditional* branches from a
+stage, all running at once) arrived with edms-backend PR #54 and is covered by TP-Q15–TP-Q27.
 
 Log in as `client_admin` (`workflow:edit` is required to reach this page at all). Open
 `/admin/workflows` and select or create a workflow with **at least 3 stages** — a couple of these
@@ -632,9 +634,10 @@ steps need a stage to have more than one other stage available to route to.
       **Properties** and **Transitions** tabs. On Properties, change the stage name (don't save),
       switch to Transitions, then switch back to Properties. Confirm your unsaved name edit is
       still sitting there — tab-switching must not silently discard it.
-- [ ] **TP-Q2 (the default shape).** On the Transitions tab of a stage with no authored branches,
-      confirm you see exactly one card, badge **"Fallback"**, pointing at the next stage in
-      sequence, plus a **"+ Add conditional branch"** button. This is the same default chain the
+- [x] **TP-Q2 (the default shape).** *(2026-10-18, browser.)* On the Transitions tab of a stage with no authored branches,
+      confirm you see exactly one card, badge **"Next"** (it becomes **"Fallback"** once the stage
+      has a conditional branch), pointing at the next stage in sequence, plus **"+ Add
+      conditional branch"** and **"+ Add parallel branch"** buttons. This is the same default chain the
       designer has always built, just now visible/editable as a real transition instead of an
       implicit assumption.
 - [ ] **TP-Q3 (adding a branch).** Click **"+ Add conditional branch"**. Confirm a new card
@@ -692,6 +695,128 @@ steps need a stage to have more than one other stage available to route to.
       what each line color means), and that Escape, clicking the backdrop, and the **×** all
       close it — same behavior as every other modal in the app, since this one reuses the shared
       modal system rather than a one-off implementation.
+
+**Parallel routing (edms-backend PR #54, frontend 2026-10-17).** Two or more plain (no
+condition) branches from one stage run at the same time, each with its own task and SLA. If the
+branches meet again, the stage where they meet waits until every branch has arrived, then opens
+one task. **Status 2026-10-19:** the designer works (TP-Q15–Q18, Q21–Q23 and Q25 passed in a
+browser); **running a parallel workflow fails on the live backend** at the first fork (TP-Q19),
+so the runtime steps say what *should* happen and what you will see today.
+
+**Setup.** As `client_admin`, open `/admin/workflows` → **New workflow**. Add stages until there
+are four, named and assigned like this (Properties tab, then **Save changes** on each):
+
+| Stage | Assign to (Role) | Allowed actions |
+|---|---|---|
+| Intake | staff | Review, Reject |
+| Finance review | supervisor | Review, Reject, Request changes |
+| Legal review | staff | Review, Reject, Request changes |
+| Final approval | management | Review, Reject, Request changes |
+
+They start as a straight chain: Intake → Finance review → Legal review → Final approval.
+
+*Building it — the normal way*
+
+- [x] **TP-Q15 (making a fork).** *(2026-10-18, browser: PATCH 200.)* On Intake's Transitions
+      tab click **"+ Add parallel branch"** and point the new card at Legal review. Confirm both
+      cards read **"Parallel"** with a ✕, **"+ Add conditional branch"** is greyed out, and
+      **Branches meet at** shows **Final approval**. The note under it lists what else the save
+      changes: *Finance review goes on to Final approval*, *Finance review no longer goes to Legal
+      review*, *Final approval waits for every branch*. **Save transitions** — it succeeds, and
+      afterwards the tab shows no **Discard** (nothing left unsaved).
+- [x] **TP-Q16 (the canvas).** *(2026-10-18, browser.)* Intake's two lines are blue and labelled
+      **"Parallel"**, Finance and Legal sit side by side, and Final approval's card reads
+      **"· waits for all"**. Select Final approval: its Properties tab says parallel branches meet
+      there. **"How routing works"** explains parallel branches and the blue line.
+
+*Building it — errors you should hit.* Each is caught before anything is saved: a warning
+appears under the branches and **Save transitions** is disabled. **Discard** after each.
+
+- [x] **TP-Q17 (branches meet but nothing waits).** *(2026-10-18.)* On Intake, set **Branches
+      meet at** to **"Nowhere"**. Warning: *"The parallel branches from Intake meet again at Final
+      approval, which has to wait for all of them — choose it under "Branches meet at"."*
+- [x] **TP-Q18 (removing a branch strands a stage).** *(2026-10-18.)* Remove the Legal branch
+      (✕). Warning: *"Nothing routes to Legal review any more — no document could reach it."*
+- [x] **TP-Q21 (two branches to the same stage).** *(2026-10-19.)* Point the Legal card at
+      Finance review. Warning: *"Two branches from this stage point to the same next stage — pick
+      a different target for one of them."*
+- [x] **TP-Q22 (a branch that can finish early).** *(2026-10-19.)* **Add stage**. It goes after
+      Final approval, which now leads to it, with no warning, and you can click another stage
+      straight away without a "Discard unsaved changes?" prompt. On Legal review's Transitions,
+      **"+ Add conditional branch"** pointing at the new stage. Warning: *"A branch from Intake
+      can end at New stage without reaching Final approval."*
+- [x] **TP-Q23 (a branch splitting again).** *(2026-10-19.)* On Finance review,
+      **"+ Add parallel branch"** pointing at the new stage. The warning includes *"Finance
+      review splits into parallel branches again before Final approval — a branch can't split
+      further."*
+- [ ] **TP-Q24 (conditions and parallel don't mix).** *(2026-10-18: the first half seen in a browser; the second not yet clicked.)* On Intake (a fork),
+      **"+ Add conditional branch"** is disabled, and hovering says why. On a stage with a
+      conditional branch, **"+ Add parallel branch"** is disabled.
+- [x] **TP-Q25 (deleting stages).** *(2026-10-19.)* Delete **Final approval**: no confirm opens,
+      and a red toast reads *"Can't delete "Final approval": …"* with the reason. Delete **Legal
+      review** instead: confirm, it is removed, and Final approval no longer reads "waits for
+      all" (Intake has one branch left, so it isn't a fork any more).
+
+If a save ever does reach the backend and fail, the red toast shows the backend's reason (for
+example *"Parallel stage 'intake' has converging branches but no join: 'all' stage"*), not just
+"Validation failed".
+
+*Reordering stages*
+
+- [x] **TP-Q28 (Move earlier / Move later).** *(2026-10-19, browser.)* On a draft chain Alpha →
+      Bravo → Charlie → Delta, select Charlie → Properties → **Position**. **↑ Move earlier**: it
+      saves at once and the canvas reads Alpha → Charlie → Bravo → Delta. Again: Charlie is now
+      the first stage (where documents start), and a toast says "Request changes" was removed
+      from it. On the first stage **Move earlier** is disabled ("This is already the first
+      stage."); on the last, **Move later** ("This is the last stage — nothing comes after it.").
+      On a stage that branches, or one where routes meet, the buttons are disabled and hovering
+      says why. Moving the stage where parallel branches meet later makes its new predecessor
+      the one that "waits for all".
+
+*Running it.* Rebuild the TP-Q15 workflow (or undo TP-Q22–Q25), then **Publish**. Route a
+document **you own**: as `staff_finance`, upload a new document and use **Route to workflow** on
+it. Routing someone else's document fails with *"You do not have permission to create a
+workflow instance for this document"*.
+
+- [ ] **TP-Q19 (the normal run).** ⛔ *Blocked by the backend (2026-10-18, re-checked
+      2026-10-19, and over the API 2026-10-20: BE-19 in BACKEND_REQUESTS).* As `staff_finance`, open the task and **Mark reviewed** at Intake. **Today
+      you get a red toast, "An unexpected error occurred" (HTTP 500), and the task stays at
+      Intake** — on every fork, even the simplest. Once the backend is fixed: the stage rail
+      shows Finance review *and* Legal review as current, each with its own holder and deadline,
+      and `supervisor_finance` and `staff_finance` each have a task. Mark Finance reviewed as
+      `supervisor_finance`: Finance reads done, Final approval reads **"waiting for the other
+      branches"** with no deadline, and management has no task yet. Mark Legal reviewed: Final
+      approval becomes current, with a task for `management_ops`. Review it there and the
+      workflow closes.
+- [ ] **TP-Q20 (request changes inside a branch — suspected backend gap).** ⛔ *Blocked by
+      TP-Q19.* On a fresh run, after the fork, **Request changes** on Finance review. The
+      document goes back to Intake for that branch only; Legal's task is untouched. Upload a new
+      version at Intake (you must own the document — see TP-Q27) and mark it reviewed. **Reading
+      the backend code, Intake forks that branch again** into new Finance *and* Legal branches,
+      while the original Legal branch waits at Final approval for a sibling that went back. It
+      would wait forever, and the workflow would never close. If that's what you see, raise it
+      with the backend team: re-reviewing at a fork stage should resume the one branch.
+- [ ] **TP-Q26 (reject inside a branch).** ⛔ *Blocked by TP-Q19.* After the fork, **Reject** on
+      Legal review. The backend's own description says rejecting a document cancels its other
+      live branches, so Finance's task should disappear and the workflow close.
+- [ ] **TP-Q27 (revision upload by someone who doesn't own the document — known gap).** *(Found
+      2026-10-18 on a sequential workflow.)* When a stage holder who isn't the document's owner
+      is asked for changes, the workflow page offers **New version**, but the upload fails (403):
+      staff can only add versions to their own documents. They then can't move the stage on:
+      **Mark reviewed** says *"Document "…" requires a new version after Request Changes before
+      it can proceed."* Avoid it by routing documents owned by whoever holds the first stage.
+
+| You see | Meaning | What to do |
+|---|---|---|
+| Red toast **"An unexpected error occurred"** when acting at a fork stage | Backend 500 on every parallel fork (TP-Q19) | Nothing to fix on the frontend — report it to the backend team |
+| *"The parallel branches from X meet again at Y…"* | Branches converge and nothing waits for them | Pick Y under **Branches meet at** |
+| *"Nothing routes to X any more…"* | A stage became unreachable | Route something to X, or delete X |
+| *"Two branches from this stage point to the same next stage…"* | Duplicate target | Point one branch elsewhere |
+| *"A branch from X can end at Y without reaching Z."* | A branch can finish before the meeting stage | Route Y on to Z, or remove that branch |
+| *"X splits into parallel branches again before Z…"* | A fork inside a branch (not supported) | Keep one route out of X |
+| *"Can't delete "X": …"* | Deleting X would break the routing | Fix the routing first |
+| *"You do not have permission to create a workflow instance for this document"* | Routing a document you don't own | Route your own document |
+| *"Document "…" requires a new version after Request Changes…"* | Changes were requested and no new version exists yet | Upload one (owner only — TP-Q27) |
 
 ---
 

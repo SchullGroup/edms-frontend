@@ -37,6 +37,7 @@ it. Then BE-1 and BE-4, which are security items rather than features.
 | **BE-4**  | Enforce confidentiality for download/print/export | Security fix | 🔴 High     | No                         |
 | **BE-5**  | `GET /documents/:id/download`                     | New endpoint | 🟠 Med      | Yes — no way to get a file |
 | **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med | No — 1 of 8 documents affected so far |
+| **BE-19** | 500 on the first action at a parallel fork (PR #54) | Bug | 🔴 High | **Yes — no parallel workflow can run** |
 | **BE-9**  | `policies` module                                 | New module   | 🟠 Med      | No — frontend on fixtures  |
 | **BE-10** | JSON 404 handler                                  | Small fix    | 🟡 Low      | No                         |
 | ~~BE-11~~ | ~~`audit` module~~                                | ✅ **Done**  | —           | —                          |
@@ -45,6 +46,65 @@ it. Then BE-1 and BE-4, which are security items rather than features.
 | **BE-15** | Revoke a granted `DocumentAccessGrant`            | New endpoint | 🟠 Med      | No — grants just accumulate |
 | **BE-16** | Optional `signature` on the `review` task action  | Schema change | 🟠 Med      | No — "Mark reviewed" ships comment-only meanwhile |
 | **BE-17** | Support >1 document per workflow instance         | Data model change | 🟡 Low | No — single-document version upload covers the common case |
+
+---
+
+## 🔴 BE-19 · `POST /tasks/:id/action` returns 500 at a parallel fork
+
+**Raised:** 2026-10-20 · **Backend:** live API (`edms-backend-zmfm.onrender.com`); code read at
+`origin/dev` `6700804`
+
+### What we found
+
+The first action at a stage with two or more unconditional transitions (a parallel fork, PR #54)
+fails every time:
+
+```
+POST /api/v1/tasks/f83de22c-89ab-4873-a80f-880f1776cf2f/action
+{"action":"review","comment":"parallel repro 2026-10-20"}
+
+500 {"success":false,"message":"An unexpected error occurred","code":"INTERNAL_SERVER_ERROR"}
+```
+
+The task stays `pending` at the fork stage and no branch task is created. Sequential workflows on
+the same backend work. First seen 2026-10-18 (TEST_PLAN TP-Q19), and reproduced over the API on
+2026-10-20 with the smallest possible fork: no join, one document, `review` only.
+
+### How to reproduce
+
+1. As `client_admin`, `POST /workflows` with this definition, then `POST /workflows/:id/publish`.
+   It saves and publishes cleanly:
+   ```json
+   {
+     "stages": [
+       { "id": "intake",  "name": "Intake",         "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] },
+       { "id": "finance", "name": "Finance review", "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] },
+       { "id": "legal",   "name": "Legal review",   "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] }
+     ],
+     "transitions": [{ "from": "intake", "to": "finance" }, { "from": "intake", "to": "legal" }]
+   }
+   ```
+2. As `staff_finance`, `POST /workflow-instances` with one document they own, then
+   `POST /workflow-instances/:id/start` (both succeed; one task opens at `intake`).
+3. As `staff_finance`, `POST /tasks/:taskId/action` with `{"action":"review"}`: **500**.
+
+The 2026-10-20 run's IDs, for the server logs: workflow `d607c88e-85f9-4043-9c03-74c336341ff6`
+(archived afterwards), instance `c86d381f-a2b9-4c55-bcfe-0404e86d250a` (closed afterwards), task
+`f83de22c-89ab-4873-a80f-880f1776cf2f`. The response carries no request id.
+
+### Where to look
+
+The fork branch of the task action in `src/modules/workflows/tasks/tasks.service.ts` (the
+`sourceOccurrences` loop that calls `instancesRepository.forkDocumentExecution`, then
+`routeDestinationGroups`). We couldn't find the cause from the code alone. A 500 means an
+uncaught error rather than an `AppError`, so the stack trace for the request above should name
+it.
+
+### What we need
+
+The fork action to succeed: one task per branch, each document execution split into children
+(`parentExecutionId` set), as PR #54 describes. The designer already builds and saves forks and
+joins (live since 2026-10-17), so the frontend is waiting only on this.
 
 ---
 
@@ -204,6 +264,11 @@ guessing is currently possible. `express-rate-limit` on that one route would clo
 ---
 
 ## 🔴 BE-12 · Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`
+
+> **Superseded — history only.** The constant was removed 2026-09-16; the gap moved to the
+> RBAC seed (DRIFT-14 in doc 01). **Re-tested live 2026-10-16:** the live tenant's
+> non-admin roles hold `workflow:view:global` and get 200 from `GET /workflows`, so nothing
+> is blocked there. The seed still lacks those four rows, so a freshly seeded tenant would be.
 
 **This is now the most serious item in this document, and it is one line.**
 

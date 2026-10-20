@@ -2,7 +2,7 @@
 
 import { StagePropertiesPanel, StagePropertiesPanelProps } from './StagePropertiesPanel';
 import { BranchEditorCard } from './BranchEditorCard';
-import type { WorkflowStage, WorkflowTransition } from '@/types/models';
+import type { WorkflowDefinitionJson, WorkflowStage, WorkflowTransition } from '@/types/models';
 
 export type StageTab = 'properties' | 'transitions';
 
@@ -10,33 +10,21 @@ export interface StagePanelProps {
   selectedStage: WorkflowStage | null;
   stages: WorkflowStage[];
   transitions: WorkflowTransition[];
-  onSaveTransitions: (stageId: string, outgoing: WorkflowTransition[]) => void;
+  onSaveTransitions: (definition: WorkflowDefinitionJson) => void;
   saving: boolean;
   canEdit: boolean;
   propertiesProps: Omit<StagePropertiesPanelProps, 'selectedStage' | 'bare'>;
-  /** Whether this stage has any conditional branch — shown as a small dot on
-   *  the Transitions tab so a stage's routing isn't invisible from the
-   *  Properties tab. */
-  hasConditionalBranch: boolean;
-  /** Controlled from the page, not local state — clicking a branch line's
-   *  label on the canvas needs to force this to 'transitions', which a
-   *  sibling component (WorkflowCanvas) can't reach into local state for. */
+  /** Whether this stage branches (conditionally or in parallel); shown as a dot on
+   *  the Transitions tab. */
+  stageBranches: boolean;
+  /** Controlled by the page, so a branch-label click on the canvas can switch it
+   *  to 'transitions'. */
   tab: StageTab;
   onTabChange: (tab: StageTab) => void;
 }
 
-/**
- * One card, two tabs, for whichever stage is selected on the canvas: what to
- * assign it and its SLA (Properties), and where its documents go next
- * (Transitions). Both tabs stay mounted (hidden via CSS, not unmounted) when
- * you switch — an in-progress edit on either one survives flipping to the
- * other and back, which a plain conditional render wouldn't give you.
- *
- * The Transitions tab is `BranchEditorCard` — the same component used for
- * the canvas-anchored popover this replaced — so routing here and there
- * would (if both existed) share one implementation; there's no second copy
- * of the rule-builder to keep in sync.
- */
+/** The selected stage's Properties and Transitions tabs. Both stay mounted (hidden by
+ *  CSS), so an unsaved edit survives switching tabs. */
 export function StagePanel({
   selectedStage,
   stages,
@@ -45,7 +33,7 @@ export function StagePanel({
   saving,
   canEdit,
   propertiesProps,
-  hasConditionalBranch,
+  stageBranches,
   tab,
   onTabChange,
 }: StagePanelProps) {
@@ -73,7 +61,7 @@ export function StagePanel({
         </button>
         <button type="button" role="tab" aria-selected={tab === 'transitions'} className={tab === 'transitions' ? 'active' : ''} onClick={() => onTabChange('transitions')}>
           Transitions
-          {hasConditionalBranch && <span className="wfd-tab-dot" aria-label="Has a conditional branch" />}
+          {stageBranches && <span className="wfd-tab-dot" aria-label="This stage branches" />}
         </button>
       </div>
 
