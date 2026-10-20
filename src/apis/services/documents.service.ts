@@ -159,6 +159,12 @@ export const documentsService = {
     return response.data.data;
   },
 
+  // 202: queues a fresh summary; the returned status is `pending`, the old text kept.
+  requestSummary: async (id: string): Promise<DocumentSummary> => {
+    const response = await apiClient.post<ApiResponse<DocumentSummary>>(`/documents/${id}/summary`);
+    return response.data.data;
+  },
+
   // Version Control
   getVersions: async (id: string): Promise<DocumentVersion[]> => {
     const response = await apiClient.get<ApiResponse<DocumentVersion[]>>(

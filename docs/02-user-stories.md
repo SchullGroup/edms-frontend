@@ -529,7 +529,8 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
 - [x] Checkout / check-in from this screen
 - [x] **AI summary of the current version (2026-10-13, verified live)** — `GET /documents/:id/summary`
       (Gemini, written after OCR). The card says when it's still being written, when the file has no
-      readable text, and when OCR or the summary failed
+      readable text, and when OCR or the summary failed. Since 2026-10-20 (verified live) a failed
+      summary can be retried and a finished one regenerated (`POST /documents/:id/summary`)
 - [x] Edit title, type, folder, confidentiality, urgency, status
 - [x] Workflow stage rail + activity trail from live `GET /workflow-history` (since the
       `feature/management` merge)

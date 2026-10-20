@@ -628,13 +628,16 @@ anything stopping the same document being routed into a second active workflow?
 The frontend now uses PR #49 (pending users, the suspended-login message, the hidden
 `schulltech_admin` role, AI summaries).
 
-### N2. A failed summary can't be retried — **in the works**
+### N2. A failed summary can't be retried — ✅ **done** (PR #56, live 2026-10-20)
 
 `getDocumentSummary` queues a summary only when `summaryStatus` is `pending`. After the job's
 three attempts fail, the version stays `failed` for good. The backend developer confirmed
 (2026-10-13) that a summary trigger is being built. Until it's live, the frontend shows "The
 summary couldn't be written" with a "Check again" that only re-reads the status; once it is,
 that button should call the trigger.
+
+**2026-10-20:** `POST /documents/:id/summary` (PR #56). The card now offers "Try again" on a
+failed summary and "Regenerate" on a finished one, verified live.
 
 ### N3. Login says whether an email belongs to a suspended account — **deferred**
 

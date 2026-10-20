@@ -10,6 +10,7 @@ import {
   CreateVersionRequest,
   Document,
   DocumentAccessKind,
+  DocumentSummary,
   DocumentMetadataValueInput,
 } from '@/types/models';
 import { ACCESS_KIND_LABEL } from '@/constants/documentLevels';
@@ -118,13 +119,10 @@ const SUMMARY_POLL_MS = 10_000;
 /** Each fetch writes an audit row, so polling stops after a minute. */
 const SUMMARY_POLL_WINDOW_MS = 60_000;
 
-/**
- * The AI summary of the document's current version. While it is still being
- * written it polls every 10 s for up to a minute per version; after that,
- * `checkAgain` fetches once more and reopens the window. Adding or restoring a
- * version invalidates it, since the summary follows the current version.
- */
+/** The current version's AI summary; polls every 10 s for a minute while it's written.
+ *  `checkAgain` re-reads and reopens that window; `requestNew` asks for a fresh one. */
 export function useDocumentSummary(id: string, options?: { enabled?: boolean }) {
+  const queryClient = useQueryClient();
   const pollStart = useRef<{ versionId: string; at: number } | null>(null);
   const query = useQuery({
     queryKey: documentKeys.summary(id),
@@ -149,7 +147,35 @@ export function useDocumentSummary(id: string, options?: { enabled?: boolean }) 
     pollStart.current = null;
     return refetch();
   }, [refetch]);
-  return { ...query, checkAgain };
+
+  const request = useMutation({
+    mutationFn: () => documentsService.requestSummary(id),
+    onMutate: () => {
+      pollStart.current = null;
+    },
+    onSuccess: (data) => queryClient.setQueryData(documentKeys.summary(id), data),
+    onError: (err: any) => {
+      const code = err?.response?.data?.code;
+      // One already running, or OCR still going: show and poll that instead of an error.
+      if (code === 'SUMMARY_IN_PROGRESS') {
+        queryClient.setQueryData<DocumentSummary>(documentKeys.summary(id), (prev) =>
+          prev ? { ...prev, summaryStatus: 'processing' } : prev,
+        );
+      } else if (code === 'OCR_IN_PROGRESS') {
+        refetch();
+      }
+    },
+  });
+  const { mutate } = request;
+  const requestNew = useCallback(() => mutate(), [mutate]);
+
+  return {
+    ...query,
+    checkAgain,
+    requestNew,
+    isRequesting: request.isPending,
+    requestError: request.error as any,
+  };
 }
 
 export function useDocumentVersion(id: string, versionId: string) {

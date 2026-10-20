@@ -9,18 +9,29 @@ interface Props {
   documentId: string;
 }
 
-/**
- * The AI summary of the document's current version (`GET /documents/:id/summary`).
- * The backend writes it in the background once OCR has read the file, so a new
- * document shows "being written" for a while and the hook polls briefly.
- */
+/** The current version's AI summary (`GET /documents/:id/summary`), written after OCR.
+ *  A failed one can be retried and a finished one regenerated (`POST`, same access). */
 export function DocumentSummaryPanel({ documentId }: Props) {
-  const { data, isLoading, isError, error, isFetching, checkAgain } =
-    useDocumentSummary(documentId);
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    checkAgain,
+    requestNew,
+    isRequesting,
+    requestError,
+  } = useDocumentSummary(documentId);
 
   const checkAgainButton = (
     <button className="btn btn-ghost btn-sm" onClick={() => checkAgain()} disabled={isFetching}>
       {isFetching ? 'Checking…' : 'Check again'}
+    </button>
+  );
+  const requestButton = (label: string) => (
+    <button className="btn btn-ghost btn-sm" onClick={requestNew} disabled={isRequesting}>
+      {isRequesting ? 'Asking…' : label}
     </button>
   );
 
@@ -42,10 +53,13 @@ export function DocumentSummaryPanel({ documentId }: Props) {
     body = (
       <>
         <SummaryText text={data.summary} />
-        <div className="caption mt-2">
-          Written by AI from version {data.versionNumber}
-          {data.generatedAt ? ` on ${fmtDateTime(data.generatedAt)}` : ''}. Check important
-          details against the document.
+        <div className="caption mt-2 flex items-center gap-2 flex-wrap">
+          <span>
+            Written by AI from version {data.versionNumber}
+            {data.generatedAt ? ` on ${fmtDateTime(data.generatedAt)}` : ''}. Check important
+            details against the document.
+          </span>
+          {requestButton('Regenerate')}
         </div>
       </>
     );
@@ -59,10 +73,29 @@ export function DocumentSummaryPanel({ documentId }: Props) {
   } else if (data.summaryStatus === 'skipped') {
     body = <div className="caption">No summary: no readable text was found in this file.</div>;
   } else if (data.summaryStatus === 'failed') {
-    body = (
+    // A failed regeneration keeps the earlier summary.
+    body = data.summary ? (
+      <>
+        <SummaryText text={data.summary} />
+        <div className="caption mt-2 flex items-center gap-2 flex-wrap">
+          A new summary couldn&apos;t be written, so this is the earlier one.{' '}
+          {requestButton('Try again')}
+        </div>
+      </>
+    ) : (
       <div className="caption flex items-center gap-2 flex-wrap">
-        The summary couldn&apos;t be written. {checkAgainButton}
+        The summary couldn&apos;t be written. {requestButton('Try again')}
       </div>
+    );
+  } else if (data.summary) {
+    // Regenerating: the earlier summary stays until the new one replaces it.
+    body = (
+      <>
+        <SummaryText text={data.summary} />
+        <div className="caption mt-2 flex items-center gap-2 flex-wrap" aria-live="polite">
+          Writing a new summary. This one stays until it&apos;s ready. {checkAgainButton}
+        </div>
+      </>
     );
   } else {
     // pending or processing: OCR first, then the summary.
@@ -79,14 +112,36 @@ export function DocumentSummaryPanel({ documentId }: Props) {
     );
   }
 
+  const requestErrorText = summaryRequestError(requestError);
+
   return (
     <div className="card">
       <div className="card-head">
         <span className="h3">AI summary</span>
       </div>
-      <div className="card-body">{body}</div>
+      <div className="card-body">
+        {body}
+        {requestErrorText && (
+          <div className="caption mt-2" role="alert">
+            {requestErrorText}
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+/** What to say when `POST /documents/:id/summary` fails; null when the panel
+ *  already shows the outcome (the two 409s switch it to in progress). */
+function summaryRequestError(err: any): string | null {
+  if (!err) return null;
+  const code = err.response?.data?.code;
+  if (code === 'SUMMARY_IN_PROGRESS' || code === 'OCR_IN_PROGRESS') return null;
+  if (code === 'NO_EXTRACTABLE_TEXT') return "There's no readable text in this file to summarize.";
+  if (code === 'SUMMARY_UNAVAILABLE') {
+    return "AI summaries aren't available right now. Try again later.";
+  }
+  return "Couldn't ask for a new summary. Try again in a moment.";
 }
 
 /** The summary is plain text: an opening sentence, then "- " bullet lines. */
