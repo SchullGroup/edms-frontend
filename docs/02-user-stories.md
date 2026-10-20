@@ -763,7 +763,8 @@ one activates.
 lifecycle.
 
 **Acceptance criteria**
-- [x] Create, edit, publish and archive definitions
+- [x] Create, edit, publish and archive definitions; since 2026-10-20 (verified live) delete a
+      draft that was never started, and unarchive an archived one
 - [x] Stages with sequential transitions, SLA hours and role/user assignment
 - [x] Published definitions are immutable; edits require a new version
 - [x] ✅ **Authorization now enforced** (2026-09-04). `definitions.service.ts` asserts on

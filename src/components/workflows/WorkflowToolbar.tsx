@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '@/components/ui/Icons';
-import { Copy, MoreVertical } from 'lucide-react';
+import { Copy, MoreVertical, Trash2 } from 'lucide-react';
 
 export interface WorkflowToolbarProps {
   workflow: any;
@@ -21,22 +21,22 @@ export interface WorkflowToolbarProps {
   onCreateNew: () => void;
   onClone: () => void;
   onArchive: () => void;
+  onUnarchive: () => void;
+  onDelete: () => void;
   onPublish: () => void;
   creating: boolean;
   archiving: boolean;
+  unarchiving: boolean;
+  deleting: boolean;
   publishing: boolean;
   canCreate: boolean;
   canArchive: boolean;
+  canDelete: boolean;
   canPublish: boolean;
 }
 
-/** A breadcrumb row (which workflow, tenant-wide) sits above a focused
- *  toolbar (this workflow). The old single row conflated "pick a workflow"
- *  with "act on this one" — Clone and Publish read as just more items in
- *  the same unlabeled cluster as the switcher. Splitting them into two
- *  visually distinct rows fixes that without hiding anything: New/Clone/
- *  Archive move into an overflow menu since they're occasional, Publish
- *  stays a primary button because it isn't. */
+/** Switcher row above this workflow's toolbar. The primary button follows the status
+ *  (Publish a draft, Unarchive an archived one); Clone, Archive and Delete sit in the menu. */
 export function WorkflowToolbar({
   workflow,
   stageCount,
@@ -53,12 +53,17 @@ export function WorkflowToolbar({
   onCreateNew,
   onClone,
   onArchive,
+  onUnarchive,
+  onDelete,
   onPublish,
   creating,
   archiving,
+  unarchiving,
+  deleting,
   publishing,
   canCreate,
   canArchive,
+  canDelete,
   canPublish,
 }: WorkflowToolbarProps) {
   const statusBadgeClass =
@@ -183,14 +188,25 @@ export function WorkflowToolbar({
           >
             <Icon name="plus" size={15} /> New workflow
           </button>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={onPublish}
-            disabled={publishing || workflow.status === 'published' || !canPublish}
-            title={!canPublish ? "You don't have permission to publish workflows" : undefined}
-          >
-            {workflow.status === 'published' ? 'Published' : 'Publish'}
-          </button>
+          {workflow.status === 'archived' ? (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={onUnarchive}
+              disabled={unarchiving || !canArchive}
+              title={!canArchive ? "You don't have permission to unarchive workflows" : undefined}
+            >
+              {unarchiving ? 'Unarchiving…' : 'Unarchive'}
+            </button>
+          ) : (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={onPublish}
+              disabled={publishing || workflow.status === 'published' || !canPublish}
+              title={!canPublish ? "You don't have permission to publish workflows" : undefined}
+            >
+              {workflow.status === 'published' ? 'Published' : 'Publish'}
+            </button>
+          )}
           <div ref={menuRef} style={{ position: 'relative' }}>
             <button
               type="button"
@@ -231,7 +247,26 @@ export function WorkflowToolbar({
                   >
                     <Copy name="copy" size={15} /> Clone this workflow
                   </button>
-                  {workflow.status !== 'archived' && (
+                  {workflow.status === 'draft' && (
+                    <>
+                      <div className="menu-sep"></div>
+                      <button
+                        className="menu-item danger"
+                        role="menuitem"
+                        disabled={deleting || !canDelete}
+                        title={
+                          !canDelete ? "You don't have permission to delete workflows" : undefined
+                        }
+                        onClick={() => {
+                          setMenuOpen(false);
+                          onDelete();
+                        }}
+                      >
+                        <Trash2 size={15} /> Delete draft
+                      </button>
+                    </>
+                  )}
+                  {workflow.status === 'published' && (
                     <>
                       <div className="menu-sep"></div>
                       <button

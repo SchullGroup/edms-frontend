@@ -40,4 +40,17 @@ export const workflowsService = {
     );
     return response.data.data;
   },
+
+  // Drafts that were never started only (409 otherwise); 204.
+  deleteDraft: async (id: string): Promise<void> => {
+    await apiClient.delete(`/workflows/${id}`);
+  },
+
+  // Back to `published`; 422 if a stage's department has since been deleted.
+  unarchive: async (id: string): Promise<WorkflowDefinition> => {
+    const response = await apiClient.post<ApiResponse<WorkflowDefinition>>(
+      `/workflows/${id}/unarchive`,
+    );
+    return response.data.data;
+  },
 };

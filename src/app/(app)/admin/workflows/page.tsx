@@ -9,6 +9,8 @@ import {
   useCreateWorkflow,
   usePublishWorkflow,
   useArchiveWorkflow,
+  useUnarchiveWorkflow,
+  useDeleteWorkflow,
 } from '@/apis/hooks/useWorkflows';
 import { useRoles } from '@/apis/hooks/useRoles';
 import { useAllUsers } from '@/apis/hooks/useUsers';
@@ -59,6 +61,8 @@ export default function WorkflowDesignerPage() {
   const createWfMutation = useCreateWorkflow();
   const publishWfMutation = usePublishWorkflow();
   const archiveWfMutation = useArchiveWorkflow();
+  const unarchiveWfMutation = useUnarchiveWorkflow();
+  const deleteWfMutation = useDeleteWorkflow();
 
   const [wfId, setWfId] = useState<string | null>(null);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
@@ -66,8 +70,7 @@ export default function WorkflowDesignerPage() {
   // the Transitions tab's rule picker uses).
   const { data: metadataFields } = useAllMetadataFields();
   const [stagePanelTab, setStagePanelTab] = useState<StageTab>('properties');
-  // The backend can only archive a workflow, not delete it; archived ones are
-  // hidden from the switcher by default.
+  // Archived workflows are hidden from the switcher by default.
   const [showArchived, setShowArchived] = useState(false);
 
   // Local drafts: typing is instant and nothing is written until Save. They
@@ -236,18 +239,37 @@ export default function WorkflowDesignerPage() {
     });
   };
 
-  // Archive is the API's nearest thing to delete: the workflow leaves the switcher
-  // and can't be routed to, but stays reversible and auditable.
+  // Only a published workflow can be archived; it stays reversible with Unarchive.
   const handleArchive = () => {
     openConfirm({
       title: `Archive "${wf.name}"?`,
       message:
-        "There's no permanent delete for a workflow — archive is the closest thing. It'll drop out of this list and can no longer be routed to for new documents. Files already in flight are unaffected, and it can be found again via \"Show archived\".",
+        "It'll drop out of this list and can no longer be routed to for new documents. Files already in flight are unaffected. You can unarchive it later from \"Show archived\".",
       confirmLabel: 'Archive',
       danger: true,
       onConfirm: () =>
         archiveWfMutation.mutateAsync(wf.id).then(() => {
           auditAction('WORKFLOW_ARCHIVE', wf.id, `Archived ${wf.name}`);
+        }),
+    });
+  };
+
+  const handleUnarchive = () => {
+    unarchiveWfMutation.mutate(wf.id);
+  };
+
+  // Only a draft can be deleted, and the backend also refuses one that was ever started (409).
+  const handleDelete = () => {
+    openConfirm({
+      title: `Delete "${wf.name}"?`,
+      message:
+        "This draft has never been published, so it's deleted for good. This can't be undone.",
+      confirmLabel: 'Delete draft',
+      danger: true,
+      onConfirm: () =>
+        deleteWfMutation.mutateAsync(wf.id).then(() => {
+          setWfId(workflows.find((w) => w.id !== wf.id && w.status !== 'archived')?.id ?? null);
+          setSelectedStageId(null);
         }),
     });
   };
@@ -478,12 +500,17 @@ export default function WorkflowDesignerPage() {
         onCreateNew={handleCreateWorkflow}
         onClone={handleClone}
         onArchive={handleArchive}
+        onUnarchive={handleUnarchive}
+        onDelete={handleDelete}
         onPublish={handlePublish}
         creating={createWfMutation.isPending}
         archiving={archiveWfMutation.isPending}
+        unarchiving={unarchiveWfMutation.isPending}
+        deleting={deleteWfMutation.isPending}
         publishing={publishWfMutation.isPending}
         canCreate={canCreateWorkflow}
         canArchive={canArchiveWorkflow}
+        canDelete={canEditWorkflow}
         canPublish={canPublishWorkflow}
       />
 

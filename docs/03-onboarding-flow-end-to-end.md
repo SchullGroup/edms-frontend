@@ -530,6 +530,8 @@ fixed 2026-09-04, DRIFT-05; re-checked 2026-10-15)*
 | 6.3 | Edit while draft | `PATCH /workflows/:id` | ✅ |
 | 6.4 | Publish | `POST /workflows/:id/publish` | ✅ sets `publishedAt`, `status='published'` |
 | 6.5 | Archive an old version | `POST /workflows/:id/archive` | ✅ |
+| 6.6 | Delete a draft that was never started | `DELETE /workflows/:id` | ✅ since 2026-10-20 |
+| 6.7 | Bring an archived workflow back | `POST /workflows/:id/unarchive` | ✅ since 2026-10-20; 422 if a stage's department was deleted |
 
 ### The definition shape
 
