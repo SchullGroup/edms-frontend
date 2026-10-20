@@ -30,7 +30,6 @@ interface Props {
    *  changes" onto the caller's current task, so the file can't be silently
    *  swapped mid-review. */
   canUploadVersion: boolean;
-  getUploaderName?: (userId: string) => string;
 }
 
 export function DocumentVersionsPanel({
@@ -40,7 +39,6 @@ export function DocumentVersionsPanel({
   canDownload,
   canEdit,
   canUploadVersion,
-  getUploaderName,
 }: Props) {
   const { data: versions, isLoading } = useDocumentVersions(canView ? documentId : '');
   const addVersion = useAddDocumentVersion();
@@ -142,7 +140,7 @@ export function DocumentVersionsPanel({
               </span>
               <span className="v flex items-center gap-2" style={{ justifyContent: 'flex-end' }}>
                 <span className="caption">
-                  {getUploaderName ? getUploaderName(v.uploadedBy) : v.uploadedBy} ·{' '}
+                  {v.uploader?.name || 'Unknown user'} ·{' '}
                   {fmtDate(v.createdAt)}
                   {v.ocrStatus && v.ocrStatus !== 'completed' ? ` · OCR ${v.ocrStatus}` : ''}
                 </span>

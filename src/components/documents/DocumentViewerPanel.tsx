@@ -22,7 +22,6 @@ export interface DocumentViewerPanelProps {
   sealed: boolean;
   lockedByOther: boolean;
   onSignatureFieldClick: (index: number) => void;
-  getSignerName: (userId: string) => string;
   /** `document:download` plus clearance for this document's tier. Also decides
    *  whether a PDF's text can be selected and copied. */
   canDownload: boolean;
@@ -60,7 +59,6 @@ export function DocumentViewerPanel({
   sealed,
   lockedByOther,
   onSignatureFieldClick,
-  getSignerName,
   canDownload,
   onDownload,
   canPrint,
@@ -219,7 +217,7 @@ export function DocumentViewerPanel({
               }}
             >
               {s.signedBy
-                ? getSignerName(s.signedBy)
+                ? s.signer?.name || 'Unknown user'
                 : '✎ ' + (s.field || s.fieldName || 'Signature')}
             </div>
           ))}

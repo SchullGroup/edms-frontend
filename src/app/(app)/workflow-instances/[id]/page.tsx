@@ -524,7 +524,6 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               canDownload={allows(selectedDoc, 'download')}
               canEdit={false}
               canUploadVersion={canUploadRevision}
-              getUploaderName={(userId) => users.find((u) => u.id === userId)?.name || 'User'}
             />
           )}
 
