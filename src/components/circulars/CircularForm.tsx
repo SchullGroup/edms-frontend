@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/Icons';
 import { useDocuments } from '@/apis/hooks/useDocuments';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 import { calculateChecksum } from '@/apis/services/s3.service';
-import { resolveUploadMimeType } from '@/constants/uploadTypes';
+import { UPLOAD_ACCEPT, resolveUploadMimeType } from '@/constants/uploadTypes';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useUIStore } from '@/store/useUIStore';
 import type {
@@ -331,6 +331,7 @@ export function CircularForm({ initial, submitLabel, onSubmit, onCancel }: Circu
                 type="file"
                 multiple
                 hidden
+                accept={UPLOAD_ACCEPT}
                 onChange={(e) => handleFiles(e.target.files)}
               />
               <button

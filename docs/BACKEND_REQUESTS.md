@@ -426,8 +426,9 @@ action in the product.
 
 `src/modules/policies/` is an empty directory. Our `policies.service.ts` returns fixtures.
 
-We need confidentiality tiers (watermark/download/print per tier), urgency levels, retention
-rules and SoD controls to be real and editable from `/admin/policies`. Today an admin can
+We need confidentiality tiers (watermark/download/print per tier), urgency levels and
+retention rules to be real and editable from `/admin/policies`. *(SoD controls were in this
+list; SoD and redaction were dropped from scope 2026-10-21 by PM decision.)* Today an admin can
 "save" a policy change and nothing persists.
 
 `RetentionPolicy` exists in the schema with `retentionDays` and
@@ -773,6 +774,25 @@ curl -s -H "Authorization: Bearer $CLIENT_ADMIN_TOKEN" \
 # should self-heal within OCR_RECOVERY_INTERVAL_MS plus one Textract turnaround, with
 # no manual intervention.
 ```
+
+---
+
+## 🟠 BE-19 · Enforce the PDF-and-images upload allowlist — **new, 2026-10-21**
+
+PM decision 2026-10-21: documents are **PDF and images only**, because every upload goes
+through OCR. The frontend now accepts exactly what Textract's async API
+(`StartDocumentTextDetection`, `ocr.workers.ts`) reads:
+
+| MIME | Max size | Why |
+|---|---|---|
+| `application/pdf` | 100 MB | Textract async allows 500 MB / 3,000 pages; 100 MB is ours |
+| `image/tiff` | 100 MB | Same as PDF, multi-page included |
+| `image/jpeg`, `image/png` | 10 MB | Textract async caps JPEG/PNG at 10 MB |
+
+`documents.validation.ts` accepts any non-empty `mimeType`, so a direct API call can still
+file a DOCX that then fails OCR. **Ask:** reject other types (and over-size images) with a
+`422` on `POST /documents` and on new versions, using the table above. Applies to circular
+attachments too if they are OCR'd. Documents already stored as DOCX/XLSX stay as they are.
 
 ---
 
