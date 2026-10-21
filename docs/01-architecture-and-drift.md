@@ -1280,7 +1280,7 @@ badge and the staff notification panel were permanently broken.
 > notification addressed to anyone, rendered with full system credibility. The
 > "Request access" button on `/doc/[id]` therefore **no longer notifies the document
 > owner** — it records the audit action only, pending a server-side endpoint
-> (see `BACKEND_REQUESTS.md` → BE-1).
+> (BE-1 — since built as `POST /documents/:id/access-requests`, live 2026-09-18).
 
 **DRIFT-11 (audit) — ✅ RESOLVED (verified 2026-09-18).**
 

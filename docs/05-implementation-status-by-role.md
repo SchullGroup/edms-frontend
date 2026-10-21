@@ -1120,7 +1120,7 @@ frontend was rewired accordingly on 2026-09-10.
 > choosing, rendered with full system credibility — a phishing vector. The client call was
 > removed; the "Request access" button now records the audit action only, and **the owner
 > is not notified** until a server-side endpoint that derives both recipient and text from
-> the document exists (`BACKEND_REQUESTS.md` → BE-1).
+> the document exists (BE-1 — since built as `POST /documents/:id/access-requests`, live 2026-09-18).
 
 ⚠️ **The 404s that remain still return an HTML body**, because `app.ts` has no JSON 404
 handler — the `errorHandler` is a 4-arg error middleware and is skipped on the happy path.

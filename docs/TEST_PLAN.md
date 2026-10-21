@@ -377,7 +377,7 @@ users' roles for the ones named.
 **Superseded 2026-09-18.** This phase used to test the dedicated `GET/POST
 /documents/:id/comments`/`/signatures` panels. Those were wired, then deliberately
 un-wired the same day — every comment and signature is workflow-trail-only now. See
-`BACKEND_REQUESTS.md` BE-16/BE-17 and doc 01's DRIFT-08 note.
+`BACKEND_REQUESTS.md` BE-16 and doc 01's DRIFT-08 note.
 
 - [ ] **TP-L1 (mark reviewed, no signature).** As the assignee of a `review`-only stage,
       click "Mark reviewed". Confirm a modal opens with an optional comment field (not an

@@ -544,7 +544,7 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
       signature to live on the one workflow trail (`POST /tasks/:id/action`'s
       `comment`/`approve`'s `signature`), not split across a second thread. "Mark
       reviewed" now opens an optional-comment modal too — see DRIFT-08 in doc 01 and
-      BE-16/BE-17 in `BACKEND_REQUESTS.md` for what's still needed (an optional
+      BE-16 in `BACKEND_REQUESTS.md` for what's still needed (an optional
       signature on `review`; multi-document workflow instances shipped in the
       backend and were wired 2026-10-07 — DRIFT-19 in doc 01).
 - [ ] 🟨 **The backend audit trail is real now (DRIFT-11 revised, 2026-09-18)** — it
