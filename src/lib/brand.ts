@@ -60,7 +60,7 @@ export const BRAND_PRESETS: Record<BrandKey, BrandPreset> = {
     heroBadge: '✦ EDMS SaaS Platform · v1.0',
     heroTitle: 'A system of record for regulated, high-stakes work.',
     heroText:
-      'Capture, classify, route, sign, redact and audit every document — with white-label theming, role-based portals and SLA-driven workflows.',
+      'Capture, classify, route, sign and audit every document — with white-label theming, role-based portals and SLA-driven workflows.',
     footerText: '© 2026 Schull Technologies Ltd · Confidential — Internal & Client Stakeholders',
   },
   galaxybackbone: {

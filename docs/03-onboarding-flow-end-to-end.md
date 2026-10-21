@@ -864,13 +864,13 @@ the product.
 | "Prove this trail hasn't been altered" | 🟨 `GET /audit/verify` exists, works, and confirmed the hash chain intact live — but no auditor-facing screen calls it (`/admin/audit`'s "Verify integrity" does). |
 | "Track this finding to closure" | ⛔ No `Finding` model in Prisma. `/auditor/findings` (367 lines) operates entirely on `SEED.findings`. |
 | "Which documents are past retention?" | ⛔ `RetentionPolicy` exists in the schema and a cabinet can reference one (`retentionPolicyId`), but no endpoint manages policies, no UI shows them and no job applies them. |
-| "Enforce separation of duties" | ⛔ Described in the older docs as a platform feature. No SoD logic exists in either codebase. |
 | "Department SLA compliance this quarter" | 🟨 Server-side now — `/management` reads per-department on-time/total buckets from `GET /tasks/stats` (DRIFT-07). The figure is all-time, not per quarter. *Was: "Computed in the browser from paginated lists".* |
 | "Who can see the Contracts cabinet?" | 🟨 `GET /cabinets/:id/access` exists (gated on `cabinet_access:view`, which `internal_auditor` holds), and the admin cabinet screen uses it. No auditor screen does. *Was: "There is no endpoint to use it".* |
 
 **The gap between positioning and reality is narrower than it was.** The audit trail —
 the claim this product is sold on — is real, hash-chained and readable by the auditor.
-What remains are findings, retention and separation of duties, which are all builds.
+What remains are findings and retention, which are both builds. (Separation of duties and
+redaction were dropped from scope 2026-10-21 by PM decision.)
 
 *Superseded (2026-08-29):* "A product sold on 'every action logged immutably for compliance'
 has, today, logged zero actions." Confirmed wrong 2026-09-18 (DRIFT-11).
@@ -895,7 +895,7 @@ Phase 8  First document          🟨            → ✅ OCR works; 🟠 routing
 Phase 9  Steady state            ✅            → ✅ search; 🟨 notifications emitted,
                                                     not clicked through
 Phase 10 Governance              🟨            → ✅ audit trail real; ⛔ findings,
-                                                    retention, SoD
+                                                    retention
 ```
 
 *Re-drawn 2026-10-15. The 2026-09-04 version showed Phase 3 "no metadata designer", Phase 4
@@ -983,8 +983,10 @@ npm run dev                # Web   :3000
 - 🟨 Notifications are sent for task assignment, returned work, SLA warnings and breaches,
   but have not been clicked through end to end. ~~**No notifications.**~~
 - ✅ The audit trail is real and hash-chained (DRIFT-11). ~~**No audit trail.**~~ Findings,
-  retention and separation of duties are still not built — don't oversell compliance.
-- ⚠️ Accepted types: PDF, DOCX, XLSX, TIFF, JPEG, PNG (`src/constants/uploadTypes.ts`).
-  Uploads are chunked; the cap is 100 MB (`MAX_UPLOAD_BYTES`). ~~Files over 2 MB will be
-  rejected; only PDF and images upload.~~
+  retention are still not built — don't oversell compliance. Separation of duties and
+  redaction are out of scope (PM, 2026-10-21) — don't promise them either.
+- ⚠️ Accepted types: **PDF and images only** (PM, 2026-10-21) — PDF and TIFF up to 100 MB,
+  JPEG and PNG up to 10 MB, since every upload is OCR'd and Textract's async API caps images
+  at 10 MB (`src/constants/uploadTypes.ts`). Tell users to save Word/Excel files as PDF.
+  Uploads are chunked. *(Was PDF, DOCX, XLSX, TIFF, JPEG, PNG at 100 MB each.)*
 - ⚠️ A checked-out document can only be force-released once it is **overdue** — set an expected return date when checking out, or nobody but the holder can release it.

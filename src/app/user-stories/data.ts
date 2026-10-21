@@ -571,7 +571,7 @@ export const EPICS: Epic[] = [
         id: 'E4',
         title: 'Review what each role can do',
         statement:
-          'As Bola, I want to see exactly what each role can do, so that I can check the system matches my organisation’s separation-of-duties policy.',
+          'As Bola, I want to see exactly what each role can do, so that I can check the system matches how my organisation divides responsibilities.',
         status: 'progress',
         note: 'The six roles ship as standard and are consistent across every organisation.',
       },
@@ -659,13 +659,6 @@ export const EPICS: Epic[] = [
         statement:
           'As Femi, I want to raise a finding against a document or process, assign an owner and a due date, and track it, so that issues are resolved rather than noted.',
         status: 'preview',
-      },
-      {
-        id: 'H3',
-        title: 'Verify separation of duties',
-        statement:
-          'As Femi, I want the system to prevent one person both approving and auditing the same document, so that the control is structural rather than a policy people remember.',
-        status: 'planned',
       },
     ],
   },

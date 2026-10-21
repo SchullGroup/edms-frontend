@@ -20,11 +20,10 @@ export default function AuditorDashboard() {
 
   const openFindings = findings.filter(f => f.status !== 'Closed');
   const dueSoon = openFindings.filter(f => f.due - Date.now() < 3 * 86400000);
-  const sensitiveActions = ['REDACT_RELEASE', 'REDACT_MARK', 'SIGN', 'ACCESS_REQUEST', 'PRINT', 'DOWNLOAD', 'USER_SUSPEND', 'SLA_ESCALATION', 'AUDIT_EXPORT', 'WORKFLOW_PUBLISH', 'TENANT_CONFIG'];
+  const sensitiveActions = ['SIGN', 'ACCESS_REQUEST', 'PRINT', 'DOWNLOAD', 'USER_SUSPEND', 'SLA_ESCALATION', 'AUDIT_EXPORT', 'WORKFLOW_PUBLISH', 'TENANT_CONFIG'];
   const sensitive = audit.filter(a => sensitiveActions.includes(a.action));
 
   const controlCoverage = [
-    { label: 'Segregation of duties', value: 92, color: 'var(--status-closed)' },
     { label: 'Access management', value: 78, color: 'var(--status-pending)' },
     { label: 'Confidentiality controls', value: 85, color: 'var(--status-closed)' },
     { label: 'Records retention', value: 64, color: 'var(--status-overdue)' }

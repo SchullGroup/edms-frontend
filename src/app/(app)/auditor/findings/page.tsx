@@ -25,7 +25,7 @@ export default function AuditorFindingsPage() {
     let detail = '';
     let sev = 'High';
     let owner = users?.find((u: any) => u.status === 'Active')?.id || '';
-    let control = 'Segregation of Duties';
+    let control = 'Access Management';
     let due = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
 
     openModal({
@@ -70,7 +70,6 @@ export default function AuditorFindingsPage() {
                 onChange={(e) => (control = e.target.value)}
               >
                 {[
-                  'Segregation of Duties',
                   'Access Management',
                   'Confidentiality Controls',
                   'Records Retention',

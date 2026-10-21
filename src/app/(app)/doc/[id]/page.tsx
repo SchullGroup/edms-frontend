@@ -498,7 +498,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             disabled={doc.legalHold || archiveDocument.isPending}
             onClick={actArchive}
           >
-            <Icon name="redact" size={14} /> Archive
+            <Icon name="archive" size={14} /> Archive
           </button>
         )}
       </div>
