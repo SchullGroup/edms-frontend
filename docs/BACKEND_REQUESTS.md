@@ -14,7 +14,8 @@
 > (password recovery), BE-14 (tier clearance), BE-15 (revoke a grant, `550feda`) and BE-17
 > (several documents per workflow). Their write-ups are in git history. BE-4 and BE-18 were
 > partly done and keep only their open part. Withdrawn 2026-10-22: BE-9 (`policies` module,
-> not being built) and BE-20 (upload allowlist; the frontend enforces it).
+> not being built) and BE-20 (upload allowlist; the frontend enforces it). Done 2026-10-23:
+> BE-16 (signature on `review`), shipped in `ae08ef5` as **required**, not optional.
 
 Each item states what the frontend does today, what it needs, and why.
 
@@ -32,7 +33,6 @@ which are security items rather than features.
 | **BE-4**  | Reject confidentiality tiers the uploader isn't cleared for | Security fix    | 🔴 High  | No                                         |
 | **BE-21** | Check cabinet grants when a document is read                | Security fix    | 🔴 High  | No — documents are over-shared today       |
 | **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med   | No — 1 of 8 documents affected when raised |
-| **BE-16** | Optional `signature` on the `review` task action            | Schema change   | 🟠 Med   | No — "Mark reviewed" is comment-only       |
 | **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
 
@@ -334,64 +334,6 @@ catch-all returning the standard `ApiResponse` envelope would have made them obv
 app.use((_req, res) => ApiResponse.notFound(res, 'Route not found', 'ROUTE_NOT_FOUND'));
 // must sit after the routers, before errorHandler
 ```
-
----
-
-## 🟠 BE-16 · Optional `signature` on the `review` task action — **new, 2026-09-18**
-
-### What we found
-
-`POST /tasks/:id/action`'s request schema (confirmed against the live OpenAPI spec) is a
-three-way `oneOf`:
-
-```json
-{
-  "title": "Approve task",
-  "required": ["action", "signature"],
-  "additionalProperties": false,
-  "properties": { "action": { "enum": ["approve"] }, "signature": { "...required..." }, "comment": {}, "note": {} }
-},
-{
-  "title": "Review, reject, request changes, or close",
-  "required": ["action"],
-  "additionalProperties": false,
-  "properties": { "action": { "enum": ["reject", "review", "request_changes", "close"] }, "comment": {}, "note": {} }
-},
-```
-
-`additionalProperties: false` on the second variant means a `signature` field sent
-alongside `{action: "review", ...}` would fail validation outright, not just be ignored.
-Signing is `approve`-only.
-
-### Why we're asking
-
-We just built "Mark reviewed" as a modal with an optional comment field, matching how
-`approve` already works — the plan was to let a reviewer optionally sign off too, not
-just approve. We can't, today. A reviewer who wants their sign-off recorded has to use
-`approve` instead of `review`, which isn't right where a stage is genuinely review-only
-(no approval authority) — or has no way to sign at all.
-
-### What we need
-
-Extend the `oneOf`'s "review" branch (or split `review` into its own variant) to accept
-the same optional `signature` object `approve` does, still not required:
-
-```json
-{
-  "action": "review",
-  "signature": { "fileUrl": "...", "mimeType": "image/png" },  // optional
-  "comment": "..."                                              // optional, unchanged
-}
-```
-
-`TaskActionSignature`'s validation (URL format, MIME allowlist, extension-matches-MIME)
-can be reused as-is — we're not asking for new validation, just for the existing
-`signature` shape to be legal on one more action.
-
-### Until then
-
-"Mark reviewed" ships comment-only. Not blocking — it's a nice-to-have, not a broken
-flow — but flagging so it's tracked rather than re-discovered later.
 
 ---
 

@@ -379,16 +379,16 @@ users' roles for the ones named.
 un-wired the same day — every comment and signature is workflow-trail-only now. See
 `BACKEND_REQUESTS.md` BE-16 and doc 01's DRIFT-08 note.
 
-- [ ] **TP-L1 (mark reviewed, no signature).** As the assignee of a `review`-only stage,
-      click "Mark reviewed". Confirm a modal opens with an optional comment field (not an
-      immediate confirm) — leave the comment blank and submit. Confirm it succeeds and
-      the stage advances; the trail entry shows no comment line.
+- [ ] **TP-L1 (mark reviewed, signature required).** As the assignee of a `review`-only
+      stage, click "Mark reviewed". Confirm step 2 has a signature pad and an optional
+      comment. Submit with no signature: a "Add a signature to mark reviewed" toast, nothing
+      sent. Sign, leave the comment blank and submit: it succeeds, the stage advances, and
+      the trail entry shows the signature but no comment line.
 - [ ] **TP-L2 (mark reviewed, with comment).** Repeat, this time typing a comment.
       Confirm the trail entry on `WorkflowActivityPanel` shows your comment text.
-- [ ] **TP-L3 (review has no signature capture).** Confirm the "Mark reviewed" modal has
-      no signature pad — only `approve` does. This is a known backend limitation
-      (`review`'s action schema is `additionalProperties: false`, no `signature`
-      property), not a frontend gap; BE-16 tracks closing it.
+- [ ] **TP-L3 (review signature survives a retry).** *(Was "review has no signature
+      capture"; since edms-backend `ae08ef5` the backend requires one, 2026-10-23.)* Sign,
+      go Back to step 1 and Next again: the pad is empty and must be signed again.
 - [ ] **TP-L4 (approve signature shows on the trail).** Sign & approve a task (as before).
       Confirm the resulting trail entry on `WorkflowActivityPanel` now shows a small
       signature thumbnail next to the "Approved" entry (previously only the comment text

@@ -827,7 +827,7 @@ Once documents are flowing, this is what daily use looks like and what it costs.
 | Upload a new version | 🟨 | ✅ works, but **narrowed 2026-09-18** — only offered once the previous stage has sent the document back with "Request changes" onto the caller's current task; also blocked if someone else holds the lock (correct) |
 | Restore a version | ✅ | UI shipped since this table was written — `DocumentVersionsPanel`'s "Restore" |
 | Comment on a document | ✅ | optional `comment` on `POST /tasks/:id/action`, prompted by "Mark reviewed"/"Approve"/etc. and shown on the workflow trail. (A dedicated `/documents/:id/comments` endpoint exists too but is deliberately unused — see BE-16/BE-17 in `BACKEND_REQUESTS.md`.) |
-| Sign a document | 🟨 | `approve` only — `signature` is required there, not offered on `review`/`reject`/etc. (BE-16 asks for that gap to close). A dedicated `/documents/:id/signatures` endpoint exists too but is deliberately unused. |
+| Sign a document | 🟨 | `approve` and `review` — `signature` is required on both (`review` since edms-backend `ae08ef5`; the "Mark reviewed" modal captures it since 2026-10-23, not yet tested end to end); not offered on `reject`/etc. A dedicated `/documents/:id/signatures` endpoint exists too but is deliberately unused. |
 | Notifications | 🟨 | module built, wired in the UI, and emitted from task, SLA, access-request, checkout and circular events (DRIFT-10); not clicked through end to end. *Was ⛔ "module missing"* |
 | Delegate while away | 🟨 | `/delegations` UI since 2026-09-04 (create, list, end); no task marker or activation notification — doc 02 C4. *Was: "no UI at all"* |
 | Supervisor workload view | ✅ | reads `GET /tasks/workload` (doc 02 F1). *Was: "walks every page of `/documents` client-side"* |

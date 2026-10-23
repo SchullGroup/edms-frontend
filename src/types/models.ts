@@ -872,7 +872,7 @@ export interface PendingDocumentRevision {
   };
 }
 
-/** Signature image metadata carried by an `approve` task action. The backend
+/** Signature image carried by an `approve` or `review` task action. The backend
  *  validates that the file extension in `fileUrl` matches `mimeType`. */
 export interface TaskActionSignature {
   fileUrl: string;
@@ -881,9 +881,9 @@ export interface TaskActionSignature {
 
 export type TaskActionRequest =
   | {
-      /** Advancing an approval stage. The backend **requires** `signature` here
-       *  (422 without it). `comment` is persisted to the workflow activity trail. */
-      action: 'approve';
+      /** Advancing a stage. The backend **requires** `signature` on both (400 without
+       *  it; `review` since edms-backend `ae08ef5`). `comment` goes to the activity trail. */
+      action: 'approve' | 'review';
       signature: TaskActionSignature;
       comment?: string;
       note?: string;
@@ -894,7 +894,7 @@ export type TaskActionRequest =
       documents?: { documentId: string }[];
     }
   | {
-      action: 'review' | 'reject';
+      action: 'reject';
       comment?: string;
       note?: string;
       documents?: { documentId: string }[];
