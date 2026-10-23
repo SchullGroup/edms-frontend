@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   documentsService,
@@ -119,15 +119,20 @@ const SUMMARY_POLL_MS = 10_000;
 /** Each fetch writes an audit row, so polling stops after a minute. */
 const SUMMARY_POLL_WINDOW_MS = 60_000;
 
-/** The current version's AI summary; polls every 10 s for a minute while it's written.
- *  `checkAgain` re-reads and reopens that window; `requestNew` asks for a fresh one. */
-export function useDocumentSummary(id: string, options?: { enabled?: boolean }) {
+/** The current version's AI summary, read from the document until the user asks for one.
+ *  `GET …/summary` queues a missing summary itself, so it's only polled after a request. */
+export function useDocumentSummary(id: string) {
   const queryClient = useQueryClient();
   const pollStart = useRef<{ versionId: string; at: number } | null>(null);
+  const doc = useDocument(id);
+  // The summary cache is only ever filled by a request the user made.
+  const [requestedId, setRequestedId] = useState<string | null>(null);
+  const requested =
+    requestedId === id || queryClient.getQueryData(documentKeys.summary(id)) !== undefined;
   const query = useQuery({
     queryKey: documentKeys.summary(id),
     queryFn: () => documentsService.getSummary(id),
-    enabled: !!id && (options?.enabled ?? true),
+    enabled: !!id && requested,
     retry: false,
     refetchInterval: (q) => {
       const data = q.state.data;
@@ -143,34 +148,54 @@ export function useDocumentSummary(id: string, options?: { enabled?: boolean }) 
     },
   });
   const { refetch } = query;
+  const { refetch: refetchDocument } = doc;
   const checkAgain = useCallback(() => {
     pollStart.current = null;
-    return refetch();
-  }, [refetch]);
+    return requested ? refetch() : refetchDocument();
+  }, [requested, refetch, refetchDocument]);
 
   const request = useMutation({
     mutationFn: () => documentsService.requestSummary(id),
     onMutate: () => {
       pollStart.current = null;
     },
-    onSuccess: (data) => queryClient.setQueryData(documentKeys.summary(id), data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(documentKeys.summary(id), data);
+      setRequestedId(id);
+    },
     onError: (err: any) => {
       const code = err?.response?.data?.code;
       // One already running, or OCR still going: show and poll that instead of an error.
       if (code === 'SUMMARY_IN_PROGRESS') {
-        queryClient.setQueryData<DocumentSummary>(documentKeys.summary(id), (prev) =>
-          prev ? { ...prev, summaryStatus: 'processing' } : prev,
-        );
+        setRequestedId(id);
+        if (requested) refetch();
       } else if (code === 'OCR_IN_PROGRESS') {
-        refetch();
+        refetchDocument();
       }
     },
   });
   const { mutate } = request;
   const requestNew = useCallback(() => mutate(), [mutate]);
 
+  const version = doc.data?.currentVersion;
+  const fromDocument: DocumentSummary | undefined = version && {
+    documentId: id,
+    versionId: version.id,
+    versionNumber: version.versionNumber,
+    ocrStatus: version.ocrStatus,
+    summaryStatus: version.summaryStatus ?? 'pending',
+    summary: version.aiSummary ?? null,
+    generatedAt: version.summaryGeneratedAt ?? null,
+  };
+  const source = requested ? query : doc;
+
   return {
-    ...query,
+    data: requested ? query.data : fromDocument,
+    isLoading: source.isLoading,
+    isError: source.isError,
+    error: source.error,
+    isFetching: source.isFetching,
+    requested,
     checkAgain,
     requestNew,
     isRequesting: request.isPending,

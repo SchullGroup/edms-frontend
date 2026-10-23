@@ -153,7 +153,7 @@ export const documentsService = {
     return response.data.data;
   },
 
-  // Audited as `document.summary_viewed`, so callers should poll sparingly.
+  // Audited as `document.summary_viewed`, and queues a missing summary: call only after a request.
   getSummary: async (id: string): Promise<DocumentSummary> => {
     const response = await apiClient.get<ApiResponse<DocumentSummary>>(`/documents/${id}/summary`);
     return response.data.data;

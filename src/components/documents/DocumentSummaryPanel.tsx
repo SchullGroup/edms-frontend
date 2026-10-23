@@ -9,8 +9,8 @@ interface Props {
   documentId: string;
 }
 
-/** The current version's AI summary (`GET /documents/:id/summary`), written after OCR.
- *  A failed one can be retried and a finished one regenerated (`POST`, same access). */
+/** The current version's AI summary. A missing one is written only when someone presses
+ *  Summarize; a failed one can be retried and a finished one regenerated (`POST`). */
 export function DocumentSummaryPanel({ documentId }: Props) {
   const {
     data,
@@ -18,6 +18,7 @@ export function DocumentSummaryPanel({ documentId }: Props) {
     isError,
     error,
     isFetching,
+    requested,
     checkAgain,
     requestNew,
     isRequesting,
@@ -48,8 +49,11 @@ export function DocumentSummaryPanel({ documentId }: Props) {
         </div>
       );
   } else if (!data) {
-    body = null;
-  } else if (data.summaryStatus === 'completed' && data.summary) {
+    body = <div className="caption">There&apos;s no file to summarize yet.</div>;
+  } else if (
+    data.summary &&
+    (data.summaryStatus === 'completed' || (!requested && data.summaryStatus === 'pending'))
+  ) {
     body = (
       <>
         <SummaryText text={data.summary} />
@@ -87,6 +91,19 @@ export function DocumentSummaryPanel({ documentId }: Props) {
         The summary couldn&apos;t be written. {requestButton('Try again')}
       </div>
     );
+  } else if (data.ocrStatus !== 'completed') {
+    body = (
+      <div className="caption flex items-center gap-2 flex-wrap">
+        Reading the text in this file. You can ask for a summary once that&apos;s done.{' '}
+        {checkAgainButton}
+      </div>
+    );
+  } else if (!requested && data.summaryStatus === 'pending') {
+    body = (
+      <div className="caption flex items-center gap-2 flex-wrap">
+        No summary yet. {requestButton('Summarize')}
+      </div>
+    );
   } else if (data.summary) {
     // Regenerating: the earlier summary stays until the new one replaces it.
     body = (
@@ -98,15 +115,12 @@ export function DocumentSummaryPanel({ documentId }: Props) {
       </>
     );
   } else {
-    // pending or processing: OCR first, then the summary.
+    // Asked for (or already running): pending or processing.
     body = (
       <div aria-live="polite">
         <SkeletonText lines={3} />
         <div className="caption mt-2 flex items-center gap-2 flex-wrap">
-          {data.ocrStatus === 'completed'
-            ? 'Writing the summary. This usually takes under a minute.'
-            : 'Reading the text in this file first. The summary follows.'}
-          {checkAgainButton}
+          Writing the summary. This usually takes under a minute. {checkAgainButton}
         </div>
       </div>
     );

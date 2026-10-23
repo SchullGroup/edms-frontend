@@ -177,9 +177,8 @@ export interface DocumentVersion {
   checksum: string;
   ocrStatus: 'pending' | 'processing' | 'completed' | 'failed';
   ocrText?: string | null;
-  /** Also on `GET /documents/:id`'s `currentVersion`, but read it through
-   *  `GET /documents/:id/summary`: that call is audited and queues summaries
-   *  for versions uploaded before the feature existed. */
+  /** On `GET /documents/:id`'s `currentVersion`. Read it from there: `GET …/summary`
+   *  queues a missing summary, so it's only called after the user asks for one. */
   aiSummary?: string | null;
   summaryStatus?: DocumentSummaryStatus;
   summaryGeneratedAt?: string | null;
