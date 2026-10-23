@@ -402,7 +402,7 @@ destination (request doc item 7).
 | Search by content | ✅ | **Corrected 2026-10-14.** Was "⛔ Index never built (OCR always fails)" — wrong since the 2026-09-21 retraction, and fixed properly by edms-backend PR #51 (live 2026-10-14): indexed at create, on title/metadata change, on restore, and on a final OCR failure. A version stranded at `pending` *before* that deploy has no backfill |
 | Work the task queue | ✅ | Oldest first or by due date, with an Overdue filter, all server-side and paginated (2026-10-19). *Corrected 2026-10-20: said "prioritised by urgency then due date"; the backend has no urgency order* |
 | Act on a task | ✅ | |
-| Receive a notification | 🟨 | Backend fires them and the bell + `/notifications` read them (corrected 2026-10-12; was "⛔ 404"). Not clicked through end to end. Arrives within 60 s (polling, no push). The bell's menu shows skeleton rows (one per unread, up to 7) while it loads, and a retry line if it fails (2026-10-13) |
+| Receive a notification | 🟨 | Backend fires them and the bell + `/notifications` read them (corrected 2026-10-12; was "⛔ 404"). Not clicked through end to end. Arrives within 60 s, or at once when the tab regains focus (polling, no push). The bell's menu lists the 5 most recent unread (7 until 2026-10-23) and shows skeleton rows (one per unread, up to 5) while it loads, and a retry line if it fails (2026-10-13) |
 | Request access to a document | ✅ | Verified live 2026-10-12: from `/doc/[id]` (View access: 201, then 409 → "Already pending") and from a Restricted document on the workflow page (View and/or Action access, one request and toast per kind) |
 | Comment on a document | ✅ | The `comment` field on `POST /tasks/:id/action` (DRIFT-08; What's left #4). *(Was "⛔ 404" — stale.)* |
 | Read/acknowledge a circular | ✅ | Wired 2026-10-05 to `/circulars/inbox*` — read receipt on open, acknowledgement recorded and audited server-side. *(confirmed by the product owner’s testing, 2026-10-09)* |
@@ -1074,7 +1074,7 @@ by the product owner's testing the same day. Rows still 🟨 are unverified end 
 was true of an early version. Since `bba1e2d` the page, the bell and the sidebar badge all
 read the real notifications API, and the backend fires notifications from task assignment,
 outcomes, delegation, access requests and SLA warnings/breaches (doc 01 DRIFT-10). New
-notifications are picked up by polling every 60 s (`useUnreadNotificationCount`); there's
+notifications are picked up by polling every 60 s and on tab focus (`useUnreadNotificationCount`); there's
 no push channel.
 
 ---
