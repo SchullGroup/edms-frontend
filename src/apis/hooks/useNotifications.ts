@@ -19,12 +19,14 @@ export function useNotifications(
     queryKey: notificationKeys.list(params),
     queryFn: () => notificationsService.getAll(params),
     enabled: options?.enabled ?? true,
+    // 'always' ignores staleTime, so returning to the tab shows new notifications at once.
+    refetchOnWindowFocus: 'always',
   });
 }
 
 /**
- * Unread in-app count for the bell badge. Polled so a notification raised by
- * another user's workflow action shows up without a reload.
+ * Unread in-app count for the bell badge. Polled, and refetched on tab focus even
+ * when fresh (the 60 s poll keeps it inside staleTime, so `true` rarely fired).
  */
 export function useUnreadNotificationCount(options?: { enabled?: boolean }) {
   return useQuery({
@@ -32,7 +34,7 @@ export function useUnreadNotificationCount(options?: { enabled?: boolean }) {
     queryFn: () => notificationsService.getUnreadCount(),
     enabled: options?.enabled ?? true,
     refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: 'always',
   });
 }
 
