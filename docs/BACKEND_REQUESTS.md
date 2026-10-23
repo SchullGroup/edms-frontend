@@ -4,7 +4,7 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-10-21
+**Raised:** 2026-08-29 · **Updated:** 2026-10-22
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `origin/dev` (`d14f250`)
 
@@ -13,13 +13,13 @@
 > (download, shipped as `GET /documents/:id/versions/:versionId`), BE-11 (audit), BE-13
 > (password recovery), BE-14 (tier clearance), BE-15 (revoke a grant, `550feda`) and BE-17
 > (several documents per workflow). Their write-ups are in git history. BE-4 and BE-18 were
-> partly done and keep only their open part. The upload-allowlist ask, briefly numbered
-> BE-19 alongside the fork bug, is BE-20.
+> partly done and keep only their open part. Withdrawn 2026-10-22: BE-9 (`policies` module,
+> not being built) and BE-20 (upload allowlist; the frontend enforces it).
 
 Each item states what the frontend does today, what it needs, and why.
 
-**Take BE-19 first** — no parallel workflow can run without it. Then BE-2 and BE-4, which
-are security items rather than features.
+**Take BE-19 first** — no parallel workflow can run without it. Then BE-2, BE-4 and BE-21,
+which are security items rather than features.
 
 ---
 
@@ -30,9 +30,8 @@ are security items rather than features.
 | **BE-19** | 500 on the first action at a parallel fork (PR #54)         | Bug             | 🔴 High  | **Yes — no parallel workflow can run**     |
 | **BE-2**  | `POST /auth/logout` + refresh-token revocation              | New endpoint    | 🔴 High  | No — fails silently today                  |
 | **BE-4**  | Reject confidentiality tiers the uploader isn't cleared for | Security fix    | 🔴 High  | No                                         |
+| **BE-21** | Check cabinet grants when a document is read                | Security fix    | 🔴 High  | No — documents are over-shared today       |
 | **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med   | No — 1 of 8 documents affected when raised |
-| **BE-20** | Enforce the PDF-and-images upload allowlist                 | Validation      | 🟠 Med   | No — the frontend enforces it              |
-| **BE-9**  | `policies` module                                           | New module      | 🟠 Med   | No — frontend on fixtures                  |
 | **BE-16** | Optional `signature` on the `review` task action            | Schema change   | 🟠 Med   | No — "Mark reviewed" is comment-only       |
 | **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
@@ -60,6 +59,11 @@ The task stays `pending` at the fork stage and no branch task is created. Sequen
 the same backend work. First seen 2026-10-18 (TEST_PLAN TP-Q19), and reproduced over the API on
 2026-10-20 with the smallest possible fork: no join, one document, `review` only.
 
+**Re-tested 2026-10-22 on `origin/dev` `2f42695`: still a 500.** The only workflow change since
+the report is notification wiring (`c316ddb`, PR #57), which doesn't touch the fork path. A
+sequential control run the same minute (intake → finance → legal, same user and document) returned
+200 and opened the next task.
+
 ### How to reproduce
 
 1. As `client_admin`, `POST /workflows` with this definition, then `POST /workflows/:id/publish`.
@@ -80,7 +84,10 @@ the same backend work. First seen 2026-10-18 (TEST_PLAN TP-Q19), and reproduced 
 
 The 2026-10-20 run's IDs, for the server logs: workflow `d607c88e-85f9-4043-9c03-74c336341ff6`
 (archived afterwards), instance `c86d381f-a2b9-4c55-bcfe-0404e86d250a` (closed afterwards), task
-`f83de22c-89ab-4873-a80f-880f1776cf2f`. The response carries no request id.
+`f83de22c-89ab-4873-a80f-880f1776cf2f`. The 2026-10-22 run (action at about 08:26 UTC): workflow
+`6312badb-ae27-4eae-8c3e-f279303de560`, instance `e0e52b86-b908-45d5-91d8-12f10cbdd6c5`, task
+`dcab51d1-7c26-4f30-a744-bf24799917e8`; both archived/closed afterwards. The response carries no
+request id.
 
 ### Where to look
 
@@ -151,6 +158,50 @@ grants that clearance to some role in `/admin/roles`.
 
 **Ask:** reject a `confidentiality` on create, edit or new version that the caller isn't
 cleared to view, with a `403`.
+
+---
+
+## 🔴 BE-21 · Check cabinet grants when a document is read — **new, 2026-10-22**
+
+Checked at `origin/dev` `cc56f40`. Tracker 5.4; doc 05 backlog #12.
+
+Cabinet grants (`CabinetAccess`) are checked on every document **write** (`PATCH`, `DELETE`,
+new version, restore, check-out/in, `PUT /metadata`) and on cabinet, folder and workflow reads.
+They are never checked when a document is **read**:
+
+- `GET /documents/:id` and its `/export`, `/print`, `/versions`, `/versions/:versionId`,
+  `/summary` (GET and POST), `/metadata`, `/comments` and `/signatures` check the role permission
+  and `requireConfidentiality` only (`documents.router.ts`).
+- `GET /documents`, `/documents/search` and `/documents/stats` filter by RBAC scope and tier
+  clearance (`buildAccessScopeWhere`, `buildScopeSqlFilter` in `documents.repository.ts`).
+  Nothing in the documents module queries `cabinetAccess`.
+
+`GET /cabinets` already applies both, entitlement **and** scope (`buildCabinetWhere`,
+`cabinets.repository.ts`), so the two disagree. A user whose role holds `document:view` at
+`global` scope, with no grant on another department's cabinet, doesn't see that cabinet in
+`GET /cabinets` and gets 403 from `GET /cabinets/:id`, but can list, search and open every
+document in it.
+
+**Ask:** give every document read the same entitlement `requireCabinetAccess('view')` uses:
+`CABINET_ACCESS_BYPASS_ROLES` skip it; an org-wide cabinet or the user's own department's cabinet
+is implicitly viewable; anything else needs a `view`-or-higher grant, direct or through a role.
+
+- **Single-document routes:** mount `requireCabinetAccess('view')` after `requireConfidentiality`
+  and return `403 FORBIDDEN`. The frontend already shows "You don't have access" with
+  **Request access** on any 403 from `GET /documents/:id`, so it needs no change.
+- **List, search, stats:** add the same entitlement as a row filter, so counts and results only
+  include documents the caller can open.
+- **An approved access request overrides it** (product decision, 2026-10-22). A
+  `DocumentAccessGrant` with `permission: 'view'` lets that user open that one document without
+  cabinet view, just as it already overrides tier and scope. Without this, **Request access**
+  can't help with a document that's blocked by its cabinet.
+- Workflow reads (`tasks.service.ts`, `instances.service.ts`, `history.service.ts`) already
+  filter by viewable cabinet. They need no change.
+
+**To check:** take a user whose role has `document:view:global`, outside the department of a
+department-mapped cabinet, with no grant on it. Today `GET /cabinets/:id` returns 403 while
+`GET /documents/:id` for a document in that cabinet returns 200. After the fix both return 403.
+Once an access request for that document is approved, `GET /documents/:id` returns 200.
 
 ---
 
@@ -269,53 +320,6 @@ curl -s -H "Authorization: Bearer $CLIENT_ADMIN_TOKEN" \
 
 ---
 
-## 🟠 BE-20 · Enforce the PDF-and-images upload allowlist — **new, 2026-10-21**
-
-PM decision 2026-10-21: documents are **PDF and images only**, because every upload goes
-through OCR. The frontend now accepts exactly what Textract's async API
-(`StartDocumentTextDetection`, `ocr.workers.ts`) reads:
-
-| MIME | Max size | Why |
-|---|---|---|
-| `application/pdf` | 100 MB | Textract async allows 500 MB / 3,000 pages; 100 MB is ours |
-| `image/tiff` | 100 MB | Same as PDF, multi-page included |
-| `image/jpeg`, `image/png` | 10 MB | Textract async caps JPEG/PNG at 10 MB |
-
-`documents.validation.ts` accepts any non-empty `mimeType`, so a direct API call can still
-file a DOCX that then fails OCR. **Ask:** reject other types (and over-size images) with a
-`422` on `POST /documents` and on new versions, using the table above. Applies to circular
-attachments too if they are OCR'd. Documents already stored as DOCX/XLSX stay as they are.
-
----
-
-## 🟠 BE-9 · `policies` module
-
-`src/modules/policies/` is an empty directory. Our `policies.service.ts` returns fixtures.
-
-We need confidentiality tiers (watermark/download/print per tier), urgency levels and
-retention rules to be real and editable from `/admin/policies`. *(SoD controls were in this
-list; SoD and redaction were dropped from scope 2026-10-21 by PM decision.)* Today an admin can
-"save" a policy change and nothing persists.
-
-`RetentionPolicy` exists in the schema with `retentionDays` and
-`actionOnExpiry: archive | delete | flag_for_review`, and cabinets can reference one — but
-there's no endpoint and no job that ever applies it. Nothing expires.
-
-**Shape request:** please return something stable and keyed, e.g.
-
-```json
-{
-  "confidentiality": [
-    { "level": "restricted", "download": false, "print": false, "watermark": true }
-  ]
-}
-```
-
-with **snake_case tier names matching `CONFIDENTIALITY_TIERS`**. Our fixtures use display
-casing ("Top Secret") and we currently normalise on read; we'd rather not.
-
----
-
 ## 🟡 BE-10 · JSON 404 handler
 
 `app.ts` mounts `errorHandler` (a four-argument error middleware, skipped on the happy
@@ -418,5 +422,5 @@ grep -cE "^\s+\{ resource: '[a-z_]+', action: '[a-z_]+' \}," prisma/seed-system.
 
 ---
 
-_Questions on any of this — particularly BE-9's response shape — are welcome. We'd
-rather agree the contract before either side builds._
+_Questions on any of this are welcome. We'd rather agree the contract before either side
+builds._
