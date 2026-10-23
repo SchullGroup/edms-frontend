@@ -530,6 +530,8 @@ fixed 2026-09-04, DRIFT-05; re-checked 2026-10-15)*
 | 6.3 | Edit while draft | `PATCH /workflows/:id` | ✅ |
 | 6.4 | Publish | `POST /workflows/:id/publish` | ✅ sets `publishedAt`, `status='published'` |
 | 6.5 | Archive an old version | `POST /workflows/:id/archive` | ✅ |
+| 6.6 | Delete a draft that was never started | `DELETE /workflows/:id` | ✅ since 2026-10-20 |
+| 6.7 | Bring an archived workflow back | `POST /workflows/:id/unarchive` | ✅ since 2026-10-20; 422 if a stage's department was deleted |
 
 ### The definition shape
 
@@ -825,7 +827,7 @@ Once documents are flowing, this is what daily use looks like and what it costs.
 | Upload a new version | 🟨 | ✅ works, but **narrowed 2026-09-18** — only offered once the previous stage has sent the document back with "Request changes" onto the caller's current task; also blocked if someone else holds the lock (correct) |
 | Restore a version | ✅ | UI shipped since this table was written — `DocumentVersionsPanel`'s "Restore" |
 | Comment on a document | ✅ | optional `comment` on `POST /tasks/:id/action`, prompted by "Mark reviewed"/"Approve"/etc. and shown on the workflow trail. (A dedicated `/documents/:id/comments` endpoint exists too but is deliberately unused — see BE-16/BE-17 in `BACKEND_REQUESTS.md`.) |
-| Sign a document | 🟨 | `approve` only — `signature` is required there, not offered on `review`/`reject`/etc. (BE-16 asks for that gap to close). A dedicated `/documents/:id/signatures` endpoint exists too but is deliberately unused. |
+| Sign a document | 🟨 | `approve` and `review` — `signature` is required on both (`review` since edms-backend `ae08ef5`; the "Mark reviewed" modal captures it since 2026-10-23, not yet tested end to end); not offered on `reject`/etc. A dedicated `/documents/:id/signatures` endpoint exists too but is deliberately unused. |
 | Notifications | 🟨 | module built, wired in the UI, and emitted from task, SLA, access-request, checkout and circular events (DRIFT-10); not clicked through end to end. *Was ⛔ "module missing"* |
 | Delegate while away | 🟨 | `/delegations` UI since 2026-09-04 (create, list, end); no task marker or activation notification — doc 02 C4. *Was: "no UI at all"* |
 | Supervisor workload view | ✅ | reads `GET /tasks/workload` (doc 02 F1). *Was: "walks every page of `/documents` client-side"* |
@@ -862,13 +864,13 @@ the product.
 | "Prove this trail hasn't been altered" | 🟨 `GET /audit/verify` exists, works, and confirmed the hash chain intact live — but no auditor-facing screen calls it (`/admin/audit`'s "Verify integrity" does). |
 | "Track this finding to closure" | ⛔ No `Finding` model in Prisma. `/auditor/findings` (367 lines) operates entirely on `SEED.findings`. |
 | "Which documents are past retention?" | ⛔ `RetentionPolicy` exists in the schema and a cabinet can reference one (`retentionPolicyId`), but no endpoint manages policies, no UI shows them and no job applies them. |
-| "Enforce separation of duties" | ⛔ Described in the older docs as a platform feature. No SoD logic exists in either codebase. |
 | "Department SLA compliance this quarter" | 🟨 Server-side now — `/management` reads per-department on-time/total buckets from `GET /tasks/stats` (DRIFT-07). The figure is all-time, not per quarter. *Was: "Computed in the browser from paginated lists".* |
 | "Who can see the Contracts cabinet?" | 🟨 `GET /cabinets/:id/access` exists (gated on `cabinet_access:view`, which `internal_auditor` holds), and the admin cabinet screen uses it. No auditor screen does. *Was: "There is no endpoint to use it".* |
 
 **The gap between positioning and reality is narrower than it was.** The audit trail —
 the claim this product is sold on — is real, hash-chained and readable by the auditor.
-What remains are findings, retention and separation of duties, which are all builds.
+What remains are findings and retention, which are both builds. (Separation of duties and
+redaction were dropped from scope 2026-10-21 by PM decision.)
 
 *Superseded (2026-08-29):* "A product sold on 'every action logged immutably for compliance'
 has, today, logged zero actions." Confirmed wrong 2026-09-18 (DRIFT-11).
@@ -893,7 +895,7 @@ Phase 8  First document          🟨            → ✅ OCR works; 🟠 routing
 Phase 9  Steady state            ✅            → ✅ search; 🟨 notifications emitted,
                                                     not clicked through
 Phase 10 Governance              🟨            → ✅ audit trail real; ⛔ findings,
-                                                    retention, SoD
+                                                    retention
 ```
 
 *Re-drawn 2026-10-15. The 2026-09-04 version showed Phase 3 "no metadata designer", Phase 4
@@ -981,8 +983,10 @@ npm run dev                # Web   :3000
 - 🟨 Notifications are sent for task assignment, returned work, SLA warnings and breaches,
   but have not been clicked through end to end. ~~**No notifications.**~~
 - ✅ The audit trail is real and hash-chained (DRIFT-11). ~~**No audit trail.**~~ Findings,
-  retention and separation of duties are still not built — don't oversell compliance.
-- ⚠️ Accepted types: PDF, DOCX, XLSX, TIFF, JPEG, PNG (`src/constants/uploadTypes.ts`).
-  Uploads are chunked; the cap is 100 MB (`MAX_UPLOAD_BYTES`). ~~Files over 2 MB will be
-  rejected; only PDF and images upload.~~
+  retention are still not built — don't oversell compliance. Separation of duties and
+  redaction are out of scope (PM, 2026-10-21) — don't promise them either.
+- ⚠️ Accepted types: **PDF and images only** (PM, 2026-10-21) — PDF and TIFF up to 100 MB,
+  JPEG and PNG up to 10 MB, since every upload is OCR'd and Textract's async API caps images
+  at 10 MB (`src/constants/uploadTypes.ts`). Tell users to save Word/Excel files as PDF.
+  Uploads are chunked. *(Was PDF, DOCX, XLSX, TIFF, JPEG, PNG at 100 MB each.)*
 - ⚠️ A checked-out document can only be force-released once it is **overdue** — set an expected return date when checking out, or nobody but the holder can release it.

@@ -148,6 +148,8 @@ export interface Document {
   checkoutLock?: CheckoutLock | null;
   archivedAt?: string | null;
   createdBy: string;
+  /** Who `createdBy` is. On list, detail and search responses; not on create/update. */
+  creator?: PersonSummary | null;
   // No due-date field exists here on the backend (`filing.prisma` has none on
   // `Document`) — a due date lives on `Task.dueAt` / `WorkflowInstance.
   // stageDueAt` instead. A `dueDate` field used to be declared here and was
@@ -182,6 +184,8 @@ export interface DocumentVersion {
   summaryStatus?: DocumentSummaryStatus;
   summaryGeneratedAt?: string | null;
   uploadedBy: string;
+  /** Who `uploadedBy` is. On `GET /documents/:id/versions` and the detail's `currentVersion`. */
+  uploader?: PersonSummary | null;
   createdAt: string;
 }
 
@@ -235,8 +239,8 @@ export interface CheckoutLock {
   locker?: PersonSummary;
 }
 
-/** A `{id, name, email}` person embed — used for a request's requester/reviewer,
- *  a comment's author, and a signature's signer. */
+/** A `{id, name, email}` person embed next to a person id: requester, reviewer,
+ *  author, signer, locker, creator, uploader, audit actor. */
 export interface PersonSummary {
   id: string;
   name: string;
@@ -868,7 +872,7 @@ export interface PendingDocumentRevision {
   };
 }
 
-/** Signature image metadata carried by an `approve` task action. The backend
+/** Signature image carried by an `approve` or `review` task action. The backend
  *  validates that the file extension in `fileUrl` matches `mimeType`. */
 export interface TaskActionSignature {
   fileUrl: string;
@@ -877,9 +881,9 @@ export interface TaskActionSignature {
 
 export type TaskActionRequest =
   | {
-      /** Advancing an approval stage. The backend **requires** `signature` here
-       *  (422 without it). `comment` is persisted to the workflow activity trail. */
-      action: 'approve';
+      /** Advancing a stage. The backend **requires** `signature` on both (400 without
+       *  it; `review` since edms-backend `ae08ef5`). `comment` goes to the activity trail. */
+      action: 'approve' | 'review';
       signature: TaskActionSignature;
       comment?: string;
       note?: string;
@@ -890,7 +894,7 @@ export type TaskActionRequest =
       documents?: { documentId: string }[];
     }
   | {
-      action: 'review' | 'reject';
+      action: 'reject';
       comment?: string;
       note?: string;
       documents?: { documentId: string }[];
@@ -1529,6 +1533,8 @@ export interface AuditEntry {
   seq: number;
   /** Null for system-originated actions. */
   actorId: string | null;
+  /** Who `actorId` is; null for system entries and for a deleted user. */
+  actor?: PersonSummary | null;
   actorType: 'user' | 'system';
   /** e.g. `"document.uploaded"`. */
   action: string;

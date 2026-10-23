@@ -279,7 +279,7 @@ This must be done in order; each step produces the input for the next.
 | 5 | Define cabinet metadata fields | `/admin/cabinets` → Metadata schema card | `POST /cabinets/:id/metadata-fields` | ✅ (*same stale "⛔ no UI", corrected 2026-10-06*) |
 | 6 | Build folder trees — usually by the cabinet's manager, not the admin | `/staff/cabinets` | `POST /cabinets/:id/folders` | 🟨 moved here from `/admin/cabinets` 2026-10-06, not yet verified live |
 | 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles`, `POST /users/:id/invitation` | ✅ "Invite user" emails a set-password link; the user is **Pending** until they use it, then Active (PR #49). Resend invite is offered for pending users and for active users who never signed in |
-| 8 | **Design and publish workflows** | `/admin/workflows` | `POST /workflows`, `/publish` | ✅ authorized since 2026-09-04 (DRIFT-05). ⚠️ On a freshly seeded tenant only admins can *list* them — DRIFT-14 (the live tenant's roles hold the grant, re-tested 2026-10-16) |
+| 8 | **Design and publish workflows** | `/admin/workflows` → `/admin/workflows/[id]` | `POST /workflows`, `/publish` | ✅ authorized since 2026-09-04 (DRIFT-05). ⚠️ On a freshly seeded tenant only admins can *list* them — DRIFT-14 (the live tenant's roles hold the grant, re-tested 2026-10-16) |
 | 9 | Set retention and confidentiality policy | `/admin/policies` | `GET`/`PATCH /sla/configuration`, `/sla/holidays` (SLA tab only) | 🟨 SLA tab real since 2026-10-08; retention and confidentiality tabs still `SEED.policies` |
 | 10 | Apply branding | `/admin/branding` | — | 🟥 saved in this browser only (since 2026-10-12); other users don't see it |
 | 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
@@ -403,7 +403,7 @@ last is why the routing picker couldn't list workflows for a freshly seeded staf
 | Habit | Status | Note |
 |---|---|---|
 | File 20–30 documents a day | ✅ | The core loop works well |
-| Search for a document by content | ✅ | `/search` confirmed by the product owner 2026-10-09. *(Was "returns nothing"; the OCR claim was retracted, DRIFT-06)* DOCX/XLSX have no extractable body text, so they're found by **title and metadata** only — indexed at create since edms-backend PR #51 (live 2026-10-14) instead of waiting for OCR. Since 2026-10-14 the facets also apply alongside typed text (D6) |
+| Search for a document by content | ✅ | `/search` confirmed by the product owner 2026-10-09. *(Was "returns nothing"; the OCR claim was retracted, DRIFT-06)* DOCX/XLSX uploaded before 2026-10-21 (no longer accepted) have no extractable body text, so they're found by **title and metadata** only — indexed at create since edms-backend PR #51 (live 2026-10-14) instead of waiting for OCR. Since 2026-10-14 the facets also apply alongside typed text (D6) |
 | Browse to a document instead | ✅ | This becomes the workaround, and it works |
 | Check out before editing | ✅ | Lock prevents concurrent edits, returns 409 |
 | Upload a revised version | ✅ | Auto-increments the version number |
@@ -416,7 +416,7 @@ last is why the routing picker couldn't list workflows for a freshly seeded staf
 ```
 morning   → /staff        check dashboard   ✅ the bell shows new assignments
           → /staff/tasks  work the queue    ✅
-during    → /upload       file arrivals     ✅  (≤100 MB; PDF, DOCX, XLSX, TIFF, JPEG, PNG)
+during    → /upload       file arrivals     ✅  (PDF/TIFF ≤100 MB, JPEG/PNG ≤10 MB)
           → /doc/[id]     add context       ✅ comment on the workflow action (DRIFT-08)
           → route         send for approval ✅ live · 🟠 fresh seed (DRIFT-14)
           → /search       find something    ✅ confirmed 2026-10-09
@@ -707,7 +707,6 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | "Prove the trail hasn't been altered" | ✅ `GET /audit/verify` exists and works, confirmed live; `/admin/audit`'s "Verify integrity" button calls it. Not yet surfaced on `/auditor/trail` itself. |
 | "Who can see the Contracts cabinet?" | ⛔ `cabinet_access:view` granted and `GET /cabinets/:id/access` exists; no auditor screen calls it. |
 | "Track this finding to closure" | 🟥 No `Finding` model in Prisma. Everything is lost on cache clear. |
-| "Verify separation of duties" | ⛔ No SoD logic exists in either codebase. |
 | "Export evidence for the regulator" | ✅ `/auditor/trail` exports the real trail as CSV (`GET /audit/export`). Findings would still export fixture data. *(Was ⛔ "Would export fixture data".)* |
 
 ### The gap between design and reality (historical — see correction above)
@@ -747,7 +746,8 @@ this role's own screens reading it — a frontend migration, not a backend build
 3. ✅ ~~No `/audit` endpoint despite the permission being granted~~ — **exists now**
 4. 🟥 **`/auditor/compliance` re-exports the management page** — partly `SEED`-backed
 5. ~~⛔ **Search is empty**~~ — search works (confirmed 2026-10-09; indexed at create since PR #51)
-6. ⛔ **No SoD enforcement** despite it being claimed in the older docs
+6. ~~⛔ **No SoD enforcement** despite it being claimed in the older docs~~ — SoD and
+   redaction dropped from scope (PM, 2026-10-21)
 
 ---
 
@@ -987,7 +987,8 @@ acted yet.
 
 **Read the table bottom-up and the shape of the product becomes clear:** the operational
 layer (staff → supervisor → management) is wired (DRIFT-14 only affects a freshly seeded tenant — re-tested 2026-10-16). The governance layer
-is half wired: the audit trail is real, and findings, retention and SoD are not.
+is half wired: the audit trail is real, and findings and retention are not (SoD was
+dropped from scope 2026-10-21).
 *(Was: "the governance layer … is not wired at all" — re-checked 2026-10-15.)*
 
 ---

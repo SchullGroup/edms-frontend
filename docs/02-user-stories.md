@@ -334,6 +334,9 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
       actually upload~~ — *re-checked 2026-10-15:* uploads go through the chunked
       presigned uploader, capped at 100 MB, accepting PDF, DOCX, XLSX, TIFF, JPEG and PNG
       (`src/constants/uploadTypes.ts`, `c8e9d24`, 2026-10-02).
+- [x] **Narrowed 2026-10-21 (PM decision):** PDF and images only, because every upload is
+      OCR'd — PDF and TIFF up to 100 MB, JPEG and PNG up to 10 MB (Textract's async image
+      limit). DOCX/XLSX are no longer accepted; ones already uploaded still open.
 
 **Known drift:** DRIFT-06 — the file lands in a third-party bucket the backend cannot read.
 
@@ -529,7 +532,8 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
 - [x] Checkout / check-in from this screen
 - [x] **AI summary of the current version (2026-10-13, verified live)** — `GET /documents/:id/summary`
       (Gemini, written after OCR). The card says when it's still being written, when the file has no
-      readable text, and when OCR or the summary failed
+      readable text, and when OCR or the summary failed. Since 2026-10-20 (verified live) a failed
+      summary can be retried and a finished one regenerated (`POST /documents/:id/summary`)
 - [x] Edit title, type, folder, confidentiality, urgency, status
 - [x] Workflow stage rail + activity trail from live `GET /workflow-history` (since the
       `feature/management` merge)
@@ -540,8 +544,8 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
       signature to live on the one workflow trail (`POST /tasks/:id/action`'s
       `comment`/`approve`'s `signature`), not split across a second thread. "Mark
       reviewed" now opens an optional-comment modal too — see DRIFT-08 in doc 01 and
-      BE-16/BE-17 in `BACKEND_REQUESTS.md` for what's still needed (an optional
-      signature on `review`; multi-document workflow instances shipped in the
+      BE-16, now closed: `review` takes a signature, **required** since edms-backend
+      `ae08ef5` and captured in the modal since 2026-10-23; multi-document workflow instances shipped in the
       backend and were wired 2026-10-07 — DRIFT-19 in doc 01).
 - [ ] 🟨 **The backend audit trail is real now (DRIFT-11 revised, 2026-09-18)** — it
       auto-writes hash-chained entries server-side and `/admin/audit` reads it live. But
@@ -757,12 +761,15 @@ one activates.
 > long they have,
 > **so that** the process is enforced by the system rather than remembered by people.
 
-**Current state:** `/admin/workflows` is a substantial 493-line designer wired to the real
+**Current state:** `/admin/workflows` lists every workflow by status (Published / Drafts /
+Archived, with search) and opens each in the designer at `/admin/workflows/[id]` (since
+2026-10-20; before, a dropdown that only saw the first 20). The designer is wired to the real
 `/workflows` endpoints. Definitions are versioned JSON with `draft → published → archived`
 lifecycle.
 
 **Acceptance criteria**
-- [x] Create, edit, publish and archive definitions
+- [x] Create, edit, publish and archive definitions; since 2026-10-20 (verified live) delete a
+      draft that was never started, and unarchive an archived one
 - [x] Stages with sequential transitions, SLA hours and role/user assignment
 - [x] Published definitions are immutable; edits require a new version
 - [x] ✅ **Authorization now enforced** (2026-09-04). `definitions.service.ts` asserts on
@@ -1251,24 +1258,10 @@ Prisma schema and no endpoint.** Everything a user does here is lost on
 
 ---
 
-### H3 — Verify separation of duties · ⬜ **Not built**
-
-> **As** Femi,
-> **I want** the system to prevent one person both approving and auditing the same
-> document,
-> **so that** the control is structural rather than a policy people remember.
-
-**Current state:** SoD is described in `../../out/DOCUMENTATION.md` as a platform feature.
-**No SoD logic exists in either codebase.** There is no rule preventing a user holding both
-`supervisor` and `internal_auditor`, and nothing checks actor identity across workflow
-stages.
-
-**Acceptance criteria**
-- [ ] Configurable mutually-exclusive role pairs
-- [ ] Workflow stages cannot be actioned by the same user who actioned the previous stage
-      (where configured)
-- [ ] SoD violations surfaced as findings
-- [ ] Attempted violations logged
+*H3 (Verify separation of duties) was **removed from scope 2026-10-21** by PM decision,
+along with redaction and its policy. Neither was ever built in either codebase; the
+mock UI that implied them (a findings control area, a coverage gauge, fixture
+exceptions, policy controls, a feature flag) was removed the same day.*
 
 ---
 
@@ -1602,15 +1595,16 @@ error paths and workers).
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
 | F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; SLA warnings and breaches notify (in code, DRIFT-10) |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | On server aggregation endpoints (DRIFT-07); no PDF export or forecasting |
-| H — Audit & Compliance | 0 | 1 | 1 | 1 | Audit trail real (H1 🟨, 2026-10-15); findings mock; SoD not built |
+| H — Audit & Compliance | 0 | 1 | 1 | 0 | Audit trail real (H1 🟨, 2026-10-15); findings mock; SoD dropped from scope (2026-10-21) |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **14** | **18** | **8** | **2** | 42 functional stories |
+| **Total** | **14** | **18** | **8** | **1** | 41 functional stories |
 
 *(2026-10-15: H1 moved 🟥 → 🟨, so Partial 16 → 17 and Mock 9 → 8. 2026-10-19: C2 moved
-✅ → 🟨 (no urgency ordering), so Done 15 → 14 and Partial 17 → 18. Totals re-tallied from
-the story headings, not carried forward.)*
+✅ → 🟨 (no urgency ordering), so Done 15 → 14 and Partial 17 → 18. 2026-10-21: H3 removed
+from scope, so Not built 2 → 1 and 42 → 41 stories. Totals re-tallied from the story
+headings, not carried forward.)*
 
 **The honest one-paragraph summary (revised 2026-10-15):** the *document* half of this EDMS
 — capture, filing, versioning, checkout, classification, search, task execution and

@@ -10,9 +10,10 @@ import {
   type UploadDefaults,
 } from './WorkflowDocumentPicker';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
-import { useSignAndApprove } from '@/hooks/useSignAndApprove';
+import { useSignAndApprove, useSignatureUpload, type SignatureImage } from '@/hooks/useSignAndApprove';
+import { SignaturePad } from '@/components/documents/SignaturePad';
 import { DocumentScopeField, HeldBackNote, scopedDocuments } from './DocumentScopeField';
-import type { TaskActionRequest, User } from '@/types/models';
+import type { TaskActionRequest, TaskActionSignature, User } from '@/types/models';
 
 export interface WorkflowTaskActionsArgs {
   /** The task being actioned — must be the caller's active, current-stage task. */
@@ -66,6 +67,7 @@ export function useWorkflowTaskActions({
   const attachDocument = useAttachWorkflowDocument();
   const createAuditLog = useCreateAuditLog();
   const { promptSignAndApprove } = useSignAndApprove();
+  const uploadSignature = useSignatureUpload();
   const heldBack = heldBackDocuments.length;
 
   const runAction = (
@@ -92,21 +94,20 @@ export function useWorkflowTaskActions({
   // (`POST /workflow-instances/:id/documents`, allowed for the active task's
   // holder), then the review is sent.
   //
-  // Two steps in the one modal: 1) optionally pick documents, 2) optional
-  // comment and confirm. "Next"/"Back" swap the modal's content and return
-  // `false` so the modal stays open; the selection and comment carry across
-  // both ways. Without `workflow_instance:create` there's nothing to attach
-  // with, so it opens straight on step 2.
+  // Step 1 picks documents (skipped without `workflow_instance:create`); step 2
+  // signs, required since edms-backend `ae08ef5`. The pad starts empty on each visit.
   const actReview = () => {
     if (!taskId) return;
     let picked: PickedDocument[] = [];
     let commentText = '';
+    let sig: SignatureImage | null = null;
     const reviewed = new Set(documents.map((d) => d.id));
-    // Survives a retry after a partial failure, so nothing is attached twice.
+    // Both survive a retry after a partial failure, so nothing is sent twice.
     const attached = new Set<string>();
+    let uploaded: { image: SignatureImage; signature: TaskActionSignature } | null = null;
     const title = `Mark reviewed — ${stageLabel}`;
 
-    const submit = async () => {
+    const submit = async (image: SignatureImage) => {
       for (const doc of picked) {
         if (attached.has(doc.id)) continue;
         try {
@@ -120,10 +121,19 @@ export function useWorkflowTaskActions({
           return false;
         }
       }
+      if (uploaded?.image !== image) {
+        try {
+          uploaded = { image, signature: await uploadSignature(taskId, image) };
+        } catch (err: any) {
+          addToast(err?.message || 'Could not upload the signature', 'error');
+          return false;
+        }
+      }
       const scope = scopedDocuments(documents, reviewed, heldBack);
       return runAction(
         {
           action: 'review',
+          signature: uploaded.signature,
           ...(commentText.trim() ? { comment: commentText.trim() } : {}),
           ...(scope ? { documents: scope } : {}),
         },
@@ -140,6 +150,7 @@ export function useWorkflowTaskActions({
     const openStepOne = () =>
       openModal({
         title,
+        size: 'lg',
         body: (
           <div>
             <div className="caption mb-2">Step 1 of 2 — attach documents (optional)</div>
@@ -172,13 +183,15 @@ export function useWorkflowTaskActions({
         ],
       });
 
-    const openStepTwo = () =>
+    const openStepTwo = () => {
+      sig = null;
       openModal({
         title,
+        size: 'lg',
         body: (
           <div>
             {canAttachDocuments && (
-              <div className="caption mb-2">Step 2 of 2 — add a comment</div>
+              <div className="caption mb-2">Step 2 of 2 — sign and confirm</div>
             )}
             {picked.length > 0 && (
               <div className="field">
@@ -196,6 +209,12 @@ export function useWorkflowTaskActions({
               heldBack={heldBack}
               label="Mark which documents reviewed?"
             />
+            <div className="field mb-4">
+              <label>
+                Signature <span className="req">*</span>
+              </label>
+              <SignaturePad onChange={(r) => (sig = r)} />
+            </div>
             <div className="field">
               <label>Comment (optional)</label>
               <textarea
@@ -229,11 +248,16 @@ export function useWorkflowTaskActions({
                 addToast('Pick at least one document to mark reviewed', 'error');
                 return false;
               }
-              return submit();
+              if (!sig) {
+                addToast('Add a signature to mark reviewed', 'error');
+                return false;
+              }
+              return submit(sig);
             },
           },
         ],
       });
+    };
 
     if (canAttachDocuments) openStepOne();
     else openStepTwo();

@@ -377,18 +377,18 @@ users' roles for the ones named.
 **Superseded 2026-09-18.** This phase used to test the dedicated `GET/POST
 /documents/:id/comments`/`/signatures` panels. Those were wired, then deliberately
 un-wired the same day — every comment and signature is workflow-trail-only now. See
-`BACKEND_REQUESTS.md` BE-16/BE-17 and doc 01's DRIFT-08 note.
+`BACKEND_REQUESTS.md` BE-16 and doc 01's DRIFT-08 note.
 
-- [ ] **TP-L1 (mark reviewed, no signature).** As the assignee of a `review`-only stage,
-      click "Mark reviewed". Confirm a modal opens with an optional comment field (not an
-      immediate confirm) — leave the comment blank and submit. Confirm it succeeds and
-      the stage advances; the trail entry shows no comment line.
+- [ ] **TP-L1 (mark reviewed, signature required).** As the assignee of a `review`-only
+      stage, click "Mark reviewed". Confirm step 2 has a signature pad and an optional
+      comment. Submit with no signature: a "Add a signature to mark reviewed" toast, nothing
+      sent. Sign, leave the comment blank and submit: it succeeds, the stage advances, and
+      the trail entry shows the signature but no comment line.
 - [ ] **TP-L2 (mark reviewed, with comment).** Repeat, this time typing a comment.
       Confirm the trail entry on `WorkflowActivityPanel` shows your comment text.
-- [ ] **TP-L3 (review has no signature capture).** Confirm the "Mark reviewed" modal has
-      no signature pad — only `approve` does. This is a known backend limitation
-      (`review`'s action schema is `additionalProperties: false`, no `signature`
-      property), not a frontend gap; BE-16 tracks closing it.
+- [ ] **TP-L3 (review signature survives a retry).** *(Was "review has no signature
+      capture"; since edms-backend `ae08ef5` the backend requires one, 2026-10-23.)* Sign,
+      go Back to step 1 and Next again: the pad is empty and must be signed again.
 - [ ] **TP-L4 (approve signature shows on the trail).** Sign & approve a task (as before).
       Confirm the resulting trail entry on `WorkflowActivityPanel` now shows a small
       signature thumbnail next to the "Approved" entry (previously only the comment text
@@ -996,8 +996,14 @@ at login; `schulltech_admin` is hidden from the roles API; documents get an AI s
 - [ ] **TP-W8.** On a task with two documents you can act on, act on one only (review,
       approve or reject it). The page stays on the same task: that document's tab reads
       "· Done", the other is selected and actionable, and there's no "needs Action access"
-      note. *(Checked 2026-10-16 with an edited `GET /tasks/:id`; not yet with a real
-      partial action.)*
+      note. *(Checked 2026-10-16 with an edited `GET /tasks/:id`. A real partial action was
+      made on 2026-10-20 for TP-W9 and the task stayed open, but the page wasn't looked at
+      before the send-back, so the "· Done" tab is still unverified with live data.)*
+- [x] **TP-W9.** Backend ask T3: on a task at stage A with two documents, review one only; at
+      stage B, Request changes on it. Expect 200, the same task at A holding both documents,
+      the returned one actionable with its changes-requested marker. *(Verified 2026-10-20 on
+      "ZZ test — T3 send-back recheck": instance `724841a3…`, task `a5108094…`; closed and
+      archived afterwards, both documents back to `closed`.)*
 
 ## 19g. Phase X — Frontend spec items (backend PR #51, live 2026-10-14)
 

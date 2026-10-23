@@ -14,7 +14,6 @@ export default function ExceptionsPage() {
   const { setPageTitle, addToast } = useUIStore();
 
   const [rows, setRows] = useState([
-    { id: 'ex-1', at: Date.now() - 2 * 86400000, type: 'SoD conflict', doc: 'doc-1008', detail: 'Uploader approved own memo — maker-checker did not trigger (legacy workflow version).', sev: 'High', status: 'Open' },
     { id: 'ex-2', at: Date.now() - 4 * 86400000, type: 'Control failure', doc: 'doc-1013', detail: 'Restricted document printed without watermark overlay.', sev: 'Medium', status: 'In Remediation' },
     { id: 'ex-3', at: Date.now() - 6 * 86400000, type: 'SLA breach', doc: 'doc-1005', detail: 'Officer Verification exceeded 48h SLA; escalated per policy.', sev: 'Medium', status: 'Acknowledged' },
     { id: 'ex-4', at: Date.now() - 9 * 86400000, type: 'Access anomaly', doc: 'doc-1009', detail: 'Access attempt to Top Secret litigation brief by unauthorised role (denied, logged).', sev: 'High', status: 'Closed' },
@@ -56,7 +55,7 @@ export default function ExceptionsPage() {
       <div className="page-head">
         <div>
           <div className="page-title">Exceptions</div>
-          <div className="page-sub">Control failures, SoD conflicts and access anomalies affecting your team.</div>
+          <div className="page-sub">Control failures, SLA breaches and access anomalies affecting your team.</div>
         </div>
       </div>
 

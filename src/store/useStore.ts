@@ -266,11 +266,12 @@ export const useStore = create<AppStore>()(
     }),
     {
       name: 'edms-state-v3',
-      version: 5,
+      version: 6,
       // v4: drop any stale `currentUser.permissions` persisted by an older build
       // so it gets re-derived cleanly from `GET /roles` / `GET /auth/me`.
       // v5: `savedSearches` went from one shared array (seeded with two fake
       // entries) to a per-user map with a new shape — start it empty.
+      // v6: SoD and redaction left the product — drop their persisted fixtures.
       migrate: (persisted: any, version) => {
         let next = persisted;
         if (version < 4 && next?.currentUser) {
@@ -279,6 +280,24 @@ export const useStore = create<AppStore>()(
         }
         if (version < 5 && next) {
           next = { ...next, savedSearches: {} };
+        }
+        if (version < 6 && next) {
+          next = {
+            ...next,
+            findings: next.findings?.filter((f: any) => f.control !== 'Segregation of Duties'),
+            featureFlags: next.featureFlags?.filter((f: any) => f.id !== 'ff-3'),
+            plans: next.plans?.map((p: any) => ({
+              ...p,
+              features: p.features?.filter((x: string) => x !== 'Redaction AI'),
+            })),
+            notifications: next.notifications?.filter((n: any) => n.id !== 'n13'),
+            policies: next.policies && {
+              ...next.policies,
+              controls: next.policies.controls?.filter(
+                (c: any) => !/^(SoD|Maker-checker)/.test(c.rule),
+              ),
+            },
+          };
         }
         return next;
       },

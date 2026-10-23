@@ -172,7 +172,7 @@ export default function CompliancePosturePage() {
                   <span className="v" style={{ textAlign: 'left', fontWeight: 500 }}>
                     {a.actorType === 'system' || !a.actorId
                       ? 'System'
-                      : userById(users, a.actorId)?.name || a.actorId}{' '}
+                      : a.actor?.name || 'Unknown user'}{' '}
                     · {a.action}
                     {a.objectType ? ` (${a.objectType})` : ''}
                   </span>

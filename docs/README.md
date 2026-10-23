@@ -78,7 +78,9 @@ setting up an environment.
 
 ## The short version
 
-**58 frontend pages · 134 backend routes · 6 roles · 0 tests.**
+**59 frontend pages · 134 backend routes · 6 roles · 0 tests.**
+*(Pages re-derived 2026-10-20: +1, the `/admin/workflows` list; the designer moved to
+`/admin/workflows/[id]`. Routes are recounted in the backend-dev close-out.)*
 *(Re-derived 2026-10-15 with the commands in `AGENTS.md`, backend @ `dev` `9998e05`:
 routes 130 → 134; pages unchanged; still no test files in either repo.)*
 *(Re-derived 2026-10-05 with the commands in `AGENTS.md`, backend @ `dev` `c353105`: pages
@@ -100,7 +102,7 @@ The GOVERNANCE half is now half real
   ✅ audit trail · circulars · SLA settings
   🟨 notifications (emitted, not clicked through)
   🟥 findings · retention · branding · platform operations
-                                                    🟥 11 of 58 pages
+                                                    🟥 11 of 59 pages
 ```
 *(Re-drawn 2026-10-15 from doc 05's portfolio table — was "notifications · policies …
 🟥 13 of 58 pages".)*

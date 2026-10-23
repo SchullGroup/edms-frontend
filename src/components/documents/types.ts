@@ -1,4 +1,4 @@
-import { Document, Task, WorkflowInstance } from '@/types/models';
+import { Document, PersonSummary, Task, WorkflowInstance } from '@/types/models';
 
 /**
  * Fields the UI historically expected on a document that don't exist on the
@@ -28,6 +28,8 @@ export interface DocumentSignatureFieldUI {
   w: number;
   h: number;
   signedBy?: string;
+  /** Embedded by `GET /documents/:id` with each signature. */
+  signer?: PersonSummary;
 }
 
 export interface DocumentWithUiExtras extends Document {
