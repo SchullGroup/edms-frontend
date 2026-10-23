@@ -20,7 +20,8 @@
 Each item states what the frontend does today, what it needs, and why.
 
 **Take BE-19 first** — no parallel workflow can run without it. Then BE-2, BE-4 and BE-21,
-which are security items rather than features.
+which are security items rather than features. BE-22 is a product decision (no automatic AI
+summaries) and costs a Gemini call per upload until it ships.
 
 ---
 
@@ -32,6 +33,7 @@ which are security items rather than features.
 | **BE-2**  | `POST /auth/logout` + refresh-token revocation              | New endpoint    | 🔴 High  | No — fails silently today                  |
 | **BE-4**  | Reject confidentiality tiers the uploader isn't cleared for | Security fix    | 🔴 High  | No                                         |
 | **BE-21** | Check cabinet grants when a document is read                | Security fix    | 🔴 High  | No — documents are over-shared today       |
+| **BE-22** | Write AI summaries only when a user asks                    | Behaviour fix   | 🟠 Med   | No — every upload costs a Gemini call      |
 | **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med   | No — 1 of 8 documents affected when raised |
 | **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
@@ -208,6 +210,42 @@ Once an access request for that document is approved, `GET /documents/:id` retur
 
 ---
 
+## 🟠 BE-22 · Write AI summaries only when a user asks — **new, 2026-10-23**
+
+**Product decision (2026-10-23):** no document is summarised automatically. A summary is
+written only when a user presses **Summarize** (or Try again / Regenerate), which is
+`POST /documents/:id/summary`. Checked at `origin/dev` `cc56f40`.
+
+### What happens today
+
+Two paths summarise without anyone asking:
+
+1. **After OCR, every version is summarised** — `ocr.workers.ts:108` calls
+   `enqueueSummary(documentId, versionId)` once the text is saved. Every upload costs a Gemini
+   call.
+2. **`GET /documents/:id/summary` queues one** when the version is `summaryStatus: 'pending'`
+   with OCR done (`getDocumentSummary`, `documents.service.ts:577`). Reading becomes writing.
+
+The frontend has stopped triggering path 2 (it reads `currentVersion.aiSummary` /
+`summaryStatus` from `GET /documents/:id` and calls `GET …/summary` only to follow a
+request it made), but path 1 is server-side only.
+
+### What we need
+
+1. Remove the `enqueueSummary` call from the OCR worker.
+2. Remove the lazy enqueue from `getDocumentSummary`; `GET` only reads.
+3. A status for "nobody asked yet", distinct from "queued". Today both are `pending`. Suggest a
+   new default `summaryStatus: 'none'` (migration: existing `pending` rows with no queued job →
+   `none`); `POST` sets `pending` as now.
+4. Keep `POST` as it is (its 409/422/503 codes are already handled).
+
+**Frontend follow-up once it ships:** treat `none` like today's not-requested `pending` (show
+Summarize). Until then the frontend shows Summarize for any `pending` version it hasn't asked
+about; on a version the OCR worker already queued, pressing it gets 409
+`SUMMARY_IN_PROGRESS`, which the panel shows as "Writing the summary".
+
+---
+
 ## 🟡 BE-12 · Seed `workflow:view` for the roles that route documents
 
 > Was "Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`". That constant was removed
@@ -375,12 +413,7 @@ app.use((_req, res) => ApiResponse.notFound(res, 'Route not found', 'ROUTE_NOT_F
 3. One confidence threshold per tenant, or per document type?
 4. Personal data: only suggest a higher confidentiality, or also block filing below it?
 
-### Worth knowing either way
-
-`GET /documents/:id/summary` queues a summary for a version still `pending` after OCR
-(`getDocumentSummary`), so opening a document's summary for the first time costs one Gemini
-call. That's intended for older versions; with the summary now on the workflow page, more
-documents will hit it on first view.
+Any new AI job here should follow BE-22: it runs when a user asks, not on upload.
 
 ---
 
