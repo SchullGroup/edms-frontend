@@ -4,7 +4,7 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-10-22
+**Raised:** 2026-08-29 · **Updated:** 2026-10-23
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `origin/dev` (`d14f250`)
 
@@ -20,7 +20,8 @@
 Each item states what the frontend does today, what it needs, and why.
 
 **Take BE-19 first** — no parallel workflow can run without it. Then BE-2, BE-4 and BE-21,
-which are security items rather than features.
+which are security items rather than features. BE-22 is a product decision (no automatic AI
+summaries) and costs a Gemini call per upload until it ships.
 
 ---
 
@@ -32,9 +33,13 @@ which are security items rather than features.
 | **BE-2**  | `POST /auth/logout` + refresh-token revocation              | New endpoint    | 🔴 High  | No — fails silently today                  |
 | **BE-4**  | Reject confidentiality tiers the uploader isn't cleared for | Security fix    | 🔴 High  | No                                         |
 | **BE-21** | Check cabinet grants when a document is read                | Security fix    | 🔴 High  | No — documents are over-shared today       |
+| **BE-22** | Write AI summaries only when a user asks                    | Behaviour fix   | 🟠 Med   | No — every upload costs a Gemini call      |
 | **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med   | No — 1 of 8 documents affected when raised |
 | **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
+
+**Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
+them until the PM confirms the AI features are in scope.
 
 ---
 
@@ -205,6 +210,42 @@ Once an access request for that document is approved, `GET /documents/:id` retur
 
 ---
 
+## 🟠 BE-22 · Write AI summaries only when a user asks — **new, 2026-10-23**
+
+**Product decision (2026-10-23):** no document is summarised automatically. A summary is
+written only when a user presses **Summarize** (or Try again / Regenerate), which is
+`POST /documents/:id/summary`. Checked at `origin/dev` `cc56f40`.
+
+### What happens today
+
+Two paths summarise without anyone asking:
+
+1. **After OCR, every version is summarised** — `ocr.workers.ts:108` calls
+   `enqueueSummary(documentId, versionId)` once the text is saved. Every upload costs a Gemini
+   call.
+2. **`GET /documents/:id/summary` queues one** when the version is `summaryStatus: 'pending'`
+   with OCR done (`getDocumentSummary`, `documents.service.ts:577`). Reading becomes writing.
+
+The frontend has stopped triggering path 2 (it reads `currentVersion.aiSummary` /
+`summaryStatus` from `GET /documents/:id` and calls `GET …/summary` only to follow a
+request it made), but path 1 is server-side only.
+
+### What we need
+
+1. Remove the `enqueueSummary` call from the OCR worker.
+2. Remove the lazy enqueue from `getDocumentSummary`; `GET` only reads.
+3. A status for "nobody asked yet", distinct from "queued". Today both are `pending`. Suggest a
+   new default `summaryStatus: 'none'` (migration: existing `pending` rows with no queued job →
+   `none`); `POST` sets `pending` as now.
+4. Keep `POST` as it is (its 409/422/503 codes are already handled).
+
+**Frontend follow-up once it ships:** treat `none` like today's not-requested `pending` (show
+Summarize). Until then the frontend shows Summarize for any `pending` version it hasn't asked
+about; on a version the OCR worker already queued, pressing it gets 409
+`SUMMARY_IN_PROGRESS`, which the panel shows as "Writing the summary".
+
+---
+
 ## 🟡 BE-12 · Seed `workflow:view` for the roles that route documents
 
 > Was "Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`". That constant was removed
@@ -334,6 +375,45 @@ catch-all returning the standard `ApiResponse` envelope would have made them obv
 app.use((_req, res) => ApiResponse.notFound(res, 'Route not found', 'ROUTE_NOT_FOUND'));
 // must sit after the routers, before errorHandler
 ```
+
+---
+
+## ⏸️ Parked — AI document understanding (AI-1…AI-6)
+
+**Drafted:** 2026-10-23 · **Backend checked against:** `origin/dev` `cc56f40` ·
+**Status: not sent.** Waiting on the PM to confirm these AI features (tracker items 7.2–7.4,
+7.6–7.9) are wanted. The contracts below are suggestions; the backend team owns the design.
+
+### What exists today
+
+- **Summaries (7.5) are done:** `GET`/`POST /documents/:id/summary`, written by Gemini
+  (`src/shared/utils/ai-summarizer.ts`, `GEMINI_MODEL` default `gemini-2.5-flash`) after
+  Textract OCR. The frontend shows them on `/doc/[id]` and the workflow page.
+- `DocumentVersion.checksum` (SHA-256) has `@@index([checksum])`, commented "duplicate file
+  detection on upload", but no route or create-time check reads it.
+- Nothing classifies, extracts fields, detects personal data or suggests a workflow. The
+  summary worker's Gemini call writes no audit event; only the user-facing
+  `document.summary_viewed` / `document.summary_requested` route actions are audited.
+
+### Asks
+
+| ID | For | Ask |
+|---|---|---|
+| **AI-1** | 7.2, 7.3, 7.7 | After OCR, one AI job writes a suggestion per version: `documentType`, `cabinetId`, `folderId`, `fields: { fieldId, value, confidence }[]`, `personalData: { kind, count }[]`, `suggestedConfidentiality`, overall `confidence`, and a `status` like `summaryStatus`. Read it with `GET /documents/:id/suggestions`; record the user's choice with `POST /documents/:id/suggestions/:sid/decision { accept, reject, edits }` |
+| **AI-2** | 7.2, 7.3, 7.7 at upload | Suggestions *before* filing need an analyse call on the stored file (`POST /documents/analyse { fileUrl, mimeType }`, then poll), since the document doesn't exist yet. If suggestions may arrive *after* filing, AI-1 is enough. **Product decision** |
+| **AI-3** | 7.6 | `GET /documents/duplicates?checksum=<sha256>`: documents the caller can see with that checksum (id, title, cabinet, version). Exact matches only; near-duplicates are a later ask |
+| **AI-4** | 7.4 | `GET /documents/:id/routing-suggestion` → `{ workflowId, confidence, reason }` |
+| **AI-5** | 7.8 | `GET /ai/review-queue?minConfidence=&status=`: suggestions below the tenant's threshold, behind a new permission (e.g. `ai_review:manage`) |
+| **AI-6** | 7.9 | Audit every model call and decision as `ai.summary_generated`, `ai.suggestion_generated`, `ai.suggestion_accepted`, `ai.suggestion_rejected`, with the model name and version id (actor: system for generated ones) |
+
+### Open product questions
+
+1. Suggestions before filing (AI-2) or after?
+2. Who works the review queue: records manager, cabinet owner, or the uploader?
+3. One confidence threshold per tenant, or per document type?
+4. Personal data: only suggest a higher confidentiality, or also block filing below it?
+
+Any new AI job here should follow BE-22: it runs when a user asks, not on upload.
 
 ---
 
