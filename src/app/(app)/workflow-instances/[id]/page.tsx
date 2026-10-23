@@ -17,6 +17,7 @@ import { useWorkflowTaskActions } from '@/components/workflowInstances/useWorkfl
 import { WorkflowDocumentViewer } from '@/components/workflowInstances/WorkflowDocumentViewer';
 import { WorkflowActivityPanel } from '@/components/workflowInstances/WorkflowActivityPanel';
 import { DocumentVersionsPanel } from '@/components/documents/DocumentVersionsPanel';
+import { DocumentSummaryPanel } from '@/components/documents/DocumentSummaryPanel';
 import { StatusBadge, UrgBadge } from '@/components/ui/Badges';
 import { Icon } from '@/components/ui/Icons';
 import { SkeletonPage } from '@/components/common/Skeleton';
@@ -514,6 +515,11 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
                 )}
               </div>
             </div>
+          )}
+
+          {/* Only once the document itself loaded: a Restricted one is never fetched. */}
+          {selected && selectedDoc && (
+            <DocumentSummaryPanel key={selected.id} documentId={selected.id} />
           )}
 
           {selected && selectedDoc && (
