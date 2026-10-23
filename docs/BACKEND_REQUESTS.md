@@ -4,7 +4,7 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-10-22
+**Raised:** 2026-08-29 · **Updated:** 2026-10-23
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `origin/dev` (`d14f250`)
 
@@ -35,6 +35,9 @@ which are security items rather than features.
 | **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med   | No — 1 of 8 documents affected when raised |
 | **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
+
+**Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
+them until the PM confirms the AI features are in scope.
 
 ---
 
@@ -334,6 +337,50 @@ catch-all returning the standard `ApiResponse` envelope would have made them obv
 app.use((_req, res) => ApiResponse.notFound(res, 'Route not found', 'ROUTE_NOT_FOUND'));
 // must sit after the routers, before errorHandler
 ```
+
+---
+
+## ⏸️ Parked — AI document understanding (AI-1…AI-6)
+
+**Drafted:** 2026-10-23 · **Backend checked against:** `origin/dev` `cc56f40` ·
+**Status: not sent.** Waiting on the PM to confirm these AI features (tracker items 7.2–7.4,
+7.6–7.9) are wanted. The contracts below are suggestions; the backend team owns the design.
+
+### What exists today
+
+- **Summaries (7.5) are done:** `GET`/`POST /documents/:id/summary`, written by Gemini
+  (`src/shared/utils/ai-summarizer.ts`, `GEMINI_MODEL` default `gemini-2.5-flash`) after
+  Textract OCR. The frontend shows them on `/doc/[id]` and the workflow page.
+- `DocumentVersion.checksum` (SHA-256) has `@@index([checksum])`, commented "duplicate file
+  detection on upload", but no route or create-time check reads it.
+- Nothing classifies, extracts fields, detects personal data or suggests a workflow. The
+  summary worker's Gemini call writes no audit event; only the user-facing
+  `document.summary_viewed` / `document.summary_requested` route actions are audited.
+
+### Asks
+
+| ID | For | Ask |
+|---|---|---|
+| **AI-1** | 7.2, 7.3, 7.7 | After OCR, one AI job writes a suggestion per version: `documentType`, `cabinetId`, `folderId`, `fields: { fieldId, value, confidence }[]`, `personalData: { kind, count }[]`, `suggestedConfidentiality`, overall `confidence`, and a `status` like `summaryStatus`. Read it with `GET /documents/:id/suggestions`; record the user's choice with `POST /documents/:id/suggestions/:sid/decision { accept, reject, edits }` |
+| **AI-2** | 7.2, 7.3, 7.7 at upload | Suggestions *before* filing need an analyse call on the stored file (`POST /documents/analyse { fileUrl, mimeType }`, then poll), since the document doesn't exist yet. If suggestions may arrive *after* filing, AI-1 is enough. **Product decision** |
+| **AI-3** | 7.6 | `GET /documents/duplicates?checksum=<sha256>`: documents the caller can see with that checksum (id, title, cabinet, version). Exact matches only; near-duplicates are a later ask |
+| **AI-4** | 7.4 | `GET /documents/:id/routing-suggestion` → `{ workflowId, confidence, reason }` |
+| **AI-5** | 7.8 | `GET /ai/review-queue?minConfidence=&status=`: suggestions below the tenant's threshold, behind a new permission (e.g. `ai_review:manage`) |
+| **AI-6** | 7.9 | Audit every model call and decision as `ai.summary_generated`, `ai.suggestion_generated`, `ai.suggestion_accepted`, `ai.suggestion_rejected`, with the model name and version id (actor: system for generated ones) |
+
+### Open product questions
+
+1. Suggestions before filing (AI-2) or after?
+2. Who works the review queue: records manager, cabinet owner, or the uploader?
+3. One confidence threshold per tenant, or per document type?
+4. Personal data: only suggest a higher confidentiality, or also block filing below it?
+
+### Worth knowing either way
+
+`GET /documents/:id/summary` queues a summary for a version still `pending` after OCR
+(`getDocumentSummary`), so opening a document's summary for the first time costs one Gemini
+call. That's intended for older versions; with the summary now on the workflow page, more
+documents will hit it on first view.
 
 ---
 
