@@ -22,15 +22,14 @@ export default function ApprovalsQueuePage() {
   const [tab, setTab] = useState<'pending' | 'escalated'>('pending');
   const [page, setPage] = useState(1);
 
-  // The purpose-built approvals endpoint, not a generic /tasks filter — it's
-  // already ordered by urgency then due date server-side, and `scope: 'all'`
-  // gives the team's queue rather than just tasks assigned directly to me.
+  // Nearest deadline first (else oldest first; there's no urgency order), and
+  // `scope: 'all'` for the team's queue, not just tasks assigned to me.
   const {
     data: tasksData,
     isLoading: isLoadingTasks,
     isError: isTasksError,
     refetch: refetchTasks,
-  } = useApprovalTasks({ scope: 'all', status: tab, page, limit: PAGE_SIZE });
+  } = useApprovalTasks({ scope: 'all', status: tab, sort: 'dueAt', page, limit: PAGE_SIZE });
   const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const departmentName = useDepartmentNames();
   const tasks = tasksData?.data || [];
@@ -199,7 +198,7 @@ export default function ApprovalsQueuePage() {
             <p className="caption mb-4">
               {tab === 'escalated'
                 ? 'Escalated items will appear here once something breaches its SLA.'
-                : 'Items routed for your decision will appear here, ordered by urgency and SLA.'}
+                : 'Items routed for your decision will appear here, nearest deadline first.'}
             </p>
           </div>
         )}

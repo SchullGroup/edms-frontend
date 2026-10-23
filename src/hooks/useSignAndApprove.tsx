@@ -13,6 +13,27 @@ import type { TaskActionSignature } from '@/types/models';
 
 type Mime = TaskActionSignature['mimeType'];
 
+/** What `SignaturePad` hands back: the drawn, typed or uploaded image. */
+export interface SignatureImage {
+  blob: Blob;
+  mimeType: Mime;
+}
+
+/** Uploads a signature image and returns the `signature` that `approve` and `review` take. */
+export function useSignatureUpload() {
+  const { startUpload } = useMultipartUploader();
+  return async (taskId: string, { blob, mimeType }: SignatureImage): Promise<TaskActionSignature> => {
+    const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/webp' ? 'webp' : 'png';
+    const file = new File([blob], `signature-${taskId}-${Date.now()}.${ext}`, { type: mimeType });
+    const fileUrl = await startUpload({
+      file,
+      fileName: file.name,
+      folderName: 'edms-signatures',
+    });
+    return { fileUrl, mimeType };
+  };
+}
+
 interface PromptArgs {
   taskId: string;
   /** Document / task title for the modal heading. */
@@ -34,7 +55,7 @@ interface PromptArgs {
 export function useSignAndApprove() {
   const { openModal, closeModal, addToast } = useUIStore();
   const taskAction = useTaskAction();
-  const { startUpload } = useMultipartUploader();
+  const uploadSignature = useSignatureUpload();
 
   const promptSignAndApprove = ({
     taskId,
@@ -43,7 +64,7 @@ export function useSignAndApprove() {
     heldBack = 0,
     onSuccess,
   }: PromptArgs) => {
-    const sig: { current: { blob: Blob; mimeType: Mime } | null } = { current: null };
+    const sig: { current: SignatureImage | null } = { current: null };
     const chosen = new Set(documents.map((d) => d.id));
     const comment: { current: string } = { current: '' };
     let submitting = false;
@@ -96,21 +117,12 @@ export function useSignAndApprove() {
             const scope = scopedDocuments(documents, chosen, heldBack);
             submitting = true;
             try {
-              const { blob, mimeType } = sig.current;
-              const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/webp' ? 'webp' : 'png';
-              const file = new File([blob], `signature-${taskId}-${Date.now()}.${ext}`, {
-                type: mimeType,
-              });
-              const fileUrl = await startUpload({
-                file,
-                fileName: file.name,
-                folderName: 'edms-signatures',
-              });
+              const signature = await uploadSignature(taskId, sig.current);
               await taskAction.mutateAsync({
                 id: taskId,
                 actionReq: {
                   action: 'approve',
-                  signature: { fileUrl, mimeType },
+                  signature,
                   ...(comment.current.trim() ? { comment: comment.current.trim() } : {}),
                   ...(scope ? { documents: scope } : {}),
                 },

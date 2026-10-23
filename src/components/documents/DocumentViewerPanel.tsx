@@ -22,7 +22,6 @@ export interface DocumentViewerPanelProps {
   sealed: boolean;
   lockedByOther: boolean;
   onSignatureFieldClick: (index: number) => void;
-  getSignerName: (userId: string) => string;
   /** `document:download` plus clearance for this document's tier. Also decides
    *  whether a PDF's text can be selected and copied. */
   canDownload: boolean;
@@ -60,7 +59,6 @@ export function DocumentViewerPanel({
   sealed,
   lockedByOther,
   onSignatureFieldClick,
-  getSignerName,
   canDownload,
   onDownload,
   canPrint,
@@ -69,9 +67,8 @@ export function DocumentViewerPanel({
   ocrStatus,
 }: DocumentViewerPanelProps) {
   const isPdf = fileMimeType === 'application/pdf';
-  // TIFF is an `image/*` type but only Safari can draw it in an <img> — in
-  // Chrome/Firefox it would be a broken image, so it takes the "no preview"
-  // path along with DOCX/XLSX until a renderer exists for those.
+  // Only Safari draws TIFF in an <img>, so it takes the "no preview" path, as do
+  // DOCX/XLSX uploaded before only PDF and images were accepted.
   const isImage = fileMimeType.startsWith('image/') && fileMimeType !== 'image/tiff';
 
   const downloadLabel = 'Download a copy';
@@ -219,7 +216,7 @@ export function DocumentViewerPanel({
               }}
             >
               {s.signedBy
-                ? getSignerName(s.signedBy)
+                ? s.signer?.name || 'Unknown user'
                 : '✎ ' + (s.field || s.fieldName || 'Signature')}
             </div>
           ))}

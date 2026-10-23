@@ -29,7 +29,7 @@ export interface TaskFilters {
   stage?: string;
   scope?: 'mine' | 'all';
   /** `dueAt`: earliest document deadline first, tasks without one last.
-   *  Omitted: most urgent first, then oldest. */
+   *  Omitted (or `createdAt`): oldest first. */
   sort?: 'createdAt' | 'dueAt';
   /** `true`: active tasks holding a document past its stage deadline;
    *  `false`: everything else. */
@@ -42,6 +42,9 @@ export interface ApprovalTaskFilters {
   limit?: number;
   status?: 'pending' | 'escalated';
   scope?: 'mine' | 'all';
+  /** As on `GET /tasks`: `dueAt` puts the earliest deadline first; omitted
+   *  (or `createdAt`), oldest first. */
+  sort?: 'createdAt' | 'dueAt';
 }
 
 /** A supervisor should normally omit `departmentId` — the backend resolves
@@ -69,9 +72,8 @@ export const tasksService = {
     return response.data.data;
   },
 
-  /** Purpose-built supervisor approvals queue — ordered by urgency then due
-   *  date server-side. Prefer this over `getAll({status:'pending'})` for the
-   *  Approvals Queue screen. */
+  /** The supervisor approvals queue (approve/reject stages only). Oldest first
+   *  unless `sort=dueAt`; the backend has no urgency order. */
   getApprovals: async (params?: ApprovalTaskFilters): Promise<PaginatedResponse<Task>> => {
     const response = await apiClient.get<PaginatedResponse<Task>>('/tasks/approvals', { params });
     return response.data;

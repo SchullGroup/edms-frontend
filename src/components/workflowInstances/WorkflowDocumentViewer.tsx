@@ -149,7 +149,6 @@ export function WorkflowDocumentViewer({
       sealed={false}
       lockedByOther={lockedByOther}
       onSignatureFieldClick={() => {}}
-      getSignerName={() => 'User'}
       canDownload={allows(doc, 'download')}
       onDownload={
         currentVersionId

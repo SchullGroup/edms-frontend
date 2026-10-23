@@ -2,6 +2,12 @@
 
 **Status:** Written 2026-08-29. Grounded in `EDMS-FRONTEND` and `edms-backend` as they exist today.
 
+> **Re-checked 2026-10-16** against the live API: **DRIFT-14 does not block the live
+> tenant.** `staff`, `supervisor`, `management` and `internal_auditor` accounts there hold
+> `workflow:view:global` and get 200 from `GET /workflows`, so C1 completes on the live
+> tenant. Only the seed (`prisma/seed-system.ts`) lacks the grant, so a freshly seeded
+> database would still hit it. Persona grants below describe the **seed**.
+
 **Revised 2026-09-04** against `edms-backend` @ `dev` (`b72e0bf`) and `EDMS-FRONTEND` @
 `dev` (`f02c7b8`). Three stories changed status — **C1 broken → done**,
 **J3 broken → partial**, **B3 gained a fixed confidentiality gate**. Counts in
@@ -130,7 +136,7 @@ in a supervisor's queue; having to re-key metadata a machine could have read.
 `own`; metadata, comments and signatures (view `department`, create `own`);
 `document_access_request:create`; `cabinet:view`, `department:view`; folders (view, create
 and edit `own`); `workflow_instance:view/create/route:own`; `task:view/action:own`;
-`delegation:view/create/end:own`. **No `workflow:view`** — see DRIFT-14.
+`delegation:view/create/end:own`. **No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)*
 *(Was "14 grants … `workflow:view`, `workflow:route`" — the pre-2026-09-16 seed.)*
 Note the scopes — staff see their **department's** documents, not the whole tenant.
 
@@ -157,7 +163,7 @@ and `view_confidential`; versions including `restore`; locks, metadata, comments
 signatures; `user:view:department`; `workflow_instance:view/create/route/close:department`;
 `task:view/action/reassign:department` — which is what lets him see and reassign other
 people's tasks; delegation; and circulars (`create:own`, `publish`/`withdraw:department`).
-**No `workflow:view`** — see DRIFT-14. *(Was "18 grants … plus membership of
+**No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)* *(Was "18 grants … plus membership of
 `TASK_VIEW_ALL_ROLES` and `TASK_REASSIGN_ROLES`" — those role lists no longer exist in the
 backend; `task:view`/`task:reassign` grants replaced them.)*
 
@@ -183,7 +189,7 @@ read across documents (view, search, `view_confidential`, download, export, prin
 versions, metadata, comments, signatures, cabinets, folders, departments, users, workflow
 instances, tasks and delegations — plus a small set of writes: `workflow_instance:create/route:own`,
 `task:action:own`, `delegation:create/end:own`, `document_access_request:create`, and
-circulars (`create:own`, `publish`, `withdraw`). **No `workflow:view`** — see DRIFT-14.
+circulars (`create:own`, `publish`, `withdraw`). **No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)*
 ~~**Management cannot create, edit, or delete anything.**~~ *(Was "10 grants, all
 read-only" — no longer true: management can act on its own tasks, route its own documents,
 delegate, and publish circulars. It still cannot create or edit documents.)* (Fixed 2026-09-10: the
@@ -213,7 +219,7 @@ findings that quietly die.
 hash-chained `GET /audit` since 2026-09-18 — DRIFT-11), `cabinet_access:view` and
 `circular:view`. `document:view_confidential:global` lets them read confidential-tier
 documents (a permission since `edms-backend` `0dab81a`; it was a role list before).
-**No `workflow:view`** — see DRIFT-14. *(Was "10 grants, read-only … `audit:view` (for which
+**No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)* *(Was "10 grants, read-only … `audit:view` (for which
 no endpoint exists)" and "deliberately cannot mutate anything". The seed now also grants
 `workflow_instance:create/route:own`, `task:action:own`, `delegation:create/end:own` and
 `document_access_request:create`. The auditor still cannot change documents, cabinets or
@@ -328,6 +334,9 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
       actually upload~~ — *re-checked 2026-10-15:* uploads go through the chunked
       presigned uploader, capped at 100 MB, accepting PDF, DOCX, XLSX, TIFF, JPEG and PNG
       (`src/constants/uploadTypes.ts`, `c8e9d24`, 2026-10-02).
+- [x] **Narrowed 2026-10-21 (PM decision):** PDF and images only, because every upload is
+      OCR'd — PDF and TIFF up to 100 MB, JPEG and PNG up to 10 MB (Textract's async image
+      limit). DOCX/XLSX are no longer accepted; ones already uploaded still open.
 
 **Known drift:** DRIFT-06 — the file lands in a third-party bucket the backend cannot read.
 
@@ -523,7 +532,8 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
 - [x] Checkout / check-in from this screen
 - [x] **AI summary of the current version (2026-10-13, verified live)** — `GET /documents/:id/summary`
       (Gemini, written after OCR). The card says when it's still being written, when the file has no
-      readable text, and when OCR or the summary failed
+      readable text, and when OCR or the summary failed. Since 2026-10-20 (verified live) a failed
+      summary can be retried and a finished one regenerated (`POST /documents/:id/summary`)
 - [x] Edit title, type, folder, confidentiality, urgency, status
 - [x] Workflow stage rail + activity trail from live `GET /workflow-history` (since the
       `feature/management` merge)
@@ -534,8 +544,8 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
       signature to live on the one workflow trail (`POST /tasks/:id/action`'s
       `comment`/`approve`'s `signature`), not split across a second thread. "Mark
       reviewed" now opens an optional-comment modal too — see DRIFT-08 in doc 01 and
-      BE-16/BE-17 in `BACKEND_REQUESTS.md` for what's still needed (an optional
-      signature on `review`; multi-document workflow instances shipped in the
+      BE-16, now closed: `review` takes a signature, **required** since edms-backend
+      `ae08ef5` and captured in the modal since 2026-10-23; multi-document workflow instances shipped in the
       backend and were wired 2026-10-07 — DRIFT-19 in doc 01).
 - [ ] 🟨 **The backend audit trail is real now (DRIFT-11 revised, 2026-09-18)** — it
       auto-writes hash-chained entries server-side and `/admin/audit` reads it live. But
@@ -634,7 +644,10 @@ built and unreachable.
       routes — the checks live in the services, so grep `_FORBIDDEN`.)*~~ *(2026-10-15:
       `workflows.router.ts` now has 40 `requirePermission` calls across its 39 routes —
       the router-level checks landed with the 2026-09-16 RBAC refactor.)*
-- [ ] 🔴 ⚠️ **Blocked again, by a different cause (DRIFT-14).** `GET /workflows` — the
+- [x] 🟨 **Not blocked on the live tenant (re-tested 2026-10-16)** — its four non-admin
+      roles hold `workflow:view:global` and get 200 from `GET /workflows`. The gap below
+      is real in the **seed**, so a freshly seeded database would still hit it (DRIFT-14,
+      now 🟠 latent). *Was:* 🔴 ⚠️ **Blocked again, by a different cause (DRIFT-14).** `GET /workflows` — the
       list `useRouteToWorkflow` needs to build its picker — requires `workflow:view`, and
       `prisma/seed-system.ts` grants that only to `client_admin` and `schulltech_admin`
       (re-checked 2026-10-15). `staff`, `supervisor`, `management` and `internal_auditor`
@@ -649,23 +662,31 @@ built and unreachable.
 
 ---
 
-### C2 — Work my task queue · ✅ **Done**
+### C2 — Work my task queue · 🟨 **Partial**
 
 > **As** David (Supervisor),
 > **I want** a single prioritised list of everything waiting on me, with the most urgent
 > and most overdue at the top,
 > **so that** I work the right thing first instead of whatever is most recent.
 
-**Current state:** genuinely well built on both sides. `tasks.repository` prioritises by
-document urgency then due date; `tasks.service` correctly resolves both direct assignment
-and role-pool assignment, and honours active delegations.
+**Current state:** assignment is well built: `tasks.service` resolves both direct
+assignment and role-pool assignment, and honours active delegations. Prioritising is
+not: `GET /tasks` sorts oldest-created first, or by earliest deadline with `sort=dueAt`;
+it has no urgency order or filter. *(Corrected 2026-10-19 — this said `tasks.repository`
+"prioritises by document urgency then due date"; on `origin/dev` `listTasks` orders by
+`createdAt` unless asked for `dueAt`.)*
 
 **Acceptance criteria**
 - [x] `GET /tasks` returns tasks assigned to me directly **or** to a role I hold
 - [x] Oversight roles can request `scope=all` (holders of `task:view` wider than `own`; was `TASK_VIEW_ALL_ROLES`, removed 2026-09-16)
-- [x] Prioritised by urgency then due date
+- [ ] 🟨 Prioritised — by due date only (`sort=dueAt`, most overdue first). The backend
+      has no urgency sort, and My Tasks dropped its in-browser urgency sort and filter on
+      2026-10-19: they only ever reordered the 20 tasks loaded. Since 2026-10-20 My Tasks
+      opens on Open tasks (`status=pending`) and `/supervisor/approvals` asks for
+      `sort=dueAt` (it was oldest first)
 - [x] Due/overdue state visible per row
-- [x] Paginated
+- [x] Paginated — `/staff/tasks` pages through `GET /tasks` (20 a page, Prev/Next) since
+      2026-10-19. *Was:* it loaded only the first 20, oldest first, with no way to see more
 - [x] Frontend: `/staff/tasks`, `/supervisor/approvals` both live
 - [x] `/staff/tasks`'s Overdue filter and "Sort: Due date" are applied server-side
       (`overdue`, `sort=dueAt`, edms-backend PR #50), so they cover the whole queue, not
@@ -740,19 +761,23 @@ one activates.
 > long they have,
 > **so that** the process is enforced by the system rather than remembered by people.
 
-**Current state:** `/admin/workflows` is a substantial 493-line designer wired to the real
+**Current state:** `/admin/workflows` lists every workflow by status (Published / Drafts /
+Archived, with search) and opens each in the designer at `/admin/workflows/[id]` (since
+2026-10-20; before, a dropdown that only saw the first 20). The designer is wired to the real
 `/workflows` endpoints. Definitions are versioned JSON with `draft → published → archived`
 lifecycle.
 
 **Acceptance criteria**
-- [x] Create, edit, publish and archive definitions
+- [x] Create, edit, publish and archive definitions; since 2026-10-20 (verified live) delete a
+      draft that was never started, and unarchive an archived one
 - [x] Stages with sequential transitions, SLA hours and role/user assignment
 - [x] Published definitions are immutable; edits require a new version
 - [x] ✅ **Authorization now enforced** (2026-09-04). `definitions.service.ts` asserts on
       every method: `assertCanView` on list/getById, `assertCanManage` on
       create/update/publish/archive, with `WORKFLOW_DEFINITION_MANAGE_ROLES` =
       `client_admin` + `schulltech_admin`. DRIFT-05 resolved.
-- [ ] 🔴 **Read access is over-restricted (DRIFT-14).** `GET /workflows` requires
+- [ ] 🟠 **Read access is over-restricted in the seed (DRIFT-14)** — *not on the live
+      tenant, whose roles still hold `workflow:view:global` (re-tested 2026-10-16).* `GET /workflows` requires
       `workflow:view`, which the seed grants only to `client_admin` and
       `schulltech_admin` (re-checked 2026-10-15), so `staff`, `supervisor`, `management`
       and `internal_auditor` cannot list definitions to route into. *(Was described as
@@ -760,7 +785,17 @@ lifecycle.
       `workflow:view:global` grant". That constant is gone, and no non-admin role holds
       `workflow:view` in today's seed.)*
 - [x] ✅ `// @ts-nocheck` removed 2026-10-08 — the page type-checks
-- [ ] Parallel branches — still not supported
+- [ ] 🟨 Parallel branches — backend merged 2026-10-16 (edms-backend PR #54: unconditional
+      fan-out, child executions with their own task and SLA, `join: 'all'` barrier stages).
+      Designer since 2026-10-17: **"+ Add parallel branch"** and **Branches meet at** in
+      `BranchEditorCard`; `applyStageRouting` saves the fork, its branches' onward routes and
+      the join in one PATCH, and `validateParallelRouting` mirrors the backend's graph checks
+      (`validateDefinition` adds each stage's fallback rules for stage add/delete/move,
+      2026-10-20). The
+      backend accepted and rejected the same definitions as the frontend in a live API check
+      (2026-10-17), and the designer was clicked through in a browser on 2026-10-18 (TEST_PLAN
+      TP-Q2, Q15–Q18). ⛔ **Running a parallel workflow fails on the live backend:** the first
+      action at a fork stage returns 500, even on a minimal fork with no join (2026-10-18)
 - [x] Conditional branches — backend conditional routing merged 2026-10-06
       (`definitions.validation.ts` condition rules, `matchesWorkflowCondition` in
       `tasks.service.ts`), and the designer has a branch editor since 2026-09-29
@@ -1223,24 +1258,10 @@ Prisma schema and no endpoint.** Everything a user does here is lost on
 
 ---
 
-### H3 — Verify separation of duties · ⬜ **Not built**
-
-> **As** Femi,
-> **I want** the system to prevent one person both approving and auditing the same
-> document,
-> **so that** the control is structural rather than a policy people remember.
-
-**Current state:** SoD is described in `../../out/DOCUMENTATION.md` as a platform feature.
-**No SoD logic exists in either codebase.** There is no rule preventing a user holding both
-`supervisor` and `internal_auditor`, and nothing checks actor identity across workflow
-stages.
-
-**Acceptance criteria**
-- [ ] Configurable mutually-exclusive role pairs
-- [ ] Workflow stages cannot be actioned by the same user who actioned the previous stage
-      (where configured)
-- [ ] SoD violations surfaced as findings
-- [ ] Attempted violations logged
+*H3 (Verify separation of duties) was **removed from scope 2026-10-21** by PM decision,
+along with redaction and its policy. Neither was ever built in either codebase; the
+mock UI that implied them (a findings control area, a coverage gauge, fixture
+exceptions, policy controls, a feature flag) was removed the same day.*
 
 ---
 
@@ -1569,27 +1590,31 @@ error paths and workers).
 |---|---|---|---|---|---|
 | A — Capture & Filing | 2 | 1 | 0 | 1 | Core works; enrichment missing |
 | B — Retrieval & Search | 1 | 3 | 0 | 0 | Search indexes every document since PR #51 (2026-10-14); download gated and audited (2026-10-08) |
-| C — Routing & Approval | 3 | 2 | 0 | 0 | Task execution solid; workflow routes authorized (DRIFT-05); routing **blocked for non-admins** by the RBAC seed (DRIFT-14) |
+| C — Routing & Approval | 2 | 3 | 0 | 0 | Task execution solid; workflow routes authorized (DRIFT-05); ~~routing **blocked for non-admins** by the RBAC seed~~ routing works on the live tenant; the seed lacks `workflow:view` for non-admins, so a fresh database would block it (DRIFT-14, re-tested 2026-10-16) |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
 | F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; SLA warnings and breaches notify (in code, DRIFT-10) |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | On server aggregation endpoints (DRIFT-07); no PDF export or forecasting |
-| H — Audit & Compliance | 0 | 1 | 1 | 1 | Audit trail real (H1 🟨, 2026-10-15); findings mock; SoD not built |
+| H — Audit & Compliance | 0 | 1 | 1 | 0 | Audit trail real (H1 🟨, 2026-10-15); findings mock; SoD dropped from scope (2026-10-21) |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **15** | **17** | **8** | **2** | 42 functional stories |
+| **Total** | **14** | **18** | **8** | **1** | 41 functional stories |
 
-*(2026-10-15: H1 moved 🟥 → 🟨, so Partial 16 → 17 and Mock 9 → 8. Totals re-tallied from
-the story headings, not carried forward.)*
+*(2026-10-15: H1 moved 🟥 → 🟨, so Partial 16 → 17 and Mock 9 → 8. 2026-10-19: C2 moved
+✅ → 🟨 (no urgency ordering), so Done 15 → 14 and Partial 17 → 18. 2026-10-21: H3 removed
+from scope, so Not built 2 → 1 and 42 → 41 stories. Totals re-tallied from the story
+headings, not carried forward.)*
 
 **The honest one-paragraph summary (revised 2026-10-15):** the *document* half of this EDMS
 — capture, filing, versioning, checkout, classification, search, task execution and
 approval — is genuinely built and mostly works. Audit, notifications and circulars have
 since moved onto real backends. What is still a UI over fixture data is policies (except
-the SLA tab), findings, branding and platform operations. The one defect that still sits
+the SLA tab), findings, branding and platform operations. ~~The one defect that still sits
 across the seam is **DRIFT-14**: the roles that route documents cannot list workflow
-definitions, because the RBAC seed grants `workflow:view` only to the two admin roles.
+definitions, because the RBAC seed grants `workflow:view` only to the two admin roles.~~
+*Re-tested 2026-10-16:* DRIFT-14 doesn't affect the live tenant, whose roles still hold
+`workflow:view:global`; it is a seed gap that a freshly seeded database would hit.
 
 *Superseded (written 2026-08-29):* "Two defects … **workflow routes have no authorization at
 all**, and **the audit trail … has never recorded a single event.**" The first was fixed

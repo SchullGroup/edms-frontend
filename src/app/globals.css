@@ -675,8 +675,10 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
 
 .wfd-toolbar { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
 .wfd-crumbrow { padding: 10px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-.wfd-crumb-select { appearance: none; background: transparent repeat scroll 0 0 / auto padding-box border-box; border: none; font: inherit; font-weight: 700; font-size: 13px; color: var(--ink); cursor: pointer; padding: 2px 18px 2px 2px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23878FA1' stroke-width='1.5' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right center; }
-.wfd-archived-toggle { background: none; border: 0; padding: 0; cursor: pointer; color: var(--focus); margin-left: auto; }
+.wfd-back { background: none; border: 0; padding: 0; cursor: pointer; color: var(--focus); }
+.wfd-back:hover { text-decoration: underline; }
+.wf-name-link { color: var(--ink); }
+.wf-name-link:hover { text-decoration: underline; }
 .wfd-toolrow { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .wfd-saved-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: var(--status-closed); opacity: 0; transform: translateY(2px); transition: opacity .2s cubic-bezier(.2,0,0,1), transform .2s cubic-bezier(.2,0,0,1); pointer-events: none; }
 .wfd-saved-pill.show { opacity: 1; transform: translateY(0); }
@@ -708,6 +710,7 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
 .wf-node.selected { border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 16%, transparent); }
 .wf-node-name { font-size: 13px; font-weight: 700; line-height: 1.3; }
 .wf-node-meta { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+.wf-node-join { color: var(--status-progress); font-weight: 700; }
 .wf-node-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
 .wf-node-tag { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font-size: 9.5px; font-weight: 600; color: var(--muted); }
 
@@ -723,14 +726,19 @@ mark { background: color-mix(in srgb, var(--status-pending) 28%, transparent); c
 .wfd-arrow-plain { fill: var(--muted); }
 .wfd-arrow-conditional { fill: var(--status-pending); }
 .wfd-arrow-fallback { fill: var(--status-closed); }
+/* Parallel branches all run: blue, and a heavier line than a plain one. */
+.wfd-connector-parallel { stroke: var(--status-progress); stroke-width: 3; }
+.wfd-arrow-parallel { fill: var(--status-progress); }
 .wfd-branch-label { position: absolute; z-index: 2; transform: translate(-50%, -50%); max-width: 136px; overflow: hidden; text-overflow: ellipsis; font-size: 9.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; pointer-events: auto; border: 0; cursor: pointer; }
 .wfd-branch-label.conditional { color: var(--status-pending); background: color-mix(in srgb, var(--status-pending) 16%, var(--panel)); }
 .wfd-branch-label.fallback { color: var(--status-closed); background: color-mix(in srgb, var(--status-closed) 16%, var(--panel)); }
+.wfd-branch-label.parallel { color: var(--status-progress); background: color-mix(in srgb, var(--status-progress) 16%, var(--panel)); }
 
 /* Transitions panel (side panel, next to Stage properties) */
 .wfd-transition-card { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
 .wfd-tag-conditional { color: var(--status-pending); border-color: color-mix(in srgb, var(--status-pending) 40%, var(--border)); background: color-mix(in srgb, var(--status-pending) 12%, var(--surface)); }
 .wfd-tag-fallback { color: var(--status-closed); border-color: color-mix(in srgb, var(--status-closed) 40%, var(--border)); background: color-mix(in srgb, var(--status-closed) 12%, var(--surface)); }
+.wfd-tag-parallel { color: var(--status-progress); border-color: color-mix(in srgb, var(--status-progress) 40%, var(--border)); background: color-mix(in srgb, var(--status-progress) 12%, var(--surface)); }
 .wfd-rule-row { display: flex; align-items: center; gap: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px; flex-wrap: wrap; }
 
 /* Stage panel's Properties/Transitions tab bar */

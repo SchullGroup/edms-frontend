@@ -50,12 +50,13 @@ export function useRouteToWorkflow() {
   const mayRouteDocument = (doc: Pick<RoutableDocument, 'createdBy'>) =>
     canRoute &&
     (createScope !== 'own' || !doc.createdBy || doc.createdBy === currentUser?.id);
-  const { data, isLoading } = useWorkflows();
+  // Ask for published ones: the first default page mixes in archived and drafts.
+  const { data, isLoading } = useWorkflows({ status: 'published', limit: 100 });
   const { mutateAsync: startWorkflow } = useStartWorkflowInstance();
   const createAuditLog = useCreateAuditLog();
   const { openModal, addToast } = useUIStore();
 
-  const publishedWorkflows = (data?.data || []).filter((w) => w.status === 'published');
+  const publishedWorkflows = data?.data || [];
 
   const routeDocuments = (requested: RoutableDocument[], opts?: { onSuccess?: () => void }) => {
     if (requested.length === 0) return;

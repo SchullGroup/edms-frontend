@@ -2,11 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { cabById, userById, useStore } from '@/store/useStore';
+import { cabById, useStore } from '@/store/useStore';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { useDocuments, useAllDocuments } from '@/apis/hooks/useDocuments';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
-import { useAllUsers } from '@/apis/hooks/useUsers';
 import { documentsService } from '@/apis/services/documents.service';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -46,8 +45,6 @@ export default function CabinetBrowserPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { data: usersData } = useAllUsers();
-  const users = usersData?.items || [];
   const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
   const { auditAction } = useStore();
   const { can } = usePermissions();
@@ -311,7 +308,7 @@ export default function CabinetBrowserPage() {
     {
       key: 'createdBy',
       label: 'Uploaded by',
-      render: (d) => <span>{userById(users, d.createdBy)?.name || 'Unknown'}</span>,
+      render: (d) => <span>{d.creator?.name || 'Unknown user'}</span>,
     },
     {
       key: 'createdAt',

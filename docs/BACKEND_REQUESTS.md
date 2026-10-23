@@ -2,164 +2,106 @@
 
 > **2026-10-08: the open asks are now one implementable spec,
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
-> against `edms-backend` `dev` at `2db7e19`. This file stays as the history of earlier requests.
+> against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-09-21
+**Raised:** 2026-08-29 · **Updated:** 2026-10-22
 **Frontend:** `edms-frontend` @ `dev`
-**Backend checked against:** `edms-backend` @ `dev` (`b1b0b68`) — **106 routes**
+**Backend checked against:** `edms-backend` @ `origin/dev` (`d14f250`)
 
-> **Update after `feat(workflow): close workflow gaps 1-10`.** Thank you — **BE-3 is
-> done**, and it was the critical item on this list. Closing it introduced one new
-> problem, raised below as **BE-12**, which is a one-line fix and currently blocks
-> document routing entirely. Please take BE-12 first.
+> **2026-10-21: this file now lists open asks only.** Every item was re-checked against
+> `d14f250`. Done and removed: BE-1 (access requests), BE-3 (workflow authorization), BE-5
+> (download, shipped as `GET /documents/:id/versions/:versionId`), BE-11 (audit), BE-13
+> (password recovery), BE-14 (tier clearance), BE-15 (revoke a grant, `550feda`) and BE-17
+> (several documents per workflow). Their write-ups are in git history. BE-4 and BE-18 were
+> partly done and keep only their open part. Withdrawn 2026-10-22: BE-9 (`policies` module,
+> not being built) and BE-20 (upload allowlist; the frontend enforces it). Done 2026-10-23:
+> BE-16 (signature on `review`), shipped in `ae08ef5` as **required**, not optional.
 
-Everything below was verified against the code on both sides on the date above, not
-assumed. Each item states what the frontend does today, what it needs, and why.
+Each item states what the frontend does today, what it needs, and why.
 
-**Please read BE-12 first** — it is one line and the product's core loop is broken without
-it. Then BE-1 and BE-4, which are security items rather than features.
+**Take BE-19 first** — no parallel workflow can run without it. Then BE-2, BE-4 and BE-21,
+which are security items rather than features.
 
 ---
 
 ## Summary
 
-> **Resolved (2026-09-18):** this doc used to have two unrelated items both numbered
-> BE-12 — "Split `WORKFLOW_DEFINITION_VIEW_ROLES`" and "password recovery". The
-> password-recovery one is renumbered to **BE-13** below; BE-12 now refers only to the
-> workflow-roles split.
-
-| ID        | Ask                                               | Type         | Priority    | Blocking?                  |
-| --------- | ------------------------------------------------- | ------------ | ----------- | -------------------------- |
-| ~~BE-1~~  | ~~`POST /documents/:id/access-request`~~          | ✅ **Done**  | —           | —                          |
-| **BE-2**  | `POST /auth/logout` + refresh-token revocation    | New endpoint | 🔴 High     | No — fails silently today  |
-| **BE-12** | Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES` | Small fix | 🔴 **Critical** | **Yes — routing is dead**  |
-| ~~BE-3~~  | ~~Authorization on the workflow routes~~          | ✅ **Done**  | —           | —                          |
-| **BE-4**  | Enforce confidentiality for download/print/export | Security fix | 🔴 High     | No                         |
-| **BE-5**  | `GET /documents/:id/download`                     | New endpoint | 🟠 Med      | Yes — no way to get a file |
-| **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med | No — 1 of 8 documents affected so far |
-| **BE-9**  | `policies` module                                 | New module   | 🟠 Med      | No — frontend on fixtures  |
-| **BE-10** | JSON 404 handler                                  | Small fix    | 🟡 Low      | No                         |
-| ~~BE-11~~ | ~~`audit` module~~                                | ✅ **Done**  | —           | —                          |
-| ~~BE-13~~ | ~~`forgot-password` / `reset-password`~~          | ✅ **Done**  | —           | —                          |
-| ~~BE-14~~ | ~~Confidentiality-tier clearance option on roles~~ | ✅ **Done** (`0dab81a`) | — | — |
-| **BE-15** | Revoke a granted `DocumentAccessGrant`            | New endpoint | 🟠 Med      | No — grants just accumulate |
-| **BE-16** | Optional `signature` on the `review` task action  | Schema change | 🟠 Med      | No — "Mark reviewed" ships comment-only meanwhile |
-| **BE-17** | Support >1 document per workflow instance         | Data model change | 🟡 Low | No — single-document version upload covers the common case |
+| ID        | Ask                                                         | Type            | Priority | Blocking?                                  |
+| --------- | ----------------------------------------------------------- | --------------- | -------- | ------------------------------------------ |
+| **BE-19** | 500 on the first action at a parallel fork (PR #54)         | Bug             | 🔴 High  | **Yes — no parallel workflow can run**     |
+| **BE-2**  | `POST /auth/logout` + refresh-token revocation              | New endpoint    | 🔴 High  | No — fails silently today                  |
+| **BE-4**  | Reject confidentiality tiers the uploader isn't cleared for | Security fix    | 🔴 High  | No                                         |
+| **BE-21** | Check cabinet grants when a document is read                | Security fix    | 🔴 High  | No — documents are over-shared today       |
+| **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med   | No — 1 of 8 documents affected when raised |
+| **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
+| **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
 
 ---
 
-## ✅ Already resolved — thank you
+## 🔴 BE-19 · `POST /tasks/:id/action` returns 500 at a parallel fork
 
-These were broken and are now working. Frontend has been repointed accordingly.
-
-- **Notifications module** — all six routes live. We now use `GET /notifications`,
-  `/unread-count`, `/preferences` (GET+PUT), `PATCH /:id/read` and `POST /read-all`.
-- **Workflow instance start** — we were calling a non-existent
-  `POST /workflow-instances/start`; the two-call `POST /workflow-instances` →
-  `POST /:id/start` sequence is now used correctly.
-- **Cabinet access grants** and **cabinet metadata fields** — both wired.
-- **Delegations** and **workflow history** — both wired.
-- **`/tasks/stats`** and **`/workflow-instances/stats`** — both consumed.
-- **Workflow authorization (BE-3)** — all five workflow services now assert roles and
-  return a named `403`. We had asked for `requirePermission` on the routes; you enforced
-  it in the services instead, which works. One note for whoever verifies it next: a
-  route-level grep for `requirePermission` still returns zero, so it reads as unfixed
-  unless you know to grep `_FORBIDDEN`. Worth a comment in `workflows.router.ts`.
-- **Asynchronous OCR** — `StartDocumentTextDetectionCommand` replaces the synchronous
-  call, so multi-page PDFs work.
-- **Presigned download URLs** (`getSignedDownloadUrl`) and **OCR text archiving**
-  (`saveOcrText`) — both noted.
-- **Eight aggregation endpoints** — instance stats, status counts, bottlenecks-ageing,
-  team-status-matrix, open-items-by-cabinet, task stats, `GET /sla/breaches` and document
-  stats. This is more than we asked for and it retires our client-side aggregation
-  problem. **We have only adopted `/tasks/stats` so far — that is on us**, and we are
-  tracking it.
-- **Access requests (BE-1)** — `POST/GET /documents/:id/access-requests`, grant, deny, and
-  the admin inbox, all confirmed live 2026-09-18. See BE-1 below.
-- **Audit module (BE-11)** — `GET /audit`, `/audit/:id`, `/audit/export`, `/audit/verify`,
-  all confirmed live 2026-09-18, entries written automatically. See BE-11 below for the
-  full note (including a swagger path-prefix quirk worth a fix).
-- **Password recovery (BE-13)** — `POST /auth/forgot-password` / `reset-password`, both
-  confirmed live 2026-09-18. Also doubles as the invitation-acceptance flow. See BE-13
-  below — the shipped body shape differs from what we asked for, which caused a
-  frontend-side bug we've since fixed.
-
-One naming note: we were calling `/notifications/mark-all-read`; the route is
-`/notifications/read-all`. **We changed our side** — `read-all` is the better name and
-pairs with `unread-count`. No action needed.
-
----
-
-## ✅ BE-1 · `POST /documents/:id/access-request` — **DONE, thank you (confirmed 2026-09-18)**
-
-Built, as `POST /documents/:id/access-requests` (plural — small naming difference from what
-we asked, no action needed on our side, we matched it). Verified live end-to-end: create →
-appears in `GET /documents/:id/access-requests` and the admin inbox
-`GET /documents/access-requests` → `grant`/`deny` both work and set `reviewedBy`/`reviewedAt`.
-Frontend wired 2026-09-18: the "Request access" button on `/doc/[id]` is real now, and
-`/admin/access-requests` (new page, client_admin-only) handles grant/deny.
-
-**One thing we couldn't verify:** whether the document owner actually gets notified.
-The shipped design is a manual client_admin review queue rather than the auto-notify-owner
-flow we originally sketched (point 3 below) — which may be the better design (auditable,
-actionable, no risk of the owner missing a fly-by notification), but we don't have
-visibility into whether `notifyUser` fires on creation, since checking would require
-logging in as the specific document's owner. Flagging as unverified, not broken.
-
-**Original ask, for reference:**
-
-**Priority: High. This is a security item, not a feature request.**
+**Raised:** 2026-10-20 · **Backend:** live API (`edms-backend-zmfm.onrender.com`); code read at
+`origin/dev` `6700804`
 
 ### What we found
 
-The document detail page had a "Request access" button that called
-`POST /api/v1/notifications` with an arbitrary `userId` in the body — the document owner's.
-That route does not exist, so it 404'd silently and nobody was ever notified.
-
-**We have removed that call rather than asking you to build the endpoint it wanted.**
-
-### Why we did not just ask for `POST /notifications`
-
-Because it would let any authenticated user create a notification addressed to any other
-user, with arbitrary text. That is a phishing and spoofing vector: a hostile user could
-send "Your document was approved — click here" to anyone in the tenant, and it would render
-in the notification centre with full system credibility.
-
-The client should never be able to name the recipient.
-
-### What we need instead
+The first action at a stage with two or more unconditional transitions (a parallel fork, PR #54)
+fails every time:
 
 ```
-POST /api/v1/documents/:id/access-request
-Body: { "reason"?: string }
+POST /api/v1/tasks/f83de22c-89ab-4873-a80f-880f1776cf2f/action
+{"action":"review","comment":"parallel repro 2026-10-20"}
+
+500 {"success":false,"message":"An unexpected error occurred","code":"INTERNAL_SERVER_ERROR"}
 ```
 
-The server should:
+The task stays `pending` at the fork stage and no branch task is created. Sequential workflows on
+the same backend work. First seen 2026-10-18 (TEST_PLAN TP-Q19), and reproduced over the API on
+2026-10-20 with the smallest possible fork: no join, one document, `review` only.
 
-1. Resolve the requester from the session (never from the body)
-2. Look up the document's `createdBy`
-3. Call the existing `notificationsService.notifyUser(...)` — the helper already exists at
-   `notifications.service.ts:30`
-4. Write an audit entry once BE-11 lands
-5. Return `204`
+**Re-tested 2026-10-22 on `origin/dev` `2f42695`: still a 500.** The only workflow change since
+the report is notification wiring (`c316ddb`, PR #57), which doesn't touch the fork path. A
+sequential control run the same minute (intake → finance → legal, same user and document) returned
+200 and opened the next task.
 
-**Suggested payload for the notification:**
+### How to reproduce
 
-```json
-{
-  "title": "Access requested",
-  "message": "<requester name> requested access to \"<document title>\".",
-  "actionUrl": "/doc/<documentId>"
-}
-```
+1. As `client_admin`, `POST /workflows` with this definition, then `POST /workflows/:id/publish`.
+   It saves and publishes cleanly:
+   ```json
+   {
+     "stages": [
+       { "id": "intake",  "name": "Intake",         "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] },
+       { "id": "finance", "name": "Finance review", "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] },
+       { "id": "legal",   "name": "Legal review",   "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] }
+     ],
+     "transitions": [{ "from": "intake", "to": "finance" }, { "from": "intake", "to": "legal" }]
+   }
+   ```
+2. As `staff_finance`, `POST /workflow-instances` with one document they own, then
+   `POST /workflow-instances/:id/start` (both succeed; one task opens at `intake`).
+3. As `staff_finance`, `POST /tasks/:taskId/action` with `{"action":"review"}`: **500**.
 
-`NOTIFICATION_TYPES` in `workflow.constants.ts` has no suitable member — please add
-something like `document.access_requested`.
+The 2026-10-20 run's IDs, for the server logs: workflow `d607c88e-85f9-4043-9c03-74c336341ff6`
+(archived afterwards), instance `c86d381f-a2b9-4c55-bcfe-0404e86d250a` (closed afterwards), task
+`f83de22c-89ab-4873-a80f-880f1776cf2f`. The 2026-10-22 run (action at about 08:26 UTC): workflow
+`6312badb-ae27-4eae-8c3e-f279303de560`, instance `e0e52b86-b908-45d5-91d8-12f10cbdd6c5`, task
+`dcab51d1-7c26-4f30-a744-bf24799917e8`; both archived/closed afterwards. The response carries no
+request id.
 
-### Until then
+### Where to look
 
-The button records the audit action and shows a toast. **The owner is never notified.**
-The feature is effectively disabled.
+The fork branch of the task action in `src/modules/workflows/tasks/tasks.service.ts` (the
+`sourceOccurrences` loop that calls `instancesRepository.forkDocumentExecution`, then
+`routeDestinationGroups`). We couldn't find the cause from the code alone. A 500 means an
+uncaught error rather than an `AppError`, so the stack trace for the request above should name
+it.
+
+### What we need
+
+The fork action to succeed: one task per branch, each document execution split into children
+(`parentExecutionId` set), as PR #54 describes. The designer already builds and saves forks and
+joins (live since 2026-10-17), so the frontend is waiting only on this.
 
 ---
 
@@ -203,406 +145,79 @@ guessing is currently possible. `express-rate-limit` on that one route would clo
 
 ---
 
-## 🔴 BE-12 · Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`
+## 🔴 BE-4 · Reject confidentiality tiers the uploader isn't cleared for
 
-**This is now the most serious item in this document, and it is one line.**
+> The rest of BE-4 is done: export, print and download each check `requireConfidentiality`
+> (`0dab81a`, 2026-10-08).
 
-### What we found
+Nothing checks that the user setting a document's confidentiality tier is cleared for it
+(`POST /documents` checks `document:create` and cabinet upload access, not the tier, at
+`d14f250`). A `staff` user can upload at `top_secret` and immediately lose access to their own
+upload. No seeded role holds `document:view_top_secret`, so nobody can read it until an admin
+grants that clearance to some role in `/admin/roles`.
 
-In `src/shared/constants/workflow.constants.ts`:
-
-```ts
-export const WORKFLOW_DEFINITION_MANAGE_ROLES = ['client_admin', 'schulltech_admin'] as const;
-export const WORKFLOW_DEFINITION_VIEW_ROLES  = WORKFLOW_DEFINITION_MANAGE_ROLES;
-```
-
-Read access was aliased to manage access, and `definitions.service.ts` calls
-`assertCanView` on both `list` and `getById`. So `GET /workflows` now returns `403
-WORKFLOW_DEFINITION_VIEW_FORBIDDEN` for every role except `client_admin` and
-`schulltech_admin`.
-
-### Impact — document routing is unreachable for the roles that do it
-
-`staff` holds `workflow:route:own` and `supervisor` holds `workflow:route:department`.
-Neither can list the definitions they are supposed to route into.
-
-Our shared `useRouteToWorkflow` hook (`src/hooks/useRouteToWorkflow.tsx`, used by
-`/upload`, `/staff/cabinets` and `/doc/[id]`) calls `GET /workflows` and filters to
-`status === 'published'` to build its picker. On a `403` the query returns no data, the
-filtered list is empty, and the modal renders its empty state:
-
-> *"No published workflows. A workflow has to be published in the Workflow Designer before
-> anything can be routed to it."*
-
-**That message is wrong and misleading.** A staff officer is told their organisation has no
-workflows, when in fact they are simply not permitted to see them. We would rather show a
-permission error, but we cannot distinguish the two cases from an empty list — which is
-itself an argument for BE-10 (a JSON 404/error shape we can branch on).
-
-This is the same outcome as the routing bug you fixed last week, from a different cause.
-
-### It also contradicts the seeded permission model
-
-`seed-system.ts` grants `workflow:view` at `global` scope to **`management`** and
-**`internal_auditor`**. Both are refused by this constant. The RBAC table and the hardcoded
-role list disagree, and the hardcoded list wins.
-
-### What we are asking for
-
-Give read its own membership rather than aliasing manage:
-
-```ts
-export const WORKFLOW_DEFINITION_MANAGE_ROLES = ['client_admin', 'schulltech_admin'] as const;
-
-// Everyone who holds workflow:view or workflow:route needs to read definitions.
-// Routing a document requires listing published definitions to choose one.
-export const WORKFLOW_DEFINITION_VIEW_ROLES = [
-    'staff',
-    'supervisor',
-    'management',
-    'internal_auditor',
-    'client_admin',
-    'schulltech_admin',
-] as const;
-```
-
-Ideally derive this from the seeded `workflow:view` / `workflow:route` grants rather than
-maintaining a parallel list by hand — the drift above is exactly what a second source of
-truth produces. If you would rather restrict `list` to published definitions for
-non-managing roles, that works for us: the picker only ever shows `published`.
-
-### How to verify
-
-```bash
-# Sign in as the seeded staff account, then:
-curl -s -H "Authorization: Bearer $STAFF_TOKEN" \
-  http://localhost:3001/api/v1/workflows | jq .
-# Today: 403 WORKFLOW_DEFINITION_VIEW_FORBIDDEN
-# Wanted: 200 with the published definitions
-```
+**Ask:** reject a `confidentiality` on create, edit or new version that the caller isn't
+cleared to view, with a `403`.
 
 ---
 
-## ✅ BE-3 · Authorization on the workflow routes — **DONE, thank you**
+## 🔴 BE-21 · Check cabinet grants when a document is read — **new, 2026-10-22**
 
-This was the critical item on the list for a week. All five workflow services now assert
-roles and return a named `403`:
+Checked at `origin/dev` `cc56f40`. Tracker 5.4; doc 05 backlog #12.
 
-| Service | Asserts |
-|---|---|
-| `definitions.service.ts` | `assertCanView` on list/getById, `assertCanManage` on create/update/publish/archive |
-| `instances.service.ts` | list, bottlenecks-ageing, team-status-matrix |
-| `tasks.service.ts` | list, approval queue, workload, stats |
-| `delegations.service.ts` | list, create, end |
-| `sla.service.ts` | breach list |
+Cabinet grants (`CabinetAccess`) are checked on every document **write** (`PATCH`, `DELETE`,
+new version, restore, check-out/in, `PUT /metadata`) and on cabinet, folder and workflow reads.
+They are never checked when a document is **read**:
 
-We had asked for `requirePermission` on the routes and you enforced it in the services
-instead. That closes the hole, so we are not asking you to redo it — but two notes:
+- `GET /documents/:id` and its `/export`, `/print`, `/versions`, `/versions/:versionId`,
+  `/summary` (GET and POST), `/metadata`, `/comments` and `/signatures` check the role permission
+  and `requireConfidentiality` only (`documents.router.ts`).
+- `GET /documents`, `/documents/search` and `/documents/stats` filter by RBAC scope and tier
+  clearance (`buildAccessScopeWhere`, `buildScopeSqlFilter` in `documents.repository.ts`).
+  Nothing in the documents module queries `cabinetAccess`.
 
-1. **A route-level grep still shows zero `requirePermission` in `workflows.router.ts`**,
-   which reads as unfixed to anyone auditing quickly. The other eight routers use
-   `requirePermission`, so the workflow module is now the exception. A comment at the top
-   of `workflows.router.ts` pointing at the service-layer checks would save the next
-   reviewer from re-filing this.
-2. **Service-layer checks use role names, not the seeded permissions.** That is what
-   produced BE-12 above: the permission grants and the role constants can now disagree
-   silently. Worth considering whether `requirePermission` should still guard the routes
-   with the service checks as defence in depth.
+`GET /cabinets` already applies both, entitlement **and** scope (`buildCabinetWhere`,
+`cabinets.repository.ts`), so the two disagree. A user whose role holds `document:view` at
+`global` scope, with no grant on another department's cabinet, doesn't see that cabinet in
+`GET /cabinets` and gets 403 from `GET /cabinets/:id`, but can list, search and open every
+document in it.
 
+**Ask:** give every document read the same entitlement `requireCabinetAccess('view')` uses:
+`CABINET_ACCESS_BYPASS_ROLES` skip it; an org-wide cabinet or the user's own department's cabinet
+is implicitly viewable; anything else needs a `view`-or-higher grant, direct or through a role.
 
-## 🔴 BE-4 · Enforce confidentiality for download, print and export
+- **Single-document routes:** mount `requireCabinetAccess('view')` after `requireConfidentiality`
+  and return `403 FORBIDDEN`. The frontend already shows "You don't have access" with
+  **Request access** on any 403 from `GET /documents/:id`, so it needs no change.
+- **List, search, stats:** add the same entitlement as a row filter, so counts and results only
+  include documents the caller can open.
+- **An approved access request overrides it** (product decision, 2026-10-22). A
+  `DocumentAccessGrant` with `permission: 'view'` lets that user open that one document without
+  cabinet view, just as it already overrides tier and scope. Without this, **Request access**
+  can't help with a document that's blocked by its cabinet.
+- Workflow reads (`tasks.service.ts`, `instances.service.ts`, `history.service.ts`) already
+  filter by viewable cabinet. They need no change.
 
-### What we found
-
-`CONFIDENTIALITY_ACCESS` in `access-control.constants.ts` is a well-built per-tier,
-per-action allowlist covering `view`, `export`, `print` and `download`, with `restricted`
-and `top_secret` denied for everything but view.
-
-**All 12 call sites use `requireConfidentiality('view')`.** The other three actions are
-never checked. No `document:download|export|print` permissions are seeded, and no download
-route exists (see BE-5).
-
-We also found and fixed a **frontend** bug in the same area: our policy lookup used a shape
-nothing produces, so client-side download/print gating silently never applied. Fixed in
-`e3e3398`. That was defence in depth on a control that isn't enforced server-side at all —
-so please treat the server-side gap as the real one.
-
-### What we need
-
-Once BE-5 exists, gate it with `requireConfidentiality('download')`, and gate any
-export/print route similarly. The policy table is already written; it just isn't consulted.
-
-### Related: tier assignment is unchecked
-
-Nothing verifies that the user setting a confidentiality tier is cleared for it. A `staff`
-user can upload at `top_secret` — and since `TOP_SECRET_TIER_ROLES` is empty by design,
-that document becomes permanently unreadable **by everyone, including `client_admin`**,
-with no recovery path. Please reject tiers the writer isn't cleared for.
+**To check:** take a user whose role has `document:view:global`, outside the department of a
+department-mapped cabinet, with no grant on it. Today `GET /cabinets/:id` returns 403 while
+`GET /documents/:id` for a document in that cabinet returns 200. After the fix both return 403.
+Once an access request for that document is approved, `GET /documents/:id` returns 200.
 
 ---
 
-## 🟠 BE-5 · `GET /documents/:id/download`
-
-There is no route that serves file bytes or returns a signed URL for a download.
-`getSignedDownloadUrl()` exists in `shared/utils/storage.ts` and is used only to hydrate
-`fileUrl` on version responses.
-
-```
-GET /api/v1/documents/:id/download   →  { url, expiresAt }   (or a 302)
-```
-
-Should be gated by `requireConfidentiality('download')` (BE-4) and write a
-`document.downloaded` audit entry (BE-11) — download is the single most audit-sensitive
-action in the product.
-
----
-
-## 🟠 BE-9 · `policies` module
-
-`src/modules/policies/` is an empty directory. Our `policies.service.ts` returns fixtures.
-
-We need confidentiality tiers (watermark/download/print per tier), urgency levels, retention
-rules and SoD controls to be real and editable from `/admin/policies`. Today an admin can
-"save" a policy change and nothing persists.
-
-`RetentionPolicy` exists in the schema with `retentionDays` and
-`actionOnExpiry: archive | delete | flag_for_review`, and cabinets can reference one — but
-there's no endpoint and no job that ever applies it. Nothing expires.
-
-**Shape request:** please return something stable and keyed, e.g.
-
-```json
-{
-  "confidentiality": [
-    { "level": "restricted", "download": false, "print": false, "watermark": true }
-  ]
-}
-```
-
-with **snake_case tier names matching `CONFIDENTIALITY_TIERS`**. Our fixtures use display
-casing ("Top Secret") and we currently normalise on read; we'd rather not.
-
----
-
-## 🟡 BE-10 · JSON 404 handler
-
-`app.ts` mounts `errorHandler` (a four-argument error middleware, skipped on the happy
-path) and nothing else, so an unmatched route returns Express's **default HTML** body. Our
-axios client then fails parsing HTML as JSON, and a missing endpoint surfaces as a confusing
-parse error rather than a clean 404.
-
-Every broken call in this document was harder to find because of this. A five-line
-catch-all returning the standard `ApiResponse` envelope would have made them obvious:
-
-```ts
-app.use((_req, res) => ApiResponse.notFound(res, 'Route not found', 'ROUTE_NOT_FOUND'));
-// must sit after the routers, before errorHandler
-```
-
----
-
-## ✅ BE-11 · `audit` module — **DONE, thank you (confirmed 2026-09-18)**
-
-Built, and more than we asked for: `GET /audit` (filters: `actorId`, `objectType`,
-`objectId`, `action`, `from`, `to`), `GET /audit/:id`, `GET /audit/export` (CSV,
-`audit:export`) and `GET /audit/verify` (hash-chain check) all exist and work — confirmed
-live, not just against the swagger doc. A real pull returned entries auto-written for
-`user.login`, `user.invited` and `user.token_refreshed`; `GET /audit/verify` recomputed
-the chain and reported it intact.
-
-One documentation-only note: the swagger spec lists these four paths with a literal
-`/api/v1` baked into the path string (`/api/v1/audit`) while every other tag is relative
-(`/documents`, `/cabinets`, …) under the `/api/v1` server URL — harmless once you know to
-call the relative `/audit`, but worth fixing in the OpenAPI annotation so it doesn't trip
-up the next integration.
-
-Frontend wired `/admin/audit` to it the same day, and `/auditor/trail` and
-`management/compliance` followed shortly after (`useAuditEntries` etc. in
-`useAudit.ts`) — all three now read the real trail with a confirmed real action
-vocabulary (`user.login`, `document.viewed`, `role.permissions_updated`, 17 others seen
-in one sample). `/platform/audit` is the one page that stays mocked, and that's on us to
-flag rather than fix: there's no cross-tenant `GET /audit`, and no platform-level
-multi-tenant API in this backend at all, so there's nothing to migrate that page *to*.
-Not asking for it here — just noting it so it doesn't read as an oversight.
-
----
-
-## ✅ BE-13 · Self-service password recovery — **DONE, thank you (confirmed 2026-09-18)**
-
-*Renumbered from BE-12 (2026-09-18) — this doc previously had two unrelated items both
-numbered BE-12; see the note at the top of the Summary table.*
-
-Built, and it doubles as the invitation-acceptance flow too — nice design, one endpoint
-covers both cases. `POST /auth/forgot-password` (`{email}`, always 200) and
-`POST /auth/reset-password` (`{token, password}`) both exist and work.
-
-**One thing worth flagging: the shipped body shape differs from what we originally
-asked for**, and it bit us. We'd requested
-`{ token, newPassword, confirmPassword }` (below, for the record); the backend
-reasonably shipped a single `{ token, password }` instead — simpler, and confirm-match
-is a client-side concern anyway. But our frontend was never updated to match, and kept
-sending the old three-field shape, so `/set-password` **completely failed for everyone**
-(`422 VALIDATION_ERROR` — `password` "expected string, received undefined") until we
-caught it 2026-09-18 wiring an unrelated feature (invite-resend) that shares this same
-landing page. Fixed on our side (`auth.service.ts#resetPassword`, `set-password/page.tsx`)
-— no backend action needed, just flagging the shape mismatch in case any other client
-integration assumed the originally-requested shape. See DRIFT-15 in doc 01.
-
-Original ask, for reference:
-
-```
-POST /api/v1/auth/forgot-password
-  body: { email: string }
-
-POST /api/v1/auth/reset-password
-  body: { token: string, newPassword: string, confirmPassword: string }   ← not what shipped; shipped as { token, password }
-```
-
----
-
-## ✅ BE-14 · Confidentiality-tier clearance for custom roles — **done, `edms-backend` `0dab81a` (2026-10-08)**
-
-**Shipped as permissions, not a role field:** `document:view_confidential`,
-`document:view_restricted` and `document:view_top_secret`, each scoped like any other grant,
-replace the tier role lists. Any role, custom or seeded, is cleared by ticking the box in
-`/admin/roles`. Download, export and print gained their own permissions too. Confirmed live
-on `/auth/me` 2026-10-08. The frontend's clearance check follows it (`isConfidentialityActionAllowed`
-in `src/constants/documentLevels.ts`). The original request follows.
-
-
-**What we found:** `RESTRICTED_TIER_ROLES`/`CONFIDENTIAL_TIER_ROLES` are hardcoded role-*name*
-allowlists (`confidential` → `supervisor`/`management`/`client_admin`/`internal_auditor`;
-`restricted` → `client_admin` only), not permission-driven. A custom role created via
-`POST /roles` can hold every `document:*` permission there is and still never pass the
-confidentiality-tier gate on a `confidential`+ document — there's no mechanism, UI or
-API, to grant a new role into those tiers. The only existing workaround is a per-document
-`DocumentAccessGrant` via the access-request flow (BE-1), which is real but doesn't scale
-to "this whole role should see this whole tier."
-
-**Status:** you've said you're adding a way to set a confidentiality-clearance option on
-a role, with system/seeded roles' clearance staying fixed (not admin-editable). No
-endpoint for this exists yet as of 2026-09-18 — nothing to verify or wire up on our side
-until it ships. Flagging here so it's tracked rather than lost in chat.
-
----
-
-## 🟡 BE-15 · Revoke a granted `DocumentAccessGrant` — **in progress, per conversation 2026-09-18**
-
-**What we found:** `POST /documents/:id/access-requests/:id/grant` creates a standing,
-view-only access grant (BE-1), but there's no endpoint to revoke one afterward. Once
-granted, always granted, with no admin-facing way to undo it short of a database change.
-
-**Status:** you've said a revoke endpoint is being built. No shape confirmed yet
-(`DELETE /documents/:id/access-requests/:id`? A dedicated revoke action?) — will wire it
-into `/admin/access-requests` once it ships and the shape is known.
-
----
-
-## 🟠 BE-16 · Optional `signature` on the `review` task action — **new, 2026-09-18**
-
-### What we found
-
-`POST /tasks/:id/action`'s request schema (confirmed against the live OpenAPI spec) is a
-three-way `oneOf`:
-
-```json
-{
-  "title": "Approve task",
-  "required": ["action", "signature"],
-  "additionalProperties": false,
-  "properties": { "action": { "enum": ["approve"] }, "signature": { "...required..." }, "comment": {}, "note": {} }
-},
-{
-  "title": "Review, reject, request changes, or close",
-  "required": ["action"],
-  "additionalProperties": false,
-  "properties": { "action": { "enum": ["reject", "review", "request_changes", "close"] }, "comment": {}, "note": {} }
-},
-```
-
-`additionalProperties: false` on the second variant means a `signature` field sent
-alongside `{action: "review", ...}` would fail validation outright, not just be ignored.
-Signing is `approve`-only.
-
-### Why we're asking
-
-We just built "Mark reviewed" as a modal with an optional comment field, matching how
-`approve` already works — the plan was to let a reviewer optionally sign off too, not
-just approve. We can't, today. A reviewer who wants their sign-off recorded has to use
-`approve` instead of `review`, which isn't right where a stage is genuinely review-only
-(no approval authority) — or has no way to sign at all.
-
-### What we need
-
-Extend the `oneOf`'s "review" branch (or split `review` into its own variant) to accept
-the same optional `signature` object `approve` does, still not required:
-
-```json
-{
-  "action": "review",
-  "signature": { "fileUrl": "...", "mimeType": "image/png" },  // optional
-  "comment": "..."                                              // optional, unchanged
-}
-```
-
-`TaskActionSignature`'s validation (URL format, MIME allowlist, extension-matches-MIME)
-can be reused as-is — we're not asking for new validation, just for the existing
-`signature` shape to be legal on one more action.
-
-### Until then
-
-"Mark reviewed" ships comment-only. Not blocking — it's a nice-to-have, not a broken
-flow — but flagging so it's tracked rather than re-discovered later.
-
----
-
-## 🟡 BE-17 · Support more than one document per workflow instance — **new, 2026-09-18**
-
-### What we found
-
-`WorkflowInstance.documentId` is a single `uuid`, and `document` is a single nested
-object — confirmed against the live OpenAPI spec, no array, no join table, no
-`documentIds`. One instance is permanently tied to exactly one document.
-
-### Why we're asking
-
-Walking through the "Request changes" flow with the product owner: when a reviewer
-requests changes, there are two different things that can be wrong —
-
-1. **The existing document is wrong** (bad data, needs correcting) — already covered:
-   the recipient uploads a new version of the same document (see the version-upload
-   gating change landed alongside this request).
-2. **Something is missing** — the reviewer needs an additional document (a supporting
-   invoice, a signed cover sheet, whatever) that was never part of the original
-   submission. Today there is no way to add a second document to an in-flight workflow;
-   the only options are starting an entirely separate workflow (loses the connection to
-   the original) or squeezing an unrelated file into a version slot on the existing
-   document (loses the file's own identity, title, and type).
-
-The ask is for a way to attach one or more additional documents to an *existing*
-workflow instance — sharing that instance and landing in the same cabinet/folder as the
-original — rather than only ever replacing the original document's content.
-
-### What we need
-
-Not fully specified yet — we don't want to hand you a shape sight-unseen for something
-this structural. Roughly, we think it looks like either:
-
-- `WorkflowInstance` gaining a `documentIds: uuid[]` (or a join table,
-  `workflow_instance_documents`), with the existing `documentId`/`document` kept as the
-  "primary" document for backward compatibility, or
-- A new `POST /workflow-instances/:id/documents` endpoint that uploads/attaches an
-  additional document to a running instance, visible alongside the primary one on
-  `GET /workflow-instances/:id`.
-
-Happy to workshop the exact contract before either side builds — flagging this now
-mainly so it's tracked, not because we expect it imminently.
-
-### Until then
-
-Only single-document workflows are supported, same as today. The "Request changes"
-recipient can upload a new version of the existing document; they cannot attach a
-separate one to the same workflow.
+## 🟡 BE-12 · Seed `workflow:view` for the roles that route documents
+
+> Was "Split `WORKFLOW_DEFINITION_VIEW_ROLES` from `MANAGE_ROLES`". That constant was removed
+> 2026-09-16 and the gap moved to the RBAC seed (DRIFT-14 in doc 01).
+
+`prisma/seed-system.ts` grants `workflow:view` only to `client_admin` and `schulltech_admin`
+(checked at `d14f250`). The live tenant's non-admin roles hold `workflow:view:global` and get
+200 from `GET /workflows` (re-tested 2026-10-16), so nothing is blocked today. On a freshly
+seeded tenant, though, `staff`, `supervisor`, `management` and `internal_auditor` can't list
+workflow definitions, so they can't route a document.
+
+**Ask:** add `workflow:view` rows for those four roles to the seed, at `global` scope as the
+live tenant has them.
 
 ---
 
@@ -631,10 +246,10 @@ into the queue and was picked up at least once.
 
 ### Why it matters
 
-A silently-stuck document is invisible to search forever (`searchIndexQueue.add()` only
-runs on the OCR **success** path) with no signal to anyone that anything is wrong — we
-only found this one document by pulling the raw list and diffing timestamps by hand.
-At real scale this is a slow, undetectable leak of unsearchable documents.
+A silently-stuck document never gets its text extracted, summarised or searched, with no
+signal to anyone that anything is wrong — we only found this one document by pulling the
+raw list and diffing timestamps by hand. *(Since PR #51 it is at least indexed by title and
+metadata at create, so it's findable that way — the part of this ask that shipped.)*
 
 ### What we need
 
@@ -681,14 +296,8 @@ export function startOcrRecovery(): ReturnType<typeof setInterval> {
 — and wire `startOcrRecovery()` into `worker.ts`'s `main()` alongside `emailRecovery`,
 the same way that one already is.
 
-Three smaller, optional pieces while you're in this area:
+Two smaller, optional pieces while you're in this area:
 
-- Decouple search indexing from OCR success — `searchIndexQueue.add()` currently only
-  runs on the OCR **success** path, so a document whose OCR job is `failed` (or, per
-  this ask, recovering from `pending`) is unfindable by search on *anything*, not just
-  its extracted text — not even its own title. Enqueueing the index job on
-  create/update/restore regardless of OCR outcome would mean a document is always at
-  least title/metadata-searchable, with OCR text as a bonus once/if it lands.
 - An admin-facing "retry OCR" action for a single document/version would let someone
   unstick one immediately rather than waiting for the next sweep — useful
   independently of the sweep itself.
@@ -711,22 +320,24 @@ curl -s -H "Authorization: Bearer $CLIENT_ADMIN_TOKEN" \
 
 ---
 
-## Appendix B — backend routes we now consume
+## 🟡 BE-10 · JSON 404 handler
 
-Previously built and unused; wired in `e07d8c3`:
+`app.ts` mounts `errorHandler` (a four-argument error middleware, skipped on the happy
+path) and nothing else, so an unmatched route returns Express's **default HTML** body. Our
+axios client then fails parsing HTML as JSON, and a missing endpoint surfaces as a confusing
+parse error rather than a clean 404.
 
-- `GET /notifications/unread-count` → bell badge (was a fixture count)
-- `GET /notifications/preferences`, `PUT /notifications/preferences` → new panel
-- `POST /notifications/read-all` → "Mark all read"
+Every broken call in this document was harder to find because of this. A five-line
+catch-all returning the standard `ApiResponse` envelope would have made them obvious:
 
-**Update 2026-09-21:** `GET /documents/stats` is adopted now, alongside
-`GET /tasks/stats`, `GET /workflow-instances/stats` and
-`GET /workflow-instances/open-items-by-cabinet` — all four management dashboards were
-rewired off the browser-side aggregation this note used to describe. Thank you for
-building the SLA-rate and task-rollup endpoints we asked for below; between them and
-`documents/stats`, the client-side aggregation is gone.
+```ts
+app.use((_req, res) => ApiResponse.notFound(res, 'Route not found', 'ROUTE_NOT_FOUND'));
+// must sit after the routers, before errorHandler
+```
 
-## Appendix C — how to reproduce the route inventory
+---
+
+## Appendix — how to reproduce the route inventory
 
 ```bash
 # in edms-backend, on dev @ e60c418
@@ -753,5 +364,5 @@ grep -cE "^\s+\{ resource: '[a-z_]+', action: '[a-z_]+' \}," prisma/seed-system.
 
 ---
 
-_Questions on any of this — particularly BE-9's response shape — are welcome. We'd
-rather agree the contract before either side builds._
+_Questions on any of this are welcome. We'd rather agree the contract before either side
+builds._

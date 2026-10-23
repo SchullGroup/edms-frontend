@@ -5,7 +5,6 @@ import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { useAuditEntries, useExportAuditCsv, useVerifyAuditChain } from '@/apis/hooks/useAudit';
-import { useAllUsers } from '@/apis/hooks/useUsers';
 import { UserSearchCombobox } from '@/components/common/UserSearchCombobox';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
@@ -43,10 +42,8 @@ export default function TenantAuditPage() {
     isError: isErrorAudit,
     refetch: refetchAudit,
   } = useAuditEntries(filters);
-  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
 
   const rows = auditData?.data || [];
-  const users = usersData?.items || [];
 
   const exportCsv = useExportAuditCsv();
   const verifyChain = useVerifyAuditChain();
@@ -58,9 +55,7 @@ export default function TenantAuditPage() {
   }, [setPageTitle]);
 
   const actorName = (a: AuditEntry) =>
-    a.actorType === 'system' || !a.actorId
-      ? 'System'
-      : users.find((u: any) => u.id === a.actorId)?.name || a.actorId;
+    a.actorType === 'system' || !a.actorId ? 'System' : a.actor?.name || 'Unknown user';
 
   const handleExport = () => {
     exportCsv.mutate({
@@ -208,7 +203,7 @@ export default function TenantAuditPage() {
             </button>
           </div>
         </div>
-        {isLoadingAudit || isLoadingUsers ? (
+        {isLoadingAudit ? (
           <SkeletonTable columns={['When', 'Actor', 'Action', 'Object', 'Detail']} rows={8} />
         ) : isErrorAudit ? (
           <ErrorMessage message="Failed to load audit logs." retry={refetchAudit} />

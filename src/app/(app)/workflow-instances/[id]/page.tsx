@@ -187,8 +187,10 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   const focusMine = !!focusTask && isMineTask(focusTask);
   const canAct =
     !!me && instance?.status === 'in_progress' && focusActive && focusMine && canActPermission;
-  const currentActorName =
-    activeTasks[0] ? taskHolderLabel(activeTasks[0], departmentName) : 'Unassigned';
+  // The focus task's holder: in parallel branches, the other live tasks belong
+  // to other people.
+  const holderTask = focusActive ? focusTask : activeTasks[0];
+  const currentActorName = holderTask ? taskHolderLabel(holderTask, departmentName) : 'Unassigned';
   const disabledReason = !instance
     ? null
     : instance.status === 'closed'
@@ -522,7 +524,6 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               canDownload={allows(selectedDoc, 'download')}
               canEdit={false}
               canUploadVersion={canUploadRevision}
-              getUploaderName={(userId) => users.find((u) => u.id === userId)?.name || 'User'}
             />
           )}
 

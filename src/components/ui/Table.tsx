@@ -108,7 +108,7 @@ export function Table<T extends Record<string, any>>({
                 className={`${onRow ? 'clickable' : ''} ${selected.has(r) ? 'selected' : ''} ${rowClassName ? rowClassName(r) : ''}`}
                 onClick={(e) => {
                   const target = e.target as HTMLElement;
-                  if (target.tagName !== 'INPUT' && !target.closest('button') && onRow) {
+                  if (target.tagName !== 'INPUT' && !target.closest('button, a[href]') && onRow) {
                     onRow(r);
                   }
                 }}

@@ -48,8 +48,10 @@ export function WorkflowActivityPanel({
           <>
             <WorkflowStageProgress
               stages={stages}
+              transitions={workflowInstance.workflowDefinition?.definition?.transitions}
               positions={positions}
               status={workflowInstance.status}
+              tasks={workflowInstance.tasks}
               currentActorName={currentStageActorName}
             />
 

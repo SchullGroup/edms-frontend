@@ -37,7 +37,7 @@ const paths: Record<string, string> = {
     'M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Zm10-3a3 3 0 1 1 0 6 3 3 0 0 1 0-6ZM4 4l16 16',
   finding: 'M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14Zm10 17-5-5m-5-8v4m0 3v.5',
   sign: 'M4 18c2-4 4-9 5-9s1 7 2 7 2-4 3-4 1 3 2 3 2-1 4-1M4 22h16',
-  redact: 'M4 6h16M4 10h9m-9 4h16M4 18h6m4 0h6',
+  archive: 'M4 6h16M4 10h9m-9 4h16M4 18h6m4 0h6',
   download: 'M12 4v10m0 0-4-4m4 4 4-4M4 20h16',
   print: 'M7 8V3h10v5M7 17H4V9h16v8h-3m-10-1h10v6H7v-6',
   share:

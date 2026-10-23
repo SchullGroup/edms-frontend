@@ -37,9 +37,13 @@ export const AUDIT_ACTIONS = [
   'folder.deleted',
   'document.uploaded',
   'document.viewed',
+  'document.summary_viewed',
+  'document.summary_requested',
   'document.edited',
   'document.deleted',
   'document.downloaded',
+  'document.exported',
+  'document.printed',
   'document.metadata_updated',
   'document.version_created',
   'document.version_restored',
@@ -55,6 +59,8 @@ export const AUDIT_ACTIONS = [
   'workflow.updated',
   'workflow.published',
   'workflow.archived',
+  'workflow.unarchived',
+  'workflow.deleted',
   'workflow.instance_created',
   'workflow.document_attached',
   'workflow.started',
@@ -96,6 +102,8 @@ const WORKFLOW_DESIGN_ACTIONS = [
   'workflow.updated',
   'workflow.published',
   'workflow.archived',
+  'workflow.unarchived',
+  'workflow.deleted',
 ];
 
 export interface AuditRecordType {

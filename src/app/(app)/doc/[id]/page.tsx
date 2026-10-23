@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore, cabById, userById } from '@/store/useStore';
+import { useStore, cabById } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import {
   useDocument,
@@ -23,7 +23,6 @@ import {
   usePrintDocument,
 } from '@/apis/hooks/useDocuments';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
-import { useAllUsers } from '@/apis/hooks/useUsers';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useWorkflowInstances } from '@/apis/hooks/useWorkflowInstances';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
@@ -64,10 +63,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
   const { data: cabinetsData, isLoading: isLoadingCabs } = useCabinets();
-  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const { policyFor, isLoading: isLoadingPolicies } = useConfidentialityPolicy();
   const cabinets = cabinetsData?.data || [];
-  const users = usersData?.items || [];
 
   const { can, scopeFor } = usePermissions();
   const archiveDocument = useArchiveDocument();
@@ -155,7 +152,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     }
   }, [me?.id, doc?.id, doc?.title, recordDocumentView]);
 
-  if (isLoading || isLoadingCabs || isLoadingUsers || isLoadingPolicies) {
+  if (isLoading || isLoadingCabs || isLoadingPolicies) {
     return <DocumentDetailSkeleton />;
   }
 
@@ -226,10 +223,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         myDepartmentId === cabinetDepartmentId));
   const eff =
     doc.status === 'closed' ? 'Closed' : doc.status === 'in_progress' ? 'In Progress' : 'Pending';
-  const lockHolderName =
-    doc.checkoutLock?.locker?.name ||
-    userById(users, doc.checkoutLock?.lockedBy)?.name ||
-    'another user';
+  const lockHolderName = doc.checkoutLock?.locker?.name || 'another user';
 
   const routeThisDocument = () =>
     routeDocuments([{ id: doc.id, title: doc.title, createdBy: doc.createdBy }]);
@@ -504,7 +498,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             disabled={doc.legalHold || archiveDocument.isPending}
             onClick={actArchive}
           >
-            <Icon name="redact" size={14} /> Archive
+            <Icon name="archive" size={14} /> Archive
           </button>
         )}
       </div>
@@ -552,7 +546,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           sealed={doc.sealed}
           lockedByOther={lockedByOther}
           onSignatureFieldClick={() => {}}
-          getSignerName={(userId) => userById(users, userId)?.name || 'User'}
           canDownload={canDownload}
           onDownload={actDownload}
           canPrint={canPrint}
@@ -572,7 +565,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             documentType={doc.documentType}
             cabinetId={doc.cabinetId}
             createdBy={doc.createdBy}
-            ownerName={userById(users, doc.createdBy)?.name || 'System'}
+            ownerName={doc.creator?.name || 'Unknown user'}
             createdAtLabel={fmtDateTime(doc.createdAt)}
             metadata={doc.metadata || []}
             canEditMetadata={
@@ -607,7 +600,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               !inHiddenWorkflow
             }
             canUploadVersion={false}
-            getUploaderName={(userId) => userById(users, userId)?.name || 'User'}
           />
 
           <div className="card">

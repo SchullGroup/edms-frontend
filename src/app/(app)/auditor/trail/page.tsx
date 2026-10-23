@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useAuditEntries, useExportAuditCsv } from '@/apis/hooks/useAudit';
-import { useAllUsers } from '@/apis/hooks/useUsers';
 import { UserSearchCombobox } from '@/components/common/UserSearchCombobox';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
@@ -24,8 +23,6 @@ export default function AuditorTrailPage() {
   // the same thing as the real trail this page now reads.
   const { auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
-  const { data: usersData } = useAllUsers();
-  const users = usersData?.items || [];
 
   const [page, setPage] = useState(1);
   const [actorId, setActorId] = useState('');
@@ -68,9 +65,7 @@ export default function AuditorTrailPage() {
   }, [setPageTitle]);
 
   const actorName = (a: AuditEntry) =>
-    a.actorType === 'system' || !a.actorId
-      ? 'System'
-      : users.find((u: any) => u.id === a.actorId)?.name || a.actorId;
+    a.actorType === 'system' || !a.actorId ? 'System' : a.actor?.name || 'Unknown user';
 
   const handleExport = () => {
     exportCsv.mutate({
