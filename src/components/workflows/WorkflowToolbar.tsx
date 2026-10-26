@@ -19,7 +19,15 @@ export interface WorkflowToolbarProps {
   onUnarchive: () => void;
   onDelete: () => void;
   onPublish: () => void;
+  /** Every version of this workflow, newest first; the picker shows when there are 2+. */
+  versions: WorkflowDefinition[];
+  onOpenVersion: (id: string) => void;
+  onNewVersion: () => void;
+  newVersionLabel: string;
+  /** Why Unarchive would 409 for this version, or null when it's allowed. */
+  unarchiveBlocked: string | null;
   cloning: boolean;
+  versioning: boolean;
   archiving: boolean;
   unarchiving: boolean;
   deleting: boolean;
@@ -46,7 +54,13 @@ export function WorkflowToolbar({
   onUnarchive,
   onDelete,
   onPublish,
+  versions,
+  onOpenVersion,
+  onNewVersion,
+  newVersionLabel,
+  unarchiveBlocked,
   cloning,
+  versioning,
   archiving,
   unarchiving,
   deleting,
@@ -62,12 +76,8 @@ export function WorkflowToolbar({
       : workflow.status === 'archived'
         ? 'b-status-overdue'
         : 'b-status-pending';
-  const statusLabel =
-    workflow.status === 'published'
-      ? 'Active'
-      : workflow.status === 'archived'
-        ? 'Archived'
-        : 'Draft';
+  const statusLabel = (status: WorkflowDefinition['status']) =>
+    status === 'published' ? 'Active' : status === 'archived' ? 'Archived' : 'Draft';
 
   // Flashes a brief "Saved" confirmation whenever a save that was in flight
   // completes, rather than leaving success entirely silent.
@@ -115,9 +125,26 @@ export function WorkflowToolbar({
           <span className={`wfd-saved-pill ${justSaved ? 'show' : ''}`}>
             <Icon name="check" size={12} /> Saved
           </span>
-          <span className={`badge ${statusBadgeClass}`}>{statusLabel}</span>
+          <span className={`badge ${statusBadgeClass}`}>{statusLabel(workflow.status)}</span>
+          {versions.length > 1 ? (
+            <select
+              className="input"
+              style={{ height: '32px', width: 'auto' }}
+              value={workflow.id}
+              onChange={(e) => onOpenVersion(e.target.value)}
+              aria-label="Workflow version"
+            >
+              {versions.map((v) => (
+                <option key={v.id} value={v.id}>
+                  v{v.version} · {statusLabel(v.status)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="caption">v{workflow.version}</span>
+          )}
           <span className="caption">
-            v{workflow.version} · {stageCount} stage{stageCount === 1 ? '' : 's'}
+            {stageCount} stage{stageCount === 1 ? '' : 's'}
           </span>
         </div>
 
@@ -126,8 +153,12 @@ export function WorkflowToolbar({
             <button
               className="btn btn-primary btn-sm"
               onClick={onUnarchive}
-              disabled={unarchiving || !canArchive}
-              title={!canArchive ? "You don't have permission to unarchive workflows" : undefined}
+              disabled={unarchiving || !canArchive || !!unarchiveBlocked}
+              title={
+                !canArchive
+                  ? "You don't have permission to unarchive workflows"
+                  : (unarchiveBlocked ?? undefined)
+              }
             >
               {unarchiving ? 'Unarchiving…' : 'Unarchive'}
             </button>
@@ -147,7 +178,9 @@ export function WorkflowToolbar({
             onClone={onClone}
             onArchive={onArchive}
             onDelete={onDelete}
-            busy={{ cloning, archiving, unarchiving, deleting }}
+            onNewVersion={onNewVersion}
+            newVersionLabel={newVersionLabel}
+            busy={{ cloning, versioning, archiving, unarchiving, deleting }}
             can={{ create: canCreate, archive: canArchive, delete: canDelete }}
           />
         </div>

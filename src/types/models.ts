@@ -452,6 +452,8 @@ export interface WorkflowDefinitionJson {
 
 export interface WorkflowDefinition {
   id: string;
+  /** Shared by every version of one workflow (edms-backend PR #59). */
+  familyId: string;
   name: string;
   description?: string | null;
   version: number;

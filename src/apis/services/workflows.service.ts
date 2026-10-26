@@ -46,6 +46,26 @@ export const workflowsService = {
     await apiClient.delete(`/workflows/${id}`);
   },
 
+  // A draft copy of the latest published version, numbered v+1 (409 from any other).
+  createVersion: async (id: string): Promise<WorkflowDefinition> => {
+    const response = await apiClient.post<ApiResponse<WorkflowDefinition>>(
+      `/workflows/${id}/versions`,
+    );
+    return response.data.data;
+  },
+
+  // Every version sharing this workflow's `familyId`, newest first.
+  getVersions: async (
+    id: string,
+    params?: { page?: number; limit?: number },
+  ): Promise<PaginatedResponse<WorkflowDefinition>> => {
+    const response = await apiClient.get<PaginatedResponse<WorkflowDefinition>>(
+      `/workflows/${id}/versions`,
+      { params },
+    );
+    return response.data;
+  },
+
   // Back to `published`; 422 if a stage's department has since been deleted.
   unarchive: async (id: string): Promise<WorkflowDefinition> => {
     const response = await apiClient.post<ApiResponse<WorkflowDefinition>>(

@@ -78,7 +78,10 @@ setting up an environment.
 
 ## The short version
 
-**59 frontend pages · 134 backend routes · 6 roles · 0 tests.**
+**59 frontend pages · 140 backend routes · 6 roles · 0 tests.**
+*(Routes re-derived 2026-10-26, backend @ `dev` `4651d71`: 134 → 140 — `DELETE /workflows/:id`
+and `POST …/unarchive` (PR #55), `POST /documents/:id/summary` (PR #56) and the three
+`/workflows/:id/versions` routes (PR #59).)*
 *(Pages re-derived 2026-10-20: +1, the `/admin/workflows` list; the designer moved to
 `/admin/workflows/[id]`. Routes are recounted in the backend-dev close-out.)*
 *(Re-derived 2026-10-15 with the commands in `AGENTS.md`, backend @ `dev` `9998e05`:
