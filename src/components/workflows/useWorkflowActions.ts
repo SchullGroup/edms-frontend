@@ -5,17 +5,33 @@ import { useUIStore } from '@/store/useUIStore';
 import {
   useArchiveWorkflow,
   useCreateWorkflow,
+  useCreateWorkflowVersion,
   useDeleteWorkflow,
   useUnarchiveWorkflow,
 } from '@/apis/hooks/useWorkflows';
 import type { WorkflowDefinition } from '@/types/models';
 
-/** Clone, archive, unarchive and delete for one workflow, with their confirms;
+/** Why Unarchive would 409: the backend reactivates only the family's latest version, and
+ *  only while none is published. Null when it's allowed or the versions aren't known yet. */
+export function unarchiveBlockedReason(
+  wf: WorkflowDefinition,
+  latestVersion: number | undefined,
+  publishedVersion: number | null | undefined,
+): string | null {
+  if (wf.status !== 'archived') return null;
+  if (latestVersion !== undefined && latestVersion > wf.version)
+    return `Only the latest version can be unarchived — v${latestVersion} is newer`;
+  if (publishedVersion != null) return `v${publishedVersion} is already active`;
+  return null;
+}
+
+/** Clone, new version, archive, unarchive and delete for one workflow, with their confirms;
  *  shared by the workflow list and the designer. */
 export function useWorkflowActions() {
   const { auditAction } = useStore();
   const { openConfirm } = useUIStore();
   const createMutation = useCreateWorkflow();
+  const versionMutation = useCreateWorkflowVersion();
   const archiveMutation = useArchiveWorkflow();
   const unarchiveMutation = useUnarchiveWorkflow();
   const deleteMutation = useDeleteWorkflow();
@@ -30,6 +46,16 @@ export function useWorkflowActions() {
       onSuccess: (data) => {
         auditAction('WORKFLOW_CLONE', data.id, 'Cloned from ' + wf.name);
         onCloned?.(data.id);
+      },
+    });
+  };
+
+  // Only from the latest version, and only a published one (409 otherwise).
+  const newVersion = (wf: WorkflowDefinition, onCreated?: (id: string) => void) => {
+    versionMutation.mutate(wf.id, {
+      onSuccess: (data) => {
+        auditAction('WORKFLOW_VERSION', data.id, `Created v${data.version} of ${wf.name}`);
+        onCreated?.(data.id);
       },
     });
   };
@@ -65,10 +91,12 @@ export function useWorkflowActions() {
 
   return {
     clone,
+    newVersion,
     archive,
     unarchive,
     remove,
     cloning: createMutation.isPending,
+    versioning: versionMutation.isPending,
     archiving: archiveMutation.isPending,
     unarchiving: unarchiveMutation.isPending,
     deleting: deleteMutation.isPending,

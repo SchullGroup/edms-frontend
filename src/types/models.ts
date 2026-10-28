@@ -452,6 +452,8 @@ export interface WorkflowDefinitionJson {
 
 export interface WorkflowDefinition {
   id: string;
+  /** Shared by every version of one workflow (edms-backend PR #59). */
+  familyId: string;
   name: string;
   description?: string | null;
   version: number;
@@ -461,6 +463,9 @@ export interface WorkflowDefinition {
   publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** The family's highest and published versions; `GET /workflows` rows only (edms-backend PR #60). */
+  latestVersion?: number;
+  publishedVersion?: number | null;
 }
 
 export type WorkflowInstanceStatus = 'pending' | 'in_progress' | 'on_hold' | 'closed';

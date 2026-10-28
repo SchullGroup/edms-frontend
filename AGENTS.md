@@ -84,7 +84,7 @@ grep -nE "apiClient\.(get|post|put|patch|delete)" src/apis/services/*.ts
 
 # backend route inventory (doc 01 §7) — run from ../edms-backend
 find src/modules -name '*.router.ts' -exec grep -hoE \
-  "(\w*[Rr]outer|router)\.(get|post|patch|put|delete)\(" {} + | wc -l      # -> 134 (2026-10-15)
+  "(\w*[Rr]outer|router)\.(get|post|patch|put|delete)\(" {} + | wc -l      # -> 140 (2026-10-26)
 
 # LOC figures quoted in the docs
 find src -type f \( -name '*.ts' -o -name '*.tsx' \) | xargs wc -l | tail -1  # -> 41345 (2026-10-15)

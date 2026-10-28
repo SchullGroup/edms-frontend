@@ -7,6 +7,8 @@ export const workflowKeys = {
   all: ['workflows'] as const,
   lists: () => [...workflowKeys.all, 'list'] as const,
   list: (filters: Record<string, any>) => [...workflowKeys.lists(), filters] as const,
+  // Under lists(), so every mutation that refreshes the lists refreshes this too.
+  versions: (id: string) => [...workflowKeys.lists(), 'versions', id] as const,
   details: () => [...workflowKeys.all, 'detail'] as const,
   detail: (id: string) => [...workflowKeys.details(), id] as const,
 };
@@ -30,6 +32,31 @@ export function useWorkflow(id: string) {
     queryKey: workflowKeys.detail(id),
     queryFn: () => workflowsService.getById(id),
     enabled: !!id,
+  });
+}
+
+/** All versions of this workflow, newest first; 100 is the backend's page cap. */
+export function useWorkflowVersions(id: string) {
+  return useQuery({
+    queryKey: workflowKeys.versions(id),
+    queryFn: () => workflowsService.getVersions(id, { limit: 100 }),
+    enabled: !!id,
+  });
+}
+
+export function useCreateWorkflowVersion() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: (id: string) => workflowsService.createVersion(id),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: workflowKeys.lists() });
+      addToast(`Draft v${data.version} created — publish it to replace v${data.version - 1}`, 'success');
+    },
+    onError: (err: any) => {
+      addToast(err.response?.data?.message || 'Failed to create a new version', 'error');
+    },
   });
 }
 
@@ -73,8 +100,9 @@ export function usePublishWorkflow() {
 
   return useMutation({
     mutationFn: (id: string) => workflowsService.publish(id),
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: workflowKeys.detail(id) });
+    onSuccess: () => {
+      // Publishing a version also archives the one that was published (PR #59).
+      queryClient.invalidateQueries({ queryKey: workflowKeys.details() });
       queryClient.invalidateQueries({ queryKey: workflowKeys.lists() });
       addToast('Workflow published successfully', 'success');
     },
