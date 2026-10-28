@@ -23,7 +23,10 @@ import { useAllMetadataFields } from '@/apis/hooks/useMetadataFields';
 import { StagePanel, type StageTab } from '@/components/workflows/StagePanel';
 import type { AssigneeMode } from '@/components/workflows/StagePropertiesPanel';
 import { WorkflowDesignerGuide } from '@/components/workflows/WorkflowDesignerGuide';
-import { useWorkflowActions } from '@/components/workflows/useWorkflowActions';
+import {
+  unarchiveBlockedReason,
+  useWorkflowActions,
+} from '@/components/workflows/useWorkflowActions';
 import {
   indexGraph,
   isParallelFork,
@@ -236,15 +239,11 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
       ? leaveTo(`/admin/workflows/${newerDraft.id}`)
       : actions.newVersion(wf, (id) => leaveTo(`/admin/workflows/${id}`));
 
-  // The backend unarchives only the latest version, and only with none active.
-  const unarchiveBlocked =
-    wf.status !== 'archived'
-      ? null
-      : latestVersion && latestVersion.id !== wf.id
-        ? `Only the latest version can be unarchived — v${latestVersion.version} is newer`
-        : activeVersion
-          ? `v${activeVersion.version} is already active`
-          : null;
+  const unarchiveBlocked = unarchiveBlockedReason(
+    wf,
+    latestVersion?.version,
+    activeVersion?.version ?? null,
+  );
 
   const handleAddStage = () => {
     if (updateWfMutation.isPending) return;

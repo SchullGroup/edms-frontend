@@ -4,7 +4,7 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-10-23
+**Raised:** 2026-08-29 · **Updated:** 2026-10-28
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `origin/dev` (`d14f250`)
 
@@ -15,7 +15,9 @@
 > (several documents per workflow). Their write-ups are in git history. BE-4 and BE-18 were
 > partly done and keep only their open part. Withdrawn 2026-10-22: BE-9 (`policies` module,
 > not being built) and BE-20 (upload allowlist; the frontend enforces it). Done 2026-10-23:
-> BE-16 (signature on `review`), shipped in `ae08ef5` as **required**, not optional.
+> BE-16 (signature on `review`), shipped in `ae08ef5` as **required**, not optional. Raised
+> 2026-10-27 and done 2026-10-28: BE-23 (`latestVersion` and `publishedVersion` on each
+> `GET /workflows` row), shipped in PR #60 (`6ced046`) and used by `/admin/workflows`.
 
 Each item states what the frontend does today, what it needs, and why.
 

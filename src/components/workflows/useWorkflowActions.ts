@@ -11,6 +11,20 @@ import {
 } from '@/apis/hooks/useWorkflows';
 import type { WorkflowDefinition } from '@/types/models';
 
+/** Why Unarchive would 409: the backend reactivates only the family's latest version, and
+ *  only while none is published. Null when it's allowed or the versions aren't known yet. */
+export function unarchiveBlockedReason(
+  wf: WorkflowDefinition,
+  latestVersion: number | undefined,
+  publishedVersion: number | null | undefined,
+): string | null {
+  if (wf.status !== 'archived') return null;
+  if (latestVersion !== undefined && latestVersion > wf.version)
+    return `Only the latest version can be unarchived — v${latestVersion} is newer`;
+  if (publishedVersion != null) return `v${publishedVersion} is already active`;
+  return null;
+}
+
 /** Clone, new version, archive, unarchive and delete for one workflow, with their confirms;
  *  shared by the workflow list and the designer. */
 export function useWorkflowActions() {

@@ -14,6 +14,8 @@ interface Props {
   onDelete: () => void;
   /** Shown for an archived workflow only when given (the designer has its own button). */
   onUnarchive?: () => void;
+  /** Why Unarchive would 409; disables the item with this as its tooltip. */
+  unarchiveBlocked?: string | null;
   /** Shown for a published workflow only when given; the label can name a newer draft. */
   onNewVersion?: () => void;
   newVersionLabel?: string;
@@ -36,6 +38,7 @@ export function WorkflowActionsMenu({
   onArchive,
   onDelete,
   onUnarchive,
+  unarchiveBlocked,
   onNewVersion,
   newVersionLabel = 'New version',
   busy,
@@ -132,9 +135,11 @@ export function WorkflowActionsMenu({
               <button
                 className="menu-item"
                 role="menuitem"
-                disabled={busy.unarchiving || !can.archive}
+                disabled={busy.unarchiving || !can.archive || !!unarchiveBlocked}
                 title={
-                  !can.archive ? "You don't have permission to unarchive workflows" : undefined
+                  !can.archive
+                    ? "You don't have permission to unarchive workflows"
+                    : (unarchiveBlocked ?? undefined)
                 }
                 onClick={run(onUnarchive)}
               >
