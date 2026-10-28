@@ -462,7 +462,10 @@ sensible to fall back to) fires only on the confirmed-401 path, replacing a sile
 saying no) across *any* query via `QueryCache`'s global `onError`/`onSuccess`
 (`react-query-provider.tsx`), and shows one calm "we're having trouble connecting"
 message instead of a dashboard full of individually broken widgets — clearing itself
-the moment any query succeeds again.
+the moment any query succeeds again. **2026-10-28 (browser-verified, API calls blocked):**
+"Try again" allows 3 failed checks; after the 3rd it is replaced by **Sign in again**, which
+runs `performLogout` (the Sign out teardown) and lands on `/`. The count restarts each time
+the overlay reappears.
 
 **Live-verified** (headless Chromium against the actual dev server, not just `tsc`):
 unauthenticated → protected page → redirected to `/`; login → correct portal; navigation
