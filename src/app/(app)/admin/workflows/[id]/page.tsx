@@ -5,7 +5,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useWorkflow, useUpdateWorkflow, usePublishWorkflow } from '@/apis/hooks/useWorkflows';
+import {
+  useWorkflow,
+  useUpdateWorkflow,
+  usePublishWorkflow,
+  useWorkflowVersions,
+} from '@/apis/hooks/useWorkflows';
 import { useRoles } from '@/apis/hooks/useRoles';
 import { useAllUsers } from '@/apis/hooks/useUsers';
 import { useDepartments } from '@/apis/hooks/useDepartments';
@@ -18,7 +23,10 @@ import { useAllMetadataFields } from '@/apis/hooks/useMetadataFields';
 import { StagePanel, type StageTab } from '@/components/workflows/StagePanel';
 import type { AssigneeMode } from '@/components/workflows/StagePropertiesPanel';
 import { WorkflowDesignerGuide } from '@/components/workflows/WorkflowDesignerGuide';
-import { useWorkflowActions } from '@/components/workflows/useWorkflowActions';
+import {
+  unarchiveBlockedReason,
+  useWorkflowActions,
+} from '@/components/workflows/useWorkflowActions';
 import {
   indexGraph,
   isParallelFork,
@@ -48,6 +56,8 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
   const canArchiveWorkflow = can('workflow', 'archive');
 
   const { data: wf, isLoading, error } = useWorkflow(workflowId);
+  const { data: versionsResult } = useWorkflowVersions(workflowId);
+  const versions = versionsResult?.data || [];
   const { data: roles } = useRoles();
   const { data: usersResult } = useAllUsers();
   const users = usersResult?.items || [];
@@ -200,13 +210,40 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
     });
   };
 
+  const publish = () =>
+    publishWfMutation.mutateAsync(wf.id).then(() => {
+      auditAction('WORKFLOW_PUBLISH', wf.id, `Published ${wf.name}`);
+    });
+
+  // Publishing a version archives the active one (PR #59), so say so first.
+  const activeVersion = versions.find((v) => v.status === 'published' && v.id !== wf.id);
   const handlePublish = () => {
-    publishWfMutation.mutate(wf.id, {
-      onSuccess: () => {
-        auditAction('WORKFLOW_PUBLISH', wf.id, `Published ${wf.name}`);
-      },
+    if (!activeVersion) {
+      // The hook's onError already toasts the failure.
+      publish().catch(() => {});
+      return;
+    }
+    openConfirm({
+      title: `Publish v${wf.version}?`,
+      message: `v${activeVersion.version} is active now and will be archived. Documents already routed through it finish there; new documents route to v${wf.version}.`,
+      confirmLabel: `Publish v${wf.version}`,
+      onConfirm: publish,
     });
   };
+
+  // Versions come only from the latest, published one; a newer draft is opened instead.
+  const latestVersion = versions[0];
+  const newerDraft = versions.find((v) => v.status === 'draft' && v.version > wf.version);
+  const handleNewVersion = () =>
+    newerDraft
+      ? leaveTo(`/admin/workflows/${newerDraft.id}`)
+      : actions.newVersion(wf, (id) => leaveTo(`/admin/workflows/${id}`));
+
+  const unarchiveBlocked = unarchiveBlockedReason(
+    wf,
+    latestVersion?.version,
+    activeVersion?.version ?? null,
+  );
 
   const handleAddStage = () => {
     if (updateWfMutation.isPending) return;
@@ -405,7 +442,13 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
         onUnarchive={() => actions.unarchive(wf)}
         onDelete={() => actions.remove(wf, () => router.replace('/admin/workflows?status=draft'))}
         onPublish={handlePublish}
+        versions={versions}
+        onOpenVersion={(id) => leaveTo(`/admin/workflows/${id}`)}
+        onNewVersion={handleNewVersion}
+        newVersionLabel={newerDraft ? `Open draft v${newerDraft.version}` : 'New version'}
+        unarchiveBlocked={unarchiveBlocked}
         cloning={actions.cloning}
+        versioning={actions.versioning}
         archiving={actions.archiving}
         unarchiving={actions.unarchiving}
         deleting={actions.deleting}

@@ -11,7 +11,10 @@ import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { SkeletonPage, SkeletonTable } from '@/components/common/Skeleton';
 import { WorkflowActionsMenu } from '@/components/workflows/WorkflowActionsMenu';
-import { useWorkflowActions } from '@/components/workflows/useWorkflowActions';
+import {
+  unarchiveBlockedReason,
+  useWorkflowActions,
+} from '@/components/workflows/useWorkflowActions';
 import { DEFAULT_WORKFLOW_DEFINITION } from '@/components/workflows/constants';
 import { timeAgo } from '@/utils/helpers';
 import type { WorkflowDefinition } from '@/types/models';
@@ -28,6 +31,14 @@ const TABS: { value: StatusTab; label: string; empty: string }[] = [
   { value: 'archived', label: 'Archived', empty: 'Nothing archived.' },
 ];
 const PAGE_SIZE = 20;
+
+/** The newer version that supersedes an archived one: the published one, else the latest. */
+function replacedByVersion(w: WorkflowDefinition): number | null {
+  if (w.status !== 'archived') return null;
+  if (w.publishedVersion != null && w.publishedVersion > w.version) return w.publishedVersion;
+  if (w.latestVersion !== undefined && w.latestVersion > w.version) return w.latestVersion;
+  return null;
+}
 
 export default function WorkflowsPage() {
   // useSearchParams needs a Suspense boundary above it.
@@ -126,7 +137,19 @@ function WorkflowList() {
         </span>
       ),
     },
-    { key: 'version', label: 'Version', render: (w) => `v${w.version}` },
+    {
+      key: 'version',
+      label: 'Version',
+      render: (w) => {
+        const replacedBy = replacedByVersion(w);
+        return (
+          <div>
+            v{w.version}
+            {replacedBy && <div className="caption">Replaced by v{replacedBy}</div>}
+          </div>
+        );
+      },
+    },
     { key: 'definition', label: 'Stages', render: (w) => w.definition?.stages?.length ?? 0 },
     {
       key: 'updatedAt',
@@ -151,6 +174,7 @@ function WorkflowList() {
           onClone={() => actions.clone(w, open)}
           onArchive={() => actions.archive(w)}
           onUnarchive={() => actions.unarchive(w)}
+          unarchiveBlocked={unarchiveBlockedReason(w, w.latestVersion, w.publishedVersion)}
           onDelete={() => actions.remove(w)}
           busy={actions}
           can={{

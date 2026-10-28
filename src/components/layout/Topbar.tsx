@@ -44,16 +44,15 @@ export const Topbar = ({
   const notifRef = useRef<HTMLDivElement>(null);
 
   const { data: unreadCount = 0 } = useUnreadNotificationCount({ enabled: !!me });
-  // Only fetched while the menu is open — the badge alone runs off the count endpoint.
-  // Capped to the 7 most recent unread; "View all notifications" is the escape
-  // hatch to the full (read + unread, paginated) list rather than growing this menu.
+  // Fetched only while open, capped to the 5 most recent unread; the badge uses the
+  // count endpoint, and "View all notifications" opens the full list.
   const {
     data: notifData,
     isLoading: isLoadingNotifs,
     isError: isNotifError,
     refetch: refetchNotifs,
   } = useNotifications(
-    { limit: 7, channel: 'in_app', unreadOnly: true },
+    { limit: 5, channel: 'in_app', unreadOnly: true },
     { enabled: notifOpen },
   );
   const markRead = useMarkNotificationRead();
@@ -173,8 +172,8 @@ export const Topbar = ({
               </button>
             </div>
             {isLoadingNotifs ? (
-              // One row per unread notification the menu will show (it caps at 7).
-              <SkeletonNotifRows rows={Math.min(Math.max(unreadCount, 1), 7)} />
+              // One row per unread notification the menu will show (it caps at 5).
+              <SkeletonNotifRows rows={Math.min(Math.max(unreadCount, 1), 5)} />
             ) : isNotifError ? (
               <div className="empty" style={{ padding: '22px' }}>
                 Couldn&apos;t load notifications.{' '}

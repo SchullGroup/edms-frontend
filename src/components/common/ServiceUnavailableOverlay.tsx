@@ -1,9 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
+import { performLogout } from '@/lib/logout';
+
+/** After this many failed "Try again" presses, the dialog offers signing in again instead. */
+const MAX_RETRIES = 3;
 
 /**
  * Shown when several queries in a row fail at the infrastructure level
@@ -18,10 +23,16 @@ import { Icon } from '@/components/ui/Icons';
  */
 export function ServiceUnavailableOverlay() {
   const serviceUnavailable = useUIStore((s) => s.serviceUnavailable);
-  const queryClient = useQueryClient();
-  const [retrying, setRetrying] = useState(false);
+  // Mounted only while shown, so the retry count starts over each time it reappears.
+  return serviceUnavailable ? <ServiceUnavailableDialog /> : null;
+}
 
-  if (!serviceUnavailable) return null;
+function ServiceUnavailableDialog() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const [retrying, setRetrying] = useState(false);
+  const [failedRetries, setFailedRetries] = useState(0);
+  const outOfRetries = failedRetries >= MAX_RETRIES;
 
   const handleRetry = async () => {
     setRetrying(true);
@@ -29,7 +40,14 @@ export function ServiceUnavailableOverlay() {
       await queryClient.refetchQueries({ type: 'active' });
     } finally {
       setRetrying(false);
+      // A success clears the flag and unmounts this dialog, so a count here means it failed.
+      setFailedRetries((n) => n + 1);
     }
+  };
+
+  const handleSignIn = () => {
+    useUIStore.getState().setServiceUnavailable(false);
+    performLogout(queryClient, router);
   };
 
   return (
@@ -48,16 +66,29 @@ export function ServiceUnavailableOverlay() {
           <div className="h2" style={{ marginBottom: '8px' }}>
             We're having trouble connecting
           </div>
-          <p className="muted">
-            Our systems are temporarily unavailable. This usually resolves within a few
-            minutes — your work isn't lost, and this page will pick back up automatically once
-            we're back.
-          </p>
+          {outOfRetries ? (
+            <p className="muted" aria-live="polite">
+              We still can't reach our systems. Sign in again to start a fresh session. If that
+              doesn't work, wait a few minutes or contact your administrator.
+            </p>
+          ) : (
+            <p className="muted">
+              Our systems are temporarily unavailable. This usually resolves within a few
+              minutes — your work isn't lost, and this page will pick back up automatically once
+              we're back.
+            </p>
+          )}
         </div>
         <div className="modal-foot" style={{ justifyContent: 'center' }}>
-          <button className="btn btn-primary" onClick={handleRetry} disabled={retrying}>
-            {retrying ? 'Checking…' : 'Try again'}
-          </button>
+          {outOfRetries ? (
+            <button className="btn btn-primary" onClick={handleSignIn}>
+              Sign in again
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={handleRetry} disabled={retrying}>
+              {retrying ? 'Checking…' : 'Try again'}
+            </button>
+          )}
         </div>
       </div>
     </div>

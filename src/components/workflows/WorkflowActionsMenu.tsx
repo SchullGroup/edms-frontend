@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, MoreVertical, RotateCcw, Trash2 } from 'lucide-react';
+import { Copy, GitBranchPlus, MoreVertical, RotateCcw, Trash2 } from 'lucide-react';
 import { Icon } from '@/components/ui/Icons';
 import type { WorkflowDefinition } from '@/types/models';
 
@@ -14,12 +14,23 @@ interface Props {
   onDelete: () => void;
   /** Shown for an archived workflow only when given (the designer has its own button). */
   onUnarchive?: () => void;
-  busy: { cloning: boolean; archiving: boolean; unarchiving: boolean; deleting: boolean };
+  /** Why Unarchive would 409; disables the item with this as its tooltip. */
+  unarchiveBlocked?: string | null;
+  /** Shown for a published workflow only when given; the label can name a newer draft. */
+  onNewVersion?: () => void;
+  newVersionLabel?: string;
+  busy: {
+    cloning: boolean;
+    versioning?: boolean;
+    archiving: boolean;
+    unarchiving: boolean;
+    deleting: boolean;
+  };
   can: { create: boolean; archive: boolean; delete: boolean };
 }
 
-/** The ⋮ menu for one workflow: Clone, then whichever of Delete draft, Archive or
- *  Unarchive its status allows (the backend refuses the others with a 409). */
+/** The ⋮ menu for one workflow: Clone (and New version), then whichever of Delete draft,
+ *  Archive or Unarchive its status allows (the backend refuses the others with a 409). */
 export function WorkflowActionsMenu({
   status,
   ariaLabel,
@@ -27,6 +38,9 @@ export function WorkflowActionsMenu({
   onArchive,
   onDelete,
   onUnarchive,
+  unarchiveBlocked,
+  onNewVersion,
+  newVersionLabel = 'New version',
   busy,
   can,
 }: Props) {
@@ -106,13 +120,26 @@ export function WorkflowActionsMenu({
             >
               <Copy size={15} /> Clone this workflow
             </button>
+            {status === 'published' && onNewVersion && (
+              <button
+                className="menu-item"
+                role="menuitem"
+                disabled={busy.versioning || !can.create}
+                title={!can.create ? "You don't have permission to create workflows" : undefined}
+                onClick={run(onNewVersion)}
+              >
+                <GitBranchPlus size={15} /> {newVersionLabel}
+              </button>
+            )}
             {status === 'archived' && onUnarchive && (
               <button
                 className="menu-item"
                 role="menuitem"
-                disabled={busy.unarchiving || !can.archive}
+                disabled={busy.unarchiving || !can.archive || !!unarchiveBlocked}
                 title={
-                  !can.archive ? "You don't have permission to unarchive workflows" : undefined
+                  !can.archive
+                    ? "You don't have permission to unarchive workflows"
+                    : (unarchiveBlocked ?? undefined)
                 }
                 onClick={run(onUnarchive)}
               >

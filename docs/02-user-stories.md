@@ -775,7 +775,10 @@ lifecycle.
 - [x] Create, edit, publish and archive definitions; since 2026-10-20 (verified live) delete a
       draft that was never started, and unarchive an archived one
 - [x] Stages with sequential transitions, SLA hours and role/user assignment
-- [x] Published definitions are immutable; edits require a new version
+- [x] Published definitions are immutable; edits require a new version. Since 2026-10-26
+      (edms-backend PR #59, verified live) that is a real version: ⋮ → **New version** copies
+      the published workflow into draft v+1 of the same family, and publishing it archives
+      the old one. Before, the only route was Clone, which started an unrelated workflow
 - [x] ✅ **Authorization now enforced** (2026-09-04). `definitions.service.ts` asserts on
       every method: `assertCanView` on list/getById, `assertCanManage` on
       create/update/publish/archive, with `WORKFLOW_DEFINITION_MANAGE_ROLES` =
