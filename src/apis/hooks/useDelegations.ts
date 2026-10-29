@@ -11,7 +11,17 @@ export const delegationKeys = {
   lists: () => [...delegationKeys.all, 'list'] as const,
   list: (params: DelegationFilters = {}) => [...delegationKeys.lists(), params] as const,
   detail: (id: string) => [...delegationKeys.all, 'detail', id] as const,
+  eligibleUsers: (search: string) => [...delegationKeys.all, 'eligible-users', search] as const,
 };
+
+/** People the caller may delegate to; `search` is sent only from 2 characters. */
+export function useEligibleDelegates(search: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: delegationKeys.eligibleUsers(search),
+    queryFn: () => delegationsService.getEligibleUsers(search || undefined),
+    enabled: options?.enabled ?? true,
+  });
+}
 
 export function useDelegations(params: DelegationFilters = {}) {
   return useQuery({

@@ -1069,6 +1069,8 @@ export interface Delegation {
   scope?: DelegationScope | null;
   isActive: boolean;
   createdAt: string;
+  delegator?: PersonSummary;
+  delegate?: PersonSummary;
 }
 
 /** Body for `POST /delegations`. */

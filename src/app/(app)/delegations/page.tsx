@@ -8,7 +8,6 @@ import {
   useCreateDelegation,
   useEndDelegation,
 } from '@/apis/hooks/useDelegations';
-import { useAllUsers } from '@/apis/hooks/useUsers';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -19,7 +18,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { fmtDateTime } from '@/utils/helpers';
 import { Cabinet, Delegation } from '@/types/models';
 import { DateTimeField, todayStr } from '@/components/ui/DatePicker';
-import { UserPicker } from '@/components/common/UserPicker';
+import { DelegatePicker } from '@/components/delegations/DelegatePicker';
 
 /** A delegation is active only while `isActive` AND the current time falls
  *  inside its window — the backend flips `isActive` off once it ends, but a
@@ -68,7 +67,6 @@ export default function DelegationsPage() {
   const canEndDelegation = can('delegation', 'end');
 
   const { data, isLoading, isError, refetch } = useDelegations({ scope: 'mine', limit: 100 });
-  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const { data: cabinetsData, isLoading: isLoadingCabinets } = useCabinets();
 
   const createDelegation = useCreateDelegation();
@@ -81,13 +79,11 @@ export default function DelegationsPage() {
   if (!currentUser) return null;
 
   const delegations = data?.data || [];
-  const users = usersData?.items || [];
   const cabinets = cabinetsData?.data || [];
   const cabinetNameById = Object.fromEntries(cabinets.map((c) => [c.id, c.name]));
 
   const delegatedByMe = delegations.filter((d) => d.delegatorId === currentUser.id);
   const delegatedToMe = delegations.filter((d) => d.delegateId === currentUser.id);
-  const userById = Object.fromEntries(users.map((u) => [u.id, u]));
 
   const openCreateModal = () => {
     // The scope-mode toggle needs to conditionally show the cabinet checklist,
@@ -104,7 +100,6 @@ export default function DelegationsPage() {
       title: 'New out-of-office delegation',
       body: (
         <DelegationForm
-          currentUserId={currentUser.id}
           cabinets={cabinets}
           formRef={formRef}
         />
@@ -150,7 +145,7 @@ export default function DelegationsPage() {
   };
 
   const renderRow = (d: Delegation, direction: 'out' | 'in') => {
-    const other = direction === 'out' ? userById[d.delegateId] : userById[d.delegatorId];
+    const other = direction === 'out' ? d.delegate : d.delegator;
     const phase = delegationPhase(d);
     return (
       <div key={d.id} className="task-row" style={{ alignItems: 'flex-start' }}>
@@ -206,7 +201,7 @@ export default function DelegationsPage() {
         </div>
       </div>
 
-      {isLoading || isLoadingUsers || isLoadingCabinets ? (
+      {isLoading || isLoadingCabinets ? (
         <div className="card" role="status" aria-busy="true" aria-label="Loading delegations">
           <SkeletonTaskRows rows={4} />
         </div>
@@ -260,11 +255,9 @@ export default function DelegationsPage() {
  * component) can read the current values without a submit handler of its own.
  */
 function DelegationForm({
-  currentUserId,
   cabinets,
   formRef,
 }: {
-  currentUserId: string;
   cabinets: Cabinet[];
   formRef: { current: DelegationFormValues };
 }) {
@@ -292,15 +285,12 @@ function DelegationForm({
         <label>
           Delegate to <span className="req">*</span>
         </label>
-        <UserPicker
+        <DelegatePicker
           value={delegateId}
           onChange={(id) => {
             setDelegateId(id);
             commit({ delegateId: id });
           }}
-          filters={{ status: 'active' }}
-          excludeIds={[currentUserId]}
-          placeholder="Select a colleague…"
           ariaLabel="Delegate to"
         />
       </div>

@@ -736,7 +736,10 @@ it has no urgency order or filter. *(Corrected 2026-10-19 — this said `tasks.r
 `startsAt`/`endsAt`, an optional JSON `scope` limiting it to particular cabinets or
 workflows, an `isActive` flag, and full CRUD at `GET/POST /delegations` and
 `POST /delegations/:id/end`. `tasks.service` already resolves delegations when listing and
-actioning tasks.
+actioning tasks. Since `edms-backend` `436ea83` (2026-10-29) a delegation in effect also
+reassigns the delegator's open tasks to the delegate. New assignments move at once, and
+existing ones move on a 5-minute worker. Each move sends the usual `task.delegated`
+notification.
 
 **A UI now exists** (`/delegations`, reachable from the Staff and Supervisor nav): create a
 time-bounded delegation to a colleague, optionally scoped to specific cabinets; separate
@@ -1253,6 +1256,13 @@ alignment), not to count records.
 `SEED.findings` via `addFinding` / `updateFinding`. **There is no `Finding` model in the
 Prisma schema and no endpoint.** Everything a user does here is lost on
 `localStorage.clear()`.
+
+*2026-10-29:* `edms-backend` `51e9d85` adds the nearest thing: **control exceptions**, the
+internal control unit's record of an issue seen in a transaction or department. Each has a
+severity, a status (open → reported → acknowledged → resolved), optional links to a
+department, document and workflow, and a resolution note. Reporting one notifies
+management. It has no owner or due date, so it doesn't meet the `Finding` criteria below,
+and no screen uses it yet (doc 01, Internal control). H2 stays 🟥.
 
 **Acceptance criteria**
 - [ ] `Finding` model: severity, status, owner, due date, linked document/workflow, evidence

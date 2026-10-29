@@ -78,7 +78,10 @@ setting up an environment.
 
 ## The short version
 
-**59 frontend pages · 140 backend routes · 6 roles · 0 tests.**
+**59 frontend pages · 149 backend routes · 6 roles · 0 tests.**
+*(Routes re-derived 2026-10-29, backend @ `dev` `82c4707`: 140 → 149 — the 8
+`/control-exceptions` routes (`51e9d85`, a 12th router file) and
+`GET /delegations/eligible-users` (`436ea83`). Seed: 78 permissions, 219 grants.)*
 *(Routes re-derived 2026-10-26, backend @ `dev` `4651d71`: 134 → 140 — `DELETE /workflows/:id`
 and `POST …/unarchive` (PR #55), `POST /documents/:id/summary` (PR #56) and the three
 `/workflows/:id/versions` routes (PR #59).)*

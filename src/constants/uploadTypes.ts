@@ -1,7 +1,7 @@
 const MB = 1024 * 1024;
 
-/** The one upload allowlist (the backend accepts any `mimeType`). PDF and images only, since
- *  every upload is OCR'd; images cap at 10 MB because Textract's async API does. */
+/** The one upload allowlist, matching the backend's (`ALLOWED_DOCUMENT_MIME_TYPES`). PDF and
+ *  images only, since every upload is OCR'd; images cap at 10 MB because Textract's async API does. */
 
 export const UPLOAD_TYPES = [
   { mime: 'application/pdf', extensions: ['pdf'], maxBytes: 100 * MB },

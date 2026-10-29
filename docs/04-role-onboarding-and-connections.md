@@ -107,7 +107,7 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
                                      │      + the first admin account
                                      ▼
                       ┌──────────────────────────────┐
-                      │  CLIENT_ADMIN (Bola)         │  72 grants, 71 global
+                      │  CLIENT_ADMIN (Bola)         │  73 grants, 72 global
                       │  Tenant system owner         │  Only role bypassing
                       │  /admin                      │  cabinet access checks
                       └──┬────────┬────────┬─────────┘
@@ -120,7 +120,7 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
         ▼                         ▼                           ▼
 ┌──────────────────┐   ┌──────────────────┐      ┌─────────────────────────┐
 │  STAFF (Chika)   │   │ SUPERVISOR(David)│      │  MANAGEMENT (Eniola)    │
-│  29 grants       │   │  40 grants       │      │  27 grants, read-mostly │
+│  29 grants       │   │  40 grants       │      │  29 grants, read-mostly │
 │  own / department│   │  department      │      │  global                 │
 │  /staff          │   │  /supervisor     │      │  /management            │
 └────────┬─────────┘   └────────┬─────────┘      └────────────┬────────────┘
@@ -139,14 +139,15 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
                     │  H7: every action above emits an audit entry
                     ▼            ✅ written since 2026-09-18 (DRIFT-11)
          ┌──────────────────────────────┐
-         │  INTERNAL_AUDITOR (Femi)     │  26 grants, read-mostly global
+         │  INTERNAL_AUDITOR (Femi)     │  30 grants, read-mostly global
          │  Independent assurance       │  No document/cabinet/user edits
          │  /auditor                    │  🟨 trail real; dashboard SEED
          └──────────────────────────────┘
 ```
 
-*Grant counts re-counted 2026-10-15 from `prisma/seed-system.ts` (they were 3 / 45 / 14 /
-18 / 10 / 10, the pre-2026-09-16 seed). "Read-mostly": management and the auditor read
+*Grant counts re-counted 2026-10-29 from `prisma/seed-system.ts`: control exceptions
+(`51e9d85`) added 1 to `client_admin`, 2 to management and 4 to the auditor. Before
+2026-09-16 they were 3 / 45 / 14 / 18 / 10 / 10. "Read-mostly": management and the auditor read
 tenant-wide, and can also act on their own tasks, route their own documents and delegate.*
 
 **The two structural observations** *(re-checked 2026-10-15)*:
@@ -255,10 +256,11 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 
 ### Identity and rights
 
-**72 grants — 71 `global`, 1 `own`** *(re-counted 2026-10-15; was "45 grants, every one
-`global`")*. Documents (including comments, signatures and access requests), versions,
-locks, metadata, cabinets, metadata fields, cabinet access, folders, departments, users,
-roles, workflows, workflow instances, tasks, delegations, audit and circulars.
+**73 grants — 72 `global`, 1 `own`** *(re-counted 2026-10-29: +`control_exception:view`;
+72 on 2026-10-15, "45 grants, every one `global`" before)*. Documents (including comments,
+signatures and access requests), versions, locks, metadata, cabinets, metadata fields,
+cabinet access, folders, departments, users, roles, workflows, workflow instances, tasks,
+delegations, audit, circulars, and read-only control exceptions.
 
 Two unique properties:
 - The **only** role in `CABINET_ACCESS_BYPASS_ROLES` — sees every cabinet regardless of grants
@@ -561,18 +563,24 @@ being the approval bottleneck, this is the most consequential missing screen in 
 
 ### Identity and rights
 
-**27 grants — 21 `global`, 6 `own`** *(re-counted 2026-10-15; this said "10 grants, all
-`global`, all read-only", the pre-2026-09-16 seed)*:
+**29 grants — 23 `global`, 6 `own`** *(re-counted 2026-10-29: +`control_exception`
+view/respond; 27 on 2026-10-15, "10 grants, all `global`, all read-only" before
+2026-09-16)*:
 
 ```
 read (global):  document view/search/view_confidential/download/export/print,
                 document_version, document_metadata, document_comment,
                 document_signature, cabinet, folder, department, user,
-                workflow_instance, task, delegation, circular
+                workflow_instance, task, delegation, circular, control_exception
 write:          workflow_instance create/route (own) · task action (own)
                 delegation create/end (own) · document_access_request create
                 circular create (own), publish, withdraw (global)
+                control_exception respond (global): acknowledge, resolve
 ```
+
+Management is the permanent secretary the internal control unit reports to: reported
+control exceptions notify every active management user. There's no UI for them yet, and
+the live tenant isn't seeded with the grants (doc 01, Internal control).
 
 Management cannot create or edit documents, users or configuration. It **can** act on tasks
 assigned to it, route its own documents, delegate, and publish circulars. The seed grants it **no
@@ -661,18 +669,25 @@ existed by 2026-09-04 evening.
 
 ### Identity and rights
 
-**26 grants — 21 `global`, 5 `own`** *(re-counted 2026-10-15; this said "10 grants, all
-`global`, all read-only" with `workflow:view:global`)*:
+**30 grants — 25 `global`, 5 `own`** *(re-counted 2026-10-29: +`control_exception`
+view/create/edit/report; 26 on 2026-10-15, "10 grants, all `global`, all read-only" with
+`workflow:view:global` before)*:
 
 ```
 read (global):  document view/search/view_confidential/download/export/print,
                 document_version, document_metadata, document_comment,
                 document_signature, cabinet, cabinet_access, folder,
-                department, workflow_instance, task, delegation, circular
+                department, workflow_instance, task, delegation, circular,
+                control_exception
 audit:          view, export (global)
 write:          workflow_instance create/route (own) · task action (own)
                 delegation create/end (own) · document_access_request create
+                control_exception create, edit, report (global)
 ```
+
+The auditor is the internal control unit: it raises control exceptions and reports them to
+management (the permanent secretary). That flow is backend-only so far, and the live tenant
+lacks the grants (doc 01, Internal control).
 
 `document:view_confidential:global` lets them read `confidential`-tier documents (a
 permission since `edms-backend` `0dab81a`; it was a role list before). They cannot change

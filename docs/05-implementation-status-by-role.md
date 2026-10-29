@@ -628,6 +628,7 @@ so they were deleted rather than left dead.
 | `GET /audit` (for the findings/compliance panel specifically — the sensitive-activity half already reads it) | Partially addressed — see `/management/compliance` above |
 | Scheduled/emailed reports | No report scheduler. A mail transport exists now (`src/config/mailer.ts`, used for invitations and notification emails) *(re-checked 2026-10-15)* |
 | `workflow:view` for management | 🟠 Seed gap (DRIFT-14) — on a freshly seeded tenant management holds `workflow_instance:route:own` but can't list definitions; the live tenant's management role can (re-tested 2026-10-16) *(added 2026-10-15)* |
+| Control exceptions inbox: `GET /control-exceptions`, `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` | ⛔ **Backend built, no UI** — `edms-backend` `51e9d85` (on `dev` 2026-10-29). Management (the permanent secretary) holds `control_exception:view` and `respond`, and gets a `control_exception.reported` notification. Not seeded on the live tenant yet (doc 01, Internal control) *(added 2026-10-29)* |
 | A department × document-status cross-tab | Doesn't exist — `/management`'s per-department Pending/In-Progress/Closed table derives `Closed` as `total − (pending + inProgress)` rather than an exact count, because no single endpoint returns document status broken out by department |
 
 ### One trade-off from the rewiring, not hidden
@@ -861,6 +862,7 @@ its recipient/acknowledgement report (`GET /circulars`, `/circulars/:id`,
 | `GET /audit` with actor / object / action / date filters | ✅ **Built and wired** — `/auditor/trail`, migrated 2026-09-18 |
 | `GET /audit/verify` (hash-chain integrity proof) | ✅ **Built** — confirmed live, returns `{intact, entriesChecked, rangeStart, rangeEnd}`; not yet surfaced on `/auditor/trail` itself (only `/admin/audit`'s "Verify integrity" button calls it) |
 | `GET/POST/PATCH /findings` | **No `Finding` model in Prisma at all** |
+| Control exceptions: `GET/POST /control-exceptions`, `PATCH /:id`, `POST /:id/report`, `GET /report` | ⛔ **Backend built, no UI** — `edms-backend` `51e9d85` (on `dev` 2026-10-29). The auditor raises, edits and reports exceptions to management. No owner or due date, so it isn't the `Finding` model. Not seeded on the live tenant yet (doc 01, Internal control) *(added 2026-10-29)* |
 | `GET /cabinets/:id/access` (who can see this cabinet) | Endpoint exists and `/admin/cabinets`'s Access card calls it; **no auditor screen does**, though `cabinet_access:view` is granted *(re-checked 2026-10-15)* |
 | Document view logging | ✅ confirmed — `document.viewed` is a real, auto-emitted action (seen live 2026-09-18). Downloads are logged too: `document.downloaded` since the gated download landed (2026-10-08; in code, not yet seen in a live pull). *(Was "no download endpoint exists to log downloads".)* |
 
@@ -918,6 +920,8 @@ claims above were re-checked against live API behavior 2026-09-18, not by re-rea
 7. **Add monthly partitioning** as the schema comments specify.
 8. ~~**Implement SoD detection**, which the older docs already claim exists.~~ **Dropped
    from scope 2026-10-21** (PM decision), with redaction.
+9. **Build the control-exceptions screens** (added 2026-10-29) once the live tenant is
+   seeded: the auditor's register and report, and management's acknowledge/resolve inbox.
 
 > ~~**This dashboard is the largest gap between what the product claims and what it does.**~~
 > *Re-checked 2026-10-15:* the trail — the part the product's claim rests on — is real. What
@@ -1013,7 +1017,7 @@ This is a **phase**, not a backlog item:
 | `/forgot-password` | 96 | signed out | — | `authService.forgotPassword` → `POST /auth/forgot-password` | 🟨 API-only, no `SEED`. Doc 04 records the reset flow as working; not re-verified in the 2026-10-08 classification pass |
 | `/set-password` | 145 | signed out | — | `authService.resetPassword` → `POST /auth/reset-password` (invitation and reset tokens) | 🟨 API-only, no `SEED`; DRIFT-15 fixed its payload 2026-09-18. Not re-verified in the 2026-10-08 pass |
 | `/user-stories` | 413 | all | — | — | static — in-app guide built from a local data module (the stories in doc 02), outside the app shell |
-| `/delegations` | 364 | `delegation:view` | `currentUser` | `useDelegations`, `useCreateDelegation`, `useEndDelegation`, `useUsers`, `useCabinets`, `UserPicker` (`GET /users?search=`) ✅ | 🟨 API-only, no `SEED`. *Row added 2026-10-08* — the page was wired by 2026-09-18 (backlog #13) but never had an inventory row; not re-verified end to end. **2026-10-13:** "Delegate to" is a searchable `UserPicker` (active users, not yourself). The old select listed only the first 20 users. As `supervisor_finance`, searching "staff" offered Finance Staff User (department scope) and picking it filled the field; creating the delegation was not re-run |
+| `/delegations` | 359 | `delegation:view` | `currentUser` | `useDelegations`, `useCreateDelegation`, `useEndDelegation`, `useCabinets`, `DelegatePicker` (`GET /delegations/eligible-users`, `useEligibleDelegates`) ✅ | 🟨 API-only, no `SEED`. *Row added 2026-10-08* — the page was wired by 2026-09-18 (backlog #13) but never had an inventory row; not re-verified end to end. **2026-10-13:** "Delegate to" became a searchable `UserPicker` (active users, not yourself). The old select listed only the first 20 users. **2026-10-29:** "Delegate to" is `DelegatePicker` on `GET /delegations/eligible-users` (`edms-backend` `436ea83`). It needs only `delegation:create`, so staff, who hold no `user:view`, can now pick someone. Rows name people from the delegation's embedded `delegate`/`delegator`, so the page no longer calls `GET /users` |
 | `/help` | 516 | none (every signed-in user) | — | none — static content | ↪️ Static — **new 2026-10-08**: help topics ordered for the reader's portal (other roles' topics appear when searched), search box, anchors per topic. The Topbar's "?" opens the topic for the current page (`helpTopicForPath` in `src/constants/helpTopics.ts`), and the sidebar's Help & support goes here instead of a stale demo-build message |
 | `/tasks/[id]` | 33 | all | — | `useTask` → `GET /tasks/:id` | ↪️ redirect to `/workflow-instances/{instanceId}?task={id}` — landing page for backend `/tasks/:id` notification links (DRIFT-17). Not yet verified live |
 | `/workflow-instances/[id]` | 544 | all | `currentUser` | `useWorkflowInstance`, `useTask`, `useDocument`, `useTaskAction`, versions, `useDocumentSummary` (`POST …/summary`, then `GET` to follow it) ✅ | ✅ Live — **new 2026-10-02** — the workflow page (see below). Was a 33-line redirect earlier the same day. Read side verified in a browser 2026-10-09; approve, reject, request changes and review-with-upload confirmed by the product owner's testing 2026-10-09. Delegate, close and the access overlay not yet exercised **Department tasks (2026-10-13, verified live):** "is this my task" follows the backend's rule, department included (`isTaskForUser`). On a Finance-only task, Finance staff and the Finance supervisor got Approve/Reject, client admin saw them disabled with "Assigned to Finance", and HR staff couldn't open the workflow (backend). Before, nobody could act on a department-only task from the UI, and a role + department task offered the buttons to that role in every department. **Partial actions (2026-10-16):** documents already actioned on the open task (edms-backend PR #52) show as "· Done" tabs and are left out of the actions, the held-back count and the deadline; before, they read as "needs Action access" and disabled Delegate and Close. Verified with an edited `GET /tasks/:id` (see doc 01 §7). **2026-10-20:** the versions panel names uploaders from each version's `uploader` (PR #53) instead of `GET /users` **AI summary (2026-10-23, verified live):** the `/doc/[id]` summary card, for the selected document tab (see below) |
@@ -1087,10 +1091,10 @@ no push channel.
 > ⚠️ **Correction (2026-09-18).** Every row previously listed here (cabinet
 > metadata-fields, cabinet access, version restore, archive, delegations, workflow
 > history, role matrix persistence) was checked against the actual consuming pages and
-> is wired. Table left empty rather than deleted, so it's visible the category was
-> checked, not skipped.
+> is wired. The table stayed empty from then until 2026-10-29.
 
-Nothing currently known to be backend-complete with zero UI.
+- **Control exceptions** — all 8 `/control-exceptions` routes (`edms-backend` `51e9d85`,
+  on `dev` 2026-10-29). See §3 and §5 "APIs missing", and doc 01, Internal control.
 
 **`GET /workflow-history` is the quiet win.** It is the closest thing the backend has to a
 real audit trail — actor, from-stage, to-stage, note, `elapsedSeconds` — and it would
