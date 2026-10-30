@@ -658,7 +658,16 @@ export const EPICS: Epic[] = [
         title: 'Track findings to closure',
         statement:
           'As Femi, I want to raise a finding against a document or process, assign an owner and a due date, and track it, so that issues are resolved rather than noted.',
-        status: 'preview',
+        status: 'planned',
+        note: 'Control exceptions (H4) cover raising and resolving issues today; owners and due dates are planned.',
+      },
+      {
+        id: 'H4',
+        title: 'Report control exceptions to the permanent secretary',
+        statement:
+          'As Femi, in the internal control unit, I want to record an issue I found in a transaction or department and report it to the permanent secretary, so that someone with authority acknowledges it and records how it was resolved.',
+        status: 'progress',
+        note: 'The screens are built; they switch on once your organisation is set up for them.',
       },
     ],
   },

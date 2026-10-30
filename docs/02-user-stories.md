@@ -736,7 +736,10 @@ it has no urgency order or filter. *(Corrected 2026-10-19 — this said `tasks.r
 `startsAt`/`endsAt`, an optional JSON `scope` limiting it to particular cabinets or
 workflows, an `isActive` flag, and full CRUD at `GET/POST /delegations` and
 `POST /delegations/:id/end`. `tasks.service` already resolves delegations when listing and
-actioning tasks.
+actioning tasks. Since `edms-backend` `436ea83` (2026-10-29) a delegation in effect also
+reassigns the delegator's open tasks to the delegate. New assignments move at once, and
+existing ones move on a 5-minute worker. Each move sends the usual `task.delegated`
+notification.
 
 **A UI now exists** (`/delegations`, reachable from the Staff and Supervisor nav): create a
 time-bounded delegation to a colleague, optionally scoped to specific cabinets; separate
@@ -1196,7 +1199,8 @@ alignment), not to count records.
 
 > ~~⚠️ **This entire epic is currently a mock on both sides.**~~ *(2026-10-15: no longer
 > true. The audit trail is real on both sides — H1 is 🟨. Findings (H2) are still mock and
-> separation-of-duties checks (H3) are not built.)*
+> separation-of-duties checks (H3) are not built.)* *(2026-10-29: H3 was dropped
+> 2026-10-21; the findings mock gave way to control exceptions, new story H4 🟨, so H2 is ⬜.)*
 
 ---
 
@@ -1242,7 +1246,7 @@ alignment), not to count records.
 
 ---
 
-### H2 — Track findings to closure · 🟥 **Mock**
+### H2 — Track findings to closure · ⬜ **Not built** *(was 🟥 Mock until 2026-10-29)*
 
 > **As** Femi,
 > **I want to** raise a finding against a document or process, assign an owner and a due
@@ -1254,14 +1258,54 @@ alignment), not to count records.
 Prisma schema and no endpoint.** Everything a user does here is lost on
 `localStorage.clear()`.
 
+*2026-10-29:* `edms-backend` `51e9d85` adds the nearest thing: **control exceptions**, the
+internal control unit's record of an issue seen in a transaction or department. Each has a
+severity, a status (open → reported → acknowledged → resolved), optional links to a
+department, document and workflow, and a resolution note. Reporting one notifies
+management. It has no owner or due date, so it doesn't meet the `Finding` criteria below.
+Its screens are story H4.
+
+*Later 2026-10-29 (product decision):* the Findings menu item now opens control exceptions,
+and `/auditor/findings` and `/management/findings` redirect there. The fixture tracker is
+gone, so H2 is ⬜: nothing tracks owners or due dates until a `Finding` model exists.
+
 **Acceptance criteria**
 - [ ] `Finding` model: severity, status, owner, due date, linked document/workflow, evidence
 - [ ] CRUD endpoints
-- [ ] Findings visible to management — `/management/findings` is a 7-line **re-export**
-      of `/auditor/findings`, so management sees the same mock screen, not a
-      management-oriented view
+- [ ] Findings visible to management — ~~`/management/findings` is a 7-line **re-export**
+      of `/auditor/findings`~~ both pages redirect to control exceptions (H4) since
+      2026-10-29
 - [ ] Notification to the assigned owner
 - [ ] Ageing and overdue-finding reporting
+
+---
+
+### H4 — Report control exceptions to the permanent secretary · 🟨 **Partial** *(new 2026-10-29)*
+
+> **As** Femi, in the internal control unit,
+> **I want to** record an issue I found in a transaction or department and report it to the
+> permanent secretary,
+> **so that** someone with authority acknowledges it and records how it was resolved.
+
+**Current state:** `edms-backend` `51e9d85` adds `control_exceptions` and 8 routes. The
+frontend built the same day: a shared register at `/control-exceptions`, a raise page and an
+edit page (pages, not modals, by product decision), a detail page with the lifecycle actions,
+and a report. The auditor's and management's Findings menu items open it. It is 🟨 because
+it was verified only against a local mock: the live tenant has neither the table nor the
+grants until `prisma migrate deploy` and `seed:system` run (doc 01, Internal control).
+
+**Acceptance criteria**
+- [x] Backend: exception with category, severity, status and optional department, document and
+      workflow links; open → reported → acknowledged → resolved (`51e9d85`)
+- [x] Raise and edit (while open) on their own pages; required title, description, category
+- [x] Report to the permanent secretary; every active `management` user is notified
+- [x] Management acknowledges, then resolves with a required note
+- [x] Register filtered by status, category, severity, department and date; counts report
+      with CSV export
+- [ ] Verified end to end on the live tenant (needs the migration and `seed:system`)
+- [ ] History names who reported, acknowledged and resolved (the API returns ids only)
+- [ ] Link a workflow from the form (the API accepts one; the form offers department and
+      document only)
 
 ---
 
@@ -1602,22 +1646,24 @@ error paths and workers).
 | E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
 | F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; SLA warnings and breaches notify (in code, DRIFT-10) |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | On server aggregation endpoints (DRIFT-07); no PDF export or forecasting |
-| H — Audit & Compliance | 0 | 1 | 1 | 0 | Audit trail real (H1 🟨, 2026-10-15); findings mock; SoD dropped from scope (2026-10-21) |
+| H — Audit & Compliance | 0 | 2 | 0 | 1 | Audit trail real (H1 🟨, 2026-10-15); control exceptions built, not live (H4 🟨); findings not built (H2 ⬜); SoD dropped from scope (2026-10-21) |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **14** | **18** | **8** | **1** | 41 functional stories |
+| **Total** | **14** | **19** | **7** | **2** | 42 functional stories |
 
 *(2026-10-15: H1 moved 🟥 → 🟨, so Partial 16 → 17 and Mock 9 → 8. 2026-10-19: C2 moved
 ✅ → 🟨 (no urgency ordering), so Done 15 → 14 and Partial 17 → 18. 2026-10-21: H3 removed
-from scope, so Not built 2 → 1 and 42 → 41 stories. Totals re-tallied from the story
-headings, not carried forward.)*
+from scope, so Not built 2 → 1 and 42 → 41 stories. 2026-10-29: H4 added 🟨 and H2 🟥 → ⬜,
+so Partial 18 → 19, Mock 8 → 7, Not built 1 → 2 and 41 → 42 stories. Totals re-tallied from
+the story headings, not carried forward.)*
 
 **The honest one-paragraph summary (revised 2026-10-15):** the *document* half of this EDMS
 — capture, filing, versioning, checkout, classification, search, task execution and
 approval — is genuinely built and mostly works. Audit, notifications and circulars have
 since moved onto real backends. What is still a UI over fixture data is policies (except
-the SLA tab), findings, branding and platform operations. ~~The one defect that still sits
+the SLA tab), branding and platform operations *(findings gave way to control exceptions,
+2026-10-29)*. ~~The one defect that still sits
 across the seam is **DRIFT-14**: the roles that route documents cannot list workflow
 definitions, because the RBAC seed grants `workflow:view` only to the two admin roles.~~
 *Re-tested 2026-10-16:* DRIFT-14 doesn't affect the live tenant, whose roles still hold

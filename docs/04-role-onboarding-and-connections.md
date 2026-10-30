@@ -107,7 +107,7 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
                                      │      + the first admin account
                                      ▼
                       ┌──────────────────────────────┐
-                      │  CLIENT_ADMIN (Bola)         │  72 grants, 71 global
+                      │  CLIENT_ADMIN (Bola)         │  73 grants, 72 global
                       │  Tenant system owner         │  Only role bypassing
                       │  /admin                      │  cabinet access checks
                       └──┬────────┬────────┬─────────┘
@@ -120,7 +120,7 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
         ▼                         ▼                           ▼
 ┌──────────────────┐   ┌──────────────────┐      ┌─────────────────────────┐
 │  STAFF (Chika)   │   │ SUPERVISOR(David)│      │  MANAGEMENT (Eniola)    │
-│  29 grants       │   │  40 grants       │      │  27 grants, read-mostly │
+│  29 grants       │   │  40 grants       │      │  29 grants, read-mostly │
 │  own / department│   │  department      │      │  global                 │
 │  /staff          │   │  /supervisor     │      │  /management            │
 └────────┬─────────┘   └────────┬─────────┘      └────────────┬────────────┘
@@ -139,21 +139,22 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
                     │  H7: every action above emits an audit entry
                     ▼            ✅ written since 2026-09-18 (DRIFT-11)
          ┌──────────────────────────────┐
-         │  INTERNAL_AUDITOR (Femi)     │  26 grants, read-mostly global
+         │  INTERNAL_AUDITOR (Femi)     │  30 grants, read-mostly global
          │  Independent assurance       │  No document/cabinet/user edits
          │  /auditor                    │  🟨 trail real; dashboard SEED
          └──────────────────────────────┘
 ```
 
-*Grant counts re-counted 2026-10-15 from `prisma/seed-system.ts` (they were 3 / 45 / 14 /
-18 / 10 / 10, the pre-2026-09-16 seed). "Read-mostly": management and the auditor read
+*Grant counts re-counted 2026-10-29 from `prisma/seed-system.ts`: control exceptions
+(`51e9d85`) added 1 to `client_admin`, 2 to management and 4 to the auditor. Before
+2026-09-16 they were 3 / 45 / 14 / 18 / 10 / 10. "Read-mostly": management and the auditor read
 tenant-wide, and can also act on their own tasks, route their own documents and delegate.*
 
 **The two structural observations** *(re-checked 2026-10-15)*:
 
 1. ~~**Every arrow into the auditor is broken.**~~ H7 works now: audit entries are written
-   automatically and `/auditor/trail` reads them (DRIFT-11). The auditor's *dashboard* and
-   *findings* are still fixture data.
+   automatically and `/auditor/trail` reads them (DRIFT-11). The auditor's *dashboard* is
+   still fixture data; *findings* gave way to control exceptions on 2026-10-29 (🟨, not live).
 2. **`client_admin` is still close to a single point of failure.** Five of the seven
    handoffs originate with them. Since 2026-10-06 a cabinet can be *delegated*: a user
    granted `delete` on it manages its folders, metadata schema and access grants from
@@ -255,10 +256,11 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 
 ### Identity and rights
 
-**72 grants — 71 `global`, 1 `own`** *(re-counted 2026-10-15; was "45 grants, every one
-`global`")*. Documents (including comments, signatures and access requests), versions,
-locks, metadata, cabinets, metadata fields, cabinet access, folders, departments, users,
-roles, workflows, workflow instances, tasks, delegations, audit and circulars.
+**73 grants — 72 `global`, 1 `own`** *(re-counted 2026-10-29: +`control_exception:view`;
+72 on 2026-10-15, "45 grants, every one `global`" before)*. Documents (including comments,
+signatures and access requests), versions, locks, metadata, cabinets, metadata fields,
+cabinet access, folders, departments, users, roles, workflows, workflow instances, tasks,
+delegations, audit, circulars, and read-only control exceptions.
 
 Two unique properties:
 - The **only** role in `CABINET_ACCESS_BYPASS_ROLES` — sees every cabinet regardless of grants
@@ -561,18 +563,26 @@ being the approval bottleneck, this is the most consequential missing screen in 
 
 ### Identity and rights
 
-**27 grants — 21 `global`, 6 `own`** *(re-counted 2026-10-15; this said "10 grants, all
-`global`, all read-only", the pre-2026-09-16 seed)*:
+**29 grants — 23 `global`, 6 `own`** *(re-counted 2026-10-29: +`control_exception`
+view/respond; 27 on 2026-10-15, "10 grants, all `global`, all read-only" before
+2026-09-16)*:
 
 ```
 read (global):  document view/search/view_confidential/download/export/print,
                 document_version, document_metadata, document_comment,
                 document_signature, cabinet, folder, department, user,
-                workflow_instance, task, delegation, circular
+                workflow_instance, task, delegation, circular, control_exception
 write:          workflow_instance create/route (own) · task action (own)
                 delegation create/end (own) · document_access_request create
                 circular create (own), publish, withdraw (global)
+                control_exception respond (global): acknowledge, resolve
 ```
+
+Management is the permanent secretary the internal control unit reports to: reported
+control exceptions notify every active management user. Since 2026-10-29 the sidebar's
+Control Exceptions item (formerly Findings) lists them, and the detail page offers
+Acknowledge and Resolve. 🟨 Verified against mocked responses only: the live tenant isn't
+seeded with the grants (doc 01, Internal control).
 
 Management cannot create or edit documents, users or configuration. It **can** act on tasks
 assigned to it, route its own documents, delegate, and publish circulars. The seed grants it **no
@@ -592,7 +602,7 @@ assigned to it, route its own documents, delegate, and publish circulars. The se
 | 3 | Review trends | `/management/trends` | ✅ same |
 | 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED`; the sensitive-activity panel needs `audit:view`, which `management` doesn't hold, so it says so (2026-10-13) |
 | 5 | Review performance | `/management/performance` | ✅ `useTaskStats`, server-aggregated (85 lines) |
-| 6 | Review findings | `/management/findings` | 🟥 re-export of `/auditor/findings` |
+| 6 | Review control exceptions reported to them; acknowledge and resolve | `/control-exceptions` (`/management/findings` redirects) | 🟨 built 2026-10-29; mocked responses only, live not seeded. Was 🟥, a re-export of the fixture `/auditor/findings` |
 | 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
 
 ### First week
@@ -661,18 +671,26 @@ existed by 2026-09-04 evening.
 
 ### Identity and rights
 
-**26 grants — 21 `global`, 5 `own`** *(re-counted 2026-10-15; this said "10 grants, all
-`global`, all read-only" with `workflow:view:global`)*:
+**30 grants — 25 `global`, 5 `own`** *(re-counted 2026-10-29: +`control_exception`
+view/create/edit/report; 26 on 2026-10-15, "10 grants, all `global`, all read-only" with
+`workflow:view:global` before)*:
 
 ```
 read (global):  document view/search/view_confidential/download/export/print,
                 document_version, document_metadata, document_comment,
                 document_signature, cabinet, cabinet_access, folder,
-                department, workflow_instance, task, delegation, circular
+                department, workflow_instance, task, delegation, circular,
+                control_exception
 audit:          view, export (global)
 write:          workflow_instance create/route (own) · task action (own)
                 delegation create/end (own) · document_access_request create
+                control_exception create, edit, report (global)
 ```
+
+The auditor is the internal control unit: it raises control exceptions and reports them to
+management (the permanent secretary), from the Control Exceptions item that replaced
+Findings on 2026-10-29. 🟨 Verified against mocked responses only: the live tenant lacks the
+grants (doc 01, Internal control).
 
 `document:view_confidential:global` lets them read `confidential`-tier documents (a
 permission since `edms-backend` `0dab81a`; it was a role list before). They cannot change
@@ -694,7 +712,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
 | 4 | Search for evidence | `/search` | ✅ index built on backend; page rebuilt 2026-09-30 *(confirmed by the product owner’s testing, 2026-10-09)* |
-| 5 | Raise a finding | `/auditor/findings` | 🟥 367 lines on `SEED.findings` |
+| 5 | Raise a control exception, then report it to the permanent secretary | `/control-exceptions/new` (a page), then the exception's page | 🟨 built 2026-10-29; mocked responses only, live not seeded. Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
 | 6 | Review compliance posture | `/auditor/compliance` | 🟥 re-export of `/management/compliance` |
 
 ### First week — what they would try to do
@@ -983,7 +1001,7 @@ acted yet.
 | Approval decisions | `supervisor` | Documents never close; management sees permanent backlog |
 | Task activity | `staff` + `supervisor` | Management dashboards are empty |
 | Audit entries | ✅ backend, auto-written | Real, and `/auditor/trail` reads them (H7) |
-| Findings | `internal_auditor` (🟥 mock) | `/management/findings` just re-exports the auditor's screen, so both roles see the same `SEED` fixtures |
+| Control exceptions *(were Findings)* | `internal_auditor` (🟨, not live) | Management has nothing to acknowledge or resolve. Both roles share `/control-exceptions`; the old Findings pages redirect there (2026-10-29) |
 
 **Read the table bottom-up and the shape of the product becomes clear:** the operational
 layer (staff → supervisor → management) is wired (DRIFT-14 only affects a freshly seeded tenant — re-tested 2026-10-16). The governance layer

@@ -398,6 +398,21 @@ const TOPICS: Topic[] = [
     ),
   },
   {
+    id: 'control-exceptions',
+    title: 'Control exceptions',
+    keywords: 'internal control exception finding procurement quotes permanent secretary report',
+    for: ['auditor', 'management'],
+    body: (
+      <p>
+        A control exception is an issue found in a transaction or department, such as a contract
+        awarded without competing quotes. The internal control unit raises one in{' '}
+        <b>Control Exceptions</b>, can edit it while it’s open, then reports it to the permanent
+        secretary. Management acknowledges it and records how it was resolved. <b>Report</b> counts
+        them by status, category, severity and department.
+      </p>
+    ),
+  },
+  {
     id: 'shortcuts',
     title: 'Keyboard shortcuts',
     keywords: 'keyboard shortcut keys',

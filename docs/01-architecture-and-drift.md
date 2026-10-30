@@ -134,7 +134,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
 │                               │              │                                        │
-│  Sole responsibility:         │              │  140 routes over 11 modules (10-26)    │
+│  Sole responsibility:         │              │  149 routes over 12 modules (10-29)    │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
 │  sees it.                     │              │  │ Repository → PrismaClient        │  │
@@ -147,6 +147,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
                                                │      • ocr (AWS Textract)              │
                                                │      • search-index (tsvector)         │
                                                │      • sla-breach (every 5 min)        │
+                                               │      • delegation-reconcile (5 min)    │
                                                └────────────────────────────────────────┘
 
                      ┌──────────────────────────────────────────┐
@@ -164,9 +165,9 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
-| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 59 pages (55 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-20 (+1: the `/admin/workflows` list, with the designer moved to `/admin/workflows/[id]`); 58 on 2026-10-15, 46 before |
-| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 140 routes over 11 router files — re-counted 2026-10-26 (134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
-| Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA |
+| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 64 pages (60 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-29 (+5: the `/control-exceptions` pages); 59 on 2026-10-20, 58 on 2026-10-15, 46 before |
+| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 149 routes over 12 router files — re-counted 2026-10-29 (140 on 2026-10-26, 134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
+| Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA + out-of-office delegation (since `436ea83`, 2026-10-29) |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |
 
 ---
@@ -1114,7 +1115,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents` | ✅ — since PR #51 (live 2026-10-14) also takes `departmentId` (documents whose cabinet belongs to that department); it only narrows, scope and clearance still apply. Since PR #53 (live 2026-10-20) each document carries `creator {id,name,email}`, readable without `user:view` | ✅ — `/staff/cabinets` "Uploaded by" reads `creator` since 2026-10-20 (verified live as `staff_finance`); before, it looked the id up in `GET /users`, a 403 for staff, so every row said "Unknown" |
 | `GET /documents/search` | ✅ — since PR #51 (live 2026-10-14) takes every list filter (`cabinetId`, `departmentId`, `folderId`, `status`, `confidentiality`, `urgency`, `documentType`) alongside `q`, all AND'd with clearance and scope. Carries `creator` since PR #53 (live 2026-10-20) | ✅ — **wired 2026-10-14**: `/search` sends the same filters to both the list and the search endpoint, so the facet panel stays live while text is typed (it used to fall back to Cabinet only). DRIFT-06's browse/search disagreement is closed for anything indexed since the re-index work — indexing no longer waits on OCR |
 | `GET /documents/:id` | ✅ — since PR #53 (live 2026-10-20) also `creator` and `currentVersion.uploader` (`{id,name,email}`) | ✅ — embeds `checkoutLock` + `locker {id,name,email}` since `edms-backend` `b4a3f81` (2026-09-29); before that only `isCheckedOut` came back, so even the lock holder couldn't check the document back in (TEST_PLAN "Things to check"). **2026-10-20 (verified live as `staff_finance`):** the owner reads `creator`, the lock holder `locker` and signers the embedded `signer`, so `/doc/[id]` no longer calls `GET /users`. That call is a 403 for staff and auditors, who saw the owner as "System" |
-| `POST /documents` | ✅ — since `edms-backend` `dd10017` (2026-10-09) takes `metadata: [{ fieldId, value }]`, checked against the cabinet's fields and saved in the same transaction. A missing **required** field fails the upload (400), so a client that sends no metadata can't file into a cabinet with required fields | ✅ — `metadata` sent from `/upload` and the workflow picker's "Upload from computer" since 2026-10-09. **Verified live 2026-10-09** on `/upload`: a `staff` user (no `document_metadata:edit`) filed with a value, `GET /documents/:id/metadata` returned it, no `PUT` was made. The picker was confirmed by the product owner's testing 2026-10-09 |
+| `POST /documents` | ✅ — since `edms-backend` `dd10017` (2026-10-09) takes `metadata: [{ fieldId, value }]`, checked against the cabinet's fields and saved in the same transaction. A missing **required** field fails the upload (400), so a client that sends no metadata can't file into a cabinet with required fields. **Since `82c4707` (on `dev` 2026-10-29)** `mimeType` must be `application/pdf`, `image/jpeg`, `image/png` or `image/tiff`, and a `fileUrl` extension must match it (400 otherwise); the same rule covers `POST /documents/batch` and `POST /documents/:id/versions`. Circular attachments and signatures are unchanged | ✅ — `src/constants/uploadTypes.ts` already allowed exactly these four types, so nothing changed here. `metadata` sent from `/upload` and the workflow picker's "Upload from computer" since 2026-10-09. **Verified live 2026-10-09** on `/upload`: a `staff` user (no `document_metadata:edit`) filed with a value, `GET /documents/:id/metadata` returned it, no `PUT` was made. The picker was confirmed by the product owner's testing 2026-10-09 |
 | `POST /documents/batch` (≤ 20, one transaction) | ✅ — each item takes `metadata` too (`dd10017`) | ✅ wired 2026-10-08 — `/upload`'s "File all", in chunks of 20; confirmed in testing 2026-10-08. Each item carries its card's metadata since 2026-10-09, **verified live** (two documents, two values stored). *This row was missing from the matrix* |
 | `POST /documents/versions/batch` (≤ 20) | ✅ | ⚠️ backend only — nothing uploads several new versions at once |
 | `PATCH /documents/:id` | ✅ — since `dd10017` (2026-10-09) also moves documents: `cabinetId` changes the cabinet (the folder is cleared unless a folder in the new cabinet is given) and `folderId: null` moves to the cabinet root; a folder from another cabinet is a 400. ✅ **Request item 7 fixed in PR #51 (live 2026-10-14):** a cross-cabinet move now needs edit on the document's **current** cabinet as well as the destination (`requireSourceCabinetAccessOnMove`), so no one can pull a document out of a cabinet they can't edit — 403 with "You need edit access to the document's current cabinet to move it" | ✅ — also, from 2026-10-08, the document page's "Change classification" dialog (`confidentiality`, `urgency`; 🟨 not verified live). Moves still send only `folderId` within the cabinet — a cross-cabinet Move UI was never built; the backend blocker for one is gone |
@@ -1152,10 +1153,11 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `PATCH /tasks/:id/reassign` | ✅ | ✅ |
 | `GET /tasks/approvals` | ✅ — refused (403 `TASK_APPROVAL_QUEUE_FORBIDDEN`) to anyone whose `task:view` is `own` | ✅ — `/supervisor/approvals` (`sort=dueAt` since 2026-10-20; it was oldest first), and the sidebar badge. **2026-10-13:** the badge and the nav item require `task:action` *and* `task:view` at department or wider; before, the badge fired for anyone with `task:action`, so staff got a hidden 403 on every page. Verified live: no request for staff, badge still 1 for the Finance supervisor |
 | `GET /sla/outcomes/summary` | ✅ PR #50 (live 2026-10-13, `task:view`): on-time vs late stage results from `workflow_sla_outcomes` over `from`–`to` (UTC dates), optional `groupBy=user\|department\|stage`, `departmentId`, `userId`; `own` scope is limited to the caller | ✅ wired 2026-10-13, verified live — staff dashboard "SLA compliance (30d)" and My Performance (rate, on time, breached; 88% = 7 of 8 for the Finance staff fixture). `/supervisor/performance` since 2026-10-13 (`groupBy=user`, plus the previous 30 days for the change; verified live: team 79%, 11 of 14). Not yet on the management pages |
-| `GET /sla/breaches` | ✅ (`workflow_instance:view`) | ✅ wired — staff dashboard Overdue tile, My Tasks, My Performance. *Row missing from this matrix until 2026-10-08* |
+| `GET /sla/breaches` | ✅ (`workflow_instance:view`). Since `99a059f` (on `dev` 2026-10-28) an overdue breach on a stage whose breach action is `escalate` also moves a `pending` task to `escalated`; before, only the breach row was written | ✅ wired — staff dashboard Overdue tile, My Tasks, My Performance. *Row missing from this matrix until 2026-10-08*. The `escalated` status feeds `/supervisor/approvals`' Escalated tab (not verified live) |
 | `GET/PATCH /sla/configuration` | ✅ (`workflow:view` / `workflow:edit`) | ✅ wired 2026-10-08, confirmed in testing 2026-10-08 — `/admin/policies` → Urgency & SLA (`SlaSettingsPanel`). Only changed fields are sent |
 | `GET/POST /sla/holidays`, `DELETE /sla/holidays/:holidayId` | ✅ (`workflow:view` / `workflow:edit`) | ✅ wired 2026-10-08, confirmed in testing 2026-10-08 — same tab, Holidays card |
-| `GET/POST /delegations`, `POST /delegations/:id/end` | ✅ | ✅ wired — `/delegations` (344 lines) exists; this row was stale, caught 2026-09-18 while investigating DRIFT-11 |
+| `GET/POST /delegations`, `POST /delegations/:id/end` | ✅ — since `436ea83` (on `dev` 2026-10-29) a delegation in effect also moves the delegator's open tasks to the delegate: new assignments at once, existing ones through the `delegation-reconcile` worker (every `DELEGATION_RECONCILE_INTERVAL_MS`). Only tasks whose pending documents all fall inside the delegation's scope move | ✅ wired — `/delegations` (344 lines) exists; this row was stale, caught 2026-09-18 while investigating DRIFT-11 |
+| `GET /delegations/eligible-users?search=` | ✅ new in `436ea83`, live (checked 2026-10-29 as `staff_finance`): active users other than the caller, name/email match, max 20, `{id,name,email}`. Needs `delegation:create`, not `user:view`; `search` must be 2–100 characters | ✅ wired 2026-10-29 — `/delegations` "Delegate to" (`DelegatePicker`, `useEligibleDelegates`); one typed character sends nothing |
 | — | `GET /workflow-history`, `GET /workflow-history/:id` | ✅ wired — the activity trail (`WorkflowHistoryTimeline`), and since 2026-10-07 each document's live stage and deadline (`useWorkflowDocumentPositions`). *This row said "no UI at all"; stale, corrected 2026-10-07* |
 
 **DRIFT-09 — ✅ RESOLVED (verified 2026-09-04).**
@@ -1184,7 +1186,7 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 | Frontend call | Backend route | Status |
 |---|---|---|
 | `GET/POST /users`, `GET/PATCH/DELETE /users/:id` | ✅ — since PR #49 (live 2026-10-13) a user is `pending` from an emailed invitation until they set a password (then `active`); `invitedAt` records the first invitation; `?status=pending` filters. Existing invited users without a password were migrated to `pending` | ✅ — `/admin/users` shows Pending with the invitation date, filters by it, offers Resend invite and no Activate for them; "Invite user" toasts "Invitation sent to …". Verified live 2026-10-13 |
-| `GET /users?search=` (name or email, case-insensitive; backend PR #48) | ✅ | ✅ wired 2026-10-13: `/admin/users` search box, and `UserPicker` (Delegations "Delegate to"). The actor filter on `/admin/audit` and `/auditor/trail` is `UserSearchCombobox` since 2026-10-16: a search box that queries from the third character. Results stay inside the caller's `user:view` scope |
+| `GET /users?search=` (name or email, case-insensitive; backend PR #48) | ✅ | ✅ wired 2026-10-13: `/admin/users` search box, and `UserPicker` (Delegations "Delegate to" until 2026-10-29, when it moved to `GET /delegations/eligible-users`). The actor filter on `/admin/audit` and `/auditor/trail` is `UserSearchCombobox` since 2026-10-16: a search box that queries from the third character. Results stay inside the caller's `user:view` scope |
 | `POST /users/:id/roles`, `DELETE /users/:id/roles/:roleId` | ✅ | ✅ |
 | `POST /users/:id/invitation` | ✅ — since PR #49 accepts `pending` or `active` users (409 otherwise) | ✅ wired 2026-09-18 — "Resend invite" button, shown for pending users and for active users with no `lastLoginAt` (since 2026-10-13; before, only the latter, so a pending user couldn't be re-invited) |
 | `GET/POST /roles`, `GET/PATCH/DELETE /roles/:id` | ✅ — since PR #49 `schulltech_admin` is never listed or returned, and assigning it through `POST /users` or `/users/:id/roles` is a 404 | ✅ — no frontend change: the role pickers list what the API returns. A user who already holds the role still shows it in their roles, and editing them keeps it |
@@ -1234,6 +1236,39 @@ an existing uploaded attachment round-trips by re-sending its signed `fileUrl`, 
 supervisors and management lack, so their audience editor offers department groups and
 named people but not role groups. Circular notifications carry `actionUrl: /circulars/:id`
 (published, reminder) or `/circulars` (withdrawn) — both are real routes here.
+
+### Internal control *(backend on `dev` 2026-10-29; UI built the same day, not live)*
+
+`edms-backend` `51e9d85` adds `control_exceptions` (migration
+`20261029090000_add_control_exceptions`). An exception is open → reported → acknowledged →
+resolved. The `internal_auditor` raises, edits (while open) and reports it; reporting notifies
+every active `management` user (`control_exception.reported`); `management` acknowledges and
+resolves it, with a required note. `client_admin` can read. Each action is audited as
+`control_exception.*`. **Not usable on live yet:** on 2026-10-29 the live `auditor` login
+held no `control_exception:*` permission (so `seed:system` hasn't run there), and the list
+route timed out twice. Live deployment is unverified.
+
+**Frontend (2026-10-29):** `controlExceptions.service.ts` / `useControlExceptions.ts` and five
+shared pages under `/control-exceptions` (doc 05, Shared pages); the auditor's and
+management's Findings menu items open them. 🟨 everywhere below: verified only against a
+local mock of these routes (with the grants added to `/auth/me`), never against live.
+
+| Frontend call | Backend route | Status |
+|---|---|---|
+| `getAll` | `GET /control-exceptions` (`view`; `status`, `category`, `severity`, `departmentId`, `from`/`to`, `page`/`limit` ≤ 100) | 🟨 the register. `to` is compared with `lte` on a timestamp, so the page sends the end of the chosen day |
+| `getReport` | `GET /control-exceptions/report` (`view`; same filters): counts by status, category, severity, department | 🟨 `/control-exceptions/report` |
+| `getById` | `GET /control-exceptions/:id` (`view`) | 🟨 detail page; also the notification's `actionUrl` |
+| `create` | `POST /control-exceptions` (`create`): `title`, `description`, `category`, `severity?`, optional `departmentId`/`documentId`/`workflowInstanceId` | 🟨 `/control-exceptions/new`. The form links a department and a document, not a workflow |
+| `update` | `PATCH /control-exceptions/:id` (`edit`, while `open`) | 🟨 `/[id]/edit`; sends `null` to unlink |
+| `report` | `POST /control-exceptions/:id/report` (`report`) | 🟨 "Report to permanent secretary", after a confirm |
+| `acknowledge`, `resolve` | `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` `{resolutionNote}` (`respond`) | 🟨 detail page; Resolve opens an inline note |
+
+Gap: the responses embed `raiser` but give only ids for the reporter, acknowledger and
+resolver, so the history can't name them (management can't read `GET /users`).
+
+Categories: `missing_competitive_quotes`, `missing_approval`, `missing_documentation`,
+`policy_breach`, `sla_breach`, `other`. Severities: `low`, `medium` (default), `high`,
+`critical`. This is not the `Finding` model doc 02 H2 asks for: there's no owner or due date.
 
 ### Modules with no backend at all
 
@@ -1356,11 +1391,10 @@ above: there is no write endpoint to point it at, by design.
 > ⚠️ **Correction (2026-09-18).** Every item previously listed here (version restore,
 > archive, cabinet access grants, cabinet metadata fields, delegations, workflow history)
 > is wired now — verified by reading the actual consuming pages, not re-derived from
-> scratch. This list is deliberately empty rather than deleted, so it's obvious the
-> category was checked and came up clean, not skipped.
+> scratch. Control exceptions sat here for one day (backend 2026-10-29) and got their UI
+> the same day.
 
-Nothing currently known to be backend-complete with zero UI. If a future scan finds one,
-it goes here.
+Nothing currently known to be backend-complete with zero UI.
 
 ---
 
@@ -1604,6 +1638,7 @@ its values have changed. A `custom` copy is the `/admin/branding` page's publish
 |---|---|---|
 | `SLA_WARNING_HOURS` | `4` | `sla-breach.worker` — warn this long before a task's `dueAt` |
 | `SLA_RECONCILE_INTERVAL_MS` | `300000` | `sla-breach.worker` schedule |
+| `DELEGATION_RECONCILE_INTERVAL_MS` | `300000` (min `60000`) | `delegation-reconcile.worker` schedule — moves open tasks to the delegate of a delegation in effect (added `436ea83`, 2026-10-29) |
 | `CHECKOUT_REMINDER_HOURS` | `24` | `checkout-overdue.worker` — `checkout.reminder` to the holder this long before `expectedReturnAt` (added `b4a3f81`, 2026-09-29) |
 | `CHECKOUT_OVERDUE_RECONCILE_INTERVAL_MS` | `300000` | `checkout-overdue.worker` schedule; once past due it sends `checkout.overdue` to the holder and to `supervisor`s in the holder's department |
 | `APP_URL` | `https://edms-kappa.vercel.app` (was `http://localhost:3000` until PR #49) | Base for every notification/email `actionUrl` — must be this app's origin, or `notificationHref` drops the link as cross-origin (see §8.4). Links from the deployed backend now open the Vercel app, so a notification clicked while testing on `localhost:3000` leaves the local app |
