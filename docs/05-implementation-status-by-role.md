@@ -138,9 +138,10 @@ For each of the six role dashboards this document lists:
 
 ## Portfolio summary
 
-**59 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
-2026-10-20 — +1: the `/admin/workflows` list, the designer moving to `/admin/workflows/[id]`;
-58 on 2026-10-05, 53 on 2026-10-02, 51 on 2026-09-18, 42 at last full classification). The
+**64 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
+2026-10-29 — +5: `/control-exceptions`, `/new`, `/[id]`, `/[id]/edit` and `/report`, under
+Shared pages; 59 on 2026-10-20 — +1: the `/admin/workflows` list, the designer moving to
+`/admin/workflows/[id]`; 58 on 2026-10-05, 53 on 2026-10-02, 51 on 2026-09-18, 42 at last full classification). The
 +4 on 2026-10-05 are the circulars pages `/circulars/[id]`, `/circulars/manage`,
 `/circulars/manage/new` and `/circulars/manage/[id]` (classified under Shared pages). The +2
 on 2026-10-02 were the notification-link landing pages `/tasks/[id]` (redirect-only) and
@@ -165,17 +166,18 @@ Every classification below was verified by inspecting what each page destructure
 |---|---:|---:|---:|---:|---:|---|
 | Staff Workspace | 4 | 4 | — | — | — | **Strongest.** Real data throughout. |
 | Supervisor Console | 7 | 5 | 1 | 1 | — | Approvals, ageing and the Workflow Monitor real; exceptions/performance fixture. |
-| Management Portal | 7 | 5 | 1 | 1 | — | The only fully API-driven pages — and the ones that don't scale. |
+| Management Portal | 7 | 5 | 1 | — | 1 | The only fully API-driven pages — and the ones that don't scale. `/management/findings` redirects to control exceptions. |
 | Client Administration | 13 | 8 | 2 | 1 | 2 | Structure real; branding mock, policies Hybrid (SLA tab real). `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
-| Audit & Compliance | 4 | 1 | 1 | 2 | — | Trail real; dashboard and findings fixture. |
+| Audit & Compliance | 4 | 1 | 1 | 1 | 1 | Trail real; dashboard fixture; `/auditor/findings` redirects to control exceptions. |
 | Platform Admin | 6 | — | — | 6 | — | Mock by design (Phase 2). |
-| Shared | 18 | 9 | 5 | — | 4 | Login, upload, search, circulars and the workflow page live; delegations, notifications and the password pages 🟨 not re-verified; `/doc/[id]` Hybrid. |
-| **Total** | **59** | **32** | **10** | **11** | **6** | |
+| Shared | 23 | 9 | 10 | — | 4 | Login, upload, search, circulars and the workflow page live; delegations, notifications and the password pages 🟨 not re-verified; `/doc/[id]` Hybrid; the 5 control-exceptions pages 🟨 until the live tenant is seeded. |
+| **Total** | **64** | **32** | **15** | **9** | **8** | |
 
 *(Re-tallied 2026-10-08 from each page's row in this doc: all 57 `page.tsx` files. Later the
 same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → 🟨, and `/help`
 (static) was added, making 58. 2026-10-13: `/supervisor/instances` 🟨 → ✅, `/supervisor/performance` 🟥 → ✅.
-2026-10-20: the workflow list `/admin/workflows` added ✅, the designer now `/admin/workflows/[id]`, making 59.)*
+2026-10-20: the workflow list `/admin/workflows` added ✅, the designer now `/admin/workflows/[id]`, making 59.
+2026-10-29: five control-exceptions pages added 🟨, and both Findings pages 🟥 → ↪️ redirect, making 64.)*
 
 *Confirmed by the product owner's own testing, 2026-10-08:* the admin setup checklist, the SLA
 settings, sub-folders, batch upload ("File all") and multi-document workflows. Page markers
@@ -196,16 +198,17 @@ since `bba1e2d` (list, unread filter, mark read / all read, delivery preferences
 *(🟨
 counts Hybrid pages and API-only pages not yet verified end to end — Partial, not ✅, per
 house rule 1. ↪️ / static: `/admin/circulars`, `/admin/workflows/instances`, `/tasks/[id]`,
-`/unauthorized`, `/user-stories`. `/admin/cabinets` and `/staff/cabinets` moved 🟨 → ✅
+`/unauthorized`, `/user-stories`, and since 2026-10-29 `/auditor/findings` and
+`/management/findings`. `/admin/cabinets` and `/staff/cabinets` moved 🟨 → ✅
 after the user tested cabinet management end to end.)*
 
 ### By data source
 
 ```
-Renders live API data      ██████████████████████████████░░░░░░░░░░  44 pages (75%)
-Renders fixture data       ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  14 pages (24%)
+Renders live API data      ███████████████████████████████░░░░░░░░░  49 pages (77%)
+Renders fixture data       ████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  12 pages (19%)
 Both, on the same page     ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   3 pages (5%)
-Neither (redirect/static)  ███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   4 pages (7%)
+Neither (redirect/static)  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   6 pages (9%)
 ```
 
 *Re-derived 2026-10-15 over all 58 pages (the bars it replaces — 21 / 23 / 6 / 3 — were
@@ -223,12 +226,13 @@ fixture-only. Both: `/management/compliance`, `/auditor/compliance`, `/admin/pol
 Neither: `/admin/circulars` (redirect), `/help`, `/user-stories`, `/unauthorized`.
 Check: 40 API-only + 11 fixture-only + 3 both + 4 neither = 58, and the 11 fixture-only
 pages are exactly the 11 🟥 in the portfolio table. 2026-10-20: the `/admin/workflows`
-list is API-only, so 41 + 11 + 3 + 4 = 59.*
+list is API-only, so 41 + 11 + 3 + 4 = 59. 2026-10-29: the five control-exceptions pages
+are API-only and both Findings pages are redirects, so 46 + 9 + 3 + 6 = 64.*
 
-The split is clean: most pages are decisively one thing or the other. The **11 mock pages
-cluster in three places** — Platform (6/6, by design), the auditor's dashboard and
-findings (plus management's re-export of findings), and two Client Admin/Supervisor
-screens (`/admin/branding`, `/supervisor/exceptions`). *(Was "20 mock pages … Auditor (4/4),
+The split is clean: most pages are decisively one thing or the other. The **9 mock pages
+cluster in three places** — Platform (6/6, by design), the auditor's dashboard, and two
+Client Admin/Supervisor screens (`/admin/branding`, `/supervisor/exceptions`). *(The
+auditor's findings and management's re-export of it were the other two until 2026-10-29.)* *(Was "20 mock pages … Auditor (4/4),
 Platform (6/6), and the governance half of Client Admin (4/8)".)*
 
 ### The ~~four~~ three mock service modules
@@ -582,13 +586,13 @@ already holds warning and escalation rows written by the SLA worker.
 | `/management/performance` | 85 | **none** | `useTaskStats` ✅ | ✅ Live — server-aggregated |
 | `/management/compliance` | 196 | **`findings`** | `useAllUsers` ✅ · `useAuditEntries` ✅ (migrated 2026-09-18) | 🟨 Hybrid — `findings`/hbar chart still `SEED`. **2026-10-13 (verified live):** the sensitive-activity panel reads `GET /audit` only with `audit:view`; the seeded `management` role lacks it, so the panel now says so instead of a 403 and an empty list. Whether management should hold `audit:view` is a question for the backend/PM (backend spec Q5). **2026-10-20:** the panel names actors from each entry's `actor` (PR #53); `useAllUsers` stays for the `SEED` findings' Owner column |
 | `/management/reports` | 322 | — | `useDepartments` ✅ · `getOpenItemsByCabinet`, `getBottlenecksAgeing` (paged, up to 2,000 rows), `tasksService.getStats`, `getTeamStatusMatrix` ✅ | ✅ Live — **rebuilt 2026-10-08, (confirmed by the product owner’s testing, 2026-10-09):** four real reports (open items by cabinet, ageing register, SLA compliance by department, workload by member), each filterable by department, previewed in a table and downloaded as CSV (with a BOM so Excel reads it as UTF-8). Scheduled reports were fake and are now a "not available yet" note: there's no report-job backend |
-| `/management/findings` | 7 | — | ↪️ re-exports `/auditor/findings` | 🟥 Mock |
+| `/management/findings` | 16 | — | — | ↪️ Redirect to `/control-exceptions` since 2026-10-29 (was a re-export of the fixture `/auditor/findings`, 🟥). The sidebar's Findings item is now **Control Exceptions** |
 
 > **Management is the only dashboard with fully API-driven pages** — four of its seven
 > read no fixtures at all, and (as of 2026-09-21) all four also let the database do the
-> aggregating instead of the browser. The three still-mocked pages (`compliance`'s
-> findings panel, `reports`, `findings`) share one root cause: no `Finding` model exists
-> anywhere in the backend, not a wiring gap.
+> aggregating instead of the browser. *(2026-10-29: `reports` went live on 2026-10-08 and
+> `findings` is now a redirect to control exceptions. Only `compliance`'s findings panel
+> still reads `SEED.findings`.)*
 
 ### APIs wired ✅
 
@@ -624,11 +628,11 @@ so they were deleted rather than left dead.
 
 | Needed | Currently |
 |---|---|
-| `GET /findings` | 🟥 No `Finding` model exists — affects this section, `/auditor/findings`, and `/management/findings` alike |
+| `GET /findings` | 🟥 No `Finding` model exists. Only `/management/compliance`'s findings panel still needs it; the Findings pages redirect to control exceptions since 2026-10-29 |
 | `GET /audit` (for the findings/compliance panel specifically — the sensitive-activity half already reads it) | Partially addressed — see `/management/compliance` above |
 | Scheduled/emailed reports | No report scheduler. A mail transport exists now (`src/config/mailer.ts`, used for invitations and notification emails) *(re-checked 2026-10-15)* |
 | `workflow:view` for management | 🟠 Seed gap (DRIFT-14) — on a freshly seeded tenant management holds `workflow_instance:route:own` but can't list definitions; the live tenant's management role can (re-tested 2026-10-16) *(added 2026-10-15)* |
-| Control exceptions inbox: `GET /control-exceptions`, `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` | ⛔ **Backend built, no UI** — `edms-backend` `51e9d85` (on `dev` 2026-10-29). Management (the permanent secretary) holds `control_exception:view` and `respond`, and gets a `control_exception.reported` notification. Not seeded on the live tenant yet (doc 01, Internal control) *(added 2026-10-29)* |
+| Control exceptions inbox: `GET /control-exceptions`, `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` | 🟨 **Built and wired 2026-10-29, not live yet** — `edms-backend` `51e9d85`. Management (the permanent secretary) holds `control_exception:view` and `respond`, and gets a `control_exception.reported` notification. The shared `/control-exceptions` pages (Shared pages below) offer Acknowledge and an inline Resolve with a required note. Verified only against mocked responses: the live tenant isn't seeded (doc 01, Internal control) |
 | A department × document-status cross-tab | Doesn't exist — `/management`'s per-department Pending/In-Progress/Closed table derives `Closed` as `total − (pending + inProgress)` rather than an exact count, because no single endpoint returns document status broken out by department |
 
 ### One trade-off from the rewiring, not hidden
@@ -647,7 +651,7 @@ approximation, not a silent one.
 |---|---|
 | `/management/compliance` | `findings`/hbar chart still `SEED.findings` — the sensitive-activity panel is real now (migrated 2026-09-18) |
 | ~~`/management/reports`~~ | ~~inline `DEPTS`; the report builder produces nothing real~~ — real reports since 2026-10-08 |
-| `/management/findings` | ↪️ auditor's page → `SEED.findings` |
+| ~~`/management/findings`~~ | ~~↪️ auditor's page → `SEED.findings`~~ — redirect to `/control-exceptions` since 2026-10-29 |
 
 ### Flows
 
@@ -813,8 +817,8 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 
 **Landing:** `/auditor` · **Sidebar:** Review / Findings / Posture
 **Overall: 🟨 `/auditor/trail` now reads the real audit backend (migrated 2026-09-18).**
-**`/auditor` (the dashboard) and `/auditor/findings` are still fixture-only — findings**
-**tracking has no `Finding` model in Prisma at all, backend or frontend.**
+**`/auditor` (the dashboard) is still fixture-only. Since 2026-10-29 the Findings item opens**
+**the control-exceptions register (🟨, not live yet); `/auditor/findings` redirects there.**
 
 > ⚠️ **Correction (2026-09-18).** This section previously stated the audit backend was
 > entirely unbuilt (`GET /audit` "no endpoint", `audit.middleware.ts` "0 bytes", table
@@ -834,7 +838,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 |---|---:|---|---|---|
 | `/auditor` | 132 | `findings`, `audit`, `users` | **none** | 🟥 Mock · Quick access card (pinned / recent / saved searches, browser-only) added 2026-10-08 |
 | `/auditor/trail` | 290 | `auditAction` (finding-raise only) | `useAuditEntries`, `useExportAuditCsv` ✅ · `UserSearchCombobox` (`GET /users?search=`) 🟨 | ✅ Live — migrated 2026-09-18. **2026-10-08 (confirmed by the product owner's testing 2026-10-09):** same record-type/action dropdowns as `/admin/audit` (`AuditTypeActionFilters`), fixing the same free-text 400. **2026-10-13:** the actor filter is the same searchable `UserPicker`; since 2026-10-16 the same `UserSearchCombobox` as `/admin/audit`. Not verified as the auditor: `internal_auditor` gets 403 on `GET /users` (seed gap), so the picker shows "Couldn't load people." until the backend grants `user:view`. **2026-10-20 (verified live as `auditor`):** the Actor column reads each entry's `actor` (edms-backend PR #53). It used to look actors up in `GET /users`, the same 403, so the auditor saw UUIDs |
-| `/auditor/findings` | 367 | `findings`, `users`, `addFinding`, `updateFinding` | **none** | 🟥 Mock — no backend model regardless |
+| `/auditor/findings` | 16 | — | — | ↪️ Redirect to `/control-exceptions` since 2026-10-29. It was a 367-line 🟥 mock on `SEED.findings` |
 | `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟨 Hybrid — inherits the now-real sensitive-activity panel |
 
 *The auditor also uses the shared `/staff/cabinets` (✅ live) and `/search` (✅ rebuilt 2026-09-30, confirmed 2026-10-09).*
@@ -862,7 +866,7 @@ its recipient/acknowledgement report (`GET /circulars`, `/circulars/:id`,
 | `GET /audit` with actor / object / action / date filters | ✅ **Built and wired** — `/auditor/trail`, migrated 2026-09-18 |
 | `GET /audit/verify` (hash-chain integrity proof) | ✅ **Built** — confirmed live, returns `{intact, entriesChecked, rangeStart, rangeEnd}`; not yet surfaced on `/auditor/trail` itself (only `/admin/audit`'s "Verify integrity" button calls it) |
 | `GET/POST/PATCH /findings` | **No `Finding` model in Prisma at all** |
-| Control exceptions: `GET/POST /control-exceptions`, `PATCH /:id`, `POST /:id/report`, `GET /report` | ⛔ **Backend built, no UI** — `edms-backend` `51e9d85` (on `dev` 2026-10-29). The auditor raises, edits and reports exceptions to management. No owner or due date, so it isn't the `Finding` model. Not seeded on the live tenant yet (doc 01, Internal control) *(added 2026-10-29)* |
+| Control exceptions: `GET/POST /control-exceptions`, `PATCH /:id`, `POST /:id/report`, `GET /report` | 🟨 **Built and wired 2026-10-29, not live yet** — `edms-backend` `51e9d85`. The auditor raises (a page, `/control-exceptions/new`), edits while open (`/[id]/edit`) and reports exceptions to management; `/control-exceptions/report` shows the counts. No owner or due date, so it isn't the `Finding` model. Verified only against mocked responses: the live tenant isn't seeded (doc 01, Internal control) |
 | `GET /cabinets/:id/access` (who can see this cabinet) | Endpoint exists and `/admin/cabinets`'s Access card calls it; **no auditor screen does**, though `cabinet_access:view` is granted *(re-checked 2026-10-15)* |
 | Document view logging | ✅ confirmed — `document.viewed` is a real, auto-emitted action (seen live 2026-09-18). Downloads are logged too: `document.downloaded` since the gated download landed (2026-10-08; in code, not yet seen in a live pull). *(Was "no download endpoint exists to log downloads".)* |
 
@@ -914,14 +918,16 @@ claims above were re-checked against live API behavior 2026-09-18, not by re-rea
    resolved, 2026-09-18).
 2. ~~Implement the hash chain.~~ **Done** — confirmed live via `GET /audit/verify`.
 3. ~~Add `GET /audit` with filters, and a chain-verification endpoint.~~ **Done.**
-4. **Build `Finding`** — model, endpoints, and wire `/auditor/findings` to it.
+4. ~~**Build `Finding`** — model, endpoints, and wire `/auditor/findings` to it.~~ The
+   Findings item now opens control exceptions (product decision, 2026-10-29). A `Finding`
+   model is only needed if owners and due dates are wanted later.
 5. **Add a cabinet-access viewer** so `cabinet_access:view` becomes usable.
 6. **Give `/auditor/compliance` its own view** rather than re-exporting management's.
 7. **Add monthly partitioning** as the schema comments specify.
 8. ~~**Implement SoD detection**, which the older docs already claim exists.~~ **Dropped
    from scope 2026-10-21** (PM decision), with redaction.
-9. **Build the control-exceptions screens** (added 2026-10-29) once the live tenant is
-   seeded: the auditor's register and report, and management's acknowledge/resolve inbox.
+9. 🟨 **Control-exceptions screens — built 2026-10-29**, verified against mocked responses.
+   Left: run `prisma migrate deploy` and `seed:system` on live, then verify end to end.
 
 > ~~**This dashboard is the largest gap between what the product claims and what it does.**~~
 > *Re-checked 2026-10-15:* the trail — the part the product's claim rests on — is real. What
@@ -1013,6 +1019,11 @@ This is a **phase**, not a backlog item:
 | `/circulars/manage` | 206 | `circular:view` | — | `useCirculars` → `GET /circulars` | ✅ Live — **new 2026-10-05** — the archive, any status, within scope. *(confirmed by the product owner’s testing, 2026-10-09)* |
 | `/circulars/manage/new` | 41 | `circular:create` | — | `useCreateCircular` → `POST /circulars` · `useDepartments`, `useRoles` (only with `role:view`), `useAllUsers`, `useDocuments`, multipart upload | ✅ Live — **new 2026-10-05** — compose a draft: audience (all staff / department+role groups / named people), acknowledgement + deadline + reminders, expiry, file and linked-document attachments. *(confirmed by the product owner’s testing, 2026-10-09)* |
 | `/circulars/manage/[id]` | 712 | `circular:view` | — | `useCircular`, `useCircularRecipients`, update / delete / publish / cancel-schedule / withdraw / revise / reminders mutations | ✅ Live — **new 2026-10-05** — detail, inline draft editing, lifecycle actions gated per permission, stats + per-department breakdown + recipients report. *(confirmed by the product owner’s testing, 2026-10-09)* **2026-10-12 (verified live):** the recipients report has **Download CSV**: every recipient matching the current filter and search (all pages, 100 at a time), with department, read and — when the circular asks for it — acknowledged, reminders sent and last reminded |
+| `/control-exceptions` | 264 | `control_exception:view` (auditor, management, client_admin) | — | `useControlExceptions` → `GET /control-exceptions` (status, category, severity, department, raised-date filters, paging); `useDepartments` ✅ | 🟨 API-only, no `SEED` — **new 2026-10-29**, the register; reads `?status=` from the report's tiles. "Raise exception" for `control_exception:create`. Verified with mocked responses (`ce-test.js`: 22 checks, both roles); not live — the tenant isn't seeded |
+| `/control-exceptions/new` | 39 | `control_exception:create` (auditor) | — | `useCreateControlException` → `POST /control-exceptions`; `ControlExceptionForm` (`DocumentPicker` → `GET /documents/search`, `useDepartments`) ✅ | 🟨 **new 2026-10-29** — the raise form is a page, not a modal (product decision). Required title, description and category; document search hit the live API in the mocked run |
+| `/control-exceptions/[id]` | 293 | `control_exception:view` | — | `useControlException`, report / acknowledge / resolve mutations | 🟨 **new 2026-10-29** — detail, links to the document and workflow, a four-step history. Actions by status and permission: Edit and Report (confirm) while open; Acknowledge when reported; Resolve (inline note, required) when reported or acknowledged. The notification's `actionUrl` lands here. Reporter, acknowledger and resolver come back as ids only, so the history names only the raiser |
+| `/control-exceptions/[id]/edit` | 68 | `control_exception:edit` | — | `useControlException`, `useUpdateControlException` → `PATCH /control-exceptions/:id` | 🟨 **new 2026-10-29** — same form as a page; says why when the exception is no longer open |
+| `/control-exceptions/report` | 212 | `control_exception:view` | — | `useControlExceptionReport` → `GET /control-exceptions/report` | 🟨 **new 2026-10-29** — totals tiles and bars by category, severity and department, filtered by department and raised date; CSV export |
 | `/unauthorized` | 58 | all | — | — | static |
 | `/forgot-password` | 96 | signed out | — | `authService.forgotPassword` → `POST /auth/forgot-password` | 🟨 API-only, no `SEED`. Doc 04 records the reset flow as working; not re-verified in the 2026-10-08 classification pass |
 | `/set-password` | 145 | signed out | — | `authService.resetPassword` → `POST /auth/reset-password` (invitation and reset tokens) | 🟨 API-only, no `SEED`; DRIFT-15 fixed its payload 2026-09-18. Not re-verified in the 2026-10-08 pass |
@@ -1091,10 +1102,10 @@ no push channel.
 > ⚠️ **Correction (2026-09-18).** Every row previously listed here (cabinet
 > metadata-fields, cabinet access, version restore, archive, delegations, workflow
 > history, role matrix persistence) was checked against the actual consuming pages and
-> is wired. The table stayed empty from then until 2026-10-29.
+> is wired. Control exceptions sat here for one day (backend 2026-10-29) and were wired the
+> same day.
 
-- **Control exceptions** — all 8 `/control-exceptions` routes (`edms-backend` `51e9d85`,
-  on `dev` 2026-10-29). See §3 and §5 "APIs missing", and doc 01, Internal control.
+Nothing currently known to be backend-complete with zero UI.
 
 **`GET /workflow-history` is the quiet win.** It is the closest thing the backend has to a
 real audit trail — actor, from-stage, to-stage, note, `elapsedSeconds` — and it would
@@ -1225,10 +1236,10 @@ resolved in SQL, confidentiality filtered in the query rather than after it.
 
 **Most of the governance half is real now too** *(re-written 2026-10-15)*. The audit trail,
 notifications, circulars and the SLA settings all run on the backend. What is still a UI
-over fixture data is **14 of the 59 pages** (11 entirely, 3 in part — "By data source"
-above): Platform (6/6, by design), the auditor's dashboard and findings, management's
-findings re-export, branding, `/supervisor/exceptions`, and the retention/confidentiality
-tabs of `/admin/policies`.
+over fixture data is **12 of the 64 pages** (9 entirely, 3 in part — "By data source"
+above): Platform (6/6, by design), the auditor's dashboard, branding,
+`/supervisor/exceptions`, and the retention/confidentiality tabs of `/admin/policies`. The
+fixture findings tracker gave way to control exceptions on 2026-10-29.
 
 **DRIFT-14 is a provisioning gap, not an outage** *(re-tested 2026-10-16)*. On the live
 tenant the roles that route documents hold `workflow:view:global` and can list workflow

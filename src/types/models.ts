@@ -1081,6 +1081,65 @@ export interface CreateDelegationRequest {
   scope?: DelegationScope | null;
 }
 
+// --- Control exceptions (internal control, edms-backend 51e9d85) ---
+
+export type ControlExceptionCategory =
+  | 'missing_competitive_quotes'
+  | 'missing_approval'
+  | 'missing_documentation'
+  | 'policy_breach'
+  | 'sla_breach'
+  | 'other';
+
+export type ControlExceptionSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+/** open → reported (to the permanent secretary) → acknowledged → resolved. */
+export type ControlExceptionStatus = 'open' | 'reported' | 'acknowledged' | 'resolved';
+
+export interface ControlException {
+  id: string;
+  title: string;
+  description: string;
+  category: ControlExceptionCategory;
+  severity: ControlExceptionSeverity;
+  status: ControlExceptionStatus;
+  departmentId: string | null;
+  department: { id: string; name: string } | null;
+  documentId: string | null;
+  document: { id: string; title: string; referenceNumber: string } | null;
+  workflowInstanceId: string | null;
+  raisedBy: string;
+  raiser: { id: string; name: string } | null;
+  raisedAt: string;
+  /** Only ids come back for these three steps, not names. */
+  reportedAt: string | null;
+  reportedBy: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  resolutionNote: string | null;
+  updatedAt: string | null;
+}
+
+export interface ControlExceptionInput {
+  title: string;
+  description: string;
+  category: ControlExceptionCategory;
+  severity: ControlExceptionSeverity;
+  departmentId?: string | null;
+  documentId?: string | null;
+}
+
+/** `GET /control-exceptions/report`. */
+export interface ControlExceptionReport {
+  total: number;
+  byStatus: Partial<Record<ControlExceptionStatus, number>>;
+  byCategory: Partial<Record<ControlExceptionCategory, number>>;
+  bySeverity: Partial<Record<ControlExceptionSeverity, number>>;
+  byDepartment: { departmentId: string | null; departmentName: string | null; count: number }[];
+}
+
 // --- Notifications ---
 
 export type NotificationChannel = 'in_app' | 'email';

@@ -42,9 +42,7 @@ export function DelegatePicker({
   const pending = query.trim() !== debounced || isLoading;
   const options = useMemo<ComboboxOption[]>(
     () =>
-      pending || tooShort
-        ? []
-        : users.map((u) => ({ value: u.id, label: u.name, hint: u.email })),
+      pending || tooShort ? [] : users.map((u) => ({ value: u.id, label: u.name, hint: u.email })),
     [pending, tooShort, users],
   );
 

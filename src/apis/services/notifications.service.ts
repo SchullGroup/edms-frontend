@@ -115,6 +115,7 @@ export const notificationIcon = (type: string): string => {
     circular: 'speaker',
     delegation: 'users',
     audit: 'finding',
+    control_exception: 'finding',
   };
   return icons[group] || 'bell';
 };

@@ -263,6 +263,19 @@ export const routeConfig: RouteRule[] = [
     anyPermissions: ['circular:view'],
   },
 
+  // Control exceptions, shared by the auditor and management. Raising needs `create`;
+  // the edit/report/respond buttons check their own permission on the page.
+  {
+    path: '/control-exceptions/new',
+    matchType: 'prefix',
+    anyPermissions: ['control_exception:create'],
+  },
+  {
+    path: '/control-exceptions',
+    matchType: 'prefix',
+    anyPermissions: ['control_exception:view'],
+  },
+
   // 4. Global authenticated paths (no gate = any authenticated user)
   { path: '/search', matchType: 'prefix' },
   // The recipient inbox: being sent a circular is the grant, so no permission.

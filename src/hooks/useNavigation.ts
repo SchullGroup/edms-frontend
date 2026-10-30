@@ -7,7 +7,7 @@ import { useCircularInboxSummary } from '@/apis/hooks/useCirculars';
 import { getBrandPreset } from '@/lib/brand';
 
 export const useNavigation = () => {
-  const { currentUser, findings } = useStore();
+  const { currentUser } = useStore();
   const { hasPermission, scopeFor, portal } = usePermissions();
   const activeBrand = getBrandPreset();
   // Reused for "home"/resource-less items below so they can never drift out of sync
@@ -302,10 +302,10 @@ export const useNavigation = () => {
               anyPermissions: ['task:view', 'workflow_instance:view'],
             },
             {
-              route: '/management/findings',
-              label: 'Findings',
+              route: '/control-exceptions',
+              label: 'Control Exceptions',
               icon: 'finding',
-              anyPermissions: ['audit:view'],
+              anyPermissions: ['control_exception:view'],
             },
             accessRequestsItem,
           ],
@@ -549,11 +549,10 @@ export const useNavigation = () => {
           label: 'Findings',
           items: [
             {
-              route: '/auditor/findings',
-              label: 'Findings Tracker',
+              route: '/control-exceptions',
+              label: 'Control Exceptions',
               icon: 'finding',
-              badge: () => findings.filter((f) => f.status !== 'Closed').length,
-              anyPermissions: ['audit:view'],
+              anyPermissions: ['control_exception:view'],
             },
           ],
         },

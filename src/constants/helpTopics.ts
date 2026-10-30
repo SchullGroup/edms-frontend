@@ -19,6 +19,7 @@ export type HelpTopicId =
   | 'workflow-designer'
   | 'sla'
   | 'audit'
+  | 'control-exceptions'
   | 'shortcuts';
 
 const BY_PATH: [prefix: string, topic: HelpTopicId][] = [
@@ -38,6 +39,7 @@ const BY_PATH: [prefix: string, topic: HelpTopicId][] = [
   ['/staff/tasks', 'workflows'],
   ['/delegations', 'delegations'],
   ['/circulars', 'circulars'],
+  ['/control-exceptions', 'control-exceptions'],
 ];
 
 export function helpTopicForPath(pathname: string): HelpTopicId {

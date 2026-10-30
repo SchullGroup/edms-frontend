@@ -165,7 +165,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
-| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 59 pages (55 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-20 (+1: the `/admin/workflows` list, with the designer moved to `/admin/workflows/[id]`); 58 on 2026-10-15, 46 before |
+| Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 64 pages (60 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-29 (+5: the `/control-exceptions` pages); 59 on 2026-10-20, 58 on 2026-10-15, 46 before |
 | API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 149 routes over 12 router files — re-counted 2026-10-29 (140 on 2026-10-26, 134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
 | Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA + out-of-office delegation (since `436ea83`, 2026-10-29) |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |
@@ -1237,7 +1237,7 @@ supervisors and management lack, so their audience editor offers department grou
 named people but not role groups. Circular notifications carry `actionUrl: /circulars/:id`
 (published, reminder) or `/circulars` (withdrawn) — both are real routes here.
 
-### Internal control *(backend only, on `dev` 2026-10-29)*
+### Internal control *(backend on `dev` 2026-10-29; UI built the same day, not live)*
 
 `edms-backend` `51e9d85` adds `control_exceptions` (migration
 `20261029090000_add_control_exceptions`). An exception is open → reported → acknowledged →
@@ -1248,15 +1248,23 @@ resolves it, with a required note. `client_admin` can read. Each action is audit
 held no `control_exception:*` permission (so `seed:system` hasn't run there), and the list
 route timed out twice. Live deployment is unverified.
 
+**Frontend (2026-10-29):** `controlExceptions.service.ts` / `useControlExceptions.ts` and five
+shared pages under `/control-exceptions` (doc 05, Shared pages); the auditor's and
+management's Findings menu items open them. 🟨 everywhere below: verified only against a
+local mock of these routes (with the grants added to `/auth/me`), never against live.
+
 | Frontend call | Backend route | Status |
 |---|---|---|
-| — | `GET /control-exceptions` (`view`; `status`, `category`, `severity`, `departmentId`, `from`/`to`, `page`/`limit` ≤ 100) | ⛔ no UI |
-| — | `GET /control-exceptions/report` (`view`; same filters): counts by status, category, severity, department | ⛔ no UI |
-| — | `GET /control-exceptions/:id` (`view`) | ⛔ no UI |
-| — | `POST /control-exceptions` (`create`): `title`, `description`, `category`, `severity?`, optional `departmentId`/`documentId`/`workflowInstanceId` | ⛔ no UI |
-| — | `PATCH /control-exceptions/:id` (`edit`, while `open`) | ⛔ no UI |
-| — | `POST /control-exceptions/:id/report` (`report`) | ⛔ no UI |
-| — | `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` `{resolutionNote}` (`respond`) | ⛔ no UI |
+| `getAll` | `GET /control-exceptions` (`view`; `status`, `category`, `severity`, `departmentId`, `from`/`to`, `page`/`limit` ≤ 100) | 🟨 the register. `to` is compared with `lte` on a timestamp, so the page sends the end of the chosen day |
+| `getReport` | `GET /control-exceptions/report` (`view`; same filters): counts by status, category, severity, department | 🟨 `/control-exceptions/report` |
+| `getById` | `GET /control-exceptions/:id` (`view`) | 🟨 detail page; also the notification's `actionUrl` |
+| `create` | `POST /control-exceptions` (`create`): `title`, `description`, `category`, `severity?`, optional `departmentId`/`documentId`/`workflowInstanceId` | 🟨 `/control-exceptions/new`. The form links a department and a document, not a workflow |
+| `update` | `PATCH /control-exceptions/:id` (`edit`, while `open`) | 🟨 `/[id]/edit`; sends `null` to unlink |
+| `report` | `POST /control-exceptions/:id/report` (`report`) | 🟨 "Report to permanent secretary", after a confirm |
+| `acknowledge`, `resolve` | `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` `{resolutionNote}` (`respond`) | 🟨 detail page; Resolve opens an inline note |
+
+Gap: the responses embed `raiser` but give only ids for the reporter, acknowledger and
+resolver, so the history can't name them (management can't read `GET /users`).
 
 Categories: `missing_competitive_quotes`, `missing_approval`, `missing_documentation`,
 `policy_breach`, `sla_breach`, `other`. Severities: `low`, `medium` (default), `high`,
@@ -1383,10 +1391,10 @@ above: there is no write endpoint to point it at, by design.
 > ⚠️ **Correction (2026-09-18).** Every item previously listed here (version restore,
 > archive, cabinet access grants, cabinet metadata fields, delegations, workflow history)
 > is wired now — verified by reading the actual consuming pages, not re-derived from
-> scratch. The list stayed empty from then until 2026-10-29.
+> scratch. Control exceptions sat here for one day (backend 2026-10-29) and got their UI
+> the same day.
 
-- **Control exceptions** (2026-10-29): all 8 `/control-exceptions` routes, see
-  [Internal control](#internal-control-backend-only-on-dev-2026-10-29). Not seeded on live yet.
+Nothing currently known to be backend-complete with zero UI.
 
 ---
 
