@@ -4,6 +4,7 @@ import {
   CreateDelegationRequest,
   Delegation,
   PaginatedResponse,
+  PersonSummary,
 } from '@/types/models';
 
 export interface DelegationFilters {
@@ -17,6 +18,15 @@ export const delegationsService = {
   getAll: async (params?: DelegationFilters): Promise<PaginatedResponse<Delegation>> => {
     const res = await apiClient.get<PaginatedResponse<Delegation>>('/delegations', { params });
     return res.data;
+  },
+
+  /** Active users the caller may delegate to (not themselves), at most 20.
+   *  `search` (name or email) must be 2–100 characters when sent. */
+  getEligibleUsers: async (search?: string): Promise<PersonSummary[]> => {
+    const res = await apiClient.get<ApiResponse<PersonSummary[]>>('/delegations/eligible-users', {
+      params: search ? { search } : undefined,
+    });
+    return res.data.data;
   },
 
   getById: async (id: string): Promise<Delegation> => {

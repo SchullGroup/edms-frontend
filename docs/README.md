@@ -78,7 +78,12 @@ setting up an environment.
 
 ## The short version
 
-**59 frontend pages · 140 backend routes · 6 roles · 0 tests.**
+**64 frontend pages · 149 backend routes · 6 roles · 0 tests.**
+*(Pages re-derived 2026-10-29: +5, the `/control-exceptions` pages; the two Findings pages
+became redirects to them.)*
+*(Routes re-derived 2026-10-29, backend @ `dev` `82c4707`: 140 → 149 — the 8
+`/control-exceptions` routes (`51e9d85`, a 12th router file) and
+`GET /delegations/eligible-users` (`436ea83`). Seed: 78 permissions, 219 grants.)*
 *(Routes re-derived 2026-10-26, backend @ `dev` `4651d71`: 134 → 140 — `DELETE /workflows/:id`
 and `POST …/unarchive` (PR #55), `POST /documents/:id/summary` (PR #56) and the three
 `/workflows/:id/versions` routes (PR #59).)*
@@ -104,11 +109,12 @@ The DOCUMENT half is real
 The GOVERNANCE half is now half real
   ✅ audit trail · circulars · SLA settings
   🟨 notifications (emitted, not clicked through)
-  🟥 findings · retention · branding · platform operations
-                                                    🟥 11 of 59 pages
+  🟨 control exceptions (built, not live until the tenant is seeded)
+  🟥 retention · branding · platform operations
+                                                    🟥 9 of 64 pages
 ```
-*(Re-drawn 2026-10-15 from doc 05's portfolio table — was "notifications · policies …
-🟥 13 of 58 pages".)*
+*(Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
+59 pages"; 2026-10-15 it was "notifications · policies … 🟥 13 of 58 pages".)*
 
 ### The four defects that matter most
 

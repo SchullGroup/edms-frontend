@@ -102,7 +102,7 @@ PHASE 0   Platform Admin (Adaeze)  ·  🟥 MOCK
 PHASE 1   Engineering  ·  ✅ REAL (CLI, not UI)
           prisma migrate deploy → seed roles, permissions, role_permissions
           ─────────────────────────────────────────────────────────────────
-                                    │  produces: 6 roles, 73 permissions, 212 grants
+                                    │  produces: 6 roles, 78 permissions, 219 grants
                                     ▼
 PHASE 2   Client Admin (Bola)  ·  ✅ REAL
           Create the department tree
@@ -217,30 +217,35 @@ npx prisma db seed           # optional: demo users, cabinets, documents
 
 **6 system roles** (`prisma/seed-system.ts`):
 
-*Re-counted 2026-10-15 from `prisma/seed-system.ts` and
-`src/shared/constants/permissions.constants.ts` on `edms-backend` `dev` (`9998e05`). The
-previous table (45 / 18 / 14 / 10 / 10 / 3 grants, 45 permissions, 100 grants) described
-the seed before the 2026-09-16 RBAC refactor.*
+*Re-counted 2026-10-29 from `prisma/seed-system.ts` and
+`src/shared/constants/permissions.constants.ts` on `edms-backend` `dev` (`82c4707`): `51e9d85`
+added `control_exception` (5 permissions, 7 grants). It was 72 / 40 / 29 / 27 / 26 / 18
+grants, 73 permissions and 212 grants on 2026-10-15 (`9998e05`). The table before that
+(45 / 18 / 14 / 10 / 10 / 3, 45 permissions, 100 grants) predated the 2026-09-16 RBAC refactor.*
 
 | Role | Grants | Character |
 |---|---|---|
-| `client_admin` | 72 | Full tenant control — 71 `global`, 1 `own` |
+| `client_admin` | 73 | Full tenant control — 72 `global`, 1 `own`; reads control exceptions |
 | `supervisor` | 40 | Department oversight + approval — 34 `department`; reassigns tasks, publishes circulars |
 | `staff` | 29 | Mixed `own` (16) / `department` (9) scope |
-| `management` | 27 | `global` read, plus own-scope routing, task action, delegation, and circular publishing |
-| `internal_auditor` | 26 | `global` read + `audit:view/export`; own-scope routing, task action and delegation |
+| `management` | 29 | `global` read, plus own-scope routing, task action, delegation, circular publishing, and acknowledging/resolving control exceptions |
+| `internal_auditor` | 30 | `global` read + `audit:view/export`; raises, edits and reports control exceptions; own-scope routing, task action and delegation |
 | `schulltech_admin` | 18 | Workflow definitions, instances, tasks, delegation, audit — **no `document:*` grant** |
 
 In the seed, only `client_admin` and `schulltech_admin` hold `workflow:view` — the cause of
 DRIFT-14. *(Re-tested 2026-10-16: the live tenant's non-admin roles still hold
 `workflow:view:global`, so it doesn't bite there; a tenant seeded fresh from this file would.)*
 
-**73 permissions** across 20 resources: `document`, `document_version`, `document_lock`,
+**78 permissions** across 21 resources: `document`, `document_version`, `document_lock`,
 `document_metadata`, `document_comment`, `document_signature`, `document_access_request`,
-`cabinet`, `cabinet_metadata_field`, `cabinet_access`, `folder`, `department`, `user`,
-`role`, `workflow`, `workflow_instance`, `task`, `delegation`, `audit`, `circular`.
+`control_exception`, `cabinet`, `cabinet_metadata_field`, `cabinet_access`, `folder`,
+`department`, `user`, `role`, `workflow`, `workflow_instance`, `task`, `delegation`, `audit`,
+`circular`.
 
-**212 role-permission grants**, each carrying a scope of `global | department | own`.
+*On an existing tenant the `control_exception` grants appear only after `npm run
+seed:system` is re-run. The live tenant didn't have them on 2026-10-29.*
+
+**219 role-permission grants**, each carrying a scope of `global | department | own`.
 
 ### The scope model — the thing to understand before anything else
 
@@ -862,7 +867,7 @@ the product.
 |---|---|
 | "Show me everything Chika did last month" | ✅ `audit_entries` is real and auto-written (DRIFT-11, confirmed live 2026-09-18), and `/auditor/trail` reads it (`GET /audit`, filter by actor/action/object) — ✅ Live in doc 05, confirmed in the product owner's testing 2026-10-08. *Was 🟨: "/auditor/trail still renders `SEED.audit`".* |
 | "Prove this trail hasn't been altered" | 🟨 `GET /audit/verify` exists, works, and confirmed the hash chain intact live — but no auditor-facing screen calls it (`/admin/audit`'s "Verify integrity" does). |
-| "Track this finding to closure" | ⛔ No `Finding` model in Prisma. `/auditor/findings` (367 lines) operates entirely on `SEED.findings`. |
+| "Track this finding to closure" | 🟨 As a **control exception** (2026-10-29): raised and reported by the auditor, acknowledged and resolved by management, on `/control-exceptions`. Verified against mocked responses only; the live tenant needs `seed:system` first. There's still no `Finding` model with an owner and due date; `/auditor/findings` redirects to control exceptions. |
 | "Which documents are past retention?" | ⛔ `RetentionPolicy` exists in the schema and a cabinet can reference one (`retentionPolicyId`), but no endpoint manages policies, no UI shows them and no job applies them. |
 | "Department SLA compliance this quarter" | 🟨 Server-side now — `/management` reads per-department on-time/total buckets from `GET /tasks/stats` (DRIFT-07). The figure is all-time, not per quarter. *Was: "Computed in the browser from paginated lists".* |
 | "Who can see the Contracts cabinet?" | 🟨 `GET /cabinets/:id/access` exists (gated on `cabinet_access:view`, which `internal_auditor` holds), and the admin cabinet screen uses it. No auditor screen does. *Was: "There is no endpoint to use it".* |
@@ -942,7 +947,7 @@ cp .env.example .env       # set DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET,
                            # REDIS_URL, AWS_REGION, S3_BUCKET, PORT=3001
 npx prisma generate        # ⚠️ NOT OPTIONAL — see Phase 1
 npx prisma migrate deploy
-npm run db:bootstrap       # pgcrypto + 6 roles + 73 permissions + 212 grants
+npm run db:bootstrap       # pgcrypto + 6 roles + 78 permissions + 219 grants
 
 # Create the first client_admin by hand — there is no UI for this and no
 # platform-provisioning flow. Adapt prisma/seed.ts or use a one-off script.
