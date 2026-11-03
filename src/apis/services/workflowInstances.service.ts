@@ -136,9 +136,11 @@ export const workflowInstancesService = {
     instanceId: string,
     documentId: string,
     comment?: string,
+    submitterId?: string,
   ): Promise<void> => {
     await apiClient.post(`/workflow-instances/${instanceId}/documents`, {
       documentId,
+      ...(submitterId ? { submitterId } : {}),
       ...(comment ? { comment } : {}),
     });
   },
@@ -151,14 +153,18 @@ export const workflowInstancesService = {
   },
 
   /** Convenience: `POST /workflow-instances` then `POST /workflow-instances/{id}/start`.
-   *  Every document goes into the one workflow. */
+   *  Every document goes into the one workflow, with the same submitter if given. */
   createAndStart: async (
     workflowDefinitionId: string,
     documentIds: string[],
+    submitterId?: string,
   ): Promise<WorkflowInstance> => {
     const instance = await workflowInstancesService.create({
       workflowDefinitionId,
-      documents: documentIds.map((documentId) => ({ documentId })),
+      documents: documentIds.map((documentId) => ({
+        documentId,
+        ...(submitterId ? { submitterId } : {}),
+      })),
     });
     return workflowInstancesService.start(instance.id);
   },

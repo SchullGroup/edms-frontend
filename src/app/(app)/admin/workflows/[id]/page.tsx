@@ -117,7 +117,13 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
   const resetStageDrafts = (stage: WorkflowStage | null) => {
     setStageNameDraft(stage?.name || '');
     setAssigneeMode(
-      stage?.user_id ? 'person' : !stage?.role && stage?.department_id ? 'department' : 'role',
+      stage?.dynamic_assignee
+        ? 'manager'
+        : stage?.user_id
+          ? 'person'
+          : !stage?.role && stage?.department_id
+            ? 'department'
+            : 'role',
     );
     setRoleDraft(stage?.role || '');
     setUserDraft(stage?.user_id || '');
@@ -143,15 +149,23 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
   // kind; the fields of the others are cleared.
   const assignmentDraft = (): Pick<
     WorkflowStage,
-    'role' | 'user_id' | 'department_id' | 'sub_department_id'
+    'role' | 'user_id' | 'department_id' | 'sub_department_id' | 'dynamic_assignee'
   > => {
+    const none = {
+      role: undefined,
+      user_id: undefined,
+      department_id: undefined,
+      sub_department_id: undefined,
+      dynamic_assignee: undefined,
+    };
     const department = {
       department_id: departmentDraft || undefined,
       sub_department_id: (departmentDraft && subDepartmentDraft) || undefined,
     };
-    if (assigneeMode === 'role') return { role: roleDraft, user_id: undefined, ...department };
-    if (assigneeMode === 'department') return { role: undefined, user_id: undefined, ...department };
-    return { role: undefined, user_id: userDraft, department_id: undefined, sub_department_id: undefined };
+    if (assigneeMode === 'role') return { ...none, role: roleDraft, ...department };
+    if (assigneeMode === 'department') return { ...none, ...department };
+    if (assigneeMode === 'manager') return { ...none, dynamic_assignee: 'submitter_manager' };
+    return { ...none, user_id: userDraft };
   };
 
   const nameDirty = nameDraft !== (wf?.name || '');
@@ -166,6 +180,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
         slaDraft !== (selectedStage.sla_hours ?? 48) ||
         (draft.role || '') !== (selectedStage.role || '') ||
         (draft.user_id || '') !== (selectedStage.user_id || '') ||
+        (draft.dynamic_assignee || '') !== (selectedStage.dynamic_assignee || '') ||
         (draft.department_id || '') !== saved.departmentId ||
         (draft.sub_department_id || '') !== saved.subDepartmentId
       );
@@ -334,7 +349,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
         setDepartmentDraft(departmentTree[0]?.id || '');
         setSubDepartmentDraft('');
       }
-    } else {
+    } else if (mode === 'person') {
       setUserDraft(userDraft || users[0]?.id || '');
     }
   };
@@ -415,6 +430,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
   };
 
   const assigneeSummary = (s: WorkflowStage) => {
+    if (s.dynamic_assignee) return "Submitter's manager";
     if (s.user_id) {
       const u = users.find((u) => u.id === s.user_id);
       return u ? u.name : 'Assigned person';
