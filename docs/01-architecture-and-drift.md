@@ -1372,7 +1372,7 @@ Categories: `missing_competitive_quotes`, `missing_approval`, `missing_documenta
 
 | Frontend service | Endpoints called | Backend | Status |
 |---|---|---|---|
-| `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 — since 2026-10-08 only its `watermark` flag is read. Download now follows the `document:download` permission and clearance, so `/admin/policies`' Download and Print toggles change nothing |
+| `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 — nothing reads it since 2026-11-03 (every document is watermarked). Download now follows the `document:download` permission and clearance, so `/admin/policies`' Download and Print toggles change nothing |
 | `branding.service.ts` | none — returns `SEED.branding` | no module, no schema | 🔴 |
 
 **DRIFT-10 (notifications) — ✅ RESOLVED (verified 2026-09-21).**

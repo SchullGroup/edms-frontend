@@ -6,7 +6,6 @@ import {
   useDownloadDocumentVersion,
   usePrintDocument,
 } from '@/apis/hooks/useDocuments';
-import { useConfidentialityPolicy } from '@/hooks/useConfidentialityPolicy';
 import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
 import { DocumentViewerPanel } from '@/components/documents/DocumentViewerPanel';
@@ -57,7 +56,6 @@ export function WorkflowDocumentViewer({
   const [zoom, setZoom] = useState(1);
   // An empty id disables the query: a Restricted document is never fetched.
   const { data: doc, isLoading, error } = useDocument(restricted ? '' : documentId);
-  const { policyFor } = useConfidentialityPolicy();
   const { allows } = useConfidentialityClearance();
   const downloadVersion = useDownloadDocumentVersion();
   const printDocument = usePrintDocument();
@@ -131,7 +129,6 @@ export function WorkflowDocumentViewer({
   }
 
   const { rawFileKey, fileUrl, fileMimeType } = documentFile(doc);
-  const policy = policyFor(doc.confidentiality);
   const currentVersionId = doc.currentVersionId;
   const lockedByOther = !!doc.isCheckedOut && doc.checkoutLock?.lockedBy !== viewerId;
 
@@ -142,7 +139,6 @@ export function WorkflowDocumentViewer({
       fileUrl={fileUrl}
       rawFileKey={rawFileKey}
       fileMimeType={fileMimeType}
-      showWatermark={policy.watermark}
       watermarkText={`${doc.confidentiality} · ${viewerName}`}
       zoom={zoom}
       onZoomChange={setZoom}

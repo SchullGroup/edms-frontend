@@ -65,7 +65,6 @@ export interface PdfViewerProps {
   title: string;
   zoom: number;
   onZoomChange: (zoom: number) => void;
-  showWatermark: boolean;
   watermarkText: string;
   /** Text can be selected and copied only by someone who could download the file anyway. */
   allowCopy: boolean;
@@ -91,7 +90,6 @@ export function PdfViewer({
   title,
   zoom,
   onZoomChange,
-  showWatermark,
   watermarkText,
   allowCopy,
   canPrint,
@@ -358,7 +356,7 @@ export function PdfViewer({
       if (onBeforePrint && !(await onBeforePrint())) return;
       await printPdf(doc, {
         title,
-        watermarkText: showWatermark ? watermarkText : undefined,
+        watermarkText: watermarkText,
         onProgress: (done, total) => setPrinting({ done, total }),
       });
     } catch {
@@ -543,7 +541,7 @@ export function PdfViewer({
             active={active}
             zoom={zoom}
             allowCopy={allowCopy}
-            watermarkText={showWatermark ? watermarkText : undefined}
+            watermarkText={watermarkText}
             onActiveHighlight={onActiveHighlight}
           />
         ) : (
@@ -563,7 +561,7 @@ export function PdfViewer({
                 onActiveHighlight={onActiveHighlight}
                 registerPage={registerPage}
                 allowCopy={allowCopy}
-                watermarkText={showWatermark ? watermarkText : undefined}
+                watermarkText={watermarkText}
               />
             ))}
           </div>

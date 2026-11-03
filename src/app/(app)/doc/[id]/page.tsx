@@ -14,7 +14,6 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { scopeAtLeast } from '@/lib/permissions';
 import { cabinetAllows, useMyCabinetAccess } from '@/components/cabinets/cabinetAccess';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
-import { useConfidentialityPolicy } from '@/hooks/useConfidentialityPolicy';
 import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import {
@@ -67,7 +66,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
   const { data: cabinetsData, isLoading: isLoadingCabs } = useCabinets();
-  const { policyFor, isLoading: isLoadingPolicies } = useConfidentialityPolicy();
   const cabinets = cabinetsData?.data || [];
 
   const { can, scopeFor } = usePermissions();
@@ -158,7 +156,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     }
   }, [me?.id, doc?.id, doc?.title, recordDocumentView]);
 
-  if (isLoading || isLoadingCabs || isLoadingPolicies) {
+  if (isLoading || isLoadingCabs) {
     return <DocumentDetailSkeleton />;
   }
 
@@ -200,9 +198,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   }
 
   const { rawFileKey, fileUrl, fileMimeType } = documentFile(doc);
-  // Watermarking still comes from the (mock) policy table. Download follows the links the
-  // backend issued this viewer; without a file, `document:download` decides (text stub).
-  const confPolicy = policyFor(doc.confidentiality);
+  // Download follows the links the backend issued this viewer; without a file,
+  // `document:download` decides (text stub).
   const canDownload = doc.currentVersion?.fileUrl
     ? canDownloadVersion(doc.currentVersion)
     : allows(doc, 'download');
@@ -560,7 +557,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           fileUrl={fileUrl}
           rawFileKey={rawFileKey}
           fileMimeType={fileMimeType}
-          showWatermark={confPolicy.watermark}
           watermarkText={`${doc.confidentiality} · ${me.name}`}
           zoom={zoom}
           onZoomChange={setZoom}
