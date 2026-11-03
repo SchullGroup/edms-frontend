@@ -5,6 +5,7 @@ import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import {
   useUsers,
+  useUser,
   useCreateUser,
   useUpdateUser,
   useAssignUserRoles,
@@ -15,6 +16,7 @@ import { useRoles } from '@/apis/hooks/useRoles';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { buildDepartmentIndex, departmentName } from '@/apis/utils/managementAggregation';
+import { UserPicker } from '@/components/common/UserPicker';
 import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
@@ -112,6 +114,7 @@ export default function UsersPage() {
       email: user?.email || '',
       roleIds: existingRoleIds,
       departmentId: user?.departmentId || departmentList[0]?.id || '',
+      managerId: user?.managerId || '',
     };
     // Modal actions aren't real <form> submits, so `required`/`type="email"`
     // alone won't pop the browser's native validation UI — this ref lets the
@@ -163,6 +166,15 @@ export default function UsersPage() {
               ))}
             </select>
           </div>
+          <div className="field">
+            <label>Reports to</label>
+            <ManagerField
+              initialManagerId={u.managerId}
+              userId={u.id}
+              onChange={(managerId) => (u.managerId = managerId)}
+            />
+            <div className="help">Gets stages assigned to the submitter&apos;s manager.</div>
+          </div>
           <div className="field col-span-2">
             <label>Roles</label>
             <RolePicker initialRoleIds={u.roleIds} onChange={(roleIds) => (u.roleIds = roleIds)} />
@@ -196,6 +208,7 @@ export default function UsersPage() {
                   email: u.email,
                   name: u.name,
                   departmentId: u.departmentId || undefined,
+                  managerId: u.managerId || undefined,
                   roleIds: u.roleIds.length ? u.roleIds : undefined,
                 })
                 .then((newUser: any) => {
@@ -211,7 +224,15 @@ export default function UsersPage() {
               updateUser
                 .mutateAsync({
                   id: u.id,
-                  updates: { name: u.name, email: u.email, departmentId: u.departmentId } as any,
+                  updates: {
+                    name: u.name,
+                    email: u.email,
+                    departmentId: u.departmentId,
+                    // Sent only when changed; null clears it.
+                    ...(u.managerId !== (user?.managerId || '')
+                      ? { managerId: u.managerId || null }
+                      : {}),
+                  } as any,
                 })
                 .then(() => {
                   auditAction('USER_EDIT', u.id, 'Updated profile');
@@ -303,6 +324,12 @@ export default function UsersPage() {
     },
     { key: 'roleLabel', label: 'Roles', sortable: true },
     { key: 'dept', label: 'Department' },
+    {
+      key: 'managerId',
+      label: 'Reports to',
+      render: (u) =>
+        u.managerId ? <ManagerName id={u.managerId} /> : <span className="caption">—</span>,
+    },
     {
       key: 'lastLogin',
       label: 'Last login',
@@ -468,7 +495,10 @@ export default function UsersPage() {
           </div>
         </div>
         {isLoading ? (
-          <SkeletonTable columns={['Name', 'Roles', 'Department', 'Last login', 'Created', 'Status', '']} rows={8} />
+          <SkeletonTable
+            columns={['Name', 'Roles', 'Department', 'Reports to', 'Last login', 'Created', 'Status', '']}
+            rows={8}
+          />
         ) : (
           <>
             <Table cols={userCols} rows={users} />
@@ -485,6 +515,39 @@ export default function UsersPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/** `GET /users` sends only `managerId`; each name is looked up once and cached. */
+function ManagerName({ id }: { id: string }) {
+  const { data } = useUser(id);
+  return <span>{data?.name ?? '…'}</span>;
+}
+
+/** The modal's manager picker: active people only, never the user themself.
+ *  Holds its own state because `openModal` freezes the values it was opened with. */
+function ManagerField({
+  initialManagerId,
+  userId,
+  onChange,
+}: {
+  initialManagerId: string;
+  userId?: string;
+  onChange: (managerId: string) => void;
+}) {
+  const [managerId, setManagerId] = useState(initialManagerId);
+  return (
+    <UserPicker
+      value={managerId}
+      onChange={(id) => {
+        setManagerId(id);
+        onChange(id);
+      }}
+      filters={{ status: 'active' }}
+      excludeIds={userId ? [userId] : undefined}
+      allLabel="No manager"
+      ariaLabel="Reports to"
+    />
   );
 }
 

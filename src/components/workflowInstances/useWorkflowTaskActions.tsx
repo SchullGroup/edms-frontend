@@ -36,6 +36,8 @@ export interface WorkflowTaskActionsArgs {
   instanceId: string;
   /** Holds `workflow_instance:create`, which `POST /workflow-instances/:id/documents` requires. */
   canAttachDocuments: boolean;
+  /** Sent with each attached document; required when a stage uses `submitter_manager`. */
+  submitterId?: string;
   /** Starting cabinet/confidentiality/urgency for a file uploaded in the picker. */
   uploadDefaults?: UploadDefaults;
   users: User[];
@@ -58,6 +60,7 @@ export function useWorkflowTaskActions({
   auditTargetId,
   instanceId,
   canAttachDocuments,
+  submitterId,
   uploadDefaults,
   users,
   me,
@@ -111,7 +114,7 @@ export function useWorkflowTaskActions({
       for (const doc of picked) {
         if (attached.has(doc.id)) continue;
         try {
-          await attachDocument.mutateAsync({ instanceId, documentId: doc.id });
+          await attachDocument.mutateAsync({ instanceId, documentId: doc.id, submitterId });
           attached.add(doc.id);
         } catch (err: any) {
           addToast(

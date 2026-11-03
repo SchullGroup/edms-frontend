@@ -24,6 +24,8 @@ export interface CreateUserInput {
   password?: string;
   status?: 'active' | 'inactive' | 'suspended';
   departmentId?: string;
+  /** Must be an active user (edms-backend PR #62). */
+  managerId?: string;
   roleIds?: string[];
 }
 

@@ -1,6 +1,11 @@
 'use client';
 
+import React, { useState } from 'react';
 import { useWorkflows } from '@/apis/hooks/useWorkflows';
+import { usersService } from '@/apis/services/users.service';
+import { UserPicker } from '@/components/common/UserPicker';
+import { useMyDepartmentId } from '@/hooks/useMyDepartmentId';
+import type { WorkflowDefinition, WorkflowDefinitionJson } from '@/types/models';
 import { useStartWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useUIStore } from '@/store/useUIStore';
@@ -39,6 +44,11 @@ export function useRouteToWorkflow() {
   const { scopeFor } = usePermissions();
   const { currentUser } = useStore();
   const createScope = scopeFor('workflow_instance', 'create');
+  const { departmentId: myDepartmentId } = useMyDepartmentId();
+  // The backend accepts anyone at `global` scope, the same department at
+  // `department`, and only yourself at `own`; a picker also needs `user:view`.
+  const canViewUsers = can('user', 'view');
+  const canPickSubmitter = createScope !== 'own' && canViewUsers;
 
   /**
    * Whether the backend lets the caller start a workflow on this document
@@ -83,7 +93,10 @@ export function useRouteToWorkflow() {
       return;
     }
 
-    let selected = publishedWorkflows[0]?.id || '';
+    const choice: RouteChoice = {
+      workflowId: publishedWorkflows[0]?.id || '',
+      submitterId: currentUser?.id || '',
+    };
     const label =
       docs.length === 1
         ? `“${(docs[0].title || docs[0].id).slice(0, 44)}”`
@@ -99,41 +112,34 @@ export function useRouteToWorkflow() {
               before anything can be routed to it.
             </div>
           ) : (
-            <>
-              <div className="field">
-                <label>Workflow</label>
-                <select
-                  className="input"
-                  defaultValue={selected}
-                  onChange={(e) => (selected = e.target.value)}
-                >
-                  {publishedWorkflows.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </select>
-                {alreadyRouted.length > 0 && (
-                  <div className="banner info" style={{ marginBottom: 10 }}>
-                    {alreadyRouted.length === 1
-                      ? '1 selected document is already in a workflow and is left out.'
-                      : `${alreadyRouted.length} selected documents are already in workflows and are left out.`}
-                  </div>
-                )}
-                {notMine.length > 0 && (
-                  <div className="banner info" style={{ marginBottom: 10 }}>
-                    {notMine.length === 1
-                      ? '1 selected document was uploaded by someone else and is left out: you can only route documents you uploaded.'
-                      : `${notMine.length} selected documents were uploaded by someone else and are left out: you can only route documents you uploaded.`}
-                  </div>
-                )}
-                <div className="help">
-                  {docs.length > 1 ? `All ${docs.length} documents go into one workflow. ` : ''}
-                  The first stage opens immediately and a task is raised for whoever that stage is
-                  assigned to.
+            <RouteWorkflowFields
+              workflows={publishedWorkflows}
+              initial={choice}
+              meName={currentUser?.name || 'You'}
+              canPickSubmitter={canPickSubmitter}
+              submitterDepartmentId={createScope === 'department' ? myDepartmentId : null}
+              onChange={(next) => Object.assign(choice, next)}
+            >
+              {alreadyRouted.length > 0 && (
+                <div className="banner info" style={{ marginBottom: 10 }}>
+                  {alreadyRouted.length === 1
+                    ? '1 selected document is already in a workflow and is left out.'
+                    : `${alreadyRouted.length} selected documents are already in workflows and are left out.`}
                 </div>
+              )}
+              {notMine.length > 0 && (
+                <div className="banner info" style={{ marginBottom: 10 }}>
+                  {notMine.length === 1
+                    ? '1 selected document was uploaded by someone else and is left out: you can only route documents you uploaded.'
+                    : `${notMine.length} selected documents were uploaded by someone else and are left out: you can only route documents you uploaded.`}
+                </div>
+              )}
+              <div className="help">
+                {docs.length > 1 ? `All ${docs.length} documents go into one workflow. ` : ''}
+                The first stage opens immediately and a task is raised for whoever that stage is
+                assigned to.
               </div>
-            </>
+            </RouteWorkflowFields>
           )}
         </div>
       ),
@@ -144,13 +150,33 @@ export function useRouteToWorkflow() {
           kind: 'btn-primary',
           disabled: publishedWorkflows.length === 0,
           onClick: async () => {
+            const selected = choice.workflowId;
             if (!selected) {
               addToast('Select a workflow first', 'error');
               return false;
             }
-            const wfName = publishedWorkflows.find((w) => w.id === selected)?.name || 'workflow';
+            const workflow = publishedWorkflows.find((w) => w.id === selected);
+            const wfName = workflow?.name || 'workflow';
+            const submitterId = needsSubmitter(workflow) ? choice.submitterId : undefined;
+            if (needsSubmitter(workflow) && !submitterId) {
+              addToast('Pick who this is submitted for', 'error');
+              return false;
+            }
+            const isMe = submitterId === currentUser?.id;
+            // Checked first where we can: a failed start leaves a pending workflow behind.
+            if (submitterId && canViewUsers) {
+              const submitter = await usersService.getById(submitterId).catch(() => null);
+              if (submitter && !submitter.managerId) {
+                addToast(noManagerMessage(isMe ? null : submitter.name, wfName), 'error');
+                return false;
+              }
+            }
             try {
-              await startWorkflow({ workflowId: selected, documentIds: docs.map((d) => d.id) });
+              await startWorkflow({
+                workflowId: selected,
+                documentIds: docs.map((d) => d.id),
+                submitterId,
+              });
               docs.forEach((d) =>
                 createAuditLog.mutate({
                   action: 'WORKFLOW_START',
@@ -166,7 +192,13 @@ export function useRouteToWorkflow() {
               );
               opts?.onSuccess?.();
             } catch (err: any) {
-              addToast(err?.response?.data?.message || 'Failed to route', 'error');
+              const { code, message } = err?.response?.data ?? {};
+              addToast(
+                code === 'WORKFLOW_ASSIGNEE_INVALID' && /manager/i.test(message ?? '')
+                  ? noManagerMessage(isMe ? null : 'The person it is submitted for', wfName)
+                  : message || 'Failed to route',
+                'error',
+              );
               return false;
             }
           },
@@ -176,4 +208,88 @@ export function useRouteToWorkflow() {
   };
 
   return { routeDocuments, canRoute, mayRouteDocument, publishedWorkflows, isLoading };
+}
+
+interface RouteChoice {
+  workflowId: string;
+  submitterId: string;
+}
+
+/** A stage goes to the submitter's manager, so routing must name a submitter (PR #62). */
+export const needsSubmitter = (workflow?: { definition?: WorkflowDefinitionJson | null }) =>
+  !!workflow?.definition?.stages?.some((s) => s.dynamic_assignee === 'submitter_manager');
+
+/** `name` null means the person routing it. */
+const noManagerMessage = (name: string | null, workflowName: string) =>
+  `${name ? `${name} has` : 'You have'} no manager set, so ${workflowName} has no one to send ` +
+  `the submitter's-manager stage to. Ask an administrator to set who ${name ? 'they report' : 'you report'} to in Users.`;
+
+/** The modal's fields. Holds its own state because `openModal` freezes its body. */
+function RouteWorkflowFields({
+  workflows,
+  initial,
+  meName,
+  canPickSubmitter,
+  submitterDepartmentId,
+  onChange,
+  children,
+}: {
+  workflows: WorkflowDefinition[];
+  initial: RouteChoice;
+  meName: string;
+  canPickSubmitter: boolean;
+  submitterDepartmentId: string | null;
+  onChange: (choice: RouteChoice) => void;
+  children?: React.ReactNode;
+}) {
+  const [choice, setChoice] = useState(initial);
+  const update = (patch: Partial<RouteChoice>) => {
+    const next = { ...choice, ...patch };
+    setChoice(next);
+    onChange(next);
+  };
+  const workflow = workflows.find((w) => w.id === choice.workflowId);
+
+  return (
+    <>
+      <div className="field">
+        <label>Workflow</label>
+        <select
+          className="input"
+          value={choice.workflowId}
+          onChange={(e) => update({ workflowId: e.target.value })}
+        >
+          {workflows.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
+        </select>
+        {children}
+      </div>
+      {needsSubmitter(workflow) && (
+        <div className="field">
+          <label>Submitted for</label>
+          {canPickSubmitter ? (
+            <UserPicker
+              value={choice.submitterId}
+              onChange={(submitterId) => update({ submitterId })}
+              filters={{
+                status: 'active',
+                ...(submitterDepartmentId ? { departmentId: submitterDepartmentId } : {}),
+              }}
+              ariaLabel="Submitted for"
+            />
+          ) : (
+            <div style={{ fontWeight: 600 }}>{meName} (you)</div>
+          )}
+          <div className="help">
+            {canPickSubmitter
+              ? "A stage in this workflow goes to this person's manager."
+              : 'A stage in this workflow goes to your manager.'}
+          </div>
+        </div>
+      )}
+    </>
+  );
 }

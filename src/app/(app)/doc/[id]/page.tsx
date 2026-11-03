@@ -548,6 +548,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           onSignatureFieldClick={() => {}}
           canDownload={canDownload}
           onDownload={actDownload}
+          hideDownloadButton
           canPrint={canPrint}
           ocrText={doc.currentVersion?.ocrText}
           ocrStatus={doc.currentVersion?.ocrStatus}

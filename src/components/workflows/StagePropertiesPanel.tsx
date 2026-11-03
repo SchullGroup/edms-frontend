@@ -6,7 +6,8 @@ import { StageDepartmentPicker } from './StageDepartmentPicker';
 import type { MoveDirection } from './workflowGraph';
 import type { Department, WorkflowStageAction } from '@/types/models';
 
-export type AssigneeMode = 'role' | 'person' | 'department';
+/** `manager`: the submitter's manager, resolved per document (edms-backend PR #62). */
+export type AssigneeMode = 'role' | 'person' | 'department' | 'manager';
 
 export interface StagePropertiesPanelProps {
   selectedStage: any | null;
@@ -157,7 +158,7 @@ export function StagePropertiesPanel({
 
           <div className="field">
             <label>Assign to</label>
-            <div className="seg" role="group" aria-label="Assign by role, person or department" style={{ marginBottom: '8px' }}>
+            <div className="seg" role="group" aria-label="Assign by role, person, department or manager" style={{ marginBottom: '8px' }}>
               <button type="button" className={assigneeMode === 'role' ? 'active' : ''} onClick={() => onAssigneeModeChange('role')}>
                 Role
               </button>
@@ -167,8 +168,17 @@ export function StagePropertiesPanel({
               <button type="button" className={assigneeMode === 'department' ? 'active' : ''} onClick={() => onAssigneeModeChange('department')}>
                 Department
               </button>
+              <button type="button" className={assigneeMode === 'manager' ? 'active' : ''} onClick={() => onAssigneeModeChange('manager')}>
+                Manager
+              </button>
             </div>
-            {assigneeMode === 'role' ? (
+            {assigneeMode === 'manager' ? (
+              <div className="help">
+                Goes to the manager of whoever the document is submitted for, as set in Admin → Users.
+                Routing asks who that is. Someone with no manager set can&apos;t be routed through
+                this stage.
+              </div>
+            ) : assigneeMode === 'role' ? (
               <>
                 <select className="input" value={roleDraft} onChange={(e) => onRoleChange(e.target.value)}>
                   {(roles || []).map((r) => (
