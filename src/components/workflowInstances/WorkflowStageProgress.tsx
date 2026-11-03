@@ -101,7 +101,9 @@ export function WorkflowStageProgress({
                       ]
                         .filter(Boolean)
                         .join(' · ')
-                    : s.role || ''}
+                    : s.dynamic_assignee
+                      ? "Submitter's manager"
+                      : s.role || ''}
                   {state === 'current' && due && (
                     <span
                       style={due.late ? { color: 'var(--status-overdue)', fontWeight: 700 } : {}}

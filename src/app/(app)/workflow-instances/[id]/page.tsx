@@ -24,6 +24,7 @@ import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { fmtDateTime } from '@/utils/helpers';
 import { documentsLabel, isActionedTaskDocument, taskDueAt } from '@/utils/workflowDocuments';
+import { needsSubmitter } from '@/hooks/useRouteToWorkflow';
 import type {
   DocumentAccessKind,
   Task,
@@ -241,6 +242,12 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
     auditTargetId: selected?.id ?? id,
     instanceId: id,
     canAttachDocuments: can('workflow_instance', 'create'),
+    // A document added mid-workflow keeps the submitter of the ones already in it.
+    submitterId: needsSubmitter(instance?.workflowDefinition)
+      ? (taskDetail?.documents
+          ?.map((s) => s.workflowDocumentExecution.workflowInstanceDocument.submitterId)
+          .find(Boolean) ?? undefined)
+      : undefined,
     // A document added mid-workflow defaults to where the one on screen lives.
     uploadDefaults: {
       cabinetId: selectedDoc?.cabinetId,

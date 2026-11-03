@@ -27,6 +27,8 @@ export interface DocumentViewerPanelProps {
   canDownload: boolean;
   /** The page's own (audited) download; without one the button opens the file. */
   onDownload?: () => void;
+  /** Leaves Download out of the PDF viewer bar, for a page with its own button. */
+  hideDownloadButton?: boolean;
   /** `document:print` plus clearance. PDFs only. */
   canPrint: boolean;
   /** The audited permission check run before printing; false cancels. */
@@ -61,6 +63,7 @@ export function DocumentViewerPanel({
   onSignatureFieldClick,
   canDownload,
   onDownload,
+  hideDownloadButton = false,
   canPrint,
   onBeforePrint,
   ocrText,
@@ -90,6 +93,7 @@ export function DocumentViewerPanel({
           ocrStatus={ocrStatus}
           actions={
             canDownload &&
+            !hideDownloadButton &&
             (onDownload ? (
               <button
                 className="icon-btn"

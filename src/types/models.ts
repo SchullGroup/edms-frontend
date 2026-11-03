@@ -56,6 +56,8 @@ export interface User {
   /** First invitation email; null when an admin set the password. */
   invitedAt?: string | null;
   departmentId?: string | null;
+  /** Who they report to (edms-backend PR #62); routes "submitter's manager" stages. */
+  managerId?: string | null;
   roles?: { id: string; name: string; description?: string | null }[];
   /** What `GET /users` actually returns — the join rows, not a flat `roles` array. */
   userRoles?: { userId: string; roleId: string; role: Role }[];
@@ -389,6 +391,8 @@ export interface WorkflowStage {
   department_id?: string;
   /** A direct child of `department_id`; the task goes to people in it. */
   sub_department_id?: string;
+  /** The routed document's submitter's manager (PR #62); excludes every field above. */
+  dynamic_assignee?: 'submitter_manager';
   sla_hours: number;
   /** `'all'`: where parallel branches meet. Each branch of a document waits
    *  here until every one has arrived, then one task opens (edms-backend PR
@@ -580,7 +584,8 @@ export interface WorkflowInstance {
  *  carries every document routed together. At least one; no duplicates. */
 export interface CreateWorkflowInstanceRequest {
   workflowDefinitionId: string;
-  documents: { documentId: string; comment?: string }[];
+  /** `submitterId` is required when a stage uses `submitter_manager` (PR #62). */
+  documents: { documentId: string; submitterId?: string; comment?: string }[];
 }
 
 /** `data` shape of `GET /workflow-instances/stats`. */
@@ -833,6 +838,8 @@ export interface TaskDocumentSnapshot {
     workflowInstanceDocument: {
       id: string;
       documentId: string;
+      /** Whose manager a `submitter_manager` stage goes to (PR #62). */
+      submitterId?: string | null;
       addedAtStage?: string | null;
       comment?: string | null;
       addedAt?: string;
