@@ -79,17 +79,17 @@ export const documentsService = {
     return response.data.data;
   },
 
-  // Registers a document whose file is already in storage (S3). See `UploadDocumentRequest`
-  // for the documented shape; kept loose because the upload page passes string-typed enums.
+  // Registers one document whose file is already in storage, as a batch of one.
+  // Kept loose (`Record<string, any>`) because the upload page passes string-typed enums.
   create: async (data: UploadDocumentRequest | Record<string, any>): Promise<Document> => {
-    const response = await apiClient.post<ApiResponse<Document>>('/documents', data);
-    return response.data.data;
+    const [document] = await documentsService.createBatch([data as UploadDocumentRequest]);
+    return document;
   },
 
-  /** `POST /documents/batch` — files up to 20 documents in one transaction: all
-   *  of them are created, or none are. Returns them in the order sent. */
+  /** `POST /documents` — files 1–20 documents in one transaction: all of them
+   *  are created, or none are. Returns them in the order sent. */
   createBatch: async (documents: UploadDocumentRequest[]): Promise<Document[]> => {
-    const response = await apiClient.post<ApiResponse<Document[]>>('/documents/batch', {
+    const response = await apiClient.post<ApiResponse<Document[]>>('/documents', {
       documents,
     });
     return response.data.data;
