@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { Icon } from '@/components/ui/Icons';
 import { PdfViewer } from '@/components/documents/PdfViewer';
 import type { DocumentSignatureFieldUI } from '@/components/documents/types';
@@ -8,7 +10,7 @@ import { fileKindLabel } from '@/constants/uploadTypes';
 export interface DocumentViewerPanelProps {
   documentTitle: string;
   confidentiality: string;
-  /** Absolute, percent-encoded S3 URL, or undefined if none/not renderable. */
+  /** The API's file link (`/files/:token`), or undefined if none/not renderable. */
   fileUrl?: string;
   /** Raw fileKey before validation — used only to distinguish "no file" from
    *  "file location isn't a real URL" in the empty state. */
@@ -36,6 +38,15 @@ export interface DocumentViewerPanelProps {
   /** The version's OCR text, searched and shown when a PDF is a scan. */
   ocrText?: string | null;
   ocrStatus?: string;
+}
+
+/** The first link seen for a file. Each refetch mints a new token in the link's
+ *  path, which would otherwise reload the PDF or image. */
+function useFirstUrlFor(fileKey: string | undefined, url: string | undefined) {
+  const key = fileKey ?? url?.split('?')[0];
+  const [first, setFirst] = useState({ key, url });
+  if (first.key !== key) setFirst({ key, url });
+  return first.key === key ? first.url : url;
 }
 
 /**
@@ -75,12 +86,14 @@ export function DocumentViewerPanel({
   const isImage = fileMimeType.startsWith('image/') && fileMimeType !== 'image/tiff';
 
   const downloadLabel = 'Download a copy';
+  // Shown from the first link; download links take the newest, which hasn't expired.
+  const shownUrl = useFirstUrlFor(rawFileKey, fileUrl);
 
-  if (fileUrl && isPdf) {
+  if (shownUrl && isPdf) {
     return (
       <div className="viewer doc-viewer-col">
         <PdfViewer
-          fileUrl={fileUrl}
+          fileUrl={shownUrl}
           title={documentTitle}
           zoom={zoom}
           onZoomChange={onZoomChange}
@@ -170,7 +183,7 @@ export function DocumentViewerPanel({
             </div>
           ) : isImage ? (
             <img
-              src={fileUrl}
+              src={shownUrl}
               alt={documentTitle}
               draggable={false}
               onContextMenu={(e) => e.preventDefault()}

@@ -994,11 +994,15 @@ Range support; no bearer token is needed, so whoever holds the link can fetch th
 it expires (410 `LINK_EXPIRED` after). Checked live 2026-11-04: CORS allows
 `http://localhost:3000`, a ranged GET returns 206. *Before PR #64 the URL pointed straight at
 S3, whose CORS answered `*` but didn't expose `Content-Range`.* The viewer still fetches each
-file whole (`disableRange`). The viewer reloads only when the
-file's path changes, so a refetch that re-signed the same S3 URL was ignored. ⚠️ **Since PR #64
-the token is in the path**, so every refetch of the document now reloads the PDF (scroll,
-zoom and find reset), and an expired link is a 410, which the viewer reports as a generic
-load error rather than "expired". Not yet fixed (2026-11-04).
+file whole (`disableRange`): no `Access-Control-Expose-Headers`, so scripts can't read
+`Content-Range`. Every refetch mints a new token **in the path**, so `DocumentViewerPanel`
+keeps the first link it saw for each `currentVersion.fileKey` and shows the PDF or image from
+that; its download links take the newest one. Without that, every refetch reloaded the PDF
+and reset scroll, zoom and find (2026-11-04, between PR #64's deploy and the fix). An expired
+link (410) reads "The link to this file has expired. Reload the page." **Verified live
+2026-11-04** as `client_admin` on Backup Power Proposal: check out and check in refetched the
+document twice; the file was fetched once and the scroll held (without the fix: three
+fetches, scroll back to the top). The 410 message was checked against the code, not waited for.
 
 pdf.js's worker and the files it loads at runtime (WebAssembly decoders for JBIG2 and
 JPEG 2000 images, standard fonts, character maps, colour profiles) are served from
