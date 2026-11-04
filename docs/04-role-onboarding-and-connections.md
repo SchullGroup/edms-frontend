@@ -280,6 +280,7 @@ This must be done in order; each step produces the input for the next.
 | 4 | **Delegate each cabinet** — grant its manager (a role or user) `upload`/`edit`/`delete` on it | `/admin/cabinets` → Access card | `POST /cabinets/:id/access` | ✅ (*was "⛔ no UI" here — stale since 2026-09-18, corrected 2026-10-06*) |
 | 5 | Define cabinet metadata fields | `/admin/cabinets` → Metadata schema card | `POST /cabinets/:id/metadata-fields` | ✅ (*same stale "⛔ no UI", corrected 2026-10-06*) |
 | 6 | Build folder trees — usually by the cabinet's manager, not the admin | `/staff/cabinets` | `POST /cabinets/:id/folders` | 🟨 moved here from `/admin/cabinets` 2026-10-06, not yet verified live |
+| 6a | Restrict sensitive folders: set a tier, stop inheriting the cabinet's access, grant the roles or users who keep it | `/staff/cabinets` → open folder → **Permissions** | `PATCH /folders/:id/confidentiality`, `PATCH /folders/:id/inheritance`, `POST /folders/:id/access` | ✅ new 2026-11-04 (edms-backend PR #65), verified live. Tier and inheritance are client_admin only; the cabinet's manager can manage grants with folder `edit` |
 | 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles`, `POST /users/:id/invitation` | ✅ "Invite user" emails a set-password link; the user is **Pending** until they use it, then Active (PR #49). Resend invite is offered for pending users and for active users who never signed in |
 | 8 | **Design and publish workflows** | `/admin/workflows` → `/admin/workflows/[id]` | `POST /workflows`, `/publish` | ✅ authorized since 2026-09-04 (DRIFT-05). ⚠️ On a freshly seeded tenant only admins can *list* them — DRIFT-14 (the live tenant's roles hold the grant, re-tested 2026-10-16) |
 | 9 | Set retention and confidentiality policy | `/admin/policies` | `GET`/`PATCH /sla/configuration`, `/sla/holidays` (SLA tab only) | 🟨 SLA tab real since 2026-10-08; retention and confidentiality tabs still `SEED.policies` |
@@ -287,7 +288,7 @@ This must be done in order; each step produces the input for the next.
 | 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 12 | Review the tenant audit trail | `/admin/audit` | `GET /audit`, `/audit/verify` | ✅ wired 2026-09-18 (was `SEED.audit`) |
 
-**Steps 2, 3, 4, 5, 7, 8 and 12 are real; step 6 is wired but not yet verified live.** Everything else is either missing a UI or writes
+**Steps 2, 3, 4, 5, 6a, 7, 8 and 12 are real; step 6 is wired but not yet verified live.** Everything else is either missing a UI or writes
 only to localStorage.
 
 ### First week
@@ -391,7 +392,7 @@ last is why the routing picker couldn't list workflows for a freshly seeded staf
 |---|---|---|---|
 | 1 | Accept the emailed invitation and set a password, then log in | `/set-password` → `/` | ✅ *(was "Log in with the password the admin gave them"; invitations since 2026-09-18)* |
 | 2 | Land on the Staff Dashboard | `/staff` | ✅ tasks, workflow tiles and notifications from the API *(corrected 2026-10-12: notifications were listed ⛔ 404)* |
-| 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (added 2026-10-06, ✅ tested by the user 2026-10-08; each action needs the role permission **and** the cabinet level — see doc 05) |
+| 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (added 2026-10-06, ✅ tested by the user 2026-10-08), and since 2026-11-04 a folder's own grants via **Permissions** when they hold folder `edit` (✅ verified live; each action needs the role permission **and** the cabinet level — see doc 05) |
 | 4 | Upload their first document | `/upload` | ✅ |
 | 5 | Watch it appear in the cabinet | `/staff/cabinets` | ✅ |
 | 6 | Open it and check the details | `/doc/[id]` | ✅ |

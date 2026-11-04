@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { cabById, useStore } from '@/store/useStore';
 import { useCabinets } from '@/apis/hooks/useCabinets';
@@ -26,6 +27,7 @@ import { Skeleton, SkeletonTable, SkeletonTreeRows } from '@/components/common/S
 import { cabinetAllows, useMyCabinetAccess } from '@/components/cabinets/cabinetAccess';
 import { CabinetSchemaCard, useCanManageSchema } from '@/components/cabinets/CabinetSchemaCard';
 import { CabinetAccessCard, useCanGrantAccess } from '@/components/cabinets/CabinetAccessCard';
+import { FolderSecurityBadges } from '@/components/cabinets/FolderSecurityBadges';
 
 /** Sentinel `activeFolder` value for "documents in this cabinet with no
  *  folder" — `GET /documents` has no `folderId=null` filter (only exact
@@ -107,6 +109,8 @@ export default function CabinetBrowserPage() {
   const myLevel = useMyCabinetAccess(activeCab);
   const canCreateFolder = can('folder', 'create') && cabinetAllows(myLevel, 'upload');
   const canRenameFolder = can('folder', 'edit') && cabinetAllows(myLevel, 'edit');
+  // Same gate as the access routes; the folder's own grants can still refuse (page explains).
+  const canManageFolderAccess = canRenameFolder;
   const canDeleteFolder = can('folder', 'delete') && cabinetAllows(myLevel, 'delete');
   const canMoveDocuments = can('document', 'edit') && cabinetAllows(myLevel, 'edit');
   const canManageSchema = useCanManageSchema(activeCabinet);
@@ -390,6 +394,11 @@ export default function CabinetBrowserPage() {
                           <Icon name="folder" size={14} />
                         </span>{' '}
                         {f.name}
+                        <FolderSecurityBadges
+                          folders={activeCabFolders}
+                          id={f.id}
+                          variant="compact"
+                        />
                       </div>
                     );
                   })}
@@ -478,6 +487,14 @@ export default function CabinetBrowserPage() {
                   >
                     Rename folder
                   </button>
+                )}
+                {openFolder && canManageFolderAccess && (
+                  <Link
+                    className="btn btn-ghost btn-sm"
+                    href={`/staff/cabinets/${activeCab}/folders/${openFolder.id}/access`}
+                  >
+                    Permissions
+                  </Link>
                 )}
                 {openFolder && canDeleteFolder && (
                   <button
@@ -694,6 +711,11 @@ export default function CabinetBrowserPage() {
                           <div style={{ fontWeight: 700, fontSize: '12.5px', lineHeight: 1.4 }}>
                             {f.name}
                           </div>
+                          <FolderSecurityBadges
+                            folders={activeCabFolders}
+                            id={f.id}
+                            variant="block"
+                          />
                           <div className="caption" style={{ marginTop: '4px' }}>
                             {f._count?.documents ?? 0} doc{f._count?.documents === 1 ? '' : 's'}
                           </div>

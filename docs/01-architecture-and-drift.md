@@ -134,7 +134,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
 │                               │              │                                        │
-│  Sole responsibility:         │              │  149 routes over 12 modules (10-29)    │
+│  Sole responsibility:         │              │  154 routes over 13 modules (11-04)    │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
 │  sees it.                     │              │  │ Repository → PrismaClient        │  │
@@ -166,7 +166,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
 | Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 64 pages (60 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-29 (+5: the `/control-exceptions` pages); 59 on 2026-10-20, 58 on 2026-10-15, 46 before |
-| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 149 routes over 12 router files — re-counted 2026-10-29 (140 on 2026-10-26, 134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
+| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 154 routes over 13 router files — re-counted 2026-11-04 (149 on 2026-10-29, 140 on 2026-10-26, 134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
 | Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA + out-of-office delegation (since `436ea83`, 2026-10-29) |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |
 
@@ -418,6 +418,9 @@ which layer denies a request is the single most common source of confusion in th
 │                     own → createdBy = me; department → cabinet.departmentId     │
 │ 4b  Confidentiality → requireConfidentiality middleware + tier allowlists        │
 │ 4c  Cabinet grants  → requireCabinetAccess middleware (CabinetAccess table)      │
+│ 4d  Folder layer    → requireFolderAccess + resolveVisibleFolderIds (PR #65):   │
+│                     a non-inheriting folder caps the cabinet level at its      │
+│                     grants; the strictest tier on the path needs clearance     │
 │ TRUST   ✅ REAL — but 4c is only on WRITE routes. See backend analysis.         │
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -1211,8 +1214,10 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 | Frontend call | Backend route | Status |
 |---|---|---|
 | `GET/POST/PATCH/DELETE /cabinets(/:id)` | ✅ | ✅ |
-| `GET/POST /cabinets/:cabinetId/folders` | ✅ | ✅ |
-| `GET/PATCH/DELETE /folders/:id` | ✅ | ✅ |
+| `GET/POST /cabinets/:cabinetId/folders` | ✅ — since PR #65 (live 2026-11-04) each folder carries `confidentiality` and `inheritsPermissions`, and the list leaves out folders the caller can't reach (grants or clearance). With `limit`/`cursor`/`parentId` it pages as `{ folders, nextCursor }` | ✅ — the frontend sends no query, so it still gets the full visible list. Tier and "Custom access" markers in the `/staff/cabinets` tree and cards and the `/upload` pickers (2026-11-04) |
+| `GET/PATCH/DELETE /folders/:id` | ✅ — since PR #65 also checks the folder's own level; a folder hidden from the caller is a 403 | ✅ |
+| `GET/POST /folders/:id/access`, `DELETE /folders/:id/access/:grantId` | ✅ — PR #65 (live 2026-11-04). `folder:edit` + cabinet `edit` + folder `edit`. Grants only matter on a folder with `inheritsPermissions: false`, where they cap each person at the lower of their cabinet level and their best grant. Non-admins can't grant to themselves, a role they hold or above their level (403 each) | ✅ — **wired 2026-11-04**, `/staff/cabinets/[cabinetId]/folders/[folderId]/access`. Verified live as `client_admin`, `supervisor_finance` and `staff_finance` |
+| `PATCH /folders/:id/confidentiality`, `PATCH /folders/:id/inheritance` | ✅ — PR #65 (live 2026-11-04). **client_admin only** (403 "Only a client administrator can change folder security settings"). The strictest tier on the path applies; a client admin bypasses grants but **not** clearance | ✅ — **wired 2026-11-04**, same page; disabled with a reason for everyone else. Top Secret is offered only to a caller holding `document:view_top_secret` (§8.3) |
 | `POST/PATCH/DELETE /cabinets/:id/metadata-fields` | ✅ | ✅ — Cabinet Designer's metadata panel (`/admin/cabinets`) and, since 2026-10-06, the cabinet's **Metadata schema** tab on `/staff/cabinets` |
 | `GET/POST /cabinets/:id/access`, `DELETE /:id/access/:grantId` | ✅ — since `dd10017` (2026-10-09) `POST` refuses (403) a grant to yourself, to a role you hold, or above your own level on the cabinet; admins (`CABINET_ACCESS_BYPASS_ROLES`) are exempt. The grants' `user` is now `{ id, name, email }` only — it used to be the whole row, password hash included (spec item S1) | ✅ — Cabinet Designer's **Access** card and the cabinet's **Access** tab on `/staff/cabinets`. The UI already left out the choices the API now refuses |
 

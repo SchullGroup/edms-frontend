@@ -1,13 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { foldersService } from '@/apis/services/folders.service';
 import { cabinetKeys } from '@/apis/hooks/useCabinets';
-import { CreateFolderRequest, UpdateFolderRequest } from '@/types/models';
+import { documentKeys } from '@/apis/hooks/useDocuments';
+import {
+  CreateFolderRequest,
+  DocumentConfidentiality,
+  Folder,
+  GrantAccessRequest,
+  UpdateFolderRequest,
+} from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
 
 export const folderKeys = {
   all: ['folders'] as const,
   byCabinet: (cabinetId: string) => [...folderKeys.all, 'cabinet', cabinetId] as const,
   detail: (id: string) => [...folderKeys.all, 'detail', id] as const,
+  access: (id: string) => [...folderKeys.all, 'access', id] as const,
 };
 
 /**
@@ -70,6 +78,101 @@ export function useUpdateFolder() {
     onError: (err: any) => {
       addToast(err.response?.data?.message || 'Failed to update folder', 'error');
     },
+  });
+}
+
+// --- Folder access and security settings ---
+
+const apiMessage = (err: any, fallback: string) => err?.response?.data?.message || fallback;
+
+export function useFolderAccessGrants(folderId?: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: folderKeys.access(folderId || ''),
+    queryFn: () => foldersService.getAccessGrants(folderId as string),
+    enabled: !!folderId && (options?.enabled ?? true),
+    // A 403/404 here means "no edit access"; retrying won't change that.
+    retry: false,
+  });
+}
+
+export function useGrantFolderAccess() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ folderId, data }: { folderId: string; data: GrantAccessRequest }) =>
+      foldersService.grantAccess(folderId, data),
+    onSuccess: (_, { folderId }) => {
+      queryClient.invalidateQueries({ queryKey: folderKeys.access(folderId) });
+      queryClient.invalidateQueries({ queryKey: documentKeys.all });
+    },
+    onError: (err: any) => addToast(apiMessage(err, 'Failed to grant folder access'), 'error'),
+  });
+}
+
+export function useRevokeFolderAccess() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ folderId, grantId }: { folderId: string; grantId: string }) =>
+      foldersService.revokeAccess(folderId, grantId),
+    onSuccess: (_, { folderId }) => {
+      queryClient.invalidateQueries({ queryKey: folderKeys.access(folderId) });
+      queryClient.invalidateQueries({ queryKey: documentKeys.all });
+      addToast('Access revoked', 'success');
+    },
+    onError: (err: any) => addToast(apiMessage(err, 'Failed to revoke folder access'), 'error'),
+  });
+}
+
+/** Tier and inheritance change who sees the folder and its documents, so both refetch. */
+function invalidateFolderVisibility(
+  queryClient: ReturnType<typeof useQueryClient>,
+  folder: Folder,
+) {
+  queryClient.invalidateQueries({ queryKey: folderKeys.byCabinet(folder.cabinetId) });
+  queryClient.invalidateQueries({ queryKey: folderKeys.detail(folder.id) });
+  queryClient.invalidateQueries({ queryKey: documentKeys.all });
+}
+
+export function useUpdateFolderConfidentiality() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      confidentiality,
+    }: {
+      id: string;
+      confidentiality: DocumentConfidentiality | null;
+    }) => foldersService.updateConfidentiality(id, confidentiality),
+    onSuccess: (folder) => {
+      invalidateFolderVisibility(queryClient, folder);
+      addToast('Folder confidentiality updated', 'success');
+    },
+    onError: (err: any) => addToast(apiMessage(err, 'Failed to update confidentiality'), 'error'),
+  });
+}
+
+export function useUpdateFolderInheritance() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({ id, inheritsPermissions }: { id: string; inheritsPermissions: boolean }) =>
+      foldersService.updateInheritance(id, inheritsPermissions),
+    onSuccess: (folder) => {
+      invalidateFolderVisibility(queryClient, folder);
+      addToast(
+        folder.inheritsPermissions
+          ? 'Folder now inherits the cabinet’s access'
+          : 'Folder now uses its own access list',
+        'success',
+      );
+    },
+    onError: (err: any) => addToast(apiMessage(err, 'Failed to update inheritance'), 'error'),
   });
 }
 

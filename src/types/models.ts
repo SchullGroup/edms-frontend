@@ -1234,8 +1234,24 @@ export interface Folder {
   _count?: {
     documents: number;
   };
+  /** Own tier only; the strictest tier on the folder's path is what applies. */
+  confidentiality?: DocumentConfidentiality | null;
+  /** `false` caps access at this folder's grants (they restrict, never raise). */
+  inheritsPermissions?: boolean;
   createdAt?: string;
   updatedAt?: string | null;
+}
+
+/** One row of `GET /folders/{id}/access`. Exactly one of `roleId` / `userId` is set. */
+export interface FolderAccessGrant {
+  id: string;
+  folderId: string;
+  permission: CabinetAccessPermission;
+  roleId?: string | null;
+  userId?: string | null;
+  createdAt?: string;
+  role?: { id: string; name: string } | null;
+  user?: { id: string; name: string; email: string } | null;
 }
 
 /** @deprecated Use {@link Folder}. Kept as an alias so existing imports compile. */
