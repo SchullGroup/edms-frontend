@@ -15,9 +15,9 @@ import {
   useUpdateFolderInheritance,
 } from '@/apis/hooks/useFolders';
 import { useRoles } from '@/apis/hooks/useRoles';
-import { useAllUsers } from '@/apis/hooks/useUsers';
 import { Table, Column } from '@/components/ui/Table';
 import { Combobox } from '@/components/ui/Combobox';
+import { UserSearchCombobox } from '@/components/common/UserSearchCombobox';
 import { ConfBadge } from '@/components/ui/Badges';
 import { SkeletonPage, SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
@@ -35,11 +35,7 @@ import type {
   DocumentConfidentiality,
   Folder,
   FolderAccessGrant,
-  User,
 } from '@/types/models';
-
-const roleNamesOf = (u: User) =>
-  u.roles?.map((r) => r.name) ?? u.userRoles?.map((ur) => ur.role.name) ?? [];
 
 const prettyRole = (name: string) => name.replace(/_/g, ' ');
 
@@ -331,16 +327,11 @@ function GrantsCard({
   const canListRoles = can('role', 'view');
   const canListUsers = can('user', 'view');
   const { data: roles = [] } = useRoles({ enabled: canListRoles });
-  const { data: usersResult } = useAllUsers({}, { enabled: canListUsers });
-  const users = usersResult?.items || [];
 
   const myRoleNames = new Set(currentUser?.roles ?? []);
   const roleOptions = roles
     .filter((r) => r.name !== CABINET_BYPASS_ROLE && (isAdmin || !myRoleNames.has(r.name)))
     .map((r) => ({ value: r.id, label: prettyRole(r.name) }));
-  const userOptions = users
-    .filter((u) => u.id !== currentUser?.id && !roleNamesOf(u).includes(CABINET_BYPASS_ROLE))
-    .map((u) => ({ value: u.id, label: u.name, hint: u.email }));
 
   // A folder level never exceeds the cabinet level, so that is the ceiling we can see.
   const levels = grantableLevels(myLevel);
@@ -358,6 +349,11 @@ function GrantsCard({
   const submit = async () => {
     if (ids.length === 0) {
       addToast(`Select at least one ${targetType}`, 'error');
+      return;
+    }
+    // Search results can include the caller; the API would 403 a self-grant anyway.
+    if (targetType === 'user' && ids[0] === currentUser?.id) {
+      addToast('You can’t grant folder access to yourself', 'error');
       return;
     }
     setBusy(true);
@@ -405,8 +401,6 @@ function GrantsCard({
       ),
     },
   ];
-
-  const pickerOptions = targetType === 'role' ? roleOptions : userOptions;
 
   return (
     <div className="card mb-4">
@@ -475,21 +469,30 @@ function GrantsCard({
               </select>
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
-              <label>{targetType === 'role' ? 'Roles' : 'Users'}</label>
-              <Combobox
-                multiple
-                options={pickerOptions}
-                value={ids}
-                onChange={(v) => setIds(v as string[])}
-                placeholder={targetType === 'role' ? 'Select roles…' : 'Select users…'}
-                searchPlaceholder={targetType === 'role' ? 'Search roles…' : 'Search users…'}
-              />
+              <label>{targetType === 'role' ? 'Roles' : 'User'}</label>
+              {targetType === 'role' ? (
+                <Combobox
+                  multiple
+                  options={roleOptions}
+                  value={ids}
+                  onChange={(v) => setIds(v as string[])}
+                  placeholder="Select roles…"
+                  searchPlaceholder="Search roles…"
+                />
+              ) : (
+                <UserSearchCombobox
+                  value={ids[0] ?? ''}
+                  onChange={(id) => setIds(id ? [id] : [])}
+                  placeholder="Search by name or email…"
+                  ariaLabel="User"
+                />
+              )}
               <div className="help">
                 {targetType === 'role'
                   ? isAdmin
                     ? 'Client admins always reach every folder, so that role isn’t listed.'
                     : 'Roles you hold aren’t listed: you can’t grant access to yourself.'
-                  : 'You and client admins aren’t listed.'}
+                  : 'Type at least 3 letters. One user per grant; client admins already reach every folder.'}
               </div>
             </div>
             <div>
