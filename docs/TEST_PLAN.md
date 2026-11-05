@@ -1153,7 +1153,8 @@ live backend, headless Edge, signing in through the login form.
 - [x] In the reassign, user shouldn't be able to reassign outside their department. So filter by current user's department id.
   - Frontend done: all four reassign dialogs (Team Overview, Approvals, Workload,
     Bottlenecks) list only active users in the reassigner's department
-    (`useDepartmentColleagues`). No department → empty list.
+    (`ReassignAssigneePicker`, searching `GET /users?departmentId=&status=active` since
+    2026-11-05; was `useDepartmentColleagues`). No department → says so, offers no one.
   - Backend already enforces this for department-scoped reassigners
     (`TASK_REASSIGN_DEPARTMENT_FORBIDDEN`); global-scoped reassigners are not restricted.
   - `/auth/me` doesn't return `departmentId`, so the page fetches `GET /users/:id` for it —

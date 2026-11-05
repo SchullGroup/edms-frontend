@@ -12,8 +12,9 @@ import {
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useSignAndApprove, useSignatureUpload, type SignatureImage } from '@/hooks/useSignAndApprove';
 import { SignaturePad } from '@/components/documents/SignaturePad';
+import { UserPicker } from '@/components/common/UserPicker';
 import { DocumentScopeField, HeldBackNote, scopedDocuments } from './DocumentScopeField';
-import type { TaskActionRequest, TaskActionSignature, User } from '@/types/models';
+import type { TaskActionRequest, TaskActionSignature } from '@/types/models';
 
 export interface WorkflowTaskActionsArgs {
   /** The task being actioned — must be the caller's active, current-stage task. */
@@ -40,7 +41,6 @@ export interface WorkflowTaskActionsArgs {
   submitterId?: string;
   /** Starting cabinet/confidentiality/urgency for a file uploaded in the picker. */
   uploadDefaults?: UploadDefaults;
-  users: User[];
   me: { id: string; name: string };
 }
 
@@ -62,7 +62,6 @@ export function useWorkflowTaskActions({
   canAttachDocuments,
   submitterId,
   uploadDefaults,
-  users,
   me,
 }: WorkflowTaskActionsArgs) {
   const { openModal, openConfirm, addToast } = useUIStore();
@@ -453,6 +452,7 @@ export function useWorkflowTaskActions({
   const actDelegate = () => {
     if (!taskId) return;
     let delegateId = '';
+    let delegateName = '';
     let note = '';
     openModal({
       title: 'Delegate this stage',
@@ -465,16 +465,15 @@ export function useWorkflowTaskActions({
             <label>
               Delegate to <span className="req">*</span>
             </label>
-            <select className="input" onChange={(e) => (delegateId = e.target.value)}>
-              <option value="">Select a person…</option>
-              {users
-                .filter((u) => u.status === 'active' && u.id !== me.id)
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-            </select>
+            <UserPicker
+              onChange={(id, user) => {
+                delegateId = id;
+                delegateName = user?.name ?? '';
+              }}
+              filters={{ status: 'active' }}
+              excludeIds={[me.id]}
+              ariaLabel="Delegate to"
+            />
           </div>
           <div className="field">
             <label>Note</label>
@@ -496,7 +495,7 @@ export function useWorkflowTaskActions({
               addToast('Pick someone to delegate to', 'error');
               return false;
             }
-            const name = users.find((u) => u.id === delegateId)?.name || 'another user';
+            const name = delegateName || 'another user';
             return runAction(
               { action: 'delegate', delegateId, ...(note.trim() ? { comment: note.trim() } : {}) },
               { action: 'DELEGATE', detail: `Delegated “${stageLabel}” to ${name}` },

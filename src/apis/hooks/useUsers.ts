@@ -1,17 +1,16 @@
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import {
+  useQuery,
+  useQueries,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from '@tanstack/react-query';
 import { usersService, UserFilters } from '@/apis/services/users.service';
 import { User } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
-import { useMyDepartmentId } from '@/hooks/useMyDepartmentId';
 
-// Scope policy (not yet enforced — tracked as part of the internal write/scope
-// gating follow-up, see the sidebar permission work): `useUsers`/`useAllUsers`
-// are called from ~14 places, most of which are pickers/dropdowns rendering a
-// user list inside a page (reassign, delegate, uploader/assignee names, etc.)
-// — those only need department-scoped `user:view`. Only the tenant-wide
-// directory (`/admin/users`, gated on *global* scope — see useNavigation.ts)
-// legitimately needs every user in the tenant. When these hooks gain scope
-// awareness, that's the split to apply — not a blanket global requirement.
+// Pickers search `GET /users?search=` (UserPicker, UserSearchCombobox); nothing
+// here walks every page of users.
 
 export const userKeys = {
   all: ['users'] as const,
@@ -19,8 +18,6 @@ export const userKeys = {
   list: (filters: UserFilters) => [...userKeys.lists(), filters] as const,
   details: () => [...userKeys.all, 'detail'] as const,
   detail: (id: string) => [...userKeys.details(), id] as const,
-  allPages: (filters: Omit<UserFilters, 'page' | 'limit'>) =>
-    [...userKeys.all, 'allPages', filters] as const,
 };
 
 export function useUsers(filters: UserFilters = {}) {
@@ -53,38 +50,19 @@ export function useUserSearch(
   });
 }
 
-/** Complete roster across all pages — for rollups and assignee pickers, where a
- *  single 20-row page would silently drop people. */
-export function useAllUsers(
-  filters: Omit<UserFilters, 'page' | 'limit'> = {},
-  options?: { enabled?: boolean },
-) {
-  return useQuery({
-    queryKey: userKeys.allPages(filters),
-    queryFn: () => usersService.getAllPages(filters),
-    enabled: options?.enabled ?? true,
+/** A few known users by id, one cached `GET /users/:id` each, e.g. names for saved ids. */
+export function useUsersByIds(ids: string[]) {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  const results = useQueries({
+    queries: unique.map((id) => ({
+      queryKey: userKeys.detail(id),
+      queryFn: () => usersService.getById(id),
+      retry: false,
+    })),
   });
-}
-
-/**
- * Active users in the signed-in user's own department — the only valid targets
- * for a reassign (the backend 403s `TASK_REASSIGN_DEPARTMENT_FORBIDDEN` for a
- * department-scoped reassigner picking anyone outside it). The department comes
- * from `/auth/me` (`useMyDepartmentId`). A user with no department gets an
- * empty list, not the whole tenant.
- */
-export function useDepartmentColleagues() {
-  const { departmentId, known } = useMyDepartmentId();
-  const { data, isLoading: isLoadingUsers } = useAllUsers(
-    { departmentId: departmentId ?? undefined, status: 'active' },
-    { enabled: !!departmentId },
-  );
-
-  return {
-    users: departmentId ? (data?.items ?? []) : [],
-    departmentId,
-    isLoading: !known || (!!departmentId && isLoadingUsers),
-  };
+  const users = new Map<string, User>();
+  results.forEach((r) => r.data && users.set(r.data.id, r.data));
+  return { users, loading: results.some((r) => r.isLoading) };
 }
 
 export function useUser(id: string) {

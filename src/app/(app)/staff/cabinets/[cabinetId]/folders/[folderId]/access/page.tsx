@@ -17,7 +17,7 @@ import {
 import { useRoles } from '@/apis/hooks/useRoles';
 import { Table, Column } from '@/components/ui/Table';
 import { Combobox } from '@/components/ui/Combobox';
-import { UserSearchCombobox } from '@/components/common/UserSearchCombobox';
+import { UserMultiPicker } from '@/components/common/UserPicker';
 import { ConfBadge } from '@/components/ui/Badges';
 import { SkeletonPage, SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
@@ -25,6 +25,7 @@ import {
   CABINET_BYPASS_ROLE,
   cabinetAllows,
   grantableLevels,
+  isGrantableUser,
   useMyCabinetAccess,
 } from '@/components/cabinets/cabinetAccess';
 import { FolderSecurityBadges } from '@/components/cabinets/FolderSecurityBadges';
@@ -351,11 +352,6 @@ function GrantsCard({
       addToast(`Select at least one ${targetType}`, 'error');
       return;
     }
-    // Search results can include the caller; the API would 403 a self-grant anyway.
-    if (targetType === 'user' && ids[0] === currentUser?.id) {
-      addToast('You can’t grant folder access to yourself', 'error');
-      return;
-    }
     setBusy(true);
     // One principal per call; each failure toasts its own backend message.
     const results = await Promise.allSettled(
@@ -469,7 +465,7 @@ function GrantsCard({
               </select>
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
-              <label>{targetType === 'role' ? 'Roles' : 'User'}</label>
+              <label>{targetType === 'role' ? 'Roles' : 'Users'}</label>
               {targetType === 'role' ? (
                 <Combobox
                   multiple
@@ -480,11 +476,12 @@ function GrantsCard({
                   searchPlaceholder="Search roles…"
                 />
               ) : (
-                <UserSearchCombobox
-                  value={ids[0] ?? ''}
-                  onChange={(id) => setIds(id ? [id] : [])}
-                  placeholder="Search by name or email…"
-                  ariaLabel="User"
+                <UserMultiPicker
+                  value={ids}
+                  onChange={setIds}
+                  include={(u) => isGrantableUser(u, currentUser?.id)}
+                  placeholder="Select users…"
+                  ariaLabel="Users"
                 />
               )}
               <div className="help">
@@ -492,7 +489,7 @@ function GrantsCard({
                   ? isAdmin
                     ? 'Client admins always reach every folder, so that role isn’t listed.'
                     : 'Roles you hold aren’t listed: you can’t grant access to yourself.'
-                  : 'Type at least 3 letters. One user per grant; client admins already reach every folder.'}
+                  : 'You and client admins aren’t listed: client admins already reach every folder.'}
               </div>
             </div>
             <div>

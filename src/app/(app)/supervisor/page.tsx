@@ -9,7 +9,7 @@ import {
   useTeamStatusMatrix,
   useOpenItemsByCabinet,
 } from '@/apis/hooks/useWorkflowInstances';
-import { useAllUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
+import { ReassignAssigneePicker } from '@/components/common/ReassignAssigneePicker';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonPage, SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -32,12 +32,8 @@ export default function SupervisorDashboard() {
   // own department automatically. See the Workflow Module API guide §4.
   const { data: members, isLoading: isLoadingMatrix } = useTeamStatusMatrix();
   const { data: byCabinetData, isLoading: isLoadingByCabinet } = useOpenItemsByCabinet();
-  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const departmentName = useDepartmentNames();
 
-  const users = usersData?.items || [];
-  // Reassign targets: active users in the reassigner's own department only.
-  const { users: colleagues } = useDepartmentColleagues();
   const byCabinet = byCabinetData?.cabinets || [];
 
   const reassignTask = useReassignTask();
@@ -47,7 +43,7 @@ export default function SupervisorDashboard() {
     setPageTitle('Team Overview');
   }, [setPageTitle]);
 
-  if (isLoadingMatrix || isLoadingByCabinet || isLoadingUsers) return <SkeletonPage kpis={4} columns={['Member', 'Open', 'Overdue', 'Due today']} rows={5} />;
+  if (isLoadingMatrix || isLoadingByCabinet) return <SkeletonPage kpis={4} columns={['Member', 'Open', 'Overdue', 'Due today']} rows={5} />;
 
   const team = members || [];
 
@@ -79,6 +75,7 @@ export default function SupervisorDashboard() {
 
   const handleReassignModal = (t: Task, onDone?: () => void) => {
     let newAssignee = '';
+    let newName = '';
     let note = '';
     const title = taskTitle(t);
 
@@ -98,16 +95,13 @@ export default function SupervisorDashboard() {
             <label>
               New Assignee <span className="req">*</span>
             </label>
-            <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
-              <option value="">Select team member...</option>
-              {colleagues
-                .filter((u) => u.id !== t.assigneeId)
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-            </select>
+            <ReassignAssigneePicker
+              excludeId={t.assigneeId}
+              onPick={(u) => {
+                newAssignee = u?.id ?? '';
+                newName = u?.name ?? '';
+              }}
+            />
           </div>
           <div className="field">
             <label>Handover Note</label>
@@ -130,7 +124,6 @@ export default function SupervisorDashboard() {
               return false;
             }
             const prevName = taskHolderLabel(t, departmentName, 'previous assignee');
-            const newUser = users.find((u) => u.id === newAssignee);
 
             return reassignTask
               .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
@@ -138,9 +131,9 @@ export default function SupervisorDashboard() {
                 createAuditLog.mutate({
                   action: 'REASSIGN',
                   target: taskPrimaryDocument(t)?.id || t.id,
-                  detail: `Reassigned from ${prevName} to ${newUser?.name}${note ? ` (Note: ${note})` : ''}`,
+                  detail: `Reassigned from ${prevName} to ${newName}${note ? ` (Note: ${note})` : ''}`,
                 });
-                addToast(`Reassigned to ${newUser?.name}`, 'success');
+                addToast(`Reassigned to ${newName}`, 'success');
                 if (onDone) onDone();
               })
               .catch(() => false);
