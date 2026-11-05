@@ -24,7 +24,11 @@ import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
 import { Table, Column } from '@/components/ui/Table';
 import { Skeleton, SkeletonTable, SkeletonTreeRows } from '@/components/common/Skeleton';
-import { cabinetAllows, useMyCabinetAccess } from '@/components/cabinets/cabinetAccess';
+import {
+  CABINET_BYPASS_ROLE,
+  cabinetAllows,
+  useMyCabinetAccess,
+} from '@/components/cabinets/cabinetAccess';
 import { CabinetSchemaCard, useCanManageSchema } from '@/components/cabinets/CabinetSchemaCard';
 import { CabinetAccessCard, useCanGrantAccess } from '@/components/cabinets/CabinetAccessCard';
 import { FolderSecurityBadges } from '@/components/cabinets/FolderSecurityBadges';
@@ -48,7 +52,7 @@ export default function CabinetBrowserPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
-  const { auditAction } = useStore();
+  const { auditAction, currentUser } = useStore();
   const { can } = usePermissions();
 
   const [activeCab, setActiveCab] = useState<string | null>(searchParams?.get('cab') || null);
@@ -94,6 +98,15 @@ export default function CabinetBrowserPage() {
   );
   const activeCabFolders = activeCabFoldersData?.data || [];
   const activeCabinet = activeCab ? cabById(cabinets, activeCab) : undefined;
+  // Client admins list only their own department's cabinets; Cabinet Designer covers the rest.
+  // A `?cab=` link to another cabinet still opens it (Designer's delete guard, doc breadcrumbs).
+  const ownDepartmentOnly = !!currentUser?.roles?.includes(CABINET_BYPASS_ROLE);
+  const listedCabinets = ownDepartmentOnly
+    ? cabinets.filter((c: any) => !!c.departmentId && c.departmentId === currentUser?.departmentId)
+    : cabinets;
+  const linkedOutside =
+    ownDepartmentOnly && !!activeCabinet && !listedCabinets.includes(activeCabinet);
+  const treeCabinets = linkedOutside ? [...listedCabinets, activeCabinet] : listedCabinets;
   // Folders nest through `parentId`; the API returns them flat.
   const subFolders = showingRealFolder ? childFolders(activeCabFolders, activeFolder) : [];
   const openFolder = showingRealFolder
@@ -359,9 +372,9 @@ export default function CabinetBrowserPage() {
             <span style={{ marginRight: '8px' }}>
               <Icon name="grid" size={15} />
             </span>{' '}
-            All cabinets
+            {ownDepartmentOnly ? 'My department’s cabinets' : 'All cabinets'}
           </div>
-          {cabinets.map((c: any) => (
+          {treeCabinets.map((c: any) => (
             <React.Fragment key={c.id}>
               <div
                 className={`tree-item ${activeCab === c.id && !activeFolder ? 'active' : ''}`}
@@ -568,6 +581,17 @@ export default function CabinetBrowserPage() {
             </div>
           )}
 
+          {linkedOutside && (
+            <div className="banner info">
+              <span>
+                {activeCabinet?.name} belongs to{' '}
+                {activeCabinet?.department?.name ?? 'another department'}. You opened it from
+                a link: this page lists only your department&rsquo;s cabinets. The rest are
+                managed in <Link href="/admin/cabinets">Cabinet Designer</Link>.
+              </span>
+            </div>
+          )}
+
           {subFolders.length > 0 && (
             <div className="flex gap-2 mb-2" style={{ flexWrap: 'wrap' }}>
               {subFolders.map((f: any) => (
@@ -588,15 +612,29 @@ export default function CabinetBrowserPage() {
 
           {!activeCab ? (
             <div className="card">
-              {cabinets.length === 0 ? (
-                <div className="empty">
-                  <Icon name="cabinet" size={32} />
-                  <div className="h3 mt-4 mb-2">No cabinets yet</div>
-                  <p className="caption mb-4">An administrator sets these up.</p>
-                </div>
+              {listedCabinets.length === 0 ? (
+                ownDepartmentOnly ? (
+                  <div className="empty">
+                    <Icon name="cabinet" size={32} />
+                    <div className="h3 mt-4 mb-2">No cabinets in your department yet</div>
+                    <p className="caption mb-4">
+                      This page lists only your own department&rsquo;s cabinets. Create one, or
+                      manage every other cabinet, in Cabinet Designer.
+                    </p>
+                    <Link href="/admin/cabinets" className="btn btn-secondary btn-sm">
+                      Open Cabinet Designer
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="empty">
+                    <Icon name="cabinet" size={32} />
+                    <div className="h3 mt-4 mb-2">No cabinets yet</div>
+                    <p className="caption mb-4">An administrator sets these up.</p>
+                  </div>
+                )
               ) : (
                 <div className="doc-grid">
-                  {cabinets.map((c: any) => (
+                  {listedCabinets.map((c: any) => (
                     <div
                       key={c.id}
                       className="doc-card"
