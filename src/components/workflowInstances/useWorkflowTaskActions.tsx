@@ -12,7 +12,7 @@ import {
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useSignAndApprove, useSignatureUpload, type SignatureImage } from '@/hooks/useSignAndApprove';
 import { SignaturePad } from '@/components/documents/SignaturePad';
-import { UserPicker } from '@/components/common/UserPicker';
+import { DelegatePicker } from '@/components/delegations/DelegatePicker';
 import { DocumentScopeField, HeldBackNote, scopedDocuments } from './DocumentScopeField';
 import type { TaskActionRequest, TaskActionSignature } from '@/types/models';
 
@@ -465,13 +465,12 @@ export function useWorkflowTaskActions({
             <label>
               Delegate to <span className="req">*</span>
             </label>
-            <UserPicker
+            <DelegatePicker
               onChange={(id, user) => {
                 delegateId = id;
                 delegateName = user?.name ?? '';
               }}
-              filters={{ status: 'active' }}
-              excludeIds={[me.id]}
+              placeholder="Select a person…"
               ariaLabel="Delegate to"
             />
           </div>
