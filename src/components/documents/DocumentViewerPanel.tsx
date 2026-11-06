@@ -1,7 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
+import {
+  downloadFileName,
+  fileActionFor,
+  filesService,
+  type FileFetchError,
+} from '@/apis/services/files.service';
 import { Icon } from '@/components/ui/Icons';
 import { PdfViewer } from '@/components/documents/PdfViewer';
 import type { DocumentSignatureFieldUI } from '@/components/documents/types';
@@ -49,6 +55,60 @@ function useFirstUrlFor(fileKey: string | undefined, url: string | undefined) {
   return first.key === key ? first.url : url;
 }
 
+/** The image behind a file link, fetched with the session; images exist only as the original. */
+function SecureImage({ url, alt }: { url: string; alt: string }) {
+  const [state, setState] = useState<{ src?: string; error?: string }>({});
+  useEffect(() => {
+    let cancelled = false;
+    let src: string | undefined;
+    setState({});
+    filesService
+      .fetch(url, 'original')
+      .then((blob) => {
+        src = URL.createObjectURL(blob);
+        if (cancelled) URL.revokeObjectURL(src);
+        else setState({ src });
+      })
+      .catch((err: FileFetchError) => {
+        if (cancelled) return;
+        setState({
+          error:
+            err.status === 403
+              ? "Viewing this image needs permission to download the original file."
+              : err.message || "The image couldn't be loaded.",
+        });
+      });
+    return () => {
+      cancelled = true;
+      if (src) URL.revokeObjectURL(src);
+    };
+  }, [url]);
+
+  if (state.error)
+    return (
+      <div className="empty" style={{ padding: '48px 16px' }}>
+        <Icon name="doc" size={32} />
+        <div className="h3 mt-4 mb-2">Preview not available</div>
+        <p className="caption">{state.error}</p>
+      </div>
+    );
+  if (!state.src) return <div className="caption" style={{ padding: 48 }}>Loading image…</div>;
+  return (
+    <img
+      src={state.src}
+      alt={alt}
+      draggable={false}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{
+        maxWidth: '100%',
+        display: 'block',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+      }}
+    />
+  );
+}
+
 /**
  * Renders the file straight from its own URL — no Google Docs Viewer or
  * similar third-party proxy, since a proxy caching a PDF means a re-uploaded
@@ -89,6 +149,24 @@ export function DocumentViewerPanel({
   // Shown from the first link; download links take the newest, which hasn't expired.
   const shownUrl = useFirstUrlFor(rawFileKey, fileUrl);
 
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveFile = async () => {
+    if (!fileUrl) return;
+    const action = fileActionFor(fileMimeType, 'download');
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await filesService.save(fileUrl, downloadFileName(documentTitle, fileMimeType, action), action);
+    } catch (err: any) {
+      setSaveError(
+        err?.status === 403 ? "You don't have permission to download this file." : err?.message,
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (shownUrl && isPdf) {
     return (
       <div className="viewer doc-viewer-col">
@@ -117,16 +195,15 @@ export function DocumentViewerPanel({
                 <Icon name="download" size={16} />
               </button>
             ) : (
-              <a
+              <button
                 className="icon-btn"
-                href={fileUrl}
-                target="_blank"
-                rel="noreferrer"
-                title={downloadLabel}
+                onClick={saveFile}
+                disabled={saving}
+                title={saveError ?? downloadLabel}
                 aria-label={downloadLabel}
               >
                 <Icon name="download" size={16} />
-              </a>
+              </button>
             ))
           }
         />
@@ -181,19 +258,8 @@ export function DocumentViewerPanel({
                   : 'This version has no file attached.'}
               </p>
             </div>
-          ) : isImage ? (
-            <img
-              src={shownUrl}
-              alt={documentTitle}
-              draggable={false}
-              onContextMenu={(e) => e.preventDefault()}
-              style={{
-                maxWidth: '100%',
-                display: 'block',
-                userSelect: 'none',
-                WebkitUserSelect: 'none',
-              }}
-            />
+          ) : isImage && shownUrl ? (
+            <SecureImage url={shownUrl} alt={documentTitle} />
           ) : (
             <div className="empty" style={{ padding: '48px 16px' }}>
               <Icon name="doc" size={32} />
@@ -210,15 +276,11 @@ export function DocumentViewerPanel({
                     <Icon name="download" size={13} /> Download
                   </button>
                 ) : (
-                  <a
-                    className="btn btn-secondary btn-sm"
-                    href={fileUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
+                  <button className="btn btn-secondary btn-sm" onClick={saveFile} disabled={saving}>
                     <Icon name="download" size={13} /> Download
-                  </a>
+                  </button>
                 ))}
+              {saveError && <p className="caption mt-2">{saveError}</p>}
             </div>
           )}
 

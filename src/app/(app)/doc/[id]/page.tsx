@@ -236,17 +236,13 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       return;
     }
     if (fileUrl && doc.currentVersionId) {
-      // Through the version endpoint, which checks permission and logs the
-      // download. The tab opens now; a later one would be blocked as a popup.
-      const tab = window.open('', '_blank');
-      if (tab) tab.opener = null;
-      downloadVersion.mutate({ id: doc.id, versionId: doc.currentVersionId, tab });
+      // Through the version endpoint, which checks permission and logs the download.
+      downloadVersion.mutate({ id: doc.id, versionId: doc.currentVersionId, title: doc.title });
       return;
     }
     const a = document.createElement('a');
     if (fileUrl) {
-      // Real pre-signed URL — the `download` hint is honoured same-origin and
-      // ignored cross-origin (S3), where the tab opens the file instead.
+      // A fixture URL in `fileKey`, not an API file link.
       a.href = fileUrl;
       a.rel = 'noreferrer';
       a.target = '_blank';
@@ -268,11 +264,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
 
   // `GET /documents/:id/export`: checks `document:export` and records the export
   // in the audit trail, then hands back a fresh link to the file.
-  const actExport = () => {
-    const tab = window.open('', '_blank');
-    if (tab) tab.opener = null;
-    exportDocument.mutate({ id: doc.id, tab });
-  };
+  const actExport = () => exportDocument.mutate({ id: doc.id });
 
   const actCheckout = () => {
     let returnAt = '';
@@ -591,6 +583,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               workflow is running. */}
           <DocumentVersionsPanel
             documentId={doc.id}
+            documentTitle={doc.title}
             currentVersionId={doc.currentVersionId}
             canView={can('document_version', 'view')}
             canDownload={canDownload}

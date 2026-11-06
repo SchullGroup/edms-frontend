@@ -5,15 +5,23 @@ import Link from 'next/link';
 import { Icon } from '@/components/ui/Icons';
 import { ConfBadge } from '@/components/ui/Badges';
 import type { CircularAttachment } from '@/types/models';
+import { filesService } from '@/apis/services/files.service';
+import { useUIStore } from '@/store/useUIStore';
 import { formatFileSize } from './circularLabels';
 
 /**
  * Attachments as the backend presents them: an uploaded file carries a
- * short-lived signed `fileUrl`; a linked document is opened through the
- * document viewer, where the usual document permissions still apply.
+ * short-lived `fileUrl`, fetched with the session; a linked document is opened
+ * through the document viewer, where the usual document permissions still apply.
  */
 export function CircularAttachmentList({ attachments }: { attachments: CircularAttachment[] }) {
+  const { addToast } = useUIStore();
   if (!attachments.length) return null;
+
+  const save = (url: string, name: string) =>
+    filesService
+      .save(url, name, 'original')
+      .catch((err) => addToast(err.message || 'Failed to download the attachment', 'error'));
 
   return (
     <div className="card mb-4">
@@ -47,14 +55,12 @@ export function CircularAttachmentList({ attachments }: { attachments: CircularA
                 <span className="caption">{formatFileSize(a.fileSize)}</span>
               </span>
               {a.fileUrl ? (
-                <a
+                <button
                   className="btn btn-secondary btn-sm"
-                  href={a.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  onClick={() => save(a.fileUrl!, a.fileName ?? 'attachment')}
                 >
                   <Icon name="download" size={13} /> Download
-                </a>
+                </button>
               ) : (
                 <span className="caption">Unavailable</span>
               )}
