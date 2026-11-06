@@ -126,7 +126,7 @@ export function PdfViewer({
         const task = lib.getDocument({
           url: latestUrl.current,
           ...PDFJS_ASSETS,
-          // S3 doesn't expose Content-Range to scripts, so fetch the file whole.
+          // The file link doesn't expose Content-Range to scripts, so fetch the file whole.
           // (No scripting option is needed: JavaScript inside a PDF only runs
           // through pdf.js's full viewer, which this doesn't use.)
           disableRange: true,
@@ -142,7 +142,8 @@ export function PdfViewer({
         setDoc(pdf);
       } catch (err: any) {
         if (cancelled) return;
-        // S3 answers 404 for a missing file and 403 for an expired link.
+        // The file link answers 404 for a missing file and 410 for an expired link
+        // (403 when links pointed straight at S3).
         const status = err?.name === 'ResponseException' ? err.status : undefined;
         setError(
           err?.name === 'PasswordException'
@@ -151,7 +152,7 @@ export function PdfViewer({
               ? "This file isn't a readable PDF."
               : status === 404
                 ? "This version's file is missing from storage."
-                : status === 403
+                : status === 410 || status === 403
                   ? 'The link to this file has expired. Reload the page.'
                   : "The PDF couldn't be loaded. Check your connection and reload the page.",
         );
