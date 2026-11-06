@@ -1,6 +1,6 @@
 import { useStore } from '@/store/useStore';
 import { useCabinet } from '@/apis/hooks/useCabinets';
-import type { CabinetAccessPermission } from '@/types/models';
+import type { CabinetAccessPermission, User } from '@/types/models';
 
 /**
  * Per-cabinet access levels, weakest first. Each level includes every level
@@ -18,6 +18,13 @@ export const CABINET_ACCESS_LEVELS: { value: CabinetAccessPermission; label: str
 
 /** The one role that skips per-cabinet grants on the API (`CABINET_ACCESS_BYPASS_ROLES`). */
 export const CABINET_BYPASS_ROLE = 'client_admin';
+
+const roleNamesOf = (u: User) =>
+  u.roles?.map((r) => r.name) ?? u.userRoles?.map((ur) => ur.role.name) ?? [];
+
+/** Who a grant form offers: not the caller (no self-grants), not client admins (they bypass). */
+export const isGrantableUser = (u: User, myId: string | undefined) =>
+  u.id !== myId && !roleNamesOf(u).includes(CABINET_BYPASS_ROLE);
 
 const rank = (level: CabinetAccessPermission | null | undefined) =>
   level ? CABINET_ACCESS_LEVELS.findIndex((l) => l.value === level) : -1;

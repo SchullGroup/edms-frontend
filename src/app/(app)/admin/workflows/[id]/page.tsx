@@ -12,7 +12,7 @@ import {
   useWorkflowVersions,
 } from '@/apis/hooks/useWorkflows';
 import { useRoles } from '@/apis/hooks/useRoles';
-import { useAllUsers } from '@/apis/hooks/useUsers';
+import { useUsersByIds } from '@/apis/hooks/useUsers';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { departmentOptions, departmentParents } from '@/apis/utils/managementAggregation';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -59,8 +59,10 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
   const { data: versionsResult } = useWorkflowVersions(workflowId);
   const versions = versionsResult?.data || [];
   const { data: roles } = useRoles();
-  const { data: usersResult } = useAllUsers();
-  const users = usersResult?.items || [];
+  // Names for the people assigned on stages, looked up by id.
+  const { users: stageUsers } = useUsersByIds(
+    (wf?.definition?.stages ?? []).map((s: WorkflowStage) => s.user_id ?? ''),
+  );
 
   const updateWfMutation = useUpdateWorkflow();
   const publishWfMutation = usePublishWorkflow();
@@ -349,8 +351,6 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
         setDepartmentDraft(departmentTree[0]?.id || '');
         setSubDepartmentDraft('');
       }
-    } else if (mode === 'person') {
-      setUserDraft(userDraft || users[0]?.id || '');
     }
   };
 
@@ -368,6 +368,10 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
         : actionsDraft;
     if (assigneeMode === 'department' && !departmentDraft) {
       addToast('Pick a department', 'error');
+      return;
+    }
+    if (assigneeMode === 'person' && !userDraft) {
+      addToast('Pick a person', 'error');
       return;
     }
     const patch = {
@@ -432,8 +436,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
   const assigneeSummary = (s: WorkflowStage) => {
     if (s.dynamic_assignee) return "Submitter's manager";
     if (s.user_id) {
-      const u = users.find((u) => u.id === s.user_id);
-      return u ? u.name : 'Assigned person';
+      return stageUsers.get(s.user_id)?.name ?? 'Assigned person';
     }
     const departmentId = s.sub_department_id || s.department_id;
     const department = departmentId ? departmentName(departmentId) || 'A department' : null;
@@ -535,7 +538,6 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
               setDepartmentDraft(departmentId);
               setSubDepartmentDraft(subDepartmentId);
             },
-            users,
             userDraft,
             onUserChange: setUserDraft,
             slaDraft,

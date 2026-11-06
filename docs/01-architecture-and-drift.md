@@ -134,7 +134,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
 │                               │              │                                        │
-│  Sole responsibility:         │              │  149 routes over 12 modules (10-29)    │
+│  Sole responsibility:         │              │  154 routes over 13 modules (11-04)    │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
 │  sees it.                     │              │  │ Repository → PrismaClient        │  │
@@ -166,7 +166,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
 | Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 64 pages (60 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-29 (+5: the `/control-exceptions` pages); 59 on 2026-10-20, 58 on 2026-10-15, 46 before |
-| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 149 routes over 12 router files — re-counted 2026-10-29 (140 on 2026-10-26, 134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
+| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 154 routes over 13 router files — re-counted 2026-11-04 (149 on 2026-10-29, 140 on 2026-10-26, 134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
 | Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA + out-of-office delegation (since `436ea83`, 2026-10-29) |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |
 
@@ -418,6 +418,9 @@ which layer denies a request is the single most common source of confusion in th
 │                     own → createdBy = me; department → cabinet.departmentId     │
 │ 4b  Confidentiality → requireConfidentiality middleware + tier allowlists        │
 │ 4c  Cabinet grants  → requireCabinetAccess middleware (CabinetAccess table)      │
+│ 4d  Folder layer    → requireFolderAccess + resolveVisibleFolderIds (PR #65):   │
+│                     a non-inheriting folder caps the cabinet level at its      │
+│                     grants; the strictest tier on the path needs clearance     │
 │ TRUST   ✅ REAL — but 4c is only on WRITE routes. See backend analysis.         │
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -1170,7 +1173,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET/PATCH /sla/configuration` | ✅ (`workflow:view` / `workflow:edit`) | ✅ wired 2026-10-08, confirmed in testing 2026-10-08 — `/admin/policies` → Urgency & SLA (`SlaSettingsPanel`). Only changed fields are sent |
 | `GET/POST /sla/holidays`, `DELETE /sla/holidays/:holidayId` | ✅ (`workflow:view` / `workflow:edit`) | ✅ wired 2026-10-08, confirmed in testing 2026-10-08 — same tab, Holidays card |
 | `GET/POST /delegations`, `POST /delegations/:id/end` | ✅ — since `436ea83` (on `dev` 2026-10-29) a delegation in effect also moves the delegator's open tasks to the delegate: new assignments at once, existing ones through the `delegation-reconcile` worker (every `DELEGATION_RECONCILE_INTERVAL_MS`). Only tasks whose pending documents all fall inside the delegation's scope move | ✅ wired — `/delegations` (344 lines) exists; this row was stale, caught 2026-09-18 while investigating DRIFT-11 |
-| `GET /delegations/eligible-users?search=` | ✅ new in `436ea83`, live (checked 2026-10-29 as `staff_finance`): active users other than the caller, name/email match, max 20, `{id,name,email}`. Needs `delegation:create`, not `user:view`; `search` must be 2–100 characters | ✅ wired 2026-10-29 — `/delegations` "Delegate to" (`DelegatePicker`, `useEligibleDelegates`); one typed character sends nothing |
+| `GET /delegations/eligible-users?search=` | ✅ new in `436ea83`, live (checked 2026-10-29 as `staff_finance`): active users other than the caller, name/email match, max 20, `{id,name,email}`. Needs `delegation:create`, not `user:view`; `search` must be 2–100 characters | ✅ wired 2026-10-29 — `/delegations` "Delegate to" (`DelegatePicker`, `useEligibleDelegates`); one typed character sends nothing. **Since 2026-11-05 also the workflow page's Delegate dialog** (the task `delegate` action accepts any active user, which is what this returns), so staff without `user:view` can delegate |
 | — | `GET /workflow-history`, `GET /workflow-history/:id` | ✅ wired — the activity trail (`WorkflowHistoryTimeline`), and since 2026-10-07 each document's live stage and deadline (`useWorkflowDocumentPositions`). *This row said "no UI at all"; stale, corrected 2026-10-07* |
 
 **DRIFT-09 — ✅ RESOLVED (verified 2026-09-04).**
@@ -1199,7 +1202,7 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 | Frontend call | Backend route | Status |
 |---|---|---|
 | `GET/POST /users`, `GET/PATCH/DELETE /users/:id` | ✅ — since PR #49 (live 2026-10-13) a user is `pending` from an emailed invitation until they set a password (then `active`); `invitedAt` records the first invitation; `?status=pending` filters. Existing invited users without a password were migrated to `pending`. **PR #62 (live 2026-11-03):** `managerId` on create and update (`null` clears it), returned on every user; the manager must be active, a cycle or yourself is a 409, and an `own`-scope editor can't change it (403) | ✅ — `/admin/users` shows Pending with the invitation date, filters by it, offers Resend invite and no Activate for them; "Invite user" toasts "Invitation sent to …". Verified live 2026-10-13. **Reports to (2026-11-03, ✅ clicked through by the product owner 2026-11-03):** the invite/edit modal has a **Reports to** picker (active users, never the user themself, "No manager" clears), sent on create and only when changed on edit; a **Reports to** column names each manager (`GET /users/:id`, cached). Checked against live on `staff_finance`: set (200), self (409), cleared again (200) |
-| `GET /users?search=` (name or email, case-insensitive; backend PR #48) | ✅ | ✅ wired 2026-10-13: `/admin/users` search box, and `UserPicker` (Delegations "Delegate to" until 2026-10-29, when it moved to `GET /delegations/eligible-users`). The actor filter on `/admin/audit` and `/auditor/trail` is `UserSearchCombobox` since 2026-10-16: a search box that queries from the third character. Results stay inside the caller's `user:view` scope |
+| `GET /users?search=` (name or email, case-insensitive; backend PR #48) | ✅ | ✅ wired 2026-10-13: `/admin/users` search box, and `UserPicker` (Delegations "Delegate to" until 2026-10-29, when it moved to `GET /delegations/eligible-users`). The actor filter on `/admin/audit` and `/auditor/trail` is `UserSearchCombobox` since 2026-10-16: a search box that queries from the third character. **Since 2026-11-05 every user picker searches:** cabinet and folder grant forms, circular audience (`UserMultiPicker`), workflow designer, and the supervisor reassign dialogs (`departmentId` + `status=active`). `useAllUsers` / `usersService.getAllPages` (walked every page) were deleted. Results stay inside the caller's `user:view` scope |
 | `POST /users/:id/roles`, `DELETE /users/:id/roles/:roleId` | ✅ | ✅ |
 | `POST /users/:id/invitation` | ✅ — since PR #49 accepts `pending` or `active` users (409 otherwise) | ✅ wired 2026-09-18 — "Resend invite" button, shown for pending users and for active users with no `lastLoginAt` (since 2026-10-13; before, only the latter, so a pending user couldn't be re-invited) |
 | `GET/POST /roles`, `GET/PATCH/DELETE /roles/:id` | ✅ — since PR #49 `schulltech_admin` is never listed or returned, and assigning it through `POST /users` or `/users/:id/roles` is a 404 | ✅ — no frontend change: the role pickers list what the API returns. A user who already holds the role still shows it in their roles, and editing them keeps it |
@@ -1211,8 +1214,10 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 | Frontend call | Backend route | Status |
 |---|---|---|
 | `GET/POST/PATCH/DELETE /cabinets(/:id)` | ✅ | ✅ |
-| `GET/POST /cabinets/:cabinetId/folders` | ✅ | ✅ |
-| `GET/PATCH/DELETE /folders/:id` | ✅ | ✅ |
+| `GET/POST /cabinets/:cabinetId/folders` | ✅ — since PR #65 (live 2026-11-04) each folder carries `confidentiality` and `inheritsPermissions`, and the list leaves out folders the caller can't reach (grants or clearance). With `limit`/`cursor`/`parentId` it pages as `{ folders, nextCursor }` | ✅ — the frontend sends no query, so it still gets the full visible list. Tier and "Custom access" markers in the `/staff/cabinets` tree and cards and the `/upload` pickers (2026-11-04) |
+| `GET/PATCH/DELETE /folders/:id` | ✅ — since PR #65 also checks the folder's own level; a folder hidden from the caller is a 403 | ✅ |
+| `GET/POST /folders/:id/access`, `DELETE /folders/:id/access/:grantId` | ✅ — PR #65 (live 2026-11-04). `folder:edit` + cabinet `edit` + folder `edit`. Grants only matter on a folder with `inheritsPermissions: false`, where they cap each person at the lower of their cabinet level and their best grant. Non-admins can't grant to themselves, a role they hold or above their level (403 each) | ✅ — **wired 2026-11-04**, `/staff/cabinets/[cabinetId]/folders/[folderId]/access`. Verified live as `client_admin`, `supervisor_finance` and `staff_finance` |
+| `PATCH /folders/:id/confidentiality`, `PATCH /folders/:id/inheritance` | ✅ — PR #65 (live 2026-11-04). **client_admin only** (403 "Only a client administrator can change folder security settings"). The strictest tier on the path applies; a client admin bypasses grants but **not** clearance | ✅ — **wired 2026-11-04**, same page; disabled with a reason for everyone else. Top Secret is offered only to a caller holding `document:view_top_secret` (§8.3) |
 | `POST/PATCH/DELETE /cabinets/:id/metadata-fields` | ✅ | ✅ — Cabinet Designer's metadata panel (`/admin/cabinets`) and, since 2026-10-06, the cabinet's **Metadata schema** tab on `/staff/cabinets` |
 | `GET/POST /cabinets/:id/access`, `DELETE /:id/access/:grantId` | ✅ — since `dd10017` (2026-10-09) `POST` refuses (403) a grant to yourself, to a role you hold, or above your own level on the cabinet; admins (`CABINET_ACCESS_BYPASS_ROLES`) are exempt. The grants' `user` is now `{ id, name, email }` only — it used to be the whole row, password hash included (spec item S1) | ✅ — Cabinet Designer's **Access** card and the cabinet's **Access** tab on `/staff/cabinets`. The UI already left out the choices the API now refuses |
 

@@ -9,7 +9,6 @@ import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
-import { useAllUsers } from '@/apis/hooks/useUsers';
 import { useTask } from '@/apis/hooks/useTasks';
 import { useDocument } from '@/apis/hooks/useDocuments';
 import { useWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
@@ -102,8 +101,6 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   const { can } = usePermissions();
   const { allows } = useConfidentialityClearance();
   const { promptRequestAccess } = useRequestAccessPrompt();
-  const { data: usersData } = useAllUsers();
-  const users = usersData?.items || [];
 
   const { data: instance, isLoading, isError, refetch } = useWorkflowInstance(id);
 
@@ -254,7 +251,6 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
       confidentiality: selectedDoc?.confidentiality,
       urgency: selectedDoc?.urgency,
     },
-    users,
     me: { id: me?.id ?? '', name: me?.name ?? '' },
   });
 

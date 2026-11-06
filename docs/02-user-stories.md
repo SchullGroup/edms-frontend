@@ -1011,6 +1011,35 @@ role takes effect in the UI without a code change.
 
 ---
 
+### E5 — Restrict a folder within a cabinet · ✅ **Done**
+
+> **As** Bola,
+> **I want to** mark the Payroll folder Restricted and limit it to the Finance supervisors,
+> **so that** a cabinet the whole department can open still keeps its most sensitive folder
+> to the people who need it.
+
+**Current state (2026-11-04):** edms-backend PR #65 (live 2026-11-04) added a folder tier,
+an inheritance switch and per-folder grants. The page is
+`/staff/cabinets/[cabinetId]/folders/[folderId]/access`, linked as **Permissions** from an
+open folder.
+
+**Acceptance criteria**
+- [x] A client admin sets or clears a folder's confidentiality; the strictest tier on the
+      path applies, and people without that clearance don't see the folder, its sub-folders
+      or their documents (`PATCH /folders/:id/confidentiality`)
+- [x] A client admin stops a folder inheriting the cabinet's access, after a confirm that
+      warns when it has no grants (`PATCH /folders/:id/inheritance`)
+- [x] Grants to roles or users, which only restrict (each person gets the lower of their
+      cabinet level and their grant). Anyone with `folder:edit` and folder `edit` manages
+      them, never for themselves, a role they hold or above their own level
+      (`GET/POST/DELETE /folders/:id/access`)
+- [x] Tier and "Custom access" markers in the cabinet tree, folder cards and upload folder
+      pickers
+- [x] Verified live 2026-11-04: restricting "Test Parent" to `supervisor_finance` hid it,
+      its sub-folder and its document (404) from `staff_finance`; reverted after
+
+---
+
 ## Epic F — Oversight, SLA & Workload
 
 ---
@@ -1649,20 +1678,21 @@ error paths and workers).
 | B — Retrieval & Search | 1 | 3 | 0 | 0 | Search indexes every document since PR #51 (2026-10-14); download gated and audited (2026-10-08) |
 | C — Routing & Approval | 2 | 3 | 0 | 0 | Task execution solid; workflow routes authorized (DRIFT-05); ~~routing **blocked for non-admins** by the RBAC seed~~ routing works on the live tenant; the seed lacks `workflow:view` for non-admins, so a fresh database would block it (DRIFT-14, re-tested 2026-10-16) |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
-| E — Access Control | 1 | 3 | 0 | 0 | Well designed; under-enforced on reads |
+| E — Access Control | 2 | 3 | 0 | 0 | Well designed; under-enforced on reads; folder-level restriction live (E5, 2026-11-04) |
 | F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; SLA warnings and breaches notify (in code, DRIFT-10) |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | On server aggregation endpoints (DRIFT-07); no PDF export or forecasting |
 | H — Audit & Compliance | 0 | 2 | 0 | 1 | Audit trail real (H1 🟨, 2026-10-15); control exceptions built, not live (H4 🟨); findings not built (H2 ⬜); SoD dropped from scope (2026-10-21) |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **14** | **19** | **7** | **2** | 42 functional stories |
+| **Total** | **15** | **19** | **7** | **2** | 43 functional stories |
 
 *(2026-10-15: H1 moved 🟥 → 🟨, so Partial 16 → 17 and Mock 9 → 8. 2026-10-19: C2 moved
 ✅ → 🟨 (no urgency ordering), so Done 15 → 14 and Partial 17 → 18. 2026-10-21: H3 removed
 from scope, so Not built 2 → 1 and 42 → 41 stories. 2026-10-29: H4 added 🟨 and H2 🟥 → ⬜,
-so Partial 18 → 19, Mock 8 → 7, Not built 1 → 2 and 41 → 42 stories. Totals re-tallied from
-the story headings, not carried forward.)*
+so Partial 18 → 19, Mock 8 → 7, Not built 1 → 2 and 41 → 42 stories. 2026-11-04: E5 added ✅,
+so Done 14 → 15 and 42 → 43 stories. Totals re-tallied from the story headings, not carried
+forward.)*
 
 **The honest one-paragraph summary (revised 2026-10-15):** the *document* half of this EDMS
 — capture, filing, versioning, checkout, classification, search, task execution and

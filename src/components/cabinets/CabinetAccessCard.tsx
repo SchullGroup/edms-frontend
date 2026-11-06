@@ -13,17 +13,15 @@ import {
   useRevokeCabinetAccess,
 } from '@/apis/hooks/useCabinets';
 import { useRoles } from '@/apis/hooks/useRoles';
-import { useAllUsers } from '@/apis/hooks/useUsers';
-import type { Cabinet, CabinetAccessPermission, User } from '@/types/models';
+import { UserMultiPicker } from '@/components/common/UserPicker';
+import type { Cabinet, CabinetAccessPermission } from '@/types/models';
 import {
   CABINET_BYPASS_ROLE,
   cabinetAllows,
   grantableLevels,
+  isGrantableUser,
   useMyCabinetAccess,
 } from './cabinetAccess';
-
-const roleNamesOf = (u: User) =>
-  u.roles?.map((r) => r.name) ?? u.userRoles?.map((ur) => ur.role.name) ?? [];
 
 /** Whether the caller may grant access on `cabinet` — callers use this to decide
  *  whether to render the card. The API needs `cabinet_access:create` plus `edit` here. */
@@ -60,15 +58,10 @@ export function CabinetAccessCard({ cabinet }: { cabinet: Cabinet }) {
   const revokeAccess = useRevokeCabinetAccess();
 
   const { data: roles = [] } = useRoles();
-  const { data: usersResult } = useAllUsers();
-  const users = usersResult?.items || [];
 
   const myRoleNames = new Set(currentUser?.roles ?? []);
   const grantableRoles = roles.filter(
     (r) => r.name !== CABINET_BYPASS_ROLE && (isAdmin || !myRoleNames.has(r.name)),
-  );
-  const grantableUsers = users.filter(
-    (u) => u.id !== currentUser?.id && !roleNamesOf(u).includes(CABINET_BYPASS_ROLE),
   );
   const levels = grantableLevels(level);
 
@@ -77,7 +70,6 @@ export function CabinetAccessCard({ cabinet }: { cabinet: Cabinet }) {
       value: r.id,
       label: r.name.replace(/_/g, ' '),
     }));
-    const userOptions = grantableUsers.map((u) => ({ value: u.id, label: u.name, hint: u.email }));
 
     const form: {
       permission: CabinetAccessPermission;
@@ -131,23 +123,30 @@ export function CabinetAccessCard({ cabinet }: { cabinet: Cabinet }) {
           </div>
           <div className="field">
             <label>{targetType === 'role' ? 'Roles' : 'Users'}</label>
-            <Combobox
-              multiple
-              options={targetType === 'role' ? roleOptions : userOptions}
-              value={targetType === 'role' ? roleIds : userIds}
-              onChange={(v) => {
-                const arr = v as string[];
-                if (targetType === 'role') {
-                  setRoleIds(arr);
-                  form.roleIds = arr;
-                } else {
-                  setUserIds(arr);
-                  form.userIds = arr;
-                }
-              }}
-              placeholder={targetType === 'role' ? 'Select roles…' : 'Select users…'}
-              searchPlaceholder={targetType === 'role' ? 'Search roles…' : 'Search users…'}
-            />
+            {targetType === 'role' ? (
+              <Combobox
+                multiple
+                options={roleOptions}
+                value={roleIds}
+                onChange={(v) => {
+                  setRoleIds(v as string[]);
+                  form.roleIds = v as string[];
+                }}
+                placeholder="Select roles…"
+                searchPlaceholder="Search roles…"
+              />
+            ) : (
+              <UserMultiPicker
+                value={userIds}
+                onChange={(ids) => {
+                  setUserIds(ids);
+                  form.userIds = ids;
+                }}
+                include={(u) => isGrantableUser(u, currentUser?.id)}
+                placeholder="Select users…"
+                ariaLabel="Users"
+              />
+            )}
             <div className="help">
               The API grants to one {targetType} per call — picking several sends a request for
               each.{' '}
@@ -208,10 +207,7 @@ export function CabinetAccessCard({ cabinet }: { cabinet: Cabinet }) {
     if (g.role?.name) return `Role: ${g.role.name.replace(/_/g, ' ')}`;
     if (g.roleId) return `Role: ${roles.find((r) => r.id === g.roleId)?.name ?? g.roleId}`;
     if (g.user?.name) return `User: ${g.user.name}`;
-    if (g.userId) {
-      const u = users.find((x) => x.id === g.userId);
-      return `User: ${u ? u.name : g.userId}`;
-    }
+    if (g.userId) return `User: ${g.userId}`;
     return '—';
   };
 

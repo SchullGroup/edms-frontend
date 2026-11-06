@@ -9,8 +9,9 @@ const MIN_SEARCH = 2;
 const MAX_RESULTS = 20;
 
 interface DelegatePickerProps {
-  value: string;
-  onChange: (userId: string) => void;
+  /** Leave unset inside a modal body: the picker then keeps its own value. */
+  value?: string;
+  onChange: (userId: string, user?: { id: string; name: string }) => void;
   placeholder?: string;
   ariaLabel?: string;
 }
@@ -20,11 +21,13 @@ interface DelegatePickerProps {
  * `delegation:create` (not `user:view`) and already leaves out the caller.
  */
 export function DelegatePicker({
-  value,
+  value: controlled,
   onChange,
   placeholder = 'Select a colleague…',
   ariaLabel,
 }: DelegatePickerProps) {
+  const [own, setOwn] = useState('');
+  const value = controlled ?? own;
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
 
@@ -52,8 +55,10 @@ export function DelegatePicker({
       value={value}
       onChange={(v) => {
         const id = v as string;
-        setPicked(options.find((o) => o.value === id) ?? null);
-        onChange(id);
+        const option = options.find((o) => o.value === id) ?? null;
+        setPicked(option);
+        setOwn(id);
+        onChange(id, option ? { id, name: option.label } : undefined);
       }}
       onQueryChange={setQuery}
       loading={pending && !tooShort}

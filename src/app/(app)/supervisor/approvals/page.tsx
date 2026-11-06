@@ -5,7 +5,7 @@ import { useDepartmentNames } from '@/apis/hooks/useDepartments';
 import { taskHolderLabel } from '@/utils/supervisor';
 import { useUIStore } from '@/store/useUIStore';
 import { useApprovalTasks, useReassignTask } from '@/apis/hooks/useTasks';
-import { useAllUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
+import { ReassignAssigneePicker } from '@/components/common/ReassignAssigneePicker';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -30,13 +30,9 @@ export default function ApprovalsQueuePage() {
     isError: isTasksError,
     refetch: refetchTasks,
   } = useApprovalTasks({ scope: 'all', status: tab, sort: 'dueAt', page, limit: PAGE_SIZE });
-  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const departmentName = useDepartmentNames();
   const tasks = tasksData?.data || [];
   const pagination = tasksData?.pagination;
-  const users = usersData?.items || [];
-  // Reassign targets: active users in the reassigner's own department only.
-  const { users: colleagues } = useDepartmentColleagues();
 
   const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
@@ -56,6 +52,7 @@ export default function ApprovalsQueuePage() {
 
   const handleReassign = (t: Task) => {
     let newAssignee = '';
+    let newName = '';
     let note = '';
     const title = taskTitle(t);
     openModal({
@@ -68,16 +65,13 @@ export default function ApprovalsQueuePage() {
           </div>
           <div className="field">
             <label>New assignee</label>
-            <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
-              <option value="">Select user...</option>
-              {colleagues
-                .filter((u) => u.id !== t.assigneeId)
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-            </select>
+            <ReassignAssigneePicker
+              excludeId={t.assigneeId}
+              onPick={(u) => {
+                newAssignee = u?.id ?? '';
+                newName = u?.name ?? '';
+              }}
+            />
           </div>
           <div className="field">
             <label>Note</label>
@@ -100,7 +94,6 @@ export default function ApprovalsQueuePage() {
               return false;
             }
             const prevName = taskHolderLabel(t, departmentName, 'previous assignee');
-            const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
             return reassignTask
               .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
               .then(() => {
@@ -146,7 +139,7 @@ export default function ApprovalsQueuePage() {
       </div>
 
       <div className="card">
-        {isLoadingUsers || isLoadingTasks ? (
+        {isLoadingTasks ? (
           <SkeletonTaskRows rows={6} />
         ) : isTasksError ? (
           <ErrorMessage message="Failed to load the approvals queue" retry={() => refetchTasks()} />
