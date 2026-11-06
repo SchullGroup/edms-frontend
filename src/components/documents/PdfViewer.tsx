@@ -13,6 +13,7 @@ import {
   type PageText,
 } from '@/utils/pdfSearch';
 import { printPdf } from '@/utils/printPdf';
+import { filesService } from '@/apis/services/files.service';
 
 type PdfJs = typeof import('pdfjs-dist');
 
@@ -121,16 +122,16 @@ export function PdfViewer({
     textCache.current = new Map();
     (async () => {
       try {
-        const lib = await loadPdfJs();
+        // The file link needs the session's Bearer token, which pdf.js can't refresh.
+        const [lib, blob] = await Promise.all([
+          loadPdfJs(),
+          filesService.fetch(latestUrl.current, 'preview'),
+        ]);
         if (cancelled) return;
+        // JavaScript inside a PDF only runs in pdf.js's full viewer, which this isn't.
         const task = lib.getDocument({
-          url: latestUrl.current,
+          data: new Uint8Array(await blob.arrayBuffer()),
           ...PDFJS_ASSETS,
-          // The file link doesn't expose Content-Range to scripts, so fetch the file whole.
-          // (No scripting option is needed: JavaScript inside a PDF only runs
-          // through pdf.js's full viewer, which this doesn't use.)
-          disableRange: true,
-          disableStream: true,
         });
         destroy = () => void task.destroy();
         const pdf = await task.promise;
@@ -142,9 +143,7 @@ export function PdfViewer({
         setDoc(pdf);
       } catch (err: any) {
         if (cancelled) return;
-        // The file link answers 404 for a missing file and 410 for an expired link
-        // (403 when links pointed straight at S3).
-        const status = err?.name === 'ResponseException' ? err.status : undefined;
+        const status = err?.name === 'FileFetchError' ? err.status : undefined;
         setError(
           err?.name === 'PasswordException'
             ? "This PDF is password-protected, so it can't be shown here."
@@ -152,9 +151,15 @@ export function PdfViewer({
               ? "This file isn't a readable PDF."
               : status === 404
                 ? "This version's file is missing from storage."
-                : status === 410 || status === 403
+                : status === 410
                   ? 'The link to this file has expired. Reload the page.'
-                  : "The PDF couldn't be loaded. Check your connection and reload the page.",
+                  : status === 401
+                    ? 'Your session has ended. Sign in again to view this file.'
+                    : status === 403
+                      ? "You don't have access to view this file."
+                      : status === 413
+                        ? 'This PDF is too large to show here.'
+                        : "The PDF couldn't be loaded. Check your connection and reload the page.",
         );
       }
     })();

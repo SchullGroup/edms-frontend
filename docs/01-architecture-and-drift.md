@@ -986,7 +986,7 @@ revision checked this against:
 ### Viewing a file (2026-10-08)
 
 PDFs are drawn in the browser by pdf.js (`src/components/documents/PdfViewer.tsx`,
-`pdfjs-dist` 6.3.289), which fetches `currentVersion.fileUrl`. **Since edms-backend PR #64
+`pdfjs-dist` 6.3.289) from bytes fetched off `currentVersion.fileUrl`. **Since edms-backend PR #64
 (`f7f013b`, live by 2026-11-04)** that is no longer a pre-signed S3 URL but
 `{API_PUBLIC_URL}/api/v1/files/:token`: an AES-GCM token holding the object key and a
 15-minute expiry, minted fresh on every response. The API streams the object from S3 with
@@ -1003,6 +1003,24 @@ link (410) reads "The link to this file has expired. Reload the page." **Verifie
 2026-11-04** as `client_admin` on Backup Power Proposal: check out and check in refetched the
 document twice; the file was fetched once and the scroll held (without the fix: three
 fetches, scroll back to the top). The 410 message was checked against the code, not waited for.
+
+**Since edms-backend `f3ebfb4` (2026-11-04, live by 2026-11-06) the link also needs the
+session's `Authorization: Bearer` header** (`files.router.ts`: `authenticate`), and takes
+`?action=`: `preview` (default) and `download` return a PDF watermarked server-side with the
+caller's name, IP and time; `original` returns the raw bytes and needs
+`document:download_original`. `preview`/`download` answer **415 for anything but a PDF**, and
+the API rechecks view scope, folder access and confidentiality clearance on every fetch. A bare
+link (pdf.js `url`, `<img src>`, `<a href>`, a new tab) now gets 401, so every viewer showed
+"The PDF couldn't be loaded" until 2026-11-06. Since then `src/apis/services/files.service.ts`
+fetches each link through `apiClient` (token attached, 401 refreshed) as a Blob, and only for
+links under `{NEXT_PUBLIC_API_URL}/api/v1/files/`; a fixture URL is fetched without the token.
+pdf.js gets the bytes as `data`, images an object URL (`action=original`), and downloads,
+export, version downloads and circular attachments are saved from an object URL, so no new tab
+opens. **Nobody can preview an image or download a non-PDF on live**: no role holds
+`document:download_original` (not in `prisma/seed-system.ts` either), so `original` is 403
+even for `client_admin`, and the viewer says so. **Verified live 2026-11-06** as
+`client_admin`: New-Memo (PDF) renders, and Download, Export and Download version 1 each save a
+watermarked PDF; Scan_20261021 (PNG) shows the permission message.
 
 pdf.js's worker and the files it loads at runtime (WebAssembly decoders for JBIG2 and
 JPEG 2000 images, standard fonts, character maps, colour profiles) are served from
@@ -1139,7 +1157,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents/:id/summary` | ✅ — PR #49 (live 2026-10-13): Gemini summary of the current version, written after OCR; `summaryStatus` pending → processing → completed / failed / skipped. Older versions are queued the first time it's asked for. Each call is audited (`document.summary_viewed`). A failed summary can be re-queued with `POST` on the same path since PR #56 (row below; backend spec N2) | ✅ wired 2026-10-13, verified live — `/doc/[id]` "AI summary" card; polls every 10 s for at most a minute per version while it's being written, then offers "Check again". Also on `/workflow-instances/[id]` for the selected document since 2026-10-23 (verified live; never for a Restricted one). **Since 2026-10-23 called only after the user asks** (product decision: no automatic summaries): `GET` queues a missing summary, so the card reads `currentVersion.aiSummary`/`summaryStatus` from `GET /documents/:id` and offers **Summarize**; `GET …/summary` only follows a `POST` it made. Verified with mocked `/summary` responses: no call on load in any state. The OCR worker still summarises every upload (BE-22) |
 | `POST /documents/:id/summary` | ✅ — PR #56 (live 2026-10-20): queues a fresh summary of the current version, **202** with `summaryStatus: 'pending'` and the old text, which `GET` keeps returning until the new one replaces it. Same access as `GET`; audited `document.summary_requested`. 409 `OCR_IN_PROGRESS` / `SUMMARY_IN_PROGRESS`, 422 `NO_EXTRACTABLE_TEXT`, 503 `SUMMARY_UNAVAILABLE` | ✅ wired 2026-10-20, verified live — "Try again" on a failed summary, "Regenerate" on a finished one; the old text stays up while the new one is written. A real Regenerate on `e8e22fcd…` returned 202 and the card moved to the new summary by polling. `OCR_IN_PROGRESS` and `NO_EXTRACTABLE_TEXT` confirmed on the API (`487006a2…`, `dcca68ff…`); the 503 and `SUMMARY_IN_PROGRESS` states checked with mocked responses |
 | `GET /documents/:id/versions/:versionId` | ✅ — since `edms-backend` `0dab81a` (2026-10-08) needs `document:download` on top of confidentiality clearance, and is audited as `document.downloaded` | 🟨 **wired 2026-10-08** as the only download path (`useDownloadDocumentVersion`): `/doc/[id]`'s Download, the workflow viewer's Download, and each version's Open in `DocumentVersionsPanel`. Permissions confirmed live on `/auth/me`. ✅ **Clicked through 2026-10-09** (Finance supervisor, `department` scope): Download on `/doc/[id]` and in the workflow viewer each called this route (200) and sent the new tab to the signed S3 URL. *Was marked ✅ before, but nothing called it: the versions panel opened the list's own signed `fileUrl`. Corrected 2026-10-08* |
-| `GET /files/:token` | ✅ new in PR #64 (`f7f013b`, live by 2026-11-04) — mounted before `authenticate`; the encrypted token is the credential. Streams the object with `Content-Disposition: inline`, Range support, `Cache-Control: private, no-store`; 404 bad token, 410 expired | ✅ — not called directly: every `fileUrl` the API returns is one of these links, opened by the viewer, `<img>`, download and export |
+| `GET /files/:token` | ✅ new in PR #64 (`f7f013b`, live by 2026-11-04). **Since `f3ebfb4` (2026-11-04) behind `authenticate`**: needs the Bearer token as well as the link. `?action=preview` (default) / `download` → watermarked PDF, 415 for non-PDFs; `original` → raw bytes with Range, needs `document:download_original` (held by no role). `Cache-Control: private, no-store`; 404 bad token, 410 expired | ✅ `filesService.fetch` / `.save` (2026-11-06) — every `fileUrl` is fetched through `apiClient` as a Blob for the viewer, images, download, export and circular attachments; until then they were opened bare and got 401 |
 | `POST /documents/:id/versions` | ✅ | ✅ |
 | `GET /documents/:id/export`, `GET /documents/:id/print` | ✅ new in `0dab81a` — `document:export` / `document:print` plus clearance; audited as `document.exported` / `document.printed`; return the document like `GET /documents/:id` | ✅ `/print` — wired 2026-10-08 (`usePrintDocument`): the PDF viewer's Print calls it first and only prints if it succeeds; verified in a browser against the live API · ✅ `/export` — wired 2026-10-08 (`useExportDocument`), `/doc/[id]`'s Export button; **clicked through 2026-10-09**: the call returned 200 and the new tab went to the signed S3 URL |
 | `GET/POST /documents/:id/comments`, `/signatures` | ✅ both exist, real endpoints | 🟥 **deliberately unused (reverted 2026-09-18, same day)** — briefly wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel` earlier the same day, then removed: product decision to keep every comment/signature scoped to the workflow trail (`POST /tasks/:id/action`'s `comment`/`approve`'s `signature`) rather than split across a second, task-independent thread. See DRIFT-08's note below and BE-16/BE-17 in `BACKEND_REQUESTS.md` |

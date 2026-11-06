@@ -152,11 +152,8 @@ export function WorkflowDocumentViewer({
       canDownload={allows(doc, 'download')}
       onDownload={
         currentVersionId
-          ? () => {
-              const tab = window.open('', '_blank');
-              if (tab) tab.opener = null;
-              downloadVersion.mutate({ id: doc.id, versionId: currentVersionId, tab });
-            }
+          ? () =>
+              downloadVersion.mutate({ id: doc.id, versionId: currentVersionId, title: doc.title })
           : undefined
       }
       canPrint={allows(doc, 'print')}
