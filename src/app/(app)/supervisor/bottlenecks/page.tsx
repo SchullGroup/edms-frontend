@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { useBottlenecksAgeing } from '@/apis/hooks/useWorkflowInstances';
 import { useReassignTask } from '@/apis/hooks/useTasks';
-import { useAllUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
+import { ReassignAssigneePicker } from '@/components/common/ReassignAssigneePicker';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTable } from '@/components/common/Skeleton';
@@ -31,10 +31,6 @@ export default function BottlenecksPage() {
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError, refetch } = useBottlenecksAgeing({ page, limit: PAGE_SIZE });
-  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
-  const users = usersData?.items || [];
-  // Reassign targets: active users in the reassigner's own department only.
-  const { users: colleagues } = useDepartmentColleagues();
 
   const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
@@ -75,6 +71,7 @@ export default function BottlenecksPage() {
     if (!item.canReassign || !item.currentTaskId) return;
     const currentTaskId = item.currentTaskId;
     let newAssignee = '';
+    let newName = '';
     let note = '';
     openModal({
       title: `Reassign — ${item.documentTitle.slice(0, 44)}${item.documentTitle.length > 44 ? '…' : ''}`,
@@ -86,16 +83,13 @@ export default function BottlenecksPage() {
           </div>
           <div className="field">
             <label>New assignee</label>
-            <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
-              <option value="">Select user...</option>
-              {colleagues
-                .filter((u) => u.id !== item.assigneeId)
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-            </select>
+            <ReassignAssigneePicker
+              excludeId={item.assigneeId}
+              onPick={(u) => {
+                newAssignee = u?.id ?? '';
+                newName = u?.name ?? '';
+              }}
+            />
           </div>
           <div className="field">
             <label>Note</label>
@@ -117,7 +111,6 @@ export default function BottlenecksPage() {
               addToast('Please select a new assignee', 'error');
               return false;
             }
-            const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
             return reassignTask
               .mutateAsync({ id: currentTaskId, assigneeId: newAssignee, note: note || undefined })
               .then(() => {
@@ -198,7 +191,7 @@ export default function BottlenecksPage() {
         </div>
       </div>
 
-      {isLoading || isLoadingUsers ? (
+      {isLoading ? (
         <SkeletonTable
           columns={['Document', 'Stuck at stage', 'Assignee', 'Age', 'SLA Status', 'Workflow Status', '']}
           rows={8}

@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Combobox } from '@/components/ui/Combobox';
 import { Icon } from '@/components/ui/Icons';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { useRoles } from '@/apis/hooks/useRoles';
-import { useAllUsers } from '@/apis/hooks/useUsers';
+import { UserMultiPicker } from '@/components/common/UserPicker';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { CircularAudience, CircularAudienceGroup } from '@/types/models';
 import { flattenDepartments } from './circularLabels';
@@ -31,15 +30,10 @@ export function AudienceEditor({ value, onChange }: AudienceEditorProps) {
 
   const { data: departmentsData } = useDepartments();
   const { data: roles = [] } = useRoles({ enabled: canListRoles });
-  const { data: usersData } = useAllUsers({ status: 'active' });
 
   const departments = useMemo(
     () => flattenDepartments(departmentsData?.data ?? []),
     [departmentsData],
-  );
-  const userOptions = useMemo(
-    () => (usersData?.items ?? []).map((u) => ({ value: u.id, label: u.name, hint: u.email })),
-    [usersData],
   );
 
   const setGroups = (groups: CircularAudienceGroup[]) => onChange({ ...value, groups });
@@ -141,13 +135,11 @@ export function AudienceEditor({ value, onChange }: AudienceEditorProps) {
           )}
 
           <div className="caption mb-2">Named people</div>
-          <Combobox
-            multiple
-            options={userOptions}
+          <UserMultiPicker
             value={value.userIds}
-            onChange={(ids) => onChange({ ...value, userIds: ids as string[] })}
-            placeholder="Add people by name…"
-            searchPlaceholder="Search people…"
+            onChange={(userIds) => onChange({ ...value, userIds })}
+            filters={{ status: 'active' }}
+            ariaLabel="Named people"
           />
         </>
       )}

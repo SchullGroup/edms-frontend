@@ -5,7 +5,7 @@ import { useDepartmentNames } from '@/apis/hooks/useDepartments';
 import { taskHolderLabel } from '@/utils/supervisor';
 import { useUIStore } from '@/store/useUIStore';
 import { useTaskWorkload, useTasks, useReassignTask } from '@/apis/hooks/useTasks';
-import { useAllUsers, useDepartmentColleagues } from '@/apis/hooks/useUsers';
+import { ReassignAssigneePicker } from '@/components/common/ReassignAssigneePicker';
 import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTable, SkeletonTaskRows } from '@/components/common/Skeleton';
@@ -26,11 +26,7 @@ export default function WorkloadPage() {
     isError: isWorkloadError,
     refetch: refetchWorkload,
   } = useTaskWorkload();
-  const { data: usersData, isLoading: isLoadingUsers } = useAllUsers();
   const departmentName = useDepartmentNames();
-  const users = usersData?.items || [];
-  // Reassign targets: active users in the reassigner's own department only.
-  const { users: colleagues } = useDepartmentColleagues();
 
   const reassignTask = useReassignTask();
   const createAuditLog = useCreateAuditLog();
@@ -43,6 +39,7 @@ export default function WorkloadPage() {
 
   const handleReassign = (t: Task) => {
     let newAssignee = '';
+    let newName = '';
     let note = '';
     const title = taskTitle(t);
     openModal({
@@ -59,16 +56,13 @@ export default function WorkloadPage() {
           </div>
           <div className="field">
             <label>New assignee</label>
-            <select className="input" onChange={(e) => (newAssignee = e.target.value)}>
-              <option value="">Select user...</option>
-              {colleagues
-                .filter((u) => u.id !== t.assigneeId)
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-            </select>
+            <ReassignAssigneePicker
+              excludeId={t.assigneeId}
+              onPick={(u) => {
+                newAssignee = u?.id ?? '';
+                newName = u?.name ?? '';
+              }}
+            />
           </div>
           <div className="field">
             <label>Note</label>
@@ -91,7 +85,6 @@ export default function WorkloadPage() {
               return false;
             }
             const prevName = taskHolderLabel(t, departmentName, 'previous assignee');
-            const newName = users.find((u) => u.id === newAssignee)?.name || 'new assignee';
             return reassignTask
               .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
               .then(() => {
@@ -120,7 +113,7 @@ export default function WorkloadPage() {
         </div>
       </div>
 
-      {isLoadingWorkload || isLoadingUsers ? (
+      {isLoadingWorkload ? (
         <SkeletonTable columns={['Member', 'Load', '']} rows={6} />
       ) : isWorkloadError ? (
         <ErrorMessage message="Failed to load workload" retry={() => refetchWorkload()} />

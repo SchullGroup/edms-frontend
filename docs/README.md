@@ -78,7 +78,11 @@ setting up an environment.
 
 ## The short version
 
-**64 frontend pages · 149 backend routes · 6 roles · 0 tests.**
+**65 frontend pages · 154 backend routes · 6 roles · 0 tests.**
+*(Pages re-derived 2026-11-04: +1, `/staff/cabinets/[cabinetId]/folders/[folderId]/access`.)*
+*(Routes re-derived 2026-11-04, backend @ `dev` `4368bc6`: 149 → 154 — PR #65 added the five
+folder access routes and removed `POST /documents/batch`; PR #64 added `GET /files/:token`.
+Router files 12 → 13.)*
 *(Pages re-derived 2026-10-29: +5, the `/control-exceptions` pages; the two Findings pages
 became redirects to them.)*
 *(Routes re-derived 2026-10-29, backend @ `dev` `82c4707`: 140 → 149 — the 8
@@ -111,7 +115,7 @@ The GOVERNANCE half is now half real
   🟨 notifications (emitted, not clicked through)
   🟨 control exceptions (built, not live until the tenant is seeded)
   🟥 retention · branding · platform operations
-                                                    🟥 9 of 64 pages
+                                                    🟥 9 of 65 pages
 ```
 *(Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
 59 pages"; 2026-10-15 it was "notifications · policies … 🟥 13 of 58 pages".)*

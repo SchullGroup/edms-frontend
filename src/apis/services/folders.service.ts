@@ -2,7 +2,10 @@ import { apiClient } from '@/lib/api-client';
 import {
   ApiResponse,
   CreateFolderRequest,
+  DocumentConfidentiality,
   Folder,
+  FolderAccessGrant,
+  GrantAccessRequest,
   UpdateFolderRequest,
 } from '@/types/models';
 
@@ -40,5 +43,41 @@ export const foldersService = {
   // 409 if the folder still contains documents.
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/folders/${id}`);
+  },
+
+  // --- Folder access (needs `folder:edit` plus `edit` on the folder) ---
+
+  getAccessGrants: async (id: string): Promise<FolderAccessGrant[]> => {
+    const res = await apiClient.get<ApiResponse<FolderAccessGrant[]>>(`/folders/${id}/access`);
+    return res.data.data;
+  },
+
+  // Exactly one of `roleId` / `userId`. Non-admins: no self, held role, or above own level.
+  grantAccess: async (id: string, data: GrantAccessRequest): Promise<FolderAccessGrant> => {
+    const res = await apiClient.post<ApiResponse<FolderAccessGrant>>(`/folders/${id}/access`, data);
+    return res.data.data;
+  },
+
+  revokeAccess: async (id: string, grantId: string): Promise<void> => {
+    await apiClient.delete(`/folders/${id}/access/${grantId}`);
+  },
+
+  // client_admin only (403 otherwise). `null` clears the folder's own tier.
+  updateConfidentiality: async (
+    id: string,
+    confidentiality: DocumentConfidentiality | null,
+  ): Promise<Folder> => {
+    const res = await apiClient.patch<ApiResponse<Folder>>(`/folders/${id}/confidentiality`, {
+      confidentiality,
+    });
+    return res.data.data;
+  },
+
+  // client_admin only (403 otherwise).
+  updateInheritance: async (id: string, inheritsPermissions: boolean): Promise<Folder> => {
+    const res = await apiClient.patch<ApiResponse<Folder>>(`/folders/${id}/inheritance`, {
+      inheritsPermissions,
+    });
+    return res.data.data;
   },
 };

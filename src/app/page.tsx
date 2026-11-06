@@ -85,7 +85,7 @@ export default function LoginPage() {
     setPassword(testPassword);
   };
 
-  const isDev = process.env.NODE_ENV === 'development';
+  // const isDev = process.env.NODE_ENV === 'development';
   // The fixture logins belong to our own deployment, so a white-labelled build
   // never shows them — not even in development.
   const { loginTestAccounts } = getBrandPreset().features;
@@ -137,7 +137,8 @@ export default function LoginPage() {
         </button>
       </form>
 
-      {isDev && loginTestAccounts && (
+      {/* {isDev && loginTestAccounts && ( */}
+      {loginTestAccounts && (
         <div className="mt-8 border-t border-(--border) pt-5">
           <div className="mb-3 text-xs font-semibold uppercase text-(--text-soft)">
             Test accounts

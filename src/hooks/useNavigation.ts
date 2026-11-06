@@ -398,9 +398,8 @@ export const useNavigation = () => {
         {
           label: 'Configuration',
           items: [
-            // No "Cabinets" item here: an administrator works on cabinets through
-            // Cabinet Designer. Folder structure and document moves live on the
-            // Cabinets page for the staff a cabinet is delegated to.
+            // Cabinet Designer manages every cabinet; the "Cabinet" item under
+            // Documents browses only the admin's own department's cabinets.
             {
               route: '/admin/cabinets',
               label: 'Cabinet Designer',
@@ -450,6 +449,17 @@ export const useNavigation = () => {
               // permission. Same exception class as /platform's role gate in
               // routes.config.ts (no permission substitute, by design).
               roles: ['client_admin'],
+            },
+          ],
+        },
+        {
+          label: 'Documents',
+          items: [
+            {
+              route: '/staff/cabinets',
+              label: 'Cabinet',
+              icon: 'cabinet',
+              anyPermissions: ['cabinet:view'],
             },
           ],
         },

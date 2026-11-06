@@ -1,8 +1,8 @@
 'use client';
 
 import { STAGE_ACTIONS } from './constants';
-import { Combobox } from '@/components/ui/Combobox';
 import { StageDepartmentPicker } from './StageDepartmentPicker';
+import { UserPicker } from '@/components/common/UserPicker';
 import type { MoveDirection } from './workflowGraph';
 import type { Department, WorkflowStageAction } from '@/types/models';
 
@@ -29,7 +29,6 @@ export interface StagePropertiesPanelProps {
   /** One of its sub-departments, or '' for the department itself. */
   subDepartmentDraft: string;
   onDepartmentChange: (departmentId: string, subDepartmentId: string) => void;
-  users: { id: string; name: string; email?: string }[];
   userDraft: string;
   onUserChange: (userId: string) => void;
   slaDraft: number;
@@ -68,7 +67,6 @@ export function StagePropertiesPanel({
   departmentDraft,
   subDepartmentDraft,
   onDepartmentChange,
-  users,
   userDraft,
   onUserChange,
   slaDraft,
@@ -209,14 +207,7 @@ export function StagePropertiesPanel({
                 )}
               </>
             ) : (
-              <Combobox
-                options={users.map((u) => ({ value: u.id, label: u.name, hint: u.email }))}
-                value={userDraft}
-                onChange={(v) => onUserChange(v as string)}
-                placeholder="Select a person…"
-                searchPlaceholder="Search people…"
-                emptyText="No people match"
-              />
+              <UserPicker value={userDraft} onChange={onUserChange} ariaLabel="Assigned person" />
             )}
           </div>
 

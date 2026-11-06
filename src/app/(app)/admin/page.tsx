@@ -32,7 +32,10 @@ export default function AdminDashboard() {
   const departments = departmentsData?.data?.length ?? 0;
   const pendingAccessRequests = accessRequestsData?.pagination?.total || 0;
   // Documents can only be filed into a folder, so a cabinet without one can't be used.
-  const cabinetsWithoutFolders = cabinets.filter((c: any) => !(c._count?.folders > 0)).length;
+  const folderless = cabinets.filter((c: any) => !(c._count?.folders > 0));
+  const cabinetsWithoutFolders = folderless.length;
+  // The Cabinet page lists only the admin's own department, so open the cabinet directly.
+  const foldersLink = folderless[0] ? `/staff/cabinets?cab=${folderless[0].id}` : '/staff/cabinets';
   const loaded = !!usersData && !!cabinetsData && !!workflowsData && !!departmentsData;
 
   useEffect(() => {
@@ -50,7 +53,7 @@ export default function AdminDashboard() {
           ? `Folders in every cabinet (${cabinetsWithoutFolders} without one)`
           : 'Folders in every cabinet',
       done: cabinets.length > 0 && cabinetsWithoutFolders === 0,
-      to: '/staff/cabinets',
+      to: foldersLink,
     },
     { label: 'Users added and given roles', done: users > 1, to: '/admin/users' },
     { label: 'A workflow published', done: publishedWorkflows > 0, to: '/admin/workflows' },
@@ -68,7 +71,7 @@ export default function AdminDashboard() {
     },
     cabinetsWithoutFolders > 0 && {
       t: `${cabinetsWithoutFolders} cabinet${cabinetsWithoutFolders === 1 ? ' has' : 's have'} no folders, so nothing can be filed there`,
-      to: '/staff/cabinets',
+      to: foldersLink,
     },
   ].filter(Boolean) as { t: string; to: string }[];
 

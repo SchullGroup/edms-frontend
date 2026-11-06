@@ -162,7 +162,9 @@ export default function UploadCapturePage() {
           filed += docs.length;
         } catch (err: any) {
           notFiled += chunk.length;
-          const message = err?.response?.data?.message || err?.message || 'Filing failed';
+          const message = explainFolderError(
+            err?.response?.data?.message || err?.message || 'Filing failed',
+          );
           chunk.forEach((c) => c.handle.fail(message));
         }
       }
@@ -314,7 +316,12 @@ import { MetadataFieldInput } from '@/components/documents/MetadataFieldInput';
 import { useUploadMetadata } from '@/components/documents/useUploadMetadata';
 import { documentsService } from '@/apis/services/documents.service';
 import { CONF_LEVELS, URG_LEVELS } from '@/constants/documentLevels';
-import { foldersAsPaths } from '@/utils/folders';
+import {
+  explainFolderError,
+  folderOptionLabel,
+  foldersAsPaths,
+  restrictingFolder,
+} from '@/utils/folders';
 import { calculateChecksum } from '@/apis/services/s3.service';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 
@@ -391,7 +398,7 @@ function BatchBar({
               </option>
               {foldersAsPaths(folders).map((f: any) => (
                 <option key={f.id} value={f.id}>
-                  {f.path}
+                  {folderOptionLabel(folders, f)}
                 </option>
               ))}
             </select>
@@ -596,7 +603,9 @@ function IDUCard({
       const wasAborted = err?.message === 'Upload aborted';
       const message = wasAborted
         ? 'Upload canceled'
-        : err?.response?.data?.message || err?.message || 'Failed to upload document';
+        : explainFolderError(
+            err?.response?.data?.message || err?.message || 'Failed to upload document',
+          );
       fail(message);
       addToast(message, wasAborted ? 'info' : 'error');
     }
@@ -683,7 +692,7 @@ function IDUCard({
               </option>
               {foldersAsPaths(folders).map((f: any) => (
                 <option key={f.id} value={f.id}>
-                  {f.path}
+                  {folderOptionLabel(folders, f)}
                 </option>
               ))}
             </select>
@@ -692,6 +701,10 @@ function IDUCard({
                 {folders.length || foldersLoading
                   ? 'Choose a folder before filing.'
                   : 'This cabinet has no folders yet — create one before filing here.'}
+              </div>
+            ) : selFol && restrictingFolder(folders, selFol) ? (
+              <div className="help">
+                This folder has its own access list. Filing works only if it gives you Upload.
               </div>
             ) : (
               <div className="help">Documents must be filed into a folder, not a cabinet root.</div>

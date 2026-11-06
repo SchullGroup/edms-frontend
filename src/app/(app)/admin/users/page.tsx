@@ -147,10 +147,12 @@ export default function UsersPage() {
               className="input"
               type="email"
               required
+              disabled={!isNew}
               defaultValue={u.email}
               placeholder="name@firstatlantic.com"
               onChange={(e) => (u.email = e.target.value)}
             />
+            {!isNew && <div className="help">The email address can&apos;t be changed.</div>}
           </div>
           <div className="field">
             <label>Department</label>
@@ -225,8 +227,8 @@ export default function UsersPage() {
                 .mutateAsync({
                   id: u.id,
                   updates: {
+                    // No `email`: PATCH /users/:id doesn't accept it (read-only here).
                     name: u.name,
-                    email: u.email,
                     departmentId: u.departmentId,
                     // Sent only when changed; null clears it.
                     ...(u.managerId !== (user?.managerId || '')
