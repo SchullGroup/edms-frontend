@@ -17,6 +17,8 @@ import { SkeletonText } from '@/components/common/Skeleton';
 
 interface Props {
   documentId: string;
+  /** Names the saved file. */
+  documentTitle: string;
   currentVersionId?: string | null;
   /** Reader — controls whether the panel renders at all. */
   canView: boolean;
@@ -34,6 +36,7 @@ interface Props {
 
 export function DocumentVersionsPanel({
   documentId,
+  documentTitle,
   currentVersionId,
   canView,
   canDownload,
@@ -147,14 +150,16 @@ export function DocumentVersionsPanel({
                 {v.fileUrl && canDownload && (
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={() => {
-                      const tab = window.open('', '_blank');
-                      if (tab) tab.opener = null;
-                      downloadVersion.mutate({ id: documentId, versionId: v.id, tab });
-                    }}
+                    onClick={() =>
+                      downloadVersion.mutate({
+                        id: documentId,
+                        versionId: v.id,
+                        title: documentTitle,
+                      })
+                    }
                     disabled={downloadVersion.isPending}
-                    title="Open this version"
-                    aria-label={`Open version ${v.versionNumber}`}
+                    title="Download this version"
+                    aria-label={`Download version ${v.versionNumber}`}
                   >
                     <Icon name="download" size={13} />
                   </button>

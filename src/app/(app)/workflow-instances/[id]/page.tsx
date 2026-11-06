@@ -528,6 +528,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
           {selected && selectedDoc && (
             <DocumentVersionsPanel
               documentId={selected.id}
+              documentTitle={selectedDoc.title}
               currentVersionId={selectedDoc.currentVersionId}
               canView={can('document_version', 'view')}
               canDownload={allows(selectedDoc, 'download')}

@@ -17,6 +17,12 @@ import { ACCESS_KIND_LABEL } from '@/constants/documentLevels';
 import { useUIStore } from '@/store/useUIStore';
 import { fetchAllPages } from '@/apis/utils/fetchAllPages';
 import { documentFile } from '@/utils/documentFile';
+import {
+  downloadFileName,
+  fileActionFor,
+  FileFetchError,
+  filesService,
+} from '@/apis/services/files.service';
 
 export const documentKeys = {
   all: ['documents'] as const,
@@ -408,33 +414,26 @@ export function useAddDocumentVersion() {
 /**
  * Opens a version's file through `GET /documents/:id/versions/:versionId`, which
  * checks `document:download` plus confidentiality clearance and is audited as
- * `document.downloaded`. The signed `fileUrl` on the document and version list
- * would skip both, so downloads go through here.
- *
- * `tab` is opened by the caller inside the click handler: a tab opened after
- * the request returns would be blocked as a popup.
+ * `document.downloaded`, then saves the file from its link with the session
+ * (watermarked for a PDF, the original otherwise).
  */
 export function useDownloadDocumentVersion() {
   const { addToast } = useUIStore.getState();
 
   return useMutation({
-    mutationFn: ({ id, versionId }: { id: string; versionId: string; tab: Window | null }) =>
-      documentsService.getVersion(id, versionId),
-    onSuccess: (version, { tab }) => {
-      if (!version.fileUrl) {
-        tab?.close();
-        addToast('This version has no file attached', 'error');
-        return;
-      }
-      if (tab) tab.location.href = version.fileUrl;
-      else window.location.assign(version.fileUrl);
+    mutationFn: async ({ id, versionId, title }: { id: string; versionId: string; title: string }) => {
+      const version = await documentsService.getVersion(id, versionId);
+      if (!version.fileUrl) throw new FileFetchError('This version has no file attached');
+      const action = fileActionFor(version.mimeType, 'download');
+      const name = downloadFileName(`${title} v${version.versionNumber}`, version.mimeType, action);
+      await filesService.save(version.fileUrl, name, action);
     },
-    onError: (err: any, { tab }) => {
-      tab?.close();
+    onError: (err: any) => {
+      const status = err.response?.status ?? err.status;
       addToast(
-        err.response?.status === 403
+        status === 403
           ? "You don't have permission to download this document"
-          : err.response?.data?.message || 'Failed to download the file',
+          : err.response?.data?.message || err.message || 'Failed to download the file',
         'error',
       );
     },
@@ -460,29 +459,24 @@ export function usePrintDocument() {
 }
 
 /** `GET /documents/:id/export` — checks `document:export`, audits
- *  `document.exported`, and returns the document with a fresh signed URL,
- *  which `tab` (opened by the caller inside the click handler) is sent to. */
+ *  `document.exported`, then saves the watermarked file (the original if not a PDF). */
 export function useExportDocument() {
   const { addToast } = useUIStore.getState();
 
   return useMutation({
-    mutationFn: ({ id }: { id: string; tab: Window | null }) => documentsService.exportDocument(id),
-    onSuccess: (doc, { tab }) => {
-      const url = documentFile(doc).fileUrl;
-      if (!url) {
-        tab?.close();
-        addToast('This document has no file to export', 'error');
-        return;
-      }
-      if (tab) tab.location.href = url;
-      else window.location.assign(url);
+    mutationFn: async ({ id }: { id: string }) => {
+      const doc = await documentsService.exportDocument(id);
+      const { fileUrl, fileMimeType } = documentFile(doc);
+      if (!fileUrl) throw new FileFetchError('This document has no file to export');
+      const action = fileActionFor(fileMimeType, 'preview');
+      await filesService.save(fileUrl, downloadFileName(doc.title, fileMimeType, action), action);
     },
-    onError: (err: any, { tab }) => {
-      tab?.close();
+    onError: (err: any) => {
+      const status = err.response?.status ?? err.status;
       addToast(
-        err.response?.status === 403
+        status === 403
           ? "You don't have permission to export this document"
-          : err.response?.data?.message || 'Failed to export the document',
+          : err.response?.data?.message || err.message || 'Failed to export the document',
         'error',
       );
     },
