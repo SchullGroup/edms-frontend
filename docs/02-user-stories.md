@@ -508,6 +508,10 @@ DRIFT-06 asks for is unbuilt.
 - [x] Re-index on title change, metadata update, and version restore — **2026-10-14** (PR #51)
 - [x] Index by title regardless of OCR outcome, so a failed OCR never makes a document
       unfindable — **2026-10-14** (PR #51). *No backfill for versions stranded earlier*
+- [x] Narrow by folder and by created date (GBB 5.3) — **2026-11-09**, `/search`'s Folder and
+      Created facets (`folderId`, PR #65; `from` / `to`, PR #67), with or without text, kept in
+      saved searches. Verified live as `staff_finance`. A folder matches only documents filed
+      directly in it, not in its sub-folders
 - [ ] Search-term highlighting in results
 - [ ] `search.executed` audit event (defined in the schema, never written)
 
