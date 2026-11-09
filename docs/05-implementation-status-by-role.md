@@ -390,6 +390,12 @@ destination (request doc item 7).
 | ~~`GET /documents/:id/download`~~ | ✅ Not needed — downloads go through `GET /documents/:id/versions/:versionId`, which checks `document:download` + clearance (`0dab81a`); see What's left #5 *(row stale until 2026-10-15)* | — |
 | `workflow:view` for non-admin roles | 🟠 **Seed gap (DRIFT-14)** — `GET /workflows` needs it, and the seed grants it only to `client_admin`/`schulltech_admin` | On a freshly seeded tenant, the route picker can't list workflows for staff. The live tenant's staff role holds the grant (re-tested 2026-10-16) *(added 2026-10-15)* |
 | ~~`GET /circulars`, `POST /circulars/:id/ack`~~ | ✅ **Built** (backend `circulars` module) and wired 2026-10-05 — the real routes are `/circulars/inbox*` (see APIs wired) | — |
+| `from` / `to` and `folderId` on `GET /documents` and `/documents/search` | ⛔ **Backend live, not wired** (PR #67 / PR #65) — ticket 03 | `/search` can't narrow by folder or by created date |
+| `workstream` on create, `PATCH`, list and search | ⛔ **Backend live, not wired** (PR #67) — ticket 04 | Documents can't be filed or found by workstream (doc 02 A5) |
+| `GET /documents/:id/history`, `changeNote` on new versions | ⛔ **Backend live, not wired** (PR #67) — ticket 05 | No record of what changed between versions on `/doc/[id]` |
+| `POST /document-views`, `POST /document-views/:sessionId/heartbeat` | ⛔ **Backend live, not wired** (PR #67) — ticket 06 | Time spent on a document isn't recorded, so the report (ticket 07) would be empty |
+| `POST /auth/mfa/setup\|enable\|disable`, `POST /auth/mfa/verify` | ⛔ **Backend live, not wired** (PR #67) — tickets 09, 10 | Staff can't turn on two-factor sign-in |
+| `downloadUrl` on versions | ⛔ **Backend live, not read** (PR #67) — ticket 12 | Downloads build their own link; image downloads ask for the original, which no live role may fetch |
 
 ### Dummy data 🟥
 
@@ -485,6 +491,8 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 | ~~Team aggregation endpoint~~ | ✅ **Exists and wired** — `GET /tasks/workload` and `GET /workflow-instances/team-status-matrix` feed `/supervisor/workload` and `/supervisor` *(row stale until 2026-10-15)*. Only `/supervisor/performance` still walks `GET /tasks?scope=all` with `fetchAllPages` | — |
 | `workflow:view` for supervisors | 🟠 **Seed gap (DRIFT-14)** | On a freshly seeded tenant, supervisors can't list workflows to route into; the live tenant's can (re-tested 2026-10-16) *(added 2026-10-15)* |
 | ~~Notifications~~ | ✅ Built — SLA warning/breach notifications fire (doc 01 DRIFT-10, resolved 2026-09-21; row stale until 2026-10-12) | — |
+| `PUT /documents/metadata/batch` | ⛔ **Backend live, not wired** (PR #67) — ticket 08 (screen design undecided). Supervisors hold `document_metadata:edit` at department scope | No way to index many documents at once |
+| PR #67 document routes (filters, workstream, history, view sessions, MFA, download links) | ⛔ Same as Staff's rows above — tickets 03–06, 09, 12 | — |
 
 ### Dummy data 🟥
 
@@ -641,6 +649,7 @@ so they were deleted rather than left dead.
 | `workflow:view` for management | 🟠 Seed gap (DRIFT-14) — on a freshly seeded tenant management holds `workflow_instance:route:own` but can't list definitions; the live tenant's management role can (re-tested 2026-10-16) *(added 2026-10-15)* |
 | Control exceptions inbox: `GET /control-exceptions`, `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` | 🟨 **Built and wired 2026-10-29, not live yet** — `edms-backend` `51e9d85`. Management (the permanent secretary) holds `control_exception:view` and `respond`, and gets a `control_exception.reported` notification. The shared `/control-exceptions` pages (Shared pages below) offer Acknowledge and an inline Resolve with a required note. Verified only against mocked responses: the live tenant isn't seeded (doc 01, Internal control) |
 | A department × document-status cross-tab | Doesn't exist — `/management`'s per-department Pending/In-Progress/Closed table derives `Closed` as `total − (pending + inProgress)` rather than an exact count, because no single endpoint returns document status broken out by department |
+| PR #67 routes: search filters, workstream, document history, view sessions, MFA | ⛔ **Backend live, not wired** — tickets 03–06, 09 (same rows as Staff). Management holds no `audit:view`, so the time-spent report (ticket 07) isn't theirs |
 
 ### One trade-off from the rewiring, not hidden
 
@@ -768,6 +777,13 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 | Branding model + endpoints | Not built | Theming is per-browser (survives reload since 2026-10-12; other users never see it) |
 | ~~Circulars model + endpoints~~ | ✅ **Built** (backend `circulars` module, 15 routes) and wired 2026-10-05 | Confirmed in the product owner's testing 2026-10-09 |
 | `GET /audit` | ✅ **Built & wired 2026-09-18** | Tenant audit view is real now |
+| `GET/POST /access-rules`, `DELETE /access-rules/:id` | ⛔ **Backend live, not wired** (PR #67) — ticket 13. The `access_rule:*` grants aren't on live (ticket 01): `GET /access-rules` as `client_admin` → 403 | No IP allow/deny or country blocking from the UI |
+| `DELETE /auth/mfa/users/:userId` | ⛔ **Backend live, not wired** (PR #67) — ticket 10 | A user who loses their authenticator can't be reset from `/admin/users` |
+| `DELETE /documents/:id/access-grants/:userId` *(older)* | ⛔ **Backend live, not wired** — ticket 11 | A granted View/Act access can't be taken back |
+| `PUT /documents/metadata/batch` | ⛔ **Backend live, not wired** (PR #67) — ticket 08 | No mass indexing |
+| `GET /document-views/report` | ⛔ **Backend live, not wired** (PR #67) — ticket 07 (`audit:view`) | No time-spent-per-document report |
+| `originalUrl` on versions (`document:download_original`) | ⛔ **Backend live, not read** (PR #67) — ticket 12; grant not on live (ticket 01) | No way to take the unmarked original |
+| PR #67 document routes for every user (filters, workstream, history, view sessions, MFA) | ⛔ Same as Staff's rows — tickets 03–06, 09 | — |
 
 ### Dummy data 🟥
 
@@ -878,7 +894,10 @@ its recipient/acknowledgement report (`GET /circulars`, `/circulars/:id`,
 | `GET/POST/PATCH /findings` | **No `Finding` model in Prisma at all** |
 | Control exceptions: `GET/POST /control-exceptions`, `PATCH /:id`, `POST /:id/report`, `GET /report` | 🟨 **Built and wired 2026-10-29, not live yet** — `edms-backend` `51e9d85`. The auditor raises (a page, `/control-exceptions/new`), edits while open (`/[id]/edit`) and reports exceptions to management; `/control-exceptions/report` shows the counts. No owner or due date, so it isn't the `Finding` model. Verified only against mocked responses: the live tenant isn't seeded (doc 01, Internal control) |
 | `GET /cabinets/:id/access` (who can see this cabinet) | Endpoint exists and `/admin/cabinets`'s Access card calls it; **no auditor screen does**, though `cabinet_access:view` is granted *(re-checked 2026-10-15)* |
-| Document view logging | ✅ confirmed — `document.viewed` is a real, auto-emitted action (seen live 2026-09-18). Downloads are logged too: `document.downloaded` since the gated download landed (2026-10-08; in code, not yet seen in a live pull). *(Was "no download endpoint exists to log downloads".)* |
+| Document view logging | ✅ confirmed — `document.viewed` is a real, auto-emitted action (seen live 2026-09-18). Downloads are logged too: `document.downloaded` since the gated download landed (2026-10-08; in code, not yet seen in a live pull). *(Was "no download endpoint exists to log downloads".)* **Since PR #67** the version read is `document.version_viewed` and `document.downloaded` comes from the file fetch itself; the audit viewers don't label the new actions yet (ticket 15) |
+| `GET /document-views/report` (time spent per document, per person) | ⛔ **Backend live, not wired** (PR #67) — ticket 07. Needs view sessions recorded first (ticket 06) |
+| `GET /documents/:id/history` (before/after of each change) | ⛔ **Backend live, not wired** (PR #67) — ticket 05 |
+| `originalUrl` on versions (`document:download_original`, the unmarked file for checksum checks) | ⛔ **Backend live, not read** (PR #67) — ticket 12; grant not on live (ticket 01) |
 
 ### The core problem (historical — see correction above)
 
@@ -1013,6 +1032,10 @@ This is a **phase**, not a backlog item:
 9. Audited, time-boxed impersonation for support access
 10. ~~Align the frontend permission model with the backend's 3 grants~~ — done 2026-09-10 (DRIFT-04)
 
+**Within today's single tenant (PR #67, 2026-11-09):** `schulltech_admin` is seeded
+`access_rule:view|create|delete` (not on live yet, ticket 01), so the IP and country rules page
+(ticket 13) is theirs as well as `client_admin`'s. Its routes are ⛔ not wired.
+
 ---
 
 ## Shared pages (used by multiple roles)
@@ -1064,7 +1087,7 @@ the document on its own: file, details, versions, custody, archive.
 | Cabinet + folder context | ✅ |
 | **Policies (watermark)** | 🟥 `SEED.policies` — only its Watermark flag is still read. Download no longer follows it (2026-10-08) |
 | **Preview fallback** | 🟨 **2026-10-08, not verified live** — a file the viewer can't show (TIFF, or a DOCX/XLSX uploaded before 2026-10-21) reads "Word documents can't be previewed yet" instead of the raw MIME type. Its button is the page's **Download**, hidden without download permission (the old "Open file" link ignored it). Same on the workflow page's viewer |
-| **File preview** | ✅ **PDFs: pdf.js viewer (`PdfViewer`), 2026-10-08, verified in a browser against the live API** — pages drawn as they scroll into view, "Find in document" with highlights and match count (Enter / Shift+Enter, Ctrl+F inside the viewer), page box, zoom, watermark on every page. Text can be selected only by someone with download permission. The viewer bar keeps Print but not Download: the page toolbar's Download is the only one here (2026-11-03). The workflow viewer keeps its own. Replaces an `<iframe>` of the browser's PDF viewer with its toolbar hidden, which had no search. Images: ⛔ blocked by the backend: they're fetched with `action=original`, which needs `document:download_original`, and no role holds it, so the viewer shows "Viewing this image needs permission to download the original file" (verified live 2026-11-06). **2026-11-04:** file links are now API links with the token in the path (edms-backend PR #64), so the viewer keys on `fileKey` and keeps its place when the document refetches. **2026-11-06:** the links also need the Bearer token (backend `f3ebfb4`), so every file is fetched through `apiClient` as a Blob; until then every PDF showed "The PDF couldn't be loaded". Verified live (see doc 01 "Viewing a file") |
+| **File preview** | ✅ **PDFs: pdf.js viewer (`PdfViewer`), 2026-10-08, verified in a browser against the live API** — pages drawn as they scroll into view, "Find in document" with highlights and match count (Enter / Shift+Enter, Ctrl+F inside the viewer), page box, zoom, watermark on every page. Text can be selected only by someone with download permission. The viewer bar keeps Print but not Download: the page toolbar's Download is the only one here (2026-11-03). The workflow viewer keeps its own. Replaces an `<iframe>` of the browser's PDF viewer with its toolbar hidden, which had no search. Images: ⛔ blocked by the backend: they're fetched with `action=original`, which needs `document:download_original`, and no role holds it, so the viewer shows "Viewing this image needs permission to download the original file" (verified live 2026-11-06). **Since PR #67 (live 2026-11-09) that block is the frontend's:** JPEG, PNG and TIFF are watermarked like PDFs, so `action=preview` serves them (checked live: a PNG fetched with the default action → 200 `image/png`), but `fileActionFor` still asks for `original` for anything that isn't a PDF (ticket 12). **2026-11-04:** file links are now API links with the token in the path (edms-backend PR #64), so the viewer keys on `fileKey` and keeps its place when the document refetches. **2026-11-06:** the links also need the Bearer token (backend `f3ebfb4`), so every file is fetched through `apiClient` as a Blob; until then every PDF showed "The PDF couldn't be loaded". Verified live (see doc 01 "Viewing a file"). *PR #67 dropped the Bearer requirement again (doc 01 §7 `GET /files/:token`); sending it is harmless* |
 | **Find in a scanned PDF** | ✅ **2026-10-08, verified in a browser on the tenant's scanned delivery note** — a scan has no text of its own, so find searches the version's `ocrText` (returned on `GET /documents/:id`) and switches to a **Scanned text** view: the OCR text on a sheet with matches highlighted, a note that it was read by OCR, and the watermark. A toolbar toggle switches between page images and text. Highlighting on the page images themselves needs the backend to keep Textract's word positions (it stores plain text only) |
 | **Print** | ✅ **2026-10-08, verified against the live API** — viewer toolbar, shown with `document:print` + clearance. Calls `GET /documents/:id/print` (audited `document.printed`), then prints page images from a hidden frame with the watermark drawn into them, so it survives "Save as PDF". Ctrl+P inside the viewer does the same |
 | **Export** | ✅ **2026-10-08, clicked through 2026-10-09** (Finance supervisor: 200, new tab sent to the signed URL) — toolbar button, shown with `document:export` + clearance. `GET /documents/:id/export` (audited `document.exported`), then opens the fresh signed URL |
@@ -1115,7 +1138,22 @@ no push channel.
 > is wired. Control exceptions sat here for one day (backend 2026-10-29) and were wired the
 > same day.
 
-Nothing currently known to be backend-complete with zero UI.
+**Since PR #67 (backend `42ed468`, live 2026-11-09)** these are backend-complete with no UI.
+Doc 01 §7 has each route; the tickets are in `.scratch/backend-dev-2026-11-09/`.
+
+| Capability | Routes | Roles | Ticket |
+|---|---|---|---|
+| Search by folder and created date | `folderId`, `from` / `to` on `GET /documents`, `/documents/search` | everyone who searches | 03 |
+| Workstreams | `workstream` on create, `PATCH`, list, search | everyone | 04 |
+| Change history, version notes | `GET /documents/:id/history`, `changeNote` | everyone who can view the document | 05 |
+| Viewing time | `POST /document-views`, `…/:sessionId/heartbeat` | everyone (recording) | 06 |
+| Time-spent report | `GET /document-views/report` | `client_admin`, `internal_auditor`, `schulltech_admin` (`audit:view`) | 07 |
+| Mass indexing | `PUT /documents/metadata/batch` | `client_admin`, `supervisor` | 08 |
+| MFA | `/auth/mfa/setup\|enable\|disable\|verify`; admin reset `DELETE /auth/mfa/users/:userId` | everyone; reset `client_admin` | 09, 10 |
+| Revoke a document grant *(older)* | `DELETE /documents/:id/access-grants/:userId` | `client_admin` | 11 |
+| Server-built download links | `downloadUrl` / `originalUrl` on versions | download holders; originals `client_admin`, `internal_auditor` | 12 |
+| IP and country rules | `/access-rules` | `client_admin`, `schulltech_admin` | 13 |
+| Active Directory SSO | `/auth/sso/*` (not configured on live) | everyone | 14 |
 
 **`GET /workflow-history` is the quiet win.** It is the closest thing the backend has to a
 real audit trail — actor, from-stage, to-stage, note, `elapsedSeconds` — and it would
