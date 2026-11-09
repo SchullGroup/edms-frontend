@@ -100,14 +100,14 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
 ```
                       ┌──────────────────────────────┐
                       │  SCHULLTECH_ADMIN (Adaeze)   │  🟥 mock portal
-                      │  Vendor operations           │  18 grants, no document:*
+                      │  Vendor operations           │  21 grants, no document:*
                       │  /platform                   │  Cannot read customer documents
                       └──────────────┬───────────────┘
                                      │  H1: provisions the tenant
                                      │      + the first admin account
                                      ▼
                       ┌──────────────────────────────┐
-                      │  CLIENT_ADMIN (Bola)         │  73 grants, 72 global
+                      │  CLIENT_ADMIN (Bola)         │  77 grants, 76 global
                       │  Tenant system owner         │  Only role bypassing
                       │  /admin                      │  cabinet access checks
                       └──┬────────┬────────┬─────────┘
@@ -139,7 +139,7 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
                     │  H7: every action above emits an audit entry
                     ▼            ✅ written since 2026-09-18 (DRIFT-11)
          ┌──────────────────────────────┐
-         │  INTERNAL_AUDITOR (Femi)     │  30 grants, read-mostly global
+         │  INTERNAL_AUDITOR (Femi)     │  31 grants, read-mostly global
          │  Independent assurance       │  No document/cabinet/user edits
          │  /auditor                    │  🟨 trail real; dashboard SEED
          └──────────────────────────────┘
@@ -170,7 +170,7 @@ tenant-wide, and can also act on their own tasks, route their own documents and 
 
 ### Identity and rights
 
-**Backend grants — 18** *(re-counted 2026-10-15; this said "exactly three" — `workflow:view`,
+**Backend grants — 21** *(re-counted 2026-11-09: +`access_rule:view/create/delete` from PR #67, not on live yet; 18 on 2026-10-15. Before that it said "exactly three" — `workflow:view`,
 `workflow:route`, `audit:view` — before the 2026-09-16 RBAC refactor)*:
 
 ```
@@ -179,6 +179,7 @@ workflow_instance: view, create, route, close                  (global)
 task:              view, action, reassign                      (global)
 delegation:        view, end (global) · create (own)
 audit:             view, export                                (global)
+access_rule:       view, create, delete                        (global, PR #67)
 document_access_request: create
 ```
 
@@ -256,11 +257,13 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 
 ### Identity and rights
 
-**73 grants — 72 `global`, 1 `own`** *(re-counted 2026-10-29: +`control_exception:view`;
-72 on 2026-10-15, "45 grants, every one `global`" before)*. Documents (including comments,
+**77 grants — 76 `global`, 1 `own`** *(re-counted 2026-11-09: +`document:download_original`
+and `access_rule:view/create/delete` from PR #67, not on live yet; 73 on 2026-10-29
+(+`control_exception:view`), 72 on 2026-10-15, "45 grants, every one `global`" before)*. Documents (including comments,
 signatures and access requests), versions, locks, metadata, cabinets, metadata fields,
 cabinet access, folders, departments, users, roles, workflows, workflow instances, tasks,
-delegations, audit, circulars, and read-only control exceptions.
+delegations, audit, circulars, read-only control exceptions, IP and country access rules,
+and the unmarked original file.
 
 Two unique properties:
 - The **only** role in `CABINET_ACCESS_BYPASS_ROLES` — sees every cabinet regardless of grants
@@ -672,7 +675,8 @@ existed by 2026-09-04 evening.
 
 ### Identity and rights
 
-**30 grants — 25 `global`, 5 `own`** *(re-counted 2026-10-29: +`control_exception`
+**31 grants — 26 `global`, 5 `own`** *(re-counted 2026-11-09: +`document:download_original`
+from PR #67, not on live yet; 30 on 2026-10-29 after +`control_exception`
 view/create/edit/report; 26 on 2026-10-15, "10 grants, all `global`, all read-only" with
 `workflow:view:global` before)*:
 
@@ -681,7 +685,7 @@ read (global):  document view/search/view_confidential/download/export/print,
                 document_version, document_metadata, document_comment,
                 document_signature, cabinet, cabinet_access, folder,
                 department, workflow_instance, task, delegation, circular,
-                control_exception
+                control_exception, document download_original (PR #67)
 audit:          view, export (global)
 write:          workflow_instance create/route (own) · task action (own)
                 delegation create/end (own) · document_access_request create

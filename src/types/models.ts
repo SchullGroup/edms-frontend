@@ -226,6 +226,11 @@ export interface SavedSearch {
     status?: 'pending' | 'in_progress' | 'on_hold' | 'closed';
     confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
     urgency?: 'low' | 'normal' | 'high' | 'critical';
+    /** Only together with `cabinetId`: the folder belongs to it. */
+    folderId?: string;
+    /** Created-date range as local "YYYY-MM-DD" days, both inclusive. */
+    from?: string;
+    to?: string;
   };
 }
 

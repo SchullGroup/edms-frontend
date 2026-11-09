@@ -184,7 +184,8 @@ it without asking anyone.
 **What they fear:** being surprised in a board meeting; numbers that don't reconcile with
 what the operations team says.
 
-**Backend rights (27 grants — 21 `global`, 6 `own`; re-counted 2026-10-15):** `global`
+**Backend rights (29 grants — 23 `global`, 6 `own`; re-counted 2026-11-09, was 27 on
+2026-10-15 before `control_exception:view/respond` were added 2026-10-29):** `global`
 read across documents (view, search, `view_confidential`, download, export, print),
 versions, metadata, comments, signatures, cabinets, folders, departments, users, workflow
 instances, tasks and delegations — plus a small set of writes: `workflow_instance:create/route:own`,
@@ -214,10 +215,12 @@ tracked to closure with named owners and dates.
 **What they fear:** an audit trail with gaps; being unable to prove the trail is complete;
 findings that quietly die.
 
-**Backend rights (26 grants — 21 `global`, 5 `own`; re-counted 2026-10-15):** the same
-`global` read set as management, plus `audit:view`/`audit:export` (served by the
-hash-chained `GET /audit` since 2026-09-18 — DRIFT-11), `cabinet_access:view` and
-`circular:view`. `document:view_confidential:global` lets them read confidential-tier
+**Backend rights (31 grants — 26 `global`, 5 `own`; re-counted 2026-11-09, was 26 on
+2026-10-15):** the same `global` read set as management, plus `audit:view`/`audit:export`
+(served by the hash-chained `GET /audit` since 2026-09-18 — DRIFT-11), `cabinet_access:view`,
+`circular:view`, `control_exception:view/create/edit/report` (2026-10-29) and, since PR #67,
+`document:download_original` — the unmarked stored file, to check against its checksum
+(not on live yet: ticket 01 of `.scratch/backend-dev-2026-11-09`). `document:view_confidential:global` lets them read confidential-tier
 documents (a permission since `edms-backend` `0dab81a`; it was a role list before).
 **No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)* *(Was "10 grants, read-only … `audit:view` (for which
 no endpoint exists)" and "deliberately cannot mutate anything". The seed now also grants
@@ -243,9 +246,10 @@ an approval chain without a support ticket; the system looks like their organisa
 **What they fear:** granting someone too much access by accident; a misconfigured workflow
 silently stalling every document in a cabinet.
 
-**Backend rights (72 grants, 71 `global` + 1 `own`; re-counted 2026-10-15 — was 45):**
-effectively full control of the tenant, across all 20 resources including `role`,
-`workflow`, `cabinet_access` and `circular`.
+**Backend rights (77 grants, 76 `global` + 1 `own`; re-counted 2026-11-09 — 72 on
+2026-10-15, 45 before):** effectively full control of the tenant, across all 22 resources
+including `role`, `workflow`, `cabinet_access`, `circular` and, since PR #67, `access_rule`
+(IP and country restrictions) and `document:download_original` (not on live yet).
 They are the **only** role in `CABINET_ACCESS_BYPASS_ROLES` (they see every cabinet
 regardless of grants) and the only seeded role holding `document:view_restricted`.
 
@@ -264,10 +268,11 @@ accurate; a bad release can be switched off without a deploy.
 **What they fear:** being *able* to read a customer's confidential documents — that is a
 liability, not a capability.
 
-**Backend rights: 18 grants** *(re-counted 2026-10-15 — was "3 grants only")* —
-`workflow:view/create/edit/publish/archive`, `workflow_instance:view/create/route/close`,
+**Backend rights: 21 grants** *(re-counted 2026-11-09 — 18 on 2026-10-15, "3 grants only"
+before)* — `workflow:view/create/edit/publish/archive`, `workflow_instance:view/create/route/close`,
 `task:view/action/reassign`, `delegation:view/end` plus `create:own`, `audit:view/export`,
-and `document_access_request:create`. Still **no `document:*` grant of any kind.** This is
+`document_access_request:create` and, since PR #67, `access_rule:view/create/delete` (not on
+live yet). Still **no `document:*` grant of any kind.** This is
 deliberate and important: the platform admin is
 **excluded from `CABINET_ACCESS_BYPASS_ROLES`, from every confidentiality tier list, and
 from all document permissions.** The vendor cannot read customer documents. The
@@ -435,6 +440,29 @@ below.)*
 - [ ] Document detail renders and edits them
 - [ ] ⚠️ Backend bug: sending all-null values to clear metadata silently no-ops
       (`normalized.length === 0` short-circuits the write)
+- [ ] Mass indexing: fill in metadata for many existing documents at once (GBB 4.3) —
+      *backend done, no UI:* `PUT /documents/metadata/batch`, 1–50 documents each with its own
+      values (PR #67, live 2026-11-09). Screen design still open (ticket 08 of
+      `.scratch/backend-dev-2026-11-09`)
+
+---
+
+### A5 — File a document under a workstream · ⬜ **Not built** (backend only) *(new 2026-11-09)*
+
+> **As** Chika,
+> **I want to** mark each document as financial, legal, ESG, operational, technical or tax,
+> **so that** everything for one line of an assessment can be pulled up together.
+
+**Current state:** edms-backend PR #67 (`6f84555`, live 2026-11-09) adds a nullable
+`workstream` to documents: set on upload, changed or cleared with `PATCH`, and a filter on
+`GET /documents` and `/documents/search`. Live documents all read `workstream: null`. The
+frontend neither sets, shows nor filters it. GBB checklist 3.4–3.9.
+
+**Acceptance criteria**
+- [x] Backend: `workstream` on create, `PATCH` (null clears) and as a list/search filter
+- [ ] Choose a workstream on upload (ticket 04)
+- [ ] Show and change it on the document page (ticket 04)
+- [ ] Filter by it on `/search` and in cabinet browsing (ticket 04)
 
 ---
 
@@ -480,6 +508,10 @@ DRIFT-06 asks for is unbuilt.
 - [x] Re-index on title change, metadata update, and version restore — **2026-10-14** (PR #51)
 - [x] Index by title regardless of OCR outcome, so a failed OCR never makes a document
       unfindable — **2026-10-14** (PR #51). *No backfill for versions stranded earlier*
+- [x] Narrow by folder and by created date (GBB 5.3) — **2026-11-09**, `/search`'s Folder and
+      Created facets (`folderId`, PR #65; `from` / `to`, PR #67), with or without text, kept in
+      saved searches. Verified live as `staff_finance`. A folder matches only documents filed
+      directly in it, not in its sub-folders
 - [ ] Search-term highlighting in results
 - [ ] `search.executed` audit event (defined in the schema, never written)
 
@@ -868,6 +900,10 @@ lifecycle.
 - [x] Version list and single-version fetch endpoints, wired to the UI
 - [ ] ⚠️ Duplicate detection is not implemented despite the checksum index existing
 - [ ] No side-by-side version diff
+- [ ] A note on each new version saying what changed, and a change history with before/after
+      values (GBB 8.4) — *backend done, no UI:* `changeNote` on uploads and new versions,
+      `GET /documents/:id/history` (PR #67, live 2026-11-09). Ticket 05 of
+      `.scratch/backend-dev-2026-11-09`
 
 ---
 
@@ -1270,7 +1306,11 @@ alignment), not to count records.
 - [x] Document view and download are logged — `documents.router.ts` records
       `document.viewed` and `document.downloaded` *(in code; not checked live)*
 - [ ] Entries capture actor, actor type, action, object type, object ID, before/after diff,
-      IP address and user agent
+      IP address and user agent *(PR #67: document edits and metadata changes now carry a
+      field-level before/after)*
+- [ ] Time spent viewing each document, per person (GBB 2.2) — *backend done, no UI:* view
+      sessions with heartbeats (`/document-views`) and `GET /document-views/report`
+      (PR #67, live 2026-11-09). Tickets 06 and 07 of `.scratch/backend-dev-2026-11-09`
 - [x] `entryHash` chains to `prevHash`; a verification endpoint proves chain integrity —
       `GET /audit/verify`, chain checked intact live 2026-09-18 (DRIFT-11)
 - [ ] The database role used by the app cannot `UPDATE` or `DELETE` the table
@@ -1667,6 +1707,14 @@ error paths and workers).
 - [ ] No `helmet` or comparable security headers
 - [ ] No request body size limit on `express.json()`
 - [ ] Access-token cookie TTL (1 day) disagrees with the JWT TTL (15 min)
+- [ ] Two-factor sign-in with an authenticator app (GBB 1.2) — *backend done, no UI:*
+      `/auth/mfa/*`, a login challenge and an admin reset (PR #67, live 2026-11-09). Tickets 09
+      and 10 of `.scratch/backend-dev-2026-11-09`
+- [ ] Sign in with Active Directory (GBB 1.3) — *backend done, no UI:* `/auth/sso/*` over
+      OIDC (PR #67). Not configured on live (`enabled: false`). Ticket 14
+- [ ] Block or allow access by IP range and country (GBB 1.6) — *backend done, no UI:*
+      `/access-rules`, enforced on every request (PR #67). The grants aren't on live yet.
+      Ticket 13
 
 ---
 
@@ -1674,7 +1722,7 @@ error paths and workers).
 
 | Epic | ✅ Done | 🟨 Partial | 🟥 Mock | ⬜ Not built | Verdict |
 |---|---|---|---|---|---|
-| A — Capture & Filing | 2 | 1 | 0 | 1 | Core works; enrichment missing |
+| A — Capture & Filing | 2 | 1 | 0 | 2 | Core works; enrichment missing; workstreams backend-only (A5, PR #67) |
 | B — Retrieval & Search | 1 | 3 | 0 | 0 | Search indexes every document since PR #51 (2026-10-14); download gated and audited (2026-10-08) |
 | C — Routing & Approval | 2 | 3 | 0 | 0 | Task execution solid; workflow routes authorized (DRIFT-05); ~~routing **blocked for non-admins** by the RBAC seed~~ routing works on the live tenant; the seed lacks `workflow:view` for non-admins, so a fresh database would block it (DRIFT-14, re-tested 2026-10-16) |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
@@ -1685,13 +1733,14 @@ error paths and workers).
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **15** | **19** | **7** | **2** | 43 functional stories |
+| **Total** | **15** | **19** | **7** | **3** | 44 functional stories |
 
 *(2026-10-15: H1 moved 🟥 → 🟨, so Partial 16 → 17 and Mock 9 → 8. 2026-10-19: C2 moved
 ✅ → 🟨 (no urgency ordering), so Done 15 → 14 and Partial 17 → 18. 2026-10-21: H3 removed
 from scope, so Not built 2 → 1 and 42 → 41 stories. 2026-10-29: H4 added 🟨 and H2 🟥 → ⬜,
 so Partial 18 → 19, Mock 8 → 7, Not built 1 → 2 and 41 → 42 stories. 2026-11-04: E5 added ✅,
-so Done 14 → 15 and 42 → 43 stories. Totals re-tallied from the story headings, not carried
+so Done 14 → 15 and 42 → 43 stories. 2026-11-09: A5 added ⬜ (backend only, PR #67), so Not
+built 2 → 3 and 43 → 44 stories. Totals re-tallied from the story headings, not carried
 forward.)*
 
 **The honest one-paragraph summary (revised 2026-10-15):** the *document* half of this EDMS

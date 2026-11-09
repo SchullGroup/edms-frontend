@@ -40,6 +40,9 @@ export interface DocumentFilters {
   urgency?: 'low' | 'normal' | 'high' | 'critical';
   documentType?: string;
   createdBy?: string;
+  /** Created-date window as ISO instants: `from` inclusive, `to` exclusive (PR #67). */
+  from?: string;
+  to?: string;
   includeArchived?: 'true' | 'false';
   page?: number;
   limit?: number;
