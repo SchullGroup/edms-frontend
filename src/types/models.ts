@@ -167,7 +167,8 @@ export interface Role {
 export interface Document {
   id: string;
   title: string;
-  referenceNumber: string;
+  /** `DOC-YYYYMMDD-HHmmss` (`-1`, `-2`… on a clash); nullable column, so older rows may lack one. */
+  referenceNumber: string | null;
   cabinetId: string;
   folderId?: string | null;
   documentType?: string | null;

@@ -386,7 +386,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         </a>{' '}
         <span className="sep">›</span>
         <span>{folderLabel}</span> <span className="sep">›</span>
-        <span className="cur">{doc.id.toUpperCase()}</span>
+        <span className="cur">{doc.referenceNumber ?? doc.id.toUpperCase()}</span>
       </div>
 
       <div className="page-head">
@@ -399,7 +399,13 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             <ConfBadge level={doc.confidentiality} />
             <UrgBadge level={doc.urgency} />
             <span className="caption" style={{ alignSelf: 'center' }}>
-              v{doc.currentVersion?.versionNumber ?? 1} · {fmtDate(doc.createdAt)}
+              {[
+                doc.referenceNumber,
+                `v${doc.currentVersion?.versionNumber ?? 1}`,
+                fmtDate(doc.createdAt),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
           </div>
         </div>
@@ -585,6 +591,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         <div className="flex flex-col gap-4">
           <DocumentDetailsPanel
             documentId={doc.id}
+            referenceNumber={doc.referenceNumber}
             documentType={doc.documentType}
             workstream={doc.workstream}
             cabinetId={doc.cabinetId}

@@ -24,6 +24,7 @@ import { MetadataFieldInput, isMetadataValueMissing, toInputValue } from './Meta
 
 export interface DocumentDetailsPanelProps {
   documentId: string;
+  referenceNumber?: string | null;
   documentType?: string | null;
   workstream?: DocumentWorkstream | null;
   cabinetId: string;
@@ -63,6 +64,7 @@ function displayValue(field: Pick<DocumentMetadataField, 'fieldType'>, value?: s
 
 export function DocumentDetailsPanel({
   documentId,
+  referenceNumber,
   documentType,
   workstream,
   cabinetId,
@@ -204,6 +206,10 @@ export function DocumentDetailsPanel({
         )}
       </div>
       <div className="card-body" style={{ paddingTop: '6px' }}>
+        <div className="meta-row">
+          <span className="k">Reference</span>
+          <span className="v">{referenceNumber || '—'}</span>
+        </div>
         <div className="meta-row">
           <span className="k">Document ID</span>
           <span className="v">{documentId.substring(0, 8).toUpperCase()}</span>
