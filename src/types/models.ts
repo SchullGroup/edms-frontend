@@ -189,7 +189,27 @@ export interface DocumentVersion {
   uploadedBy: string;
   /** Who `uploadedBy` is. On `GET /documents/:id/versions` and the detail's `currentVersion`. */
   uploader?: PersonSummary | null;
+  /** What this version changes (≤ 500 chars, PR #67); restores read "Restored from version N". */
+  changeNote?: string | null;
   createdAt: string;
+}
+
+/** One `GET /documents/:id/history` row. Edits carry `details.before`/`after` by field;
+ *  metadata changes are keyed by the field's name. */
+export interface DocumentHistoryEntry {
+  id: string;
+  action: string;
+  occurredAt: string;
+  actor: PersonSummary | null;
+  objectType: 'document' | 'document_version' | string;
+  objectId: string | null;
+  details: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+    batch?: boolean;
+    documentCount?: number;
+    [key: string]: unknown;
+  };
 }
 
 export type DocumentSummaryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
@@ -363,6 +383,8 @@ export interface CreateVersionRequest {
   mimeType: string;
   checksum: string;
   fileSize?: number;
+  /** Optional "what changed", trimmed by the API, ≤ 500 chars. */
+  changeNote?: string;
 }
 
 /** One entry in the `PUT /documents/{id}/metadata` body (a raw array). */

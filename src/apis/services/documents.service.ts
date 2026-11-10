@@ -14,6 +14,7 @@ import {
   AccessRequest,
   DocumentAccessKind,
   DocumentWorkstream,
+  DocumentHistoryEntry,
 } from '@/types/models';
 
 export interface AccessRequestInboxFilters {
@@ -168,6 +169,18 @@ export const documentsService = {
   requestSummary: async (id: string): Promise<DocumentSummary> => {
     const response = await apiClient.post<ApiResponse<DocumentSummary>>(`/documents/${id}/summary`);
     return response.data.data;
+  },
+
+  /** `GET /documents/:id/history`, newest first: edits, metadata, versions, restores. */
+  getHistory: async (
+    id: string,
+    params?: { page?: number; limit?: number },
+  ): Promise<PaginatedResponse<DocumentHistoryEntry>> => {
+    const response = await apiClient.get<PaginatedResponse<DocumentHistoryEntry>>(
+      `/documents/${id}/history`,
+      { params },
+    );
+    return response.data;
   },
 
   // Version Control

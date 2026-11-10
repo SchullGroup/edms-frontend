@@ -902,10 +902,10 @@ lifecycle.
 - [x] Version list and single-version fetch endpoints, wired to the UI
 - [ ] ⚠️ Duplicate detection is not implemented despite the checksum index existing
 - [ ] No side-by-side version diff
-- [ ] A note on each new version saying what changed, and a change history with before/after
-      values (GBB 8.4) — *backend done, no UI:* `changeNote` on uploads and new versions,
-      `GET /documents/:id/history` (PR #67, live 2026-11-09). Ticket 05 of
-      `.scratch/backend-dev-2026-11-09`
+- [x] A note on each new version saying what changed, and a change history with before/after
+      values (GBB 8.4) — *wired 2026-11-10 (ticket 05, verified live):* "What changed?" when
+      uploading a revision, shown in the versions list; a History card on `/doc/[id]` from
+      `GET /documents/:id/history` (PR #67)
 
 ---
 
@@ -1310,9 +1310,10 @@ alignment), not to count records.
 - [ ] Entries capture actor, actor type, action, object type, object ID, before/after diff,
       IP address and user agent *(PR #67: document edits and metadata changes now carry a
       field-level before/after)*
-- [ ] Time spent viewing each document, per person (GBB 2.2) — *backend done, no UI:* view
-      sessions with heartbeats (`/document-views`) and `GET /document-views/report`
-      (PR #67, live 2026-11-09). Tickets 06 and 07 of `.scratch/backend-dev-2026-11-09`
+- [ ] Time spent viewing each document, per person (GBB 2.2) — *recorded since 2026-11-10*
+      (ticket 06, verified live): `/doc/[id]` and the workflow page keep a view session with
+      heartbeats (`/document-views`) while visible. *No report screen yet:*
+      `GET /document-views/report` (PR #67) is ticket 07 of `.scratch/backend-dev-2026-11-09`
 - [x] `entryHash` chains to `prevHash`; a verification endpoint proves chain integrity —
       `GET /audit/verify`, chain checked intact live 2026-09-18 (DRIFT-11)
 - [ ] The database role used by the app cannot `UPDATE` or `DELETE` the table

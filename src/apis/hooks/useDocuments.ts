@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   documentsService,
   DocumentFilters,
@@ -32,6 +32,8 @@ export const documentKeys = {
   detail: (id: string) => [...documentKeys.details(), id] as const,
   metadata: (id: string) => [...documentKeys.detail(id), 'metadata'] as const,
   versions: (id: string) => [...documentKeys.detail(id), 'versions'] as const,
+  /** Under `detail`, so every edit, metadata save, upload and restore refreshes it. */
+  history: (id: string) => [...documentKeys.detail(id), 'history'] as const,
   /** Outside `documents` on purpose: each fetch is audited, so broad
    *  `['documents']` or detail invalidations must not refetch it. */
   summary: (id: string) => ['document-summary', id] as const,
@@ -117,6 +119,21 @@ export function useDocumentVersions(id: string) {
   return useQuery({
     queryKey: documentKeys.versions(id),
     queryFn: () => documentsService.getVersions(id),
+    enabled: !!id,
+  });
+}
+
+const HISTORY_PAGE_SIZE = 20;
+
+/** The document's change history, a page at a time ("Load more"). */
+export function useDocumentHistory(id: string) {
+  return useInfiniteQuery({
+    queryKey: documentKeys.history(id),
+    queryFn: ({ pageParam }) =>
+      documentsService.getHistory(id, { page: pageParam, limit: HISTORY_PAGE_SIZE }),
+    initialPageParam: 1,
+    getNextPageParam: (last) =>
+      last.pagination.page < last.pagination.totalPages ? last.pagination.page + 1 : undefined,
     enabled: !!id,
   });
 }
