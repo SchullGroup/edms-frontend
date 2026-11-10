@@ -5,6 +5,7 @@ import {
   DocumentFilters,
   DocumentStatsParams,
   AccessRequestInboxFilters,
+  type MetadataBatchItem,
 } from '@/apis/services/documents.service';
 import {
   CreateVersionRequest,
@@ -404,6 +405,53 @@ export function useUpdateDocumentMetadata() {
       addToast(err.response?.data?.message || 'Failed to save metadata', 'error');
     },
   });
+}
+
+/** The API's cap on one `PUT /documents/metadata/batch`. */
+export const METADATA_BATCH_SIZE = 50;
+
+/**
+ * Mass indexing in sequential batches of 50. Each batch is all-or-nothing; a failure stops
+ * the run and reports the documents already saved, so the caller can keep the rest.
+ */
+export function useUpdateMetadataBatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      items,
+      onProgress,
+    }: {
+      items: MetadataBatchItem[];
+      onProgress?: (saved: number) => void;
+    }) => {
+      const saved: string[] = [];
+      try {
+        for (let i = 0; i < items.length; i += METADATA_BATCH_SIZE) {
+          const chunk = items.slice(i, i + METADATA_BATCH_SIZE);
+          await documentsService.updateMetadataBatch(chunk);
+          saved.push(...chunk.map((item) => item.documentId));
+          onProgress?.(saved.length);
+        }
+      } catch (error) {
+        throw new MetadataBatchError(saved, error);
+      } finally {
+        saved.forEach((id) => queryClient.invalidateQueries({ queryKey: documentKeys.detail(id) }));
+        if (saved.length) queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+      }
+      return saved;
+    },
+  });
+}
+
+/** A failed mass-indexing run: `saved` made it in earlier batches, `cause` is the API error. */
+export class MetadataBatchError extends Error {
+  constructor(
+    public saved: string[],
+    public cause: unknown,
+  ) {
+    super((cause as any)?.response?.data?.message || 'Failed to save metadata');
+  }
 }
 
 export function useAddDocumentVersion() {

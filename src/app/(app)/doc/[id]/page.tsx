@@ -35,6 +35,7 @@ import { DocumentDetailsPanel } from '@/components/documents/DocumentDetailsPane
 import { DocumentVersionsPanel } from '@/components/documents/DocumentVersionsPanel';
 import { DocumentSummaryPanel } from '@/components/documents/DocumentSummaryPanel';
 import { DocumentHistoryPanel } from '@/components/documents/DocumentHistoryPanel';
+import { DocumentViewTimePanel } from '@/components/documents/DocumentViewTimePanel';
 import { useDocumentViewSession } from '@/hooks/useDocumentViewSession';
 import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/components/documents/types';
 import type { WorkflowInstanceStatus } from '@/types/models';
@@ -606,6 +607,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             cabinetId={doc.cabinetId}
             canViewVersions={can('document_version', 'view')}
           />
+
+          {can('audit', 'view') && (
+            <DocumentViewTimePanel documentId={doc.id} documentTitle={doc.title} />
+          )}
 
           <div className="card">
             <div className="card-head">

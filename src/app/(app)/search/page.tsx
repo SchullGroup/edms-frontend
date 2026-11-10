@@ -15,6 +15,12 @@ import { DateField } from '@/components/ui/DatePicker';
 import { departmentOptions } from '@/apis/utils/managementAggregation';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
+import { usePermissions } from '@/hooks/usePermissions';
+import {
+  MASS_INDEX_MAX,
+  saveMassIndexSelection,
+  type MassIndexItem,
+} from '@/utils/massIndexSelection';
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
 import { WORKSTREAMS, workstreamLabel } from '@/constants/documentWorkstreams';
 import { Icon } from '@/components/ui/Icons';
@@ -128,23 +134,50 @@ export default function SearchPage() {
   const { setPageTitle, openModal, addToast } = useUIStore();
   const saved = me ? (savedByUser[me.id] ?? []) : [];
 
-  // Picking documents to route together. The selection survives paging, new
+  // Picking documents to route or index together. The selection survives paging, new
   // searches and filter changes on purpose — it's how documents from different
   // folders and cabinets end up in one workflow.
   const { routeDocuments, canRoute } = useRouteToWorkflow();
-  const [selected, setSelected] = useState<
-    Map<string, { id: string; title: string; status?: string | null; createdBy?: string | null }>
-  >(() => new Map());
-  const toggleSelected = (
-    d: Pick<Document, 'id' | 'title' | 'status' | 'createdBy'>,
-    on: boolean,
-  ) =>
+  const { can } = usePermissions();
+  const canIndex = can('document_metadata', 'edit');
+  const canSelect = canRoute || canIndex;
+  type Picked = Pick<
+    Document,
+    'id' | 'title' | 'status' | 'createdBy' | 'cabinetId' | 'referenceNumber'
+  >;
+  const [selected, setSelected] = useState<Map<string, Picked>>(() => new Map());
+  const pick = (d: Picked): Picked => ({
+    id: d.id,
+    title: d.title,
+    status: d.status,
+    createdBy: d.createdBy,
+    cabinetId: d.cabinetId,
+    referenceNumber: d.referenceNumber,
+  });
+  const toggleSelected = (d: Picked, on: boolean) =>
     setSelected((cur) => {
       const next = new Map(cur);
-      if (on) next.set(d.id, { id: d.id, title: d.title, status: d.status, createdBy: d.createdBy });
+      if (on) next.set(d.id, pick(d));
       else next.delete(d.id);
       return next;
     });
+  const indexSelected = () => {
+    if (selected.size > MASS_INDEX_MAX) {
+      addToast(`Index up to ${MASS_INDEX_MAX} documents at a time`, 'error');
+      return;
+    }
+    const items: MassIndexItem[] = [...selected.values()].map((d) => ({
+      id: d.id,
+      title: d.title,
+      referenceNumber: d.referenceNumber,
+      cabinetId: d.cabinetId,
+    }));
+    if (!saveMassIndexSelection(items)) {
+      addToast("Couldn't pass the selection on. Check that this browser allows site storage.", 'error');
+      return;
+    }
+    router.push('/search/mass-index');
+  };
 
   const { data: cabinetsData } = useCabinets();
   const cabinets = useMemo(() => cabinetsData?.data ?? [], [cabinetsData]);
@@ -244,11 +277,7 @@ export default function SearchPage() {
   const setPageSelected = (on: boolean) =>
     setSelected((cur) => {
       const next = new Map(cur);
-      results.forEach((d) =>
-        on
-          ? next.set(d.id, { id: d.id, title: d.title, status: d.status, createdBy: d.createdBy })
-          : next.delete(d.id),
-      );
+      results.forEach((d) => (on ? next.set(d.id, pick(d)) : next.delete(d.id)));
       return next;
     });
 
@@ -587,17 +616,24 @@ export default function SearchPage() {
               <span style={{ fontSize: '12px', opacity: 0.75 }}>
                 Kept as you search and change pages.
               </span>
-              <button
-                className="btn btn-primary btn-sm"
-                style={{ marginLeft: 'auto' }}
-                onClick={() =>
-                  routeDocuments([...selected.values()], {
-                    onSuccess: () => setSelected(new Map()),
-                  })
-                }
-              >
-                Route to workflow
-              </button>
+              <span style={{ marginLeft: 'auto' }} />
+              {canIndex && (
+                <button className="btn btn-secondary btn-sm" onClick={indexSelected}>
+                  Index selected
+                </button>
+              )}
+              {canRoute && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() =>
+                    routeDocuments([...selected.values()], {
+                      onSuccess: () => setSelected(new Map()),
+                    })
+                  }
+                >
+                  Route to workflow
+                </button>
+              )}
               <button className="btn btn-secondary btn-sm" onClick={() => setSelected(new Map())}>
                 Clear selection
               </button>
@@ -626,7 +662,7 @@ export default function SearchPage() {
             </div>
           ) : (
             <div className="card">
-              {canRoute && (
+              {canSelect && (
                 <label
                   className="flex items-center gap-2"
                   style={{ padding: '10px 20px 0', cursor: 'pointer', fontSize: '12.5px' }}
@@ -651,7 +687,7 @@ export default function SearchPage() {
                     role="button"
                     tabIndex={0}
                   >
-                    {canRoute && (
+                    {canSelect && (
                       <input
                         type="checkbox"
                         aria-label={`Select ${d.title}`}

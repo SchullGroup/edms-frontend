@@ -51,6 +51,12 @@ export interface DocumentFilters {
   limit?: number;
 }
 
+/** One document's entries in a mass-indexing batch; only the fields being set. */
+export interface MetadataBatchItem {
+  documentId: string;
+  metadata: DocumentMetadataValueInput[];
+}
+
 export const documentsService = {
   // Core Document Endpoints
   getAll: async (params?: DocumentFilters): Promise<PaginatedResponse<Document>> => {
@@ -144,6 +150,11 @@ export const documentsService = {
       values,
     );
     return response.data.data;
+  },
+
+  /** Mass indexing: 1–50 documents, all-or-nothing (`PUT /documents/metadata/batch`). */
+  updateMetadataBatch: async (documents: MetadataBatchItem[]): Promise<void> => {
+    await apiClient.put('/documents/metadata/batch', { documents });
   },
 
   // Same document as `GET /documents/:id`, through routes that also check

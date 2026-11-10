@@ -440,10 +440,11 @@ below.)*
 - [ ] Document detail renders and edits them
 - [ ] ⚠️ Backend bug: sending all-null values to clear metadata silently no-ops
       (`normalized.length === 0` short-circuits the write)
-- [ ] Mass indexing: fill in metadata for many existing documents at once (GBB 4.3) —
-      *backend done, no UI:* `PUT /documents/metadata/batch`, 1–50 documents each with its own
-      values (PR #67, live 2026-11-09). Screen design still open (ticket 08 of
-      `.scratch/backend-dev-2026-11-09`)
+- [x] Mass indexing: fill in metadata for many existing documents at once (GBB 4.3) —
+      *wired 2026-11-10, verified live:* **Index selected** on `/search` opens
+      `/search/mass-index`, one table per cabinet with an "Apply to all" per column, saved
+      through `PUT /documents/metadata/batch` (PR #67) in batches of 50. For
+      `document_metadata:edit` holders (`client_admin`, `supervisor`) with Edit on the cabinet
 
 ---
 
@@ -1310,10 +1311,11 @@ alignment), not to count records.
 - [ ] Entries capture actor, actor type, action, object type, object ID, before/after diff,
       IP address and user agent *(PR #67: document edits and metadata changes now carry a
       field-level before/after)*
-- [ ] Time spent viewing each document, per person (GBB 2.2) — *recorded since 2026-11-10*
+- [x] Time spent viewing each document, per person (GBB 2.2) — *recorded since 2026-11-10*
       (ticket 06, verified live): `/doc/[id]` and the workflow page keep a view session with
-      heartbeats (`/document-views`) while visible. *No report screen yet:*
-      `GET /document-views/report` (PR #67) is ticket 07 of `.scratch/backend-dev-2026-11-09`
+      heartbeats (`/document-views`) while visible. *Report wired 2026-11-10 (ticket 07,
+      verified live):* a **Viewing time** card on `/doc/[id]` for `audit:view` holders, with a
+      date range and CSV export (`GET /document-views/report`)
 - [x] `entryHash` chains to `prevHash`; a verification endpoint proves chain integrity —
       `GET /audit/verify`, chain checked intact live 2026-09-18 (DRIFT-11)
 - [ ] The database role used by the app cannot `UPDATE` or `DELETE` the table

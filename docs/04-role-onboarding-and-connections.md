@@ -514,6 +514,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 | Delegate while on leave | 🟨 | `/delegations` (create, list, end) since 2026-09-04; not re-verified end to end. *(Was ⛔ "No UI".)* |
 | Get warned before a breach | 🟨 | `sla.breach` is sent to the supervisor role, `sla.warning` to the assignee (DRIFT-10); not clicked through. *(Was ⛔ "tells nobody".)* |
 | Export team stats | ✅ | `exportCsv` |
+| Index a batch of scanned invoices | ✅ | *(2026-11-10, ticket 08, verified live as `supervisor_finance`)* Select them on `/search` → **Index selected** → `/search/mass-index`: one table per cabinet, "Apply" fills a column, **Save all** sends `PUT /documents/metadata/batch`. Needs `document_metadata:edit` (seeded at department scope) and Edit on the cabinet |
 
 ### Steady state
 
@@ -725,7 +726,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | Task | Reality |
 |---|---|
 | "Show me everything Chika did last month" | ✅ `/auditor/trail` migrated 2026-09-18 — `actorId`/`action`/`from` filters against the real trail |
-| "Who viewed this confidential contract?" | ✅ confirmed live 2026-09-18 — `document.viewed` is a real, auto-emitted action (seen in a live 78-entry sample); `/auditor/trail`'s action filter surfaces it, though there's no per-document "who viewed this one" view yet, only actor/action/date |
+| "Who viewed this confidential contract?" | ✅ confirmed live 2026-09-18 — `document.viewed` is a real, auto-emitted action (seen in a live 78-entry sample); `/auditor/trail`'s action filter surfaces it. **2026-11-10 (ticket 07, verified live):** the document page's **Viewing time** card answers it per document: each viewer, sessions, total time and last viewed, with a date range and CSV (`GET /document-views/report`, `audit:view`). Time is recorded from 10 Nov 2026 (ticket 06) |
 | "Who downloaded it?" | ✅ `document.downloaded` is written by `documents.router.ts` (download gated and audited since 2026-10-08); filter by action on `/auditor/trail`. *(Was ⛔ "no download endpoint to log".)* |
 | "Prove the trail hasn't been altered" | ✅ `GET /audit/verify` exists and works, confirmed live; `/admin/audit`'s "Verify integrity" button calls it. Not yet surfaced on `/auditor/trail` itself. |
 | "Who can see the Contracts cabinet?" | ⛔ `cabinet_access:view` granted and `GET /cabinets/:id/access` exists; no auditor screen calls it. |

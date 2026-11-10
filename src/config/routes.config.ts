@@ -277,6 +277,12 @@ export const routeConfig: RouteRule[] = [
   },
 
   // 4. Global authenticated paths (no gate = any authenticated user)
+  // Mass indexing: before `/search`, which would otherwise match it ungated.
+  {
+    path: '/search/mass-index',
+    matchType: 'prefix',
+    anyPermissions: ['document_metadata:edit'],
+  },
   { path: '/search', matchType: 'prefix' },
   // The recipient inbox: being sent a circular is the grant, so no permission.
   { path: '/circulars', matchType: 'prefix' },
