@@ -7,11 +7,16 @@ import { useUIStore } from '@/store/useUIStore';
 import { documentStatusLabel } from '@/utils/helpers';
 import { useDocuments, useDocumentSearch } from '@/apis/hooks/useDocuments';
 import { useCabinets } from '@/apis/hooks/useCabinets';
+import { useCabinetFolders } from '@/apis/hooks/useFolders';
 import { useDepartments } from '@/apis/hooks/useDepartments';
+import type { DocumentFilters } from '@/apis/services/documents.service';
+import { foldersAsPaths } from '@/utils/folders';
+import { DateField } from '@/components/ui/DatePicker';
 import { departmentOptions } from '@/apis/utils/managementAggregation';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
+import { WORKSTREAMS, workstreamLabel } from '@/constants/documentWorkstreams';
 import { Icon } from '@/components/ui/Icons';
 import { Pagination } from '@/components/ui/Pagination';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
@@ -47,6 +52,7 @@ const URGENCY_OPTIONS: Option[] = [
   ['low', 'Low'],
 ];
 const TYPE_OPTIONS: Option[] = DOCUMENT_TYPES.map((t) => [t, t] as const);
+const WORKSTREAM_OPTIONS: Option[] = WORKSTREAMS.map((w) => [w.value, w.label] as const);
 
 /** Reads a filter from the URL, accepting the enum (`in_progress`) or its label
  *  (`In Progress`). Unknown values — e.g. the old `status=Overdue`, which isn't a
@@ -55,6 +61,17 @@ function fromParam(raw: string | null, options: Option[]): string | undefined {
   if (!raw) return undefined;
   const norm = raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
   return options.find(([v, l]) => v === norm || l.toLowerCase() === raw.trim().toLowerCase())?.[0];
+}
+
+/** A "YYYY-MM-DD" day from the URL; anything else is ignored. */
+function dayParam(raw: string | null): string | undefined {
+  return raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) && !Number.isNaN(Date.parse(raw)) ? raw : undefined;
+}
+
+/** Local midnight of `day` (+ `addDays`) as an ISO instant: the API reads a bare date as UTC. */
+function dayStartIso(day: string, addDays = 0): string {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(y, m - 1, d + addDays).toISOString();
 }
 
 function FilterGroup({
@@ -151,13 +168,47 @@ export default function SearchPage() {
     cabinetId: searchParams?.get('cabinet') || undefined,
     departmentId: searchParams?.get('dept') || undefined,
     documentType: fromParam(searchParams?.get('type') ?? null, TYPE_OPTIONS),
+    workstream: fromParam(
+      searchParams?.get('workstream') ?? null,
+      WORKSTREAM_OPTIONS,
+    ) as Filters['workstream'],
     status: fromParam(searchParams?.get('status') ?? null, STATUS_OPTIONS) as Filters['status'],
     confidentiality: fromParam(
       searchParams?.get('confidentiality') ?? searchParams?.get('conf') ?? null,
       CONFIDENTIALITY_OPTIONS,
     ) as Filters['confidentiality'],
     urgency: fromParam(searchParams?.get('urgency') ?? null, URGENCY_OPTIONS) as Filters['urgency'],
+    folderId: (searchParams?.get('cabinet') && searchParams?.get('folder')) || undefined,
+    from: dayParam(searchParams?.get('from') ?? null),
+    to: dayParam(searchParams?.get('to') ?? null),
   }));
+
+  // Folders of the picked cabinet, each with its path ("Finance / Invoices").
+  const foldersQuery = useCabinetFolders(filters.cabinetId);
+  const folderOptions = useMemo(
+    () => foldersAsPaths(foldersQuery.data?.data ?? []),
+    [foldersQuery.data],
+  );
+
+  // A folder from the URL or a saved search may have been deleted or hidden since.
+  useEffect(() => {
+    if (!filters.folderId || !foldersQuery.isSuccess) return;
+    if (folderOptions.some((f) => f.id === filters.folderId)) return;
+    setFilters((f) => ({ ...f, folderId: undefined }));
+    addToast('The folder in this search is no longer available', 'info');
+  }, [filters.folderId, foldersQuery.isSuccess, folderOptions, addToast]);
+
+  // The end day is inclusive here and exclusive in the API, so it's sent as the next midnight.
+  const rangeInvalid = !!(filters.from && filters.to && filters.from > filters.to);
+  const apiFilters = useMemo<DocumentFilters>(() => {
+    const { from, to, ...rest } = filters;
+    if (rangeInvalid) return rest;
+    return {
+      ...rest,
+      from: from ? dayStartIso(from) : undefined,
+      to: to ? dayStartIso(to, 1) : undefined,
+    };
+  }, [filters, rangeInvalid]);
 
   useEffect(() => {
     setPageTitle('Search');
@@ -180,10 +231,10 @@ export default function SearchPage() {
   // endpoint since edms-backend PR #51, so both queries see the same narrowing.
   const textMode = q.length > 0;
   const listQuery = useDocuments(
-    { ...filters, page, limit: PAGE_SIZE },
+    { ...apiFilters, page, limit: PAGE_SIZE },
     { enabled: !textMode },
   );
-  const searchQuery = useDocumentSearch(q, { ...filters, page, limit: PAGE_SIZE });
+  const searchQuery = useDocumentSearch(q, { ...apiFilters, page, limit: PAGE_SIZE });
   const active = textMode ? searchQuery : listQuery;
   const results: Document[] = active.data?.data ?? [];
   const pagination = active.data?.pagination;
@@ -250,7 +301,7 @@ export default function SearchPage() {
     // A saved cabinet or department may have been deleted since, or be one this
     // user can't see.
     if (next.cabinetId && cabinets.length && !cabinetName.has(next.cabinetId)) {
-      next = { ...next, cabinetId: undefined };
+      next = { ...next, cabinetId: undefined, folderId: undefined };
       addToast('The cabinet in this saved search is no longer available', 'info');
     }
     if (
@@ -303,7 +354,7 @@ export default function SearchPage() {
               <button
                 className="btn btn-ghost btn-sm"
                 title="Save current search"
-                disabled={!me || (!q && !hasFilters)}
+                disabled={!me || (!q && !hasFilters) || rangeInvalid}
                 onClick={saveSearch}
               >
                 + Save
@@ -347,19 +398,124 @@ export default function SearchPage() {
             title="Cabinet"
             options={cabinets.map((c: any) => [c.id, c.name] as const)}
             value={filters.cabinetId}
-            onChange={(v) => setFilter('cabinetId', v)}
+            onChange={(v) => {
+              // A folder belongs to one cabinet, so it can't outlive the cabinet change.
+              setFilters((f) => ({ ...f, cabinetId: v, folderId: undefined }));
+              setPage(1);
+            }}
           />
+          {filters.cabinetId && (
+            <div className="facet-group">
+              <div className="flex justify-between items-center">
+                <span className="fg-title">Folder</span>
+                {filters.folderId && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ marginTop: '-9px' }}
+                    onClick={() => setFilter('folderId', undefined)}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <select
+                className="input"
+                aria-label="Folder"
+                // The sidebar is narrow; the hover shows a long path in full.
+                title={folderOptions.find((f) => f.id === filters.folderId)?.path}
+                value={filters.folderId ?? ''}
+                disabled={foldersQuery.isLoading || !folderOptions.length}
+                onChange={(e) => setFilter('folderId', e.target.value || undefined)}
+              >
+                <option value="">
+                  {foldersQuery.isLoading
+                    ? 'Loading folders…'
+                    : folderOptions.length
+                      ? 'Any folder'
+                      : 'No folders in this cabinet'}
+                </option>
+                {folderOptions.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.path}
+                  </option>
+                ))}
+              </select>
+              {filters.folderId && (
+                <div className="caption" style={{ marginTop: '6px' }}>
+                  Documents filed in this folder itself, not its sub-folders.
+                </div>
+              )}
+            </div>
+          )}
           <FilterGroup
             title="Department"
             options={deptOptions}
             value={filters.departmentId}
             onChange={(v) => setFilter('departmentId', v)}
           />
+          <div className="facet-group">
+            <div className="flex justify-between items-center">
+              <span className="fg-title">Created</span>
+              {(filters.from || filters.to) && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ marginTop: '-9px' }}
+                  onClick={() => {
+                    setFilters((f) => ({ ...f, from: undefined, to: undefined }));
+                    setPage(1);
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'auto 1fr',
+                  gap: '8px',
+                  alignItems: 'center',
+                }}
+              >
+                <span className="caption">From</span>
+                <DateField
+                  compact
+                  aria-label="Created from"
+                  placeholder="Any date"
+                  value={filters.from ?? ''}
+                  onChange={(v) => setFilter('from', v || undefined)}
+                />
+                <span className="caption">To</span>
+                <DateField
+                  compact
+                  aria-label="Created to"
+                  placeholder="Any date"
+                  value={filters.to ?? ''}
+                  min={filters.from}
+                  onChange={(v) => setFilter('to', v || undefined)}
+                />
+              </div>
+              {rangeInvalid && (
+                <div className="err" role="alert">
+                  The end date is before the start date, so the dates aren't applied.
+                </div>
+              )}
+            </div>
+          </div>
           <FilterGroup
             title="Type"
             options={TYPE_OPTIONS}
             value={filters.documentType}
             onChange={(v) => setFilter('documentType', v)}
+          />
+          <FilterGroup
+            title="Workstream"
+            options={WORKSTREAM_OPTIONS}
+            value={filters.workstream}
+            onChange={(v) => setFilter('workstream', v as Filters['workstream'])}
           />
           <FilterGroup
             title="Status"
@@ -411,6 +567,7 @@ export default function SearchPage() {
                   results.map((d) => ({
                     title: d.title,
                     type: d.documentType ?? '',
+                    workstream: workstreamLabel(d.workstream) ?? '',
                     cabinet: cabinetName.get(d.cabinetId) ?? '',
                     status: documentStatusLabel(d),
                     confidentiality: d.confidentiality,
@@ -508,7 +665,13 @@ export default function SearchPage() {
                     <div className="task-main">
                       <div className="task-title">{d.title}</div>
                       <div className="caption" style={{ margin: '4px 0' }}>
-                        {[d.documentType, cabinetName.get(d.cabinetId)].filter(Boolean).join(' · ')}
+                        {[
+                          d.documentType,
+                          workstreamLabel(d.workstream),
+                          cabinetName.get(d.cabinetId),
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </div>
                       <div className="task-meta">
                         <StatusBadge status={documentStatusLabel(d)} />

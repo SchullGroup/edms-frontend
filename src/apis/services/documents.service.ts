@@ -13,6 +13,8 @@ import {
   DocumentStatsResponse,
   AccessRequest,
   DocumentAccessKind,
+  DocumentWorkstream,
+  DocumentHistoryEntry,
 } from '@/types/models';
 
 export interface AccessRequestInboxFilters {
@@ -39,7 +41,11 @@ export interface DocumentFilters {
   confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
   urgency?: 'low' | 'normal' | 'high' | 'critical';
   documentType?: string;
+  workstream?: DocumentWorkstream;
   createdBy?: string;
+  /** Created-date window as ISO instants: `from` inclusive, `to` exclusive (PR #67). */
+  from?: string;
+  to?: string;
   includeArchived?: 'true' | 'false';
   page?: number;
   limit?: number;
@@ -163,6 +169,18 @@ export const documentsService = {
   requestSummary: async (id: string): Promise<DocumentSummary> => {
     const response = await apiClient.post<ApiResponse<DocumentSummary>>(`/documents/${id}/summary`);
     return response.data.data;
+  },
+
+  /** `GET /documents/:id/history`, newest first: edits, metadata, versions, restores. */
+  getHistory: async (
+    id: string,
+    params?: { page?: number; limit?: number },
+  ): Promise<PaginatedResponse<DocumentHistoryEntry>> => {
+    const response = await apiClient.get<PaginatedResponse<DocumentHistoryEntry>>(
+      `/documents/${id}/history`,
+      { params },
+    );
+    return response.data;
   },
 
   // Version Control

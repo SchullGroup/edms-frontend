@@ -34,6 +34,8 @@ import { DocumentViewerPanel } from '@/components/documents/DocumentViewerPanel'
 import { DocumentDetailsPanel } from '@/components/documents/DocumentDetailsPanel';
 import { DocumentVersionsPanel } from '@/components/documents/DocumentVersionsPanel';
 import { DocumentSummaryPanel } from '@/components/documents/DocumentSummaryPanel';
+import { DocumentHistoryPanel } from '@/components/documents/DocumentHistoryPanel';
+import { useDocumentViewSession } from '@/hooks/useDocumentViewSession';
 import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/components/documents/types';
 import type { WorkflowInstanceStatus } from '@/types/models';
 import { Skeleton, SkeletonText } from '@/components/common/Skeleton';
@@ -87,6 +89,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   // A document outside the caller's confidentiality clearance 403s (code
   // `FORBIDDEN`) rather than 404ing — its own state below, not "not found".
   const accessDenied = (docError as any)?.response?.status === 403;
+  // Time on the open document, for the viewing-time report; only once it loaded.
+  useDocumentViewSession(rawDoc?.id);
 
   // `comments`/`signatures`/`sealed`/`legalHold` are not `Document` fields on
   // the real API, and stay empty/false shims for the viewer's overlay props.
@@ -556,6 +560,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <DocumentDetailsPanel
             documentId={doc.id}
             documentType={doc.documentType}
+            workstream={doc.workstream}
             cabinetId={doc.cabinetId}
             createdBy={doc.createdBy}
             ownerName={doc.creator?.name || 'Unknown user'}
@@ -594,6 +599,12 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
               !inHiddenWorkflow
             }
             canUploadVersion={false}
+          />
+
+          <DocumentHistoryPanel
+            documentId={doc.id}
+            cabinetId={doc.cabinetId}
+            canViewVersions={can('document_version', 'view')}
           />
 
           <div className="card">
