@@ -13,6 +13,7 @@ import {
   useResendInvitation,
 } from '@/apis/hooks/useUsers';
 import { useRoles } from '@/apis/hooks/useRoles';
+import { useResetUserMfa } from '@/apis/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { buildDepartmentIndex, departmentName } from '@/apis/utils/managementAggregation';
@@ -39,7 +40,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 export default function UsersPage() {
-  const { auditAction } = useStore();
+  const { auditAction, currentUser } = useStore();
   const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
   const { can } = usePermissions();
   const canCreateUser = can('user', 'create');
@@ -76,6 +77,7 @@ export default function UsersPage() {
   const assignUserRoles = useAssignUserRoles();
   const removeUserRole = useRemoveUserRole();
   const resendInvitation = useResendInvitation();
+  const resetUserMfa = useResetUserMfa();
 
   const { data: departmentsData } = useDepartments();
   const departmentIndex = useMemo(
@@ -309,6 +311,22 @@ export default function UsersPage() {
     });
   };
 
+  // `GET /users` doesn't say who has it on, so this is offered for every signed-up user.
+  const handleResetMfa = (u: any) => {
+    openConfirm({
+      title: `Reset two-step sign-in for ${u.name}?`,
+      message:
+        'Use this when they have lost their phone and their recovery codes. Their next sign-in needs only their password, and they can set it up again under Security. If they don’t use it, nothing changes.',
+      confirmLabel: 'Reset two-step sign-in',
+      danger: true,
+      onConfirm: () =>
+        resetUserMfa
+          .mutateAsync({ id: u.id, name: u.name })
+          .then(() => {})
+          .catch(() => false),
+    });
+  };
+
   const userCols: Column<any>[] = [
     {
       key: 'name',
@@ -415,6 +433,20 @@ export default function UsersPage() {
               }}
             >
               Resend invite
+            </button>
+          )}
+          {/* Your own goes through Security, which asks for your password and a code. */}
+          {canEditUser && u.status !== 'Pending' && u.id !== currentUser?.id && (
+            <button
+              className="btn btn-secondary btn-sm"
+              style={{ whiteSpace: 'nowrap' }}
+              title="For someone who lost their phone and recovery codes"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleResetMfa(u);
+              }}
+            >
+              Reset two-step
             </button>
           )}
         </div>

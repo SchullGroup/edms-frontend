@@ -124,7 +124,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
     ┌────────┘                       └──────────────────────────┐
     │ (a) axios → same-origin                                   │ (b) axios → cross-origin
     │     `/api/auth/*`                                         │     apiClient, baseURL
-    │     ONLY 3 routes                                         │     `${NEXT_PUBLIC_API_URL}/api/v1`
+    │     ONLY 4 routes                                         │     `${NEXT_PUBLIC_API_URL}/api/v1`
     ▼                                                           ▼
 ┌───────────────────────────────┐              ┌────────────────────────────────────────┐
 │ NEXT.JS ROUTE HANDLERS (BFF)  │              │  EXPRESS 5 BACKEND (edms-backend)      │
@@ -133,7 +133,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/login         │              │  POST /api/v1/auth/login    ✅          │
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
-│                               │              │                                        │
+│  POST /api/auth/mfa/verify    │              │  POST /api/v1/auth/mfa/verify ✅        │
 │  Sole responsibility:         │              │  171 routes over 17 modules (11-09)    │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
@@ -176,7 +176,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 
 Two distinct paths exist. Knowing which one you are on determines where to debug.
 
-### Path A — authentication (3 routes only)
+### Path A — authentication (4 routes only)
 
 ```
 Browser
@@ -209,6 +209,14 @@ Browser
   LoginPage useEffect redirects by role → /staff | /supervisor | /management |
                                           /admin | /platform | /auditor
 ```
+
+**With two-step sign-in on (since 2026-11-10, ticket 10).** `AuthService.login` stops after
+`bcrypt.compare` and returns `{ mfaRequired: true, mfaToken }` (a 5-minute JWT signed with the
+refresh secret, so it can't pass as a bearer token). The BFF passes it through, no cookie is
+set, and `/` shows a code field ("Use a recovery code instead", "Start again"). The code goes
+`axios.post('/api/auth/mfa/verify')` → `src/app/api/auth/mfa/verify/route.ts` →
+`POST /api/v1/auth/mfa/verify`, whose body is the same as a password login's; from there the
+path above continues unchanged (both handlers share `src/apis/server/tokenResponse.ts`).
 
 ### Path B — everything else (132 routes, re-counted 2026-10-15; was 66)
 
@@ -263,8 +271,9 @@ Browser — response interceptor
   │         • otherwise: Cookies.remove + window.location.href = '/'
 ```
 
-**Note the asymmetry.** Only 3 routes go through the Next.js server (login, refresh and
-logout — and the backend has no logout route, DRIFT-01). The other 132 backend routes are
+**Note the asymmetry.** Only 4 routes go through the Next.js server (login, refresh,
+logout — the backend has no logout route, DRIFT-01 — and, since 2026-11-10, the MFA second
+step, which also returns a refresh token). The other 132 backend routes are
 plain browser→Express cross-origin calls *(re-counted 2026-10-15; was "the other 71")*. There is no SSR data fetching anywhere in the
 app: every page is `'use client'`.
 
@@ -276,8 +285,9 @@ app: every page is `'use client'`.
 
 | Token | Where it lives | HttpOnly | Lifetime | Set by | Read by |
 |---|---|---|---|---|---|
-| `accessToken` | browser cookie via `js-cookie` | **No** | `expires: 1` day (cookie) but JWT expires in **15m** | `authService.login/refresh` | axios request interceptor |
-| `refreshToken` | browser cookie | **Yes** | 7 days | Next.js route handler | Next.js route handler only |
+| `accessToken` | browser cookie via `js-cookie` | **No** | `expires: 1` day (cookie) but JWT expires in **15m** | `authService.login/verifyMfa/refresh` | axios request interceptor |
+| `refreshToken` | browser cookie | **Yes** | 7 days | Next.js route handlers (`login`, `mfa/verify`) | Next.js route handler only |
+| `mfaToken` | React state on `/` only | n/a | 5 minutes | `POST /auth/login` (MFA on) | `POST /api/auth/mfa/verify` |
 
 **The design intent is sound** — the long-lived credential is unreachable from JS, and only
 the short-lived one is exposed. Two things weaken it in practice:
@@ -304,6 +314,12 @@ correct here:
   If tab A refreshes and rotates the cookie, tab B's in-flight refresh will 401 — but B
   checks the timestamp, sees A refreshed <4s ago, re-reads the cookie and retries instead
   of logging the user out. This is a real bug class that most apps ship with.
+
+**Not every 401 is a dead session (2026-11-10).** The MFA routes answer a wrong code with 401
+`INVALID_MFA_CODE` and `POST /auth/mfa/disable` a wrong password with 401
+`INVALID_CREDENTIALS`. The interceptor skips refresh-and-retry for those two codes; before,
+it refreshed and re-sent the request, so each wrong code counted twice towards the backend's
+5-try lockout. Checked live: one request per wrong attempt, no `/api/auth/refresh` call.
 
 ### 🔴 DRIFT-01 — `POST /api/v1/auth/logout` does not exist
 
@@ -1142,15 +1158,15 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists — since PR #51 (live 2026-10-14) the login response's `user` also carries `departmentId`. **PR #67 (`bca7a10`, live 2026-11-09):** for an account with MFA on it returns `{ mfaRequired: true, mfaToken }` (valid 5 min) and **no tokens**; `user.login` is audited only when the second step succeeds | ✅ — the login page stores the whole `user`, so `useMyDepartmentId` is answered from the login itself; AppShell refreshes it from `/auth/me`. ⛔ The BFF handler doesn't recognise the MFA challenge (ticket 10). No live account has MFA on (`mfaEnabled: false`), so nothing breaks yet |
+| `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists — since PR #51 (live 2026-10-14) the login response's `user` also carries `departmentId`. **PR #67 (`bca7a10`, live 2026-11-09):** for an account with MFA on it returns `{ mfaRequired: true, mfaToken }` (valid 5 min) and **no tokens**; `user.login` is audited only when the second step succeeds | ✅ — the login page stores the whole `user`, so `useMyDepartmentId` is answered from the login itself; AppShell refreshes it from `/auth/me`. **MFA challenge handled 2026-11-10 (ticket 10, verified live):** the BFF passes a body without `refreshToken` through unchanged (shared `respondWithTokens`), `authService.login` sets no cookie for it, and `/` shows the second step |
 | `POST /api/auth/refresh` → `/api/v1/auth/refresh` | ✅ exists | ✅ |
 | `POST /api/auth/logout` → `/api/v1/auth/logout` | ❌ **not registered** | 🟨 **DRIFT-01** — frontend now *calls* it (Sidebar sign-out → `authService.logout()`, with the bearer token, 2026-09-10); backend route still missing so revocation is still a no-op |
 | `GET /auth/me` | ✅ exists — since PR #50 (live 2026-10-13) also `departmentId` (null when none); login carries it too since PR #51 (live 2026-10-14) | ✅ (`permissions` now included — DRIFT-03 resolved). **`departmentId` adopted 2026-10-13, verified live:** AppShell copies it into the store; `useMyDepartmentId` replaces the `GET /users/:id` lookups in `useConfidentialityClearance`, `useDepartmentColleagues` and `/admin/cabinets`, and the first-page lookup on `/doc/[id]` |
 | `POST /auth/forgot-password` | ✅ exists | ✅ |
 | `POST /auth/reset-password` | ✅ exists | ✅ **DRIFT-15 resolved (frontend, 2026-09-18)** — was sending `newPassword`/`confirmPassword`; backend wants `password`. Fixed both sides of the shared invitation/reset-link landing page |
-| — | `POST /auth/mfa/verify` `{ mfaToken, code \| recoveryCode }` — PR #67 (`bca7a10`, live): the second login step; public, returns the normal login response. `code` is a 6-digit TOTP; exactly one of the two is required; repeated failures lock the account out for a while | ⛔ not wired — ticket 10 |
-| — | `POST /auth/mfa/setup`, `/enable` `{ code }`, `/disable` `{ password?, code \| recoveryCode }` — PR #67 (live): authenticated, for your own account. Setup returns `{ secret, otpauthUri }` (render the URI as a QR code); enable returns `{ recoveryCodes }`, shown once; disable needs the password unless the account is SSO-only. Audited `user.mfa_enabled` / `user.mfa_disabled`. `GET /auth/me` carries `mfaEnabled` | ⛔ not wired — ticket 09 |
-| — | `DELETE /auth/mfa/users/:userId` — PR #67 (live): an admin turns another user's MFA off (`user:edit`); audited `user.mfa_reset` | ⛔ not wired — ticket 10 |
+| — | `POST /auth/mfa/verify` `{ mfaToken, code \| recoveryCode }` — PR #67 (`bca7a10`, live): the second login step; public, returns the normal login response. `code` is a 6-digit TOTP; exactly one of the two is required; 5 wrong codes in a row lock the second step for 15 minutes (429 `MFA_LOCKED`) | ✅ **Wired 2026-11-10 (ticket 10, verified live)** via a new BFF route `POST /api/auth/mfa/verify`, which moves `refreshToken` into the httpOnly cookie exactly as login does (`respondWithTokens`). `authService.verifyMfa` then sets `accessToken`. An expired challenge answers 401 `MFA_CHALLENGE_INVALID` |
+| — | `POST /auth/mfa/setup`, `/enable` `{ code }`, `/disable` `{ password?, code \| recoveryCode }` — PR #67 (live): authenticated, for your own account. Setup returns `{ secret, otpauthUri }` (render the URI as a QR code); enable returns `{ recoveryCodes }`, shown once; disable needs the password unless the account is SSO-only. Audited `user.mfa_enabled` / `user.mfa_disabled`. `GET /auth/me` carries `mfaEnabled` | ✅ **Wired 2026-11-10 (ticket 09, verified live)** on `/account/security` (`useSetupMfa`, `useEnableMfa`, `useDisableMfa`, `useMe`). A wrong code or password is a **401** (`INVALID_MFA_CODE`, `INVALID_CREDENTIALS`): `api-client.ts` doesn't treat those two codes as a dead session (§3) |
+| — | `DELETE /auth/mfa/users/:userId` — PR #67 (live): an admin turns another user's MFA off (`user:edit`); audited `user.mfa_reset` | ✅ **Wired 2026-11-10 (ticket 10, verified live):** **Reset two-step** on `/admin/users` (`useResetUserMfa`). ⚠️ `GET /users` doesn't return `mfaEnabled`, so the button shows for every signed-up user, not only those with MFA on; resetting someone without it is a harmless no-op |
 | — | `GET /auth/sso/status`, `GET /auth/sso/login`, `GET /auth/sso/callback`, `POST /auth/sso/exchange` — PR #67 (`692c530`, live): Active Directory (Entra ID) over OIDC. `login` redirects to the provider; the callback sends the browser to `SSO_FRONTEND_URL?code=…`, which `exchange` turns into tokens. On only when all five `SSO_*` variables are set (§9) | ⛔ not wired — ticket 14. Live `GET /auth/sso/status` → `{ "enabled": false }` (2026-11-09) |
 
 ### Documents
@@ -1466,7 +1482,7 @@ above: there is no write endpoint to point it at, by design.
 | ~~Change history and version notes~~ ✅ wired 2026-11-10 | `GET /documents/:id/history`, `changeNote` | 05 |
 | ~~Viewing time — recording and report~~ ✅ wired 2026-11-10 | `POST /document-views`, heartbeat, `GET /document-views/report` | 06, 07 |
 | ~~Mass indexing~~ ✅ wired 2026-11-10 | `PUT /documents/metadata/batch` | 08 |
-| TOTP MFA | `/auth/mfa/*`, login challenge, `mfaEnabled` | 09, 10 |
+| ~~TOTP MFA~~ ✅ wired 2026-11-10 | `/auth/mfa/*`, login challenge, `mfaEnabled` | 09, 10 |
 | Revoke a document grant *(older)* | `DELETE /documents/:id/access-grants/:userId` | 11 |
 | Server-built download links | `downloadUrl` / `originalUrl` on versions | 12 |
 | IP and country rules | `/access-rules` | 13 |
@@ -1627,8 +1643,8 @@ Same URLs, new behaviour. Each is harmless to the current frontend unless noted.
 
 | Change | Where | Frontend impact |
 |---|---|---|
-| Login can answer with `{ mfaRequired: true, mfaToken }` and no tokens | `POST /auth/login` | ⚠️ The BFF expects tokens. Only matters once someone turns MFA on (ticket 10) |
-| `mfaEnabled` on the user | `GET /auth/me` | None until ticket 09 |
+| Login can answer with `{ mfaRequired: true, mfaToken }` and no tokens | `POST /auth/login` | ✅ Handled since 2026-11-10 (ticket 10): `/` shows the second step |
+| `mfaEnabled` on the user | `GET /auth/me` | ✅ Read by `/account/security` since 2026-11-10 (ticket 09). Not on `GET /users` |
 | `workstream` on every document (nullable enum) and as a filter | documents create, `PATCH`, list, search | ✅ Set on `/upload`, changed on `/doc/[id]`, filtered on `/search` since 2026-11-10 |
 | `from` / `to` created-date filter | `GET /documents`, `/documents/search` | ✅ Sent by `/search` since 2026-11-09, as local midnights (§8.5) |
 | `changeNote` (≤ 500) on file payloads, returned on versions | `POST /documents`, `POST /documents/:id/versions`, `GET …/versions` | ✅ Sent with new versions and shown in the versions list and History since 2026-11-10 (not sent on a first upload) |

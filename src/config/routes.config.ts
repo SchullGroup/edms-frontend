@@ -287,6 +287,8 @@ export const routeConfig: RouteRule[] = [
   // The recipient inbox: being sent a circular is the grant, so no permission.
   { path: '/circulars', matchType: 'prefix' },
   { path: '/notifications', matchType: 'prefix' },
+  // The signed-in user's own settings (two-step sign-in).
+  { path: '/account', matchType: 'prefix' },
   { path: '/delegations', matchType: 'prefix' },
   { path: '/doc', matchType: 'prefix' }, // viewing a document
   {

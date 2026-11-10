@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { authService } from '@/apis/services/auth.service';
+import { authService, type LoginResponseData } from '@/apis/services/auth.service';
 import { useMutation } from '@tanstack/react-query';
 import Cookies from 'js-cookie';
 import { AuthShell } from '@/components/auth/AuthShell';
@@ -58,18 +58,34 @@ export default function LoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, router]);
 
+  // Set when the password was right but the account has two-step sign-in on.
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+
+  const finishSignIn = (data: LoginResponseData) => {
+    setCurrentUser(data.user);
+    addToast(`Welcome back, ${data.user.name.split(' ')[0]}`, 'success');
+  };
+
   const loginMutation = useMutation({
     mutationFn: async () => {
       return authService.login({ email, password });
     },
     onSuccess: (data) => {
-      setCurrentUser(data.user);
-      addToast(`Welcome back, ${data.user.name.split(' ')[0]}`, 'success');
+      if ('mfaRequired' in data) {
+        setMfaToken(data.mfaToken);
+        return;
+      }
+      finishSignIn(data);
     },
     onError: (err: any) => {
       addToast(err.response?.data?.message || 'Login failed. Check your credentials.', 'error');
     },
   });
+
+  const startAgain = () => {
+    setMfaToken(null);
+    setPassword('');
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +107,19 @@ export default function LoginPage() {
   const { loginTestAccounts } = getBrandPreset().features;
 
   if (currentUser) return null;
+
+  if (mfaToken) {
+    return (
+      <AuthShell>
+        <MfaStep
+          key={mfaToken}
+          mfaToken={mfaToken}
+          onSignedIn={finishSignIn}
+          onStartAgain={startAgain}
+        />
+      </AuthShell>
+    );
+  }
 
   return (
     <AuthShell>
@@ -197,5 +226,156 @@ export default function LoginPage() {
         </div>
       )}
     </AuthShell>
+  );
+}
+
+/** How long the backend's challenge token lasts (`mfa-challenge.ts`, 5m). */
+const CHALLENGE_MS = 5 * 60 * 1000;
+
+/** The second sign-in step. A wrong code keeps the step; an expired challenge needs the password again. */
+function MfaStep({
+  mfaToken,
+  onSignedIn,
+  onStartAgain,
+}: {
+  mfaToken: string;
+  onSignedIn: (data: LoginResponseData) => void;
+  onStartAgain: () => void;
+}) {
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [code, setCode] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [error, setError] = useState('');
+  const [expired, setExpired] = useState(false);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setExpired(true), CHALLENGE_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  const verify = useMutation({
+    mutationFn: () =>
+      authService.verifyMfa(
+        useRecovery ? { mfaToken, recoveryCode: recoveryCode.trim() } : { mfaToken, code },
+      ),
+    onSuccess: onSignedIn,
+    onError: (err: any) => {
+      if (err.response?.data?.code === 'MFA_CHALLENGE_INVALID') {
+        setExpired(true);
+        return;
+      }
+      setError(err.response?.data?.message || 'Couldn’t sign you in. Try again.');
+      if (useRecovery) setRecoveryCode('');
+      else setCode('');
+    },
+  });
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (useRecovery ? !recoveryCode.trim() : code.length !== 6) {
+      setError(useRecovery ? 'Enter a recovery code.' : 'Enter the 6-digit code from your app.');
+      return;
+    }
+    setError('');
+    verify.mutate();
+  };
+
+  if (expired) {
+    return (
+      <>
+        <div className="page-title mb-1">Sign-in timed out</div>
+        <p className="text-sm text-muted">
+          For your security, the code must be entered within 5 minutes of your password.
+        </p>
+        <button className="btn btn-primary mt-2 w-full justify-center py-3" onClick={onStartAgain}>
+          Start again
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="page-title mb-1">Two-step sign-in</div>
+      <p className="text-sm text-muted">
+        {useRecovery
+          ? 'Enter one of the recovery codes you saved. Each works once.'
+          : 'Enter the 6-digit code from your authenticator app.'}
+      </p>
+
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        {useRecovery ? (
+          <div>
+            <label htmlFor="mfa-recovery" className="mb-2 block text-[13px] font-medium">
+              Recovery code
+            </label>
+            <input
+              id="mfa-recovery"
+              className="input w-full"
+              autoComplete="off"
+              placeholder="xxxxx-xxxxx"
+              value={recoveryCode}
+              onChange={(e) => setRecoveryCode(e.target.value)}
+              aria-invalid={!!error}
+              aria-describedby={error ? 'mfa-error' : undefined}
+              autoFocus
+            />
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="mfa-code" className="mb-2 block text-[13px] font-medium">
+              Code
+            </label>
+            <input
+              id="mfa-code"
+              className="input w-full"
+              style={{ letterSpacing: '0.3em' }}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="123456"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              aria-invalid={!!error}
+              aria-describedby={error ? 'mfa-error' : undefined}
+              autoFocus
+            />
+          </div>
+        )}
+
+        {error && (
+          <div id="mfa-error" className="banner error" style={{ marginBottom: 0 }} role="alert">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          className="btn btn-primary w-full justify-center py-3"
+          disabled={verify.isPending}
+        >
+          {verify.isPending ? 'Checking...' : 'Verify'}
+        </button>
+      </form>
+
+      <div className="mt-4 flex justify-between gap-3">
+        <button
+          type="button"
+          className="text-[12.5px] font-medium text-(--focus) hover:underline"
+          onClick={() => {
+            setUseRecovery((v) => !v);
+            setError('');
+          }}
+        >
+          {useRecovery ? 'Use a code from my app instead' : 'Use a recovery code instead'}
+        </button>
+        <button
+          type="button"
+          className="text-[12.5px] font-medium text-(--focus) hover:underline"
+          onClick={onStartAgain}
+        >
+          Start again
+        </button>
+      </div>
+    </>
   );
 }

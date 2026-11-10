@@ -44,6 +44,15 @@ export interface AuthUser {
    *  since PR #51). `null` means the user has no department. Read it with
    *  `useMyDepartmentId`. */
   departmentId?: string | null;
+  /** Two-step sign-in is on. Sent by `GET /auth/me` only, not by login (PR #67). */
+  mfaEnabled?: boolean;
+}
+
+/** `POST /auth/login` for an account with MFA on: no tokens until `/auth/mfa/verify`. */
+export interface MfaChallenge {
+  mfaRequired: true;
+  /** Valid for 5 minutes. */
+  mfaToken: string;
 }
 
 export interface User {

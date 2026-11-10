@@ -1712,9 +1712,12 @@ error paths and workers).
 - [ ] No `helmet` or comparable security headers
 - [ ] No request body size limit on `express.json()`
 - [ ] Access-token cookie TTL (1 day) disagrees with the JWT TTL (15 min)
-- [ ] Two-factor sign-in with an authenticator app (GBB 1.2) — *backend done, no UI:*
-      `/auth/mfa/*`, a login challenge and an admin reset (PR #67, live 2026-11-09). Tickets 09
-      and 10 of `.scratch/backend-dev-2026-11-09`
+- [x] Two-factor sign-in with an authenticator app (GBB 1.2) — *wired 2026-11-10, verified
+      live (tickets 09, 10):* **Security** in the account menu (`/account/security`) sets it up
+      (QR code or key, a confirming code, 10 recovery codes to copy or download) and turns it
+      off (password plus a code or recovery code). Sign-in then asks for the 6-digit code, or a
+      single-use recovery code, within 5 minutes of the password. An admin with `user:edit`
+      resets it for someone who lost their phone (**Reset two-step** on `/admin/users`)
 - [ ] Sign in with Active Directory (GBB 1.3) — *backend done, no UI:* `/auth/sso/*` over
       OIDC (PR #67). Not configured on live (`enabled: false`). Ticket 14
 - [ ] Block or allow access by IP range and country (GBB 1.6) — *backend done, no UI:*

@@ -223,6 +223,7 @@ records, that is a serious and correct architectural decision.
 | Enable a feature for one tenant | ⛔ No flag model, no evaluation logic in either codebase. |
 | Investigate a customer's issue | ⛔ Correctly cannot — no document access. Would need the impersonation flow that doesn't exist yet. |
 | Check queue depth / worker health | ⛔ `GET /health` returns `{status:'ok', timestamp}`. No DB probe, no Redis probe, no queue metrics. |
+| Turn on two-step sign-in | ✅ *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`). Unlike the rest of this portal it's real: the same backend MFA every role uses |
 
 ### Why this is Phase 2 work, not neglect
 
@@ -330,6 +331,7 @@ once the Access card shipped.
 | Configure branding | ❌ | 🟥 |
 | Publish circulars | ✅ `circular:*` at `global` scope | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | View the audit trail | ✅ | ✅ wired 2026-09-18 |
+| Two-step sign-in: their own, and a reset for someone who lost their phone | ✅ | ✅ *(2026-11-10, tickets 09–10, verified live)* Their own under account menu → **Security**. For others, **Reset two-step** on `/admin/users` (`user:edit`): the next sign-in needs only the password. `GET /users` doesn't say who has it on, so the button shows for every signed-up user except yourself |
 
 ### Where it breaks, ranked
 
@@ -445,6 +447,7 @@ end       → /staff/tasks  clear the queue   ✅
 | Act on assigned tasks | ✅ | |
 | Delete a document | ❌ | Not granted — correct |
 | Publish a workflow definition | ❌ | Correct — `workflow:publish` is admin-only. *(Was "⚠️ YES … no authorization on the endpoint" — DRIFT-05, fixed 2026-09-04.)* |
+| Turn on two-step sign-in | ✅ | *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`): scan a QR code, confirm a code, save 10 recovery codes. Sign-in then asks for the code. Someone who loses both phone and codes needs an admin reset |
 
 ### Where it breaks, ranked
 
@@ -515,6 +518,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 | Get warned before a breach | 🟨 | `sla.breach` is sent to the supervisor role, `sla.warning` to the assignee (DRIFT-10); not clicked through. *(Was ⛔ "tells nobody".)* |
 | Export team stats | ✅ | `exportCsv` |
 | Index a batch of scanned invoices | ✅ | *(2026-11-10, ticket 08, verified live as `supervisor_finance`)* Select them on `/search` → **Index selected** → `/search/mass-index`: one table per cabinet, "Apply" fills a column, **Save all** sends `PUT /documents/metadata/batch`. Needs `document_metadata:edit` (seeded at department scope) and Edit on the cabinet |
+| Turn on two-step sign-in | ✅ | *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`): scan a QR code, confirm a code, save 10 recovery codes. Sign-in then asks for the code. Someone who loses both phone and codes needs an admin reset |
 
 ### Steady state
 
@@ -621,6 +625,7 @@ assigned to it, route its own documents, delegate, and publish circulars. The se
 | "Show me open audit findings" | 🟥 Re-exports the auditor's findings screen, which runs on `SEED.findings`. **No `Finding` model exists.** |
 | "Export this for the board" | ✅ CSV |
 | "Email me this weekly" | ⛔ No report scheduling. A mail transport exists now (`src/config/mailer.ts`) |
+| "Can I protect my account with my phone?" | ✅ *(2026-11-10, tickets 09–10)* Two-step sign-in under account menu → **Security**; verified live as `management_ops` |
 
 ### ~~The scaling problem, quantified~~ — resolved 2026-09-21 (DRIFT-07)
 
@@ -732,6 +737,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | "Who can see the Contracts cabinet?" | ⛔ `cabinet_access:view` granted and `GET /cabinets/:id/access` exists; no auditor screen calls it. |
 | "Track this finding to closure" | 🟥 No `Finding` model in Prisma. Everything is lost on cache clear. |
 | "Export evidence for the regulator" | ✅ `/auditor/trail` exports the real trail as CSV (`GET /audit/export`). Findings would still export fixture data. *(Was ⛔ "Would export fixture data".)* |
+| "Who turned off two-step sign-in?" | ✅ *(2026-11-10, seen live)* Turning it on, off and admin resets are audited (`user.mfa_enabled`, `user.mfa_disabled`, `user.mfa_reset`), and a code sign-in is `user.login` with `step: 'mfa'`. The trail's action labels don't cover them yet (ticket 15). Their own two-step sign-in is under account menu → **Security** |
 
 ### The gap between design and reality (historical — see correction above)
 

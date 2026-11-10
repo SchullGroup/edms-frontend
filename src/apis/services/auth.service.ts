@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { apiClient, invalidateInFlightAuth } from '@/lib/api-client';
-import { AuthUser, ApiResponse } from '@/types/models';
+import { AuthUser, ApiResponse, MfaChallenge } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
 import Cookies from 'js-cookie';
 
@@ -14,36 +14,73 @@ export interface RefreshResponseData {
   accessToken: string;
 }
 
+/** Stores the access token and clears state left over from any earlier session. */
+function startSession(accessToken: string): void {
+  // Set accessToken securely in js-cookie for API Client interception
+  Cookies.set('accessToken', accessToken, {
+    expires: 1,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
+  // A refresh still in flight from an ended session must not act on this one.
+  invalidateInFlightAuth();
+
+  // The proxy's redirect for a dead token isn't a logout, so `sessionExpired` can still be set.
+  useUIStore.getState().setSessionExpired(false);
+}
+
 export const authService = {
-  login: async (credentials: any): Promise<LoginResponseData> => {
+  /** Either a session, or `MfaChallenge` when the account has two-step sign-in on. */
+  login: async (credentials: any): Promise<LoginResponseData | MfaChallenge> => {
     // Call the local Next.js proxy route, which intercepts the refreshToken
-    const response = await axios.post<ApiResponse<LoginResponseData>>(
+    const response = await axios.post<ApiResponse<LoginResponseData | MfaChallenge>>(
       '/api/auth/login',
       credentials,
     );
-
-    // Set accessToken securely in js-cookie for API Client interception
-    if (response.data?.success !== false && response.data?.data?.accessToken) {
-      Cookies.set('accessToken', response.data.data.accessToken, {
-        expires: 1,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-      });
-      // A refresh from a previous, since-ended session (e.g. the tab sat open
-      // overnight and something 401'd before this fresh login) could still be
-      // in flight — invalidate it so its late result can't act on this session.
-      invalidateInFlightAuth();
-
-      // A session that ended earlier can leave `sessionExpired` set: it's
-      // cleared by `performLogout`, but the proxy's redirect to `/` for a dead
-      // token isn't a logout, so a bounce to the login screen followed by a
-      // sign-in on that same page arrives here with the flag still true — and
-      // the "session ended" modal then covers the app the moment AppShell
-      // mounts. A fresh session is by definition not an expired one.
-      useUIStore.getState().setSessionExpired(false);
+    const data = response.data.data;
+    if (response.data?.success !== false && 'accessToken' in data && data.accessToken) {
+      startSession(data.accessToken);
     }
+    return data;
+  },
 
+  /** Second sign-in step (via the BFF, which keeps the refresh cookie). Exactly one of code/recoveryCode. */
+  verifyMfa: async (
+    body: { mfaToken: string } & ({ code: string } | { recoveryCode: string }),
+  ): Promise<LoginResponseData> => {
+    const response = await axios.post<ApiResponse<LoginResponseData>>('/api/auth/mfa/verify', body);
+    const data = response.data.data;
+    if (response.data?.success !== false && data?.accessToken) startSession(data.accessToken);
+    return data;
+  },
+
+  /** Starts enrolment; the secret is stored but not active until `enableMfa`. */
+  setupMfa: async (): Promise<{ secret: string; otpauthUri: string }> => {
+    const response = await apiClient.post<ApiResponse<{ secret: string; otpauthUri: string }>>(
+      '/auth/mfa/setup',
+    );
     return response.data.data;
+  },
+
+  /** Recovery codes come back once, here only. */
+  enableMfa: async (code: string): Promise<{ recoveryCodes: string[] }> => {
+    const response = await apiClient.post<ApiResponse<{ recoveryCodes: string[] }>>(
+      '/auth/mfa/enable',
+      { code },
+    );
+    return response.data.data;
+  },
+
+  /** `password` is required for accounts that have one; exactly one of code/recoveryCode. */
+  disableMfa: async (
+    body: { password?: string } & ({ code: string } | { recoveryCode: string }),
+  ): Promise<void> => {
+    await apiClient.post('/auth/mfa/disable', body);
+  },
+
+  /** Admin reset (`user:edit`) for someone who lost their device and recovery codes. */
+  resetUserMfa: async (userId: string): Promise<void> => {
+    await apiClient.delete(`/auth/mfa/users/${userId}`);
   },
 
   refresh: async (): Promise<RefreshResponseData> => {
