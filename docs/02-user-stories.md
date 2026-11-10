@@ -447,7 +447,7 @@ below.)*
 
 ---
 
-### A5 — File a document under a workstream · ⬜ **Not built** (backend only) *(new 2026-11-09)*
+### A5 — File a document under a workstream · 🟨 **Partial** *(new 2026-11-09)*
 
 > **As** Chika,
 > **I want to** mark each document as financial, legal, ESG, operational, technical or tax,
@@ -455,14 +455,16 @@ below.)*
 
 **Current state:** edms-backend PR #67 (`6f84555`, live 2026-11-09) adds a nullable
 `workstream` to documents: set on upload, changed or cleared with `PATCH`, and a filter on
-`GET /documents` and `/documents/search`. Live documents all read `workstream: null`. The
-frontend neither sets, shows nor filters it. GBB checklist 3.4–3.9.
+`GET /documents` and `/documents/search`. Since 2026-11-10 (ticket 04, verified live) the
+frontend sets it on `/upload`, shows and changes it on `/doc/[id]`, and filters by it on
+`/search`. Cabinet browsing has no workstream filter yet. GBB checklist 3.4–3.9.
 
 **Acceptance criteria**
 - [x] Backend: `workstream` on create, `PATCH` (null clears) and as a list/search filter
-- [ ] Choose a workstream on upload (ticket 04)
-- [ ] Show and change it on the document page (ticket 04)
-- [ ] Filter by it on `/search` and in cabinet browsing (ticket 04)
+- [x] Choose a workstream on upload (ticket 04, 2026-11-10)
+- [x] Show and change it on the document page, "None" clears it (ticket 04, 2026-11-10)
+- [x] Filter by it on `/search`, saved with the search (ticket 04, 2026-11-10)
+- [ ] Filter by it when browsing a cabinet (`/staff/cabinets`)
 
 ---
 
@@ -900,10 +902,10 @@ lifecycle.
 - [x] Version list and single-version fetch endpoints, wired to the UI
 - [ ] ⚠️ Duplicate detection is not implemented despite the checksum index existing
 - [ ] No side-by-side version diff
-- [ ] A note on each new version saying what changed, and a change history with before/after
-      values (GBB 8.4) — *backend done, no UI:* `changeNote` on uploads and new versions,
-      `GET /documents/:id/history` (PR #67, live 2026-11-09). Ticket 05 of
-      `.scratch/backend-dev-2026-11-09`
+- [x] A note on each new version saying what changed, and a change history with before/after
+      values (GBB 8.4) — *wired 2026-11-10 (ticket 05, verified live):* "What changed?" when
+      uploading a revision, shown in the versions list; a History card on `/doc/[id]` from
+      `GET /documents/:id/history` (PR #67)
 
 ---
 
@@ -1308,9 +1310,10 @@ alignment), not to count records.
 - [ ] Entries capture actor, actor type, action, object type, object ID, before/after diff,
       IP address and user agent *(PR #67: document edits and metadata changes now carry a
       field-level before/after)*
-- [ ] Time spent viewing each document, per person (GBB 2.2) — *backend done, no UI:* view
-      sessions with heartbeats (`/document-views`) and `GET /document-views/report`
-      (PR #67, live 2026-11-09). Tickets 06 and 07 of `.scratch/backend-dev-2026-11-09`
+- [ ] Time spent viewing each document, per person (GBB 2.2) — *recorded since 2026-11-10*
+      (ticket 06, verified live): `/doc/[id]` and the workflow page keep a view session with
+      heartbeats (`/document-views`) while visible. *No report screen yet:*
+      `GET /document-views/report` (PR #67) is ticket 07 of `.scratch/backend-dev-2026-11-09`
 - [x] `entryHash` chains to `prevHash`; a verification endpoint proves chain integrity —
       `GET /audit/verify`, chain checked intact live 2026-09-18 (DRIFT-11)
 - [ ] The database role used by the app cannot `UPDATE` or `DELETE` the table
@@ -1722,7 +1725,7 @@ error paths and workers).
 
 | Epic | ✅ Done | 🟨 Partial | 🟥 Mock | ⬜ Not built | Verdict |
 |---|---|---|---|---|---|
-| A — Capture & Filing | 2 | 1 | 0 | 2 | Core works; enrichment missing; workstreams backend-only (A5, PR #67) |
+| A — Capture & Filing | 2 | 2 | 0 | 1 | Core works; enrichment missing; workstreams wired except cabinet browsing (A5, 2026-11-10) |
 | B — Retrieval & Search | 1 | 3 | 0 | 0 | Search indexes every document since PR #51 (2026-10-14); download gated and audited (2026-10-08) |
 | C — Routing & Approval | 2 | 3 | 0 | 0 | Task execution solid; workflow routes authorized (DRIFT-05); ~~routing **blocked for non-admins** by the RBAC seed~~ routing works on the live tenant; the seed lacks `workflow:view` for non-admins, so a fresh database would block it (DRIFT-14, re-tested 2026-10-16) |
 | D — Version & Custody | 2 | 1 | 0 | 0 | Strongest area of the product |
@@ -1733,14 +1736,15 @@ error paths and workers).
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |
-| **Total** | **15** | **19** | **7** | **3** | 44 functional stories |
+| **Total** | **15** | **20** | **7** | **2** | 44 functional stories |
 
 *(2026-10-15: H1 moved 🟥 → 🟨, so Partial 16 → 17 and Mock 9 → 8. 2026-10-19: C2 moved
 ✅ → 🟨 (no urgency ordering), so Done 15 → 14 and Partial 17 → 18. 2026-10-21: H3 removed
 from scope, so Not built 2 → 1 and 42 → 41 stories. 2026-10-29: H4 added 🟨 and H2 🟥 → ⬜,
 so Partial 18 → 19, Mock 8 → 7, Not built 1 → 2 and 41 → 42 stories. 2026-11-04: E5 added ✅,
 so Done 14 → 15 and 42 → 43 stories. 2026-11-09: A5 added ⬜ (backend only, PR #67), so Not
-built 2 → 3 and 43 → 44 stories. Totals re-tallied from the story headings, not carried
+built 2 → 3 and 43 → 44 stories. 2026-11-10: A5 moved ⬜ → 🟨 (ticket 04), so Partial 19 → 20
+and Not built 3 → 2. Totals re-tallied from the story headings, not carried
 forward.)*
 
 **The honest one-paragraph summary (revised 2026-10-15):** the *document* half of this EDMS

@@ -16,6 +16,7 @@ import { departmentOptions } from '@/apis/utils/managementAggregation';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
+import { WORKSTREAMS, workstreamLabel } from '@/constants/documentWorkstreams';
 import { Icon } from '@/components/ui/Icons';
 import { Pagination } from '@/components/ui/Pagination';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
@@ -51,6 +52,7 @@ const URGENCY_OPTIONS: Option[] = [
   ['low', 'Low'],
 ];
 const TYPE_OPTIONS: Option[] = DOCUMENT_TYPES.map((t) => [t, t] as const);
+const WORKSTREAM_OPTIONS: Option[] = WORKSTREAMS.map((w) => [w.value, w.label] as const);
 
 /** Reads a filter from the URL, accepting the enum (`in_progress`) or its label
  *  (`In Progress`). Unknown values — e.g. the old `status=Overdue`, which isn't a
@@ -166,6 +168,10 @@ export default function SearchPage() {
     cabinetId: searchParams?.get('cabinet') || undefined,
     departmentId: searchParams?.get('dept') || undefined,
     documentType: fromParam(searchParams?.get('type') ?? null, TYPE_OPTIONS),
+    workstream: fromParam(
+      searchParams?.get('workstream') ?? null,
+      WORKSTREAM_OPTIONS,
+    ) as Filters['workstream'],
     status: fromParam(searchParams?.get('status') ?? null, STATUS_OPTIONS) as Filters['status'],
     confidentiality: fromParam(
       searchParams?.get('confidentiality') ?? searchParams?.get('conf') ?? null,
@@ -506,6 +512,12 @@ export default function SearchPage() {
             onChange={(v) => setFilter('documentType', v)}
           />
           <FilterGroup
+            title="Workstream"
+            options={WORKSTREAM_OPTIONS}
+            value={filters.workstream}
+            onChange={(v) => setFilter('workstream', v as Filters['workstream'])}
+          />
+          <FilterGroup
             title="Status"
             options={STATUS_OPTIONS}
             value={filters.status}
@@ -555,6 +567,7 @@ export default function SearchPage() {
                   results.map((d) => ({
                     title: d.title,
                     type: d.documentType ?? '',
+                    workstream: workstreamLabel(d.workstream) ?? '',
                     cabinet: cabinetName.get(d.cabinetId) ?? '',
                     status: documentStatusLabel(d),
                     confidentiality: d.confidentiality,
@@ -652,7 +665,13 @@ export default function SearchPage() {
                     <div className="task-main">
                       <div className="task-title">{d.title}</div>
                       <div className="caption" style={{ margin: '4px 0' }}>
-                        {[d.documentType, cabinetName.get(d.cabinetId)].filter(Boolean).join(' · ')}
+                        {[
+                          d.documentType,
+                          workstreamLabel(d.workstream),
+                          cabinetName.get(d.cabinetId),
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </div>
                       <div className="task-meta">
                         <StatusBadge status={documentStatusLabel(d)} />

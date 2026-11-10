@@ -7,6 +7,7 @@ import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { DOCUMENT_TYPES } from '@/constants/documentTypes';
+import { WORKSTREAMS } from '@/constants/documentWorkstreams';
 import type { UploadDocumentRequest } from '@/types/models';
 
 type FileStatus = 'uploading' | 'processing' | 'ready' | 'filed' | 'discarded';
@@ -29,6 +30,7 @@ interface BatchDefaults {
   folderId?: string;
   confidentiality?: string;
   urgency?: string;
+  workstream?: string;
 }
 
 /** What a card hands the page so "File all" can file it alongside the others. */
@@ -349,7 +351,8 @@ function BatchBar({
   const [folderId, setFolderId] = useState('');
   const [confidentiality, setConfidentiality] = useState('');
   const [urgency, setUrgency] = useState('');
-  const nothingChosen = !cabinetId && !confidentiality && !urgency;
+  const [workstream, setWorkstream] = useState('');
+  const nothingChosen = !cabinetId && !confidentiality && !urgency && !workstream;
 
   return (
     <div className="idu-card mt-4">
@@ -362,7 +365,7 @@ function BatchBar({
         <span className="caption">Set fields for all of them at once, then file together.</span>
       </div>
       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end mb-4 [&_.field]:mb-0!">
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 items-end mb-4 [&_.field]:mb-0!">
           <div className="field">
             <label>Cabinet</label>
             <select
@@ -429,6 +432,21 @@ function BatchBar({
               ))}
             </select>
           </div>
+          <div className="field">
+            <label>Workstream</label>
+            <select
+              className="input"
+              value={workstream}
+              onChange={(e) => setWorkstream(e.target.value)}
+            >
+              <option value="">Keep each file&rsquo;s</option>
+              {WORKSTREAMS.map((w) => (
+                <option key={w.value} value={w.value}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="flex gap-2" style={{ justifyContent: 'flex-end' }}>
           <button
@@ -440,6 +458,7 @@ function BatchBar({
                 folderId: folderId || undefined,
                 confidentiality: confidentiality || undefined,
                 urgency: urgency || undefined,
+                workstream: workstream || undefined,
               })
             }
           >
@@ -517,6 +536,7 @@ function IDUCard({
 
   const [conf, setConf] = useState('internal');
   const [urg, setUrg] = useState('normal');
+  const [workstream, setWorkstream] = useState('');
   const [showErr, setShowErr] = useState(false);
   // The file's place in storage once uploaded, so a failed filing can be
   // retried without uploading it again.
@@ -555,6 +575,7 @@ function IDUCard({
       folderId: selFol,
       confidentiality: conf as UploadDocumentRequest['confidentiality'],
       urgency: urg as UploadDocumentRequest['urgency'],
+      workstream: (workstream || undefined) as UploadDocumentRequest['workstream'],
       fileUrl: uploaded.current.fileUrl,
       mimeType: resolveUploadMimeType(file.file) ?? file.file.type,
       fileSize: file.file.size,
@@ -576,6 +597,7 @@ function IDUCard({
     }
     if (defaults.confidentiality) setConf(defaults.confidentiality);
     if (defaults.urgency) setUrg(defaults.urgency);
+    if (defaults.workstream) setWorkstream(defaults.workstream);
   };
 
   // Hand the page a stable handle whose methods always see this render's state.
@@ -734,6 +756,22 @@ function IDUCard({
                 </option>
               ))}
             </select>
+          </div>
+          <div className="field">
+            <label>Workstream</label>
+            <select
+              className="input"
+              value={workstream}
+              onChange={(e) => setWorkstream(e.target.value)}
+            >
+              <option value="">None</option>
+              {WORKSTREAMS.map((w) => (
+                <option key={w.value} value={w.value}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+            <div className="help">The line of work it belongs to, for data-room search.</div>
           </div>
         </div>
 
