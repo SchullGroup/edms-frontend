@@ -141,6 +141,8 @@ export interface Document {
   cabinetId: string;
   folderId?: string | null;
   documentType?: string | null;
+  /** Line of work it's filed under; null when none (PR #67). */
+  workstream?: DocumentWorkstream | null;
   status: 'pending' | 'in_progress' | 'on_hold' | 'closed';
   confidentiality: string; // 'public' | 'internal' | 'confidential' | 'restricted'
   urgency: string; // 'low' | 'normal' | 'high' | 'critical'
@@ -226,6 +228,7 @@ export interface SavedSearch {
     status?: 'pending' | 'in_progress' | 'on_hold' | 'closed';
     confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
     urgency?: 'low' | 'normal' | 'high' | 'critical';
+    workstream?: DocumentWorkstream;
     /** Only together with `cabinetId`: the folder belongs to it. */
     folderId?: string;
     /** Created-date range as local "YYYY-MM-DD" days, both inclusive. */
@@ -305,6 +308,14 @@ export type DocumentConfidentiality =
   'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
 
 export type DocumentUrgency = 'low' | 'normal' | 'high' | 'critical';
+/** Backend `DOCUMENT_WORKSTREAMS` (PR #67, `6f84555`). Labels in `constants/documentWorkstreams`. */
+export type DocumentWorkstream =
+  | 'financial'
+  | 'legal'
+  | 'esg'
+  | 'operational'
+  | 'technical'
+  | 'tax';
 
 export type DocumentStatus = 'pending' | 'in_progress' | 'on_hold' | 'closed';
 
@@ -323,6 +334,7 @@ export interface UploadDocumentRequest {
   urgency: DocumentUrgency;
   fileSize?: number;
   documentType?: string;
+  workstream?: DocumentWorkstream;
   folderId?: string;
   /** Cabinet metadata, saved in the same transaction (edms-backend `dd10017`). The
    *  backend rejects the upload (400) if a required field is missing or a value
@@ -334,6 +346,8 @@ export interface UploadDocumentRequest {
 export interface UpdateDocumentRequest {
   title?: string;
   documentType?: string;
+  /** `null` takes the document out of its workstream. */
+  workstream?: DocumentWorkstream | null;
   /** Moves the document; a folder left out is cleared (edms-backend `dd10017`). */
   cabinetId?: string;
   /** `null` takes the document out of its folder, to the cabinet root. */

@@ -13,6 +13,7 @@ import {
   DocumentStatsResponse,
   AccessRequest,
   DocumentAccessKind,
+  DocumentWorkstream,
 } from '@/types/models';
 
 export interface AccessRequestInboxFilters {
@@ -39,6 +40,7 @@ export interface DocumentFilters {
   confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
   urgency?: 'low' | 'normal' | 'high' | 'critical';
   documentType?: string;
+  workstream?: DocumentWorkstream;
   createdBy?: string;
   /** Created-date window as ISO instants: `from` inclusive, `to` exclusive (PR #67). */
   from?: string;

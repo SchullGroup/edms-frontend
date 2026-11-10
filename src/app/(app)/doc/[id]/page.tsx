@@ -556,6 +556,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           <DocumentDetailsPanel
             documentId={doc.id}
             documentType={doc.documentType}
+            workstream={doc.workstream}
             cabinetId={doc.cabinetId}
             createdBy={doc.createdBy}
             ownerName={doc.creator?.name || 'Unknown user'}
