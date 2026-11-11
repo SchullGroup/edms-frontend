@@ -40,6 +40,8 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
 | **BE-24** | Admins require MFA per user; users can't turn it off        | Security change | 🔴 High  | No — today every user turns MFA on/off     |
+| **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
+| **BE-26** | Mark a request `revoked` when its grant is revoked          | Small fix       | 🟡 Low   | No                                         |
 
 **Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
 them until the PM confirms the AI features are in scope.
@@ -445,6 +447,26 @@ catch-all returning the standard `ApiResponse` envelope would have made them obv
 app.use((_req, res) => ApiResponse.notFound(res, 'Route not found', 'ROUTE_NOT_FOUND'));
 // must sit after the routers, before errorHandler
 ```
+
+---
+
+## 🟡 BE-25 · Task notifications name the stage, not its id — **new, 2026-11-11**
+
+`task.assigned` and `workflow.changes_requested` read "A new stage_1789748379694 task requires your
+attention." and "Changes have been requested on your document workflow." (`tasks.service.ts`
+`pendingNotifications.push`, `instances.service.ts` `notifyAssignment`). The stage's `name` from the
+definition ("Supervisor review") and the document title or reference would let people tell their
+tasks apart from the bell. Seen live 2026-11-11 while clicking notifications through (frontend
+ticket 16); the links themselves work.
+
+---
+
+## 🟡 BE-26 · Mark a request `revoked` when its grant is revoked — **new, 2026-11-11**
+
+`DELETE /documents/:id/access-grants/:userId` deletes the `DocumentAccessGrant` row and leaves the
+`DocumentAccessRequest` `approved`. There is no grant list, so `/admin/access-requests` (where Revoke
+now lives) keeps showing revoked access as approved, and a second Revoke 404s. A `revoked` status (or
+`GET /documents/:id/access-grants`) would fix it.
 
 ---
 

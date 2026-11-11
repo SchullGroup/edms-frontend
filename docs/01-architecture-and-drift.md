@@ -1634,6 +1634,12 @@ The four path-only mappings are `redirects()` in `next.config.ts`, which run **b
 (307s to the right targets, query string kept). `/tasks/[id]` is a thin lookup page.
 Previously every one of these 404'd.
 
+**2026-11-11 (ticket 16, clicked through live):** in-app links keep only their path, so they work on
+any host, not just `APP_URL`'s (they went nowhere on localhost or a white-label domain before). And
+`GET /notifications` now asks for `channel=in_app`: `notifyUser` writes an `in_app` and an `email` row
+per event, the list returned both, and the email row is never read, so every notification showed
+twice and half stayed unread. `unread-count` and `read-all` were already in-app only.
+
 **Still open:** `/admin/access-requests` is gated on `document_access_request:view` since
 2026-10-12 (it was `user:edit`, which no access-request route checks). But the
 access-requested notification goes to the document's **creator**, who usually lacks that
@@ -1776,7 +1782,7 @@ its values have changed. A `custom` copy is the `/admin/branding` page's publish
 | `DELEGATION_RECONCILE_INTERVAL_MS` | `300000` (min `60000`) | `delegation-reconcile.worker` schedule — moves open tasks to the delegate of a delegation in effect (added `436ea83`, 2026-10-29) |
 | `CHECKOUT_REMINDER_HOURS` | `24` | `checkout-overdue.worker` — `checkout.reminder` to the holder this long before `expectedReturnAt` (added `b4a3f81`, 2026-09-29) |
 | `CHECKOUT_OVERDUE_RECONCILE_INTERVAL_MS` | `300000` | `checkout-overdue.worker` schedule; once past due it sends `checkout.overdue` to the holder and to `supervisor`s in the holder's department |
-| `APP_URL` | `https://edms-kappa.vercel.app` (was `http://localhost:3000` until PR #49) | Base for every notification/email `actionUrl` — must be this app's origin, or `notificationHref` drops the link as cross-origin (see §8.4). Links from the deployed backend now open the Vercel app, so a notification clicked while testing on `localhost:3000` leaves the local app |
+| `APP_URL` | `https://edms-kappa.vercel.app` (was `http://localhost:3000` until PR #49) | Base for every notification/email `actionUrl`. In-app links work on any host since 2026-11-11 (`notificationHref` keeps only the path; before, it dropped links whose origin wasn't this app's, so they went nowhere on localhost or another domain). **Email** links still open `APP_URL`, so a white-label deployment needs its own `APP_URL` |
 | `GEMINI_API_KEY` | unset | `summary.workers` — AI document summaries. Without it every summary is `skipped`. Set on the live backend (summaries complete, checked 2026-10-13) |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | `ai-summarizer` |
 | `SUMMARY_MAX_INPUT_CHARS` | `120000` | Cap on OCR text sent for a summary |

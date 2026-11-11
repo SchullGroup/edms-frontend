@@ -19,13 +19,15 @@ export interface NotificationFilters {
 }
 
 export const notificationsService = {
+  /** In-app rows unless `channel` says otherwise: each event also has an email row, never read. */
   getAll: async (params?: NotificationFilters): Promise<PaginatedResponse<Notification>> => {
     const res = await apiClient.get<PaginatedResponse<Notification>>('/notifications', {
-      // The backend query schema coerces `unreadOnly` from the strings 'true'/'false',
-      // so send it as a string rather than a raw boolean, and omit it when not set.
-      params: params
-        ? { ...params, unreadOnly: params.unreadOnly ? 'true' : undefined }
-        : undefined,
+      // `unreadOnly` is coerced from the strings 'true'/'false', so it's sent as one or omitted.
+      params: {
+        ...params,
+        channel: params?.channel ?? 'in_app',
+        unreadOnly: params?.unreadOnly ? 'true' : undefined,
+      },
     });
     return res.data;
   },
@@ -84,18 +86,15 @@ export const notificationTitle = (n: Notification): string =>
 export const notificationMessage = (n: Notification): string =>
   n.payload?.message || n.payload?.title || n.type;
 
-/**
- * In-app destination for a notification, or `null` when it doesn't deep-link.
- * Absolute URLs pointing at another origin are dropped — `router.push` can't
- * use them and they'd be an open-redirect if the payload were ever tampered with.
- */
+/** In-app path for a notification, or `null`. The backend makes links absolute on its APP_URL;
+ *  only the path is kept, so they work on any host and can't redirect off-site. */
 export const notificationHref = (n: Notification): string | null => {
   const url = n.payload?.actionUrl;
   if (!url) return null;
   if (url.startsWith('/')) return url;
   try {
     const parsed = new URL(url);
-    if (typeof window !== 'undefined' && parsed.origin !== window.location.origin) return null;
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return null;

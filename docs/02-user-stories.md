@@ -1560,7 +1560,8 @@ workflow completed), `sla.service.ts` (SLA warning and breach), `documents.servi
 (access requested, granted, denied), `checkout-overdue.service.ts` (overdue checkouts) and
 `circulars.service.ts` (published, reminders). Doc 01 records this as DRIFT-10, resolved
 2026-09-21. Stays 🟨 because nobody has yet clicked through a notification arriving end
-to end (doc 05 lists `/notifications` as 🟨 for the same reason).
+to end. *(2026-11-11: now clicked through, see the criteria; the story stays 🟨 for digest, email
+and delegation activation, which aren't verified.)*
 
 *Superseded (2026-09-04): "the pipe is built end to end and nothing is ever put into it."*
 
@@ -1586,7 +1587,9 @@ wired to an endpoint that correctly returns an empty list, forever.~~ *(True on
 - [x] `NotificationPreference` model respected by the read/write endpoints
 - [x] **Notifications actually emitted** on task assignment, completion, reassignment,
       delegation, SLA warning/breach and workflow outcomes *(in code since 2026-09-21,
-      DRIFT-10; not yet clicked through end to end)*. ~~**nothing calls `notifyUser`**~~
+      DRIFT-10)*. **Clicked through live 2026-11-11** (ticket 16): uploads and new versions to the
+      cabinet's people (public/internal only), task assigned, changes requested, workflow completed
+      and access decisions all arrive, read well and open the right page; read state persists. ~~**nothing calls `notifyUser`**~~
 - [ ] Notification when a date-bounded `Delegation` activates — `delegations` emits
       nothing; only per-task delegation (`task.delegated`) notifies
 - [ ] Digest mode honoured by a scheduled job — *in code* (`notifications/workers/digest.workers.ts`,
