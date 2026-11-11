@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { authService, type LoginResponseData } from '@/apis/services/auth.service';
+import type { MfaChallenge } from '@/types/models';
+import { mfaErrorText, useResendCountdown } from '@/components/security/mfaParts';
+import { CodeBoxes } from '@/components/auth/CodeBoxes';
 import { useMutation } from '@tanstack/react-query';
 import Cookies from 'js-cookie';
 import { AuthShell } from '@/components/auth/AuthShell';
@@ -59,7 +62,7 @@ export default function LoginPage() {
   }, [currentUser, router]);
 
   // Set when the password was right but the account has two-step sign-in on.
-  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfa, setMfa] = useState<MfaChallenge | null>(null);
 
   const finishSignIn = (data: LoginResponseData) => {
     setCurrentUser(data.user);
@@ -72,7 +75,7 @@ export default function LoginPage() {
     },
     onSuccess: (data) => {
       if ('mfaRequired' in data) {
-        setMfaToken(data.mfaToken);
+        setMfa(data);
         return;
       }
       finishSignIn(data);
@@ -83,7 +86,7 @@ export default function LoginPage() {
   });
 
   const startAgain = () => {
-    setMfaToken(null);
+    setMfa(null);
     setPassword('');
   };
 
@@ -108,12 +111,14 @@ export default function LoginPage() {
 
   if (currentUser) return null;
 
-  if (mfaToken) {
+  if (mfa) {
     return (
       <AuthShell>
         <MfaStep
-          key={mfaToken}
-          mfaToken={mfaToken}
+          key={mfa.mfaToken}
+          mfaToken={mfa.mfaToken}
+          byEmail={mfa.mfaMethod === 'email'}
+          email={email}
           onSignedIn={finishSignIn}
           onStartAgain={startAgain}
         />
@@ -232,31 +237,128 @@ export default function LoginPage() {
 /** How long the backend's challenge token lasts (`mfa-challenge.ts`, 5m). */
 const CHALLENGE_MS = 5 * 60 * 1000;
 
-/** The second sign-in step. A wrong code keeps the step; an expired challenge needs the password again. */
+/** `t***@domain`, like the backend's `emailMasked`. */
+const maskEmail = (email: string) => {
+  const [name, domain] = email.trim().split('@');
+  return domain ? `${name.slice(0, 1)}***@${domain}` : email;
+};
+
+const formatSeconds = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+const svgProps = {
+  width: 26,
+  height: 26,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.8,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+  'aria-hidden': true,
+};
+
+const STEP_ICON = {
+  email: (
+    <svg {...svgProps}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="M3.5 6.5l8.5 6.5 8.5-6.5" />
+    </svg>
+  ),
+  authenticator: (
+    <svg {...svgProps}>
+      <path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  ),
+  recovery: (
+    <svg {...svgProps}>
+      <circle cx="8" cy="15" r="4" />
+      <path d="M11 12l9-9" />
+      <path d="M17 6l3 3" />
+    </svg>
+  ),
+  expired: (
+    <svg {...svgProps}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  ),
+};
+
+function BackToSignIn({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-btn mb-5 inline-flex items-center gap-1.5 self-start text-[13px] font-medium text-(--side-ink) hover:text-(--ink)"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M15 18l-6-6 6-6" />
+      </svg>
+      Back to sign in
+    </button>
+  );
+}
+
+/** The second sign-in step. A full code submits itself; an expired challenge needs the password again. */
 function MfaStep({
   mfaToken,
+  byEmail,
+  email,
   onSignedIn,
   onStartAgain,
 }: {
   mfaToken: string;
+  /** Email users get a code sent here; app users read it off their phone. */
+  byEmail: boolean;
+  email: string;
   onSignedIn: (data: LoginResponseData) => void;
   onStartAgain: () => void;
 }) {
+  const { appName } = getBrandPreset();
   const [useRecovery, setUseRecovery] = useState(false);
   const [code, setCode] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [error, setError] = useState('');
+  const [wrongCode, setWrongCode] = useState(false);
   const [expired, setExpired] = useState(false);
+  const [challengeId, setChallengeId] = useState('');
+  const { secondsLeft, restart } = useResendCountdown();
 
   useEffect(() => {
     const t = window.setTimeout(() => setExpired(true), CHALLENGE_MS);
     return () => window.clearTimeout(t);
   }, []);
 
+  const sendCode = useMutation({
+    mutationFn: () => authService.requestLoginOtp(mfaToken),
+    onSuccess: (c) => {
+      setChallengeId(c.challengeId);
+      setCode('');
+      setWrongCode(false);
+      restart();
+    },
+    onError: (err: any) => {
+      if (err.response?.data?.code === 'MFA_CHALLENGE_INVALID') setExpired(true);
+      else setError(mfaErrorText(err, 'Couldn’t send the code. Try again.'));
+    },
+  });
+
+  // Once only (Strict Mode runs effects twice); a second send would hit the 60 s cooldown.
+  const sent = React.useRef(false);
+  const { mutate: send } = sendCode;
+  useEffect(() => {
+    if (!byEmail || sent.current) return;
+    sent.current = true;
+    send();
+  }, [byEmail, send]);
+
   const verify = useMutation({
-    mutationFn: () =>
+    mutationFn: (proof: { code: string } | { recoveryCode: string }) =>
       authService.verifyMfa(
-        useRecovery ? { mfaToken, recoveryCode: recoveryCode.trim() } : { mfaToken, code },
+        'recoveryCode' in proof
+          ? { mfaToken, recoveryCode: proof.recoveryCode }
+          : { mfaToken, code: proof.code, ...(byEmail ? { challengeId } : {}) },
       ),
     onSuccess: onSignedIn,
     onError: (err: any) => {
@@ -264,118 +366,166 @@ function MfaStep({
         setExpired(true);
         return;
       }
-      setError(err.response?.data?.message || 'Couldn’t sign you in. Try again.');
+      setError(mfaErrorText(err, 'Couldn’t sign you in. Try again.'));
       if (useRecovery) setRecoveryCode('');
-      else setCode('');
+      else {
+        setCode('');
+        setWrongCode(true);
+      }
     },
   });
 
+  const canSubmitCode = code.length === 6 && (!byEmail || !!challengeId);
+
+  const onCodeChange = (next: string) => {
+    setCode(next);
+    setWrongCode(false);
+    setError('');
+    if (next.length === 6 && (!byEmail || challengeId) && !verify.isPending) verify.mutate({ code: next });
+  };
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (useRecovery ? !recoveryCode.trim() : code.length !== 6) {
-      setError(useRecovery ? 'Enter a recovery code.' : 'Enter the 6-digit code from your app.');
-      return;
+    if (useRecovery) {
+      if (recoveryCode.trim()) verify.mutate({ recoveryCode: recoveryCode.trim() });
+    } else if (canSubmitCode) {
+      verify.mutate({ code });
     }
+  };
+
+  const switchMode = () => {
+    setUseRecovery((v) => !v);
     setError('');
-    verify.mutate();
+    setWrongCode(false);
   };
 
   if (expired) {
     return (
-      <>
-        <div className="page-title mb-1">Sign-in timed out</div>
-        <p className="text-sm text-muted">
-          For your security, the code must be entered within 5 minutes of your password.
-        </p>
-        <button className="btn btn-primary mt-2 w-full justify-center py-3" onClick={onStartAgain}>
-          Start again
-        </button>
-      </>
+      <div className="flex flex-col">
+        <div className="mfa-card">
+          <div className="mfa-icon">{STEP_ICON.expired}</div>
+          <h2 className="mt-4 text-[24px] font-bold tracking-[-0.01em]">Sign-in timed out</h2>
+          <p className="mt-2 text-sm text-muted">
+            For your security, the code must be entered within 5 minutes of your password.
+          </p>
+          <button className="btn btn-primary mt-6 h-12 w-full justify-center" onClick={onStartAgain}>
+            Back to sign in
+          </button>
+        </div>
+      </div>
     );
   }
 
-  return (
-    <>
-      <div className="page-title mb-1">Two-step sign-in</div>
-      <p className="text-sm text-muted">
-        {useRecovery
-          ? 'Enter one of the recovery codes you saved. Each works once.'
-          : 'Enter the 6-digit code from your authenticator app.'}
-      </p>
+  const icon = useRecovery ? STEP_ICON.recovery : byEmail ? STEP_ICON.email : STEP_ICON.authenticator;
+  const heading = useRecovery
+    ? 'Use a recovery code'
+    : byEmail
+      ? 'Check your inbox'
+      : 'Enter your verification code';
 
-      <form onSubmit={submit} className="flex flex-col gap-4">
-        {useRecovery ? (
-          <div>
-            <label htmlFor="mfa-recovery" className="mb-2 block text-[13px] font-medium">
-              Recovery code
-            </label>
+  return (
+    <div className="flex flex-col">
+      <BackToSignIn onClick={onStartAgain} />
+      <form className="mfa-card" onSubmit={submit} noValidate>
+        <div className="mfa-icon">{icon}</div>
+        <h2 className="mt-4 text-[24px] font-bold tracking-[-0.01em]">{heading}</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted" style={{ textWrap: 'balance' }}>
+          {useRecovery ? (
+            'Enter one of the recovery codes you saved. Each works once.'
+          ) : byEmail ? (
+            <>
+              Enter the 6-digit code we sent to{' '}
+              <strong className="font-semibold text-(--ink)">{maskEmail(email)}</strong>
+            </>
+          ) : (
+            `Open your authenticator app and enter the 6-digit code for ${appName}.`
+          )}
+        </p>
+
+        <div className="mt-6 w-full">
+          {useRecovery ? (
             <input
-              id="mfa-recovery"
-              className="input w-full"
+              aria-label="Recovery code"
+              className="input w-full text-center"
+              style={{ height: 48, fontSize: 16, letterSpacing: '0.08em' }}
               autoComplete="off"
               placeholder="xxxxx-xxxxx"
               value={recoveryCode}
-              onChange={(e) => setRecoveryCode(e.target.value)}
+              onChange={(e) => {
+                setRecoveryCode(e.target.value);
+                setError('');
+              }}
               aria-invalid={!!error}
               aria-describedby={error ? 'mfa-error' : undefined}
+              disabled={verify.isPending}
               autoFocus
             />
-          </div>
-        ) : (
-          <div>
-            <label htmlFor="mfa-code" className="mb-2 block text-[13px] font-medium">
-              Code
-            </label>
-            <input
-              id="mfa-code"
-              className="input w-full"
-              style={{ letterSpacing: '0.3em' }}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="123456"
+          ) : (
+            <CodeBoxes
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              aria-invalid={!!error}
-              aria-describedby={error ? 'mfa-error' : undefined}
-              autoFocus
+              onChange={onCodeChange}
+              invalid={wrongCode}
+              disabled={verify.isPending || (byEmail && !challengeId)}
+              describedBy={error ? 'mfa-error' : undefined}
             />
-          </div>
-        )}
-
-        {error && (
-          <div id="mfa-error" className="banner error" style={{ marginBottom: 0 }} role="alert">
-            {error}
-          </div>
-        )}
+          )}
+          {error && (
+            <div id="mfa-error" role="alert" className="mt-3 text-[13px] text-(--status-overdue)">
+              {error}
+            </div>
+          )}
+        </div>
 
         <button
           type="submit"
-          className="btn btn-primary w-full justify-center py-3"
-          disabled={verify.isPending}
+          className="btn btn-primary mt-5 h-12 w-full justify-center"
+          disabled={verify.isPending || (useRecovery ? !recoveryCode.trim() : !canSubmitCode)}
         >
-          {verify.isPending ? 'Checking...' : 'Verify'}
+          {verify.isPending ? (
+            <>
+              <span className="btn-spinner" aria-hidden /> Verifying…
+            </>
+          ) : (
+            'Verify and sign in'
+          )}
         </button>
-      </form>
 
-      <div className="mt-4 flex justify-between gap-3">
-        <button
-          type="button"
-          className="text-[12.5px] font-medium text-(--focus) hover:underline"
-          onClick={() => {
-            setUseRecovery((v) => !v);
-            setError('');
-          }}
-        >
-          {useRecovery ? 'Use a code from my app instead' : 'Use a recovery code instead'}
-        </button>
-        <button
-          type="button"
-          className="text-[12.5px] font-medium text-(--focus) hover:underline"
-          onClick={onStartAgain}
-        >
-          Start again
-        </button>
-      </div>
-    </>
+        {byEmail && !useRecovery && (
+          <p className="mt-4 text-[13px] text-muted" aria-live="polite">
+            Didn’t get a code?{' '}
+            {sendCode.isPending ? (
+              <span className="font-medium">Sending…</span>
+            ) : secondsLeft > 0 ? (
+              <span className="font-medium">Resend in {formatSeconds(secondsLeft)}</span>
+            ) : (
+              <button
+                type="button"
+                className="text-btn font-semibold text-(--focus) hover:underline"
+                onClick={() => {
+                  setError('');
+                  sendCode.mutate();
+                }}
+              >
+                Send a new one
+              </button>
+            )}
+          </p>
+        )}
+
+        <div className="mt-5 w-full border-t border-(--border) pt-4">
+          <button
+            type="button"
+            className="text-btn text-[13px] font-medium text-(--focus) hover:underline"
+            onClick={switchMode}
+          >
+            {useRecovery
+              ? byEmail
+                ? 'Use an emailed code instead'
+                : 'Use a code from my app instead'
+              : 'Use a recovery code'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

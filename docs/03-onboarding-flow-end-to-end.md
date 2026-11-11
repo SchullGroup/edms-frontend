@@ -989,7 +989,7 @@ npm run dev                # Web   :3000
 | 7 | Design and publish workflows | `/admin/workflows` | Only `client_admin`/`schulltech_admin` can publish or archive (DRIFT-05, fixed 09-04). **On a freshly seeded tenant only they can list them, too** — staff and supervisors can't route until DRIFT-14's seed rows are added. The live tenant's roles hold the grant (re-tested 2026-10-16). |
 | 8 | Set branding | `/admin/branding` | 🟥 **Saved in this browser only** — survives a reload since 2026-10-12, but other users and the login page don't see it. |
 | 9 | ~~Set retention policy~~ | ⛔ | Mock. No enforcement job exists. |
-| 10 | Turn on two-step sign-in for your own account, and ask users to do the same | Account menu → **Security** (`/account/security`) | Optional per user: nothing can require it. Recovery codes are shown once. Someone who loses phone and codes needs **Reset two-step** on `/admin/users`, after which a password alone signs them in. The authenticator app shows the backend's `MFA_ISSUER` (default `SchullTech EDMS`) |
+| 10 | Turn on two-step sign-in for your own account, and ask users to do the same | Account menu → **Security** (`/account/security`) | Optional per user: nothing can require it yet (BE-24 asks for admins to require it per user, including on invite). Each user picks an authenticator app or email codes; only an admin can turn it off. Recovery codes are shown once. Someone who loses phone and codes needs **Reset two-step** on `/admin/users`, after which a password alone signs them in. The authenticator app shows the backend's `MFA_ISSUER` (default `SchullTech EDMS`) |
 
 **Then hand over to staff — with these caveats stated up front:**
 

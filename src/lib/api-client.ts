@@ -101,8 +101,12 @@ export function refreshAccessToken(): Promise<string> {
   return _refreshPromise;
 }
 
-/** Backend 401 codes for a wrong secret (password, MFA code) rather than a dead token. */
-const WRONG_SECRET_CODES = new Set(['INVALID_CREDENTIALS', 'INVALID_MFA_CODE']);
+/** Backend 401 codes for a wrong secret or an expired sign-in challenge, not a dead token. */
+const WRONG_SECRET_CODES = new Set([
+  'INVALID_CREDENTIALS',
+  'INVALID_MFA_CODE',
+  'MFA_CHALLENGE_INVALID',
+]);
 
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api/v1`,

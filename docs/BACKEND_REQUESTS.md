@@ -4,7 +4,7 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-10-28
+**Raised:** 2026-08-29 · **Updated:** 2026-11-11
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `origin/dev` (`d14f250`)
 
@@ -39,6 +39,7 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med   | No — 1 of 8 documents affected when raised |
 | **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
+| **BE-24** | Admins require MFA per user; users can't turn it off        | Security change | 🔴 High  | No — today every user turns MFA on/off     |
 
 **Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
 them until the PM confirms the AI features are in scope.
@@ -109,6 +110,73 @@ it.
 The fork action to succeed: one task per branch, each document execution split into children
 (`parentExecutionId` set), as PR #54 describes. The designer already builds and saves forks and
 joins (live since 2026-10-17), so the frontend is waiting only on this.
+
+---
+
+## 🔴 BE-24 · Admins require MFA per user; users can't turn it off — **new, 2026-11-11**
+
+Checked against `edms-backend` `dev` at `4da2980` (PR #69, multiple MFA methods).
+
+### What happens today
+
+MFA is entirely self-service. Every route in `src/modules/mfa/mfa.router.ts` needs only
+`authenticate`, except the admin reset (`DELETE /auth/mfa/users/:userId`, `user:edit`). So:
+
+- any user can turn MFA **off** for themselves (`POST /auth/mfa/disable`, password + code);
+- an admin can't **require** it: nothing on `User`, `Role` or the tenant says it's required,
+  and `auth.service.ts` asks for a second factor only when `mfaEnabled` is already true;
+- `GET /users` and `GET /users/:id` don't return `mfaEnabled`, so the admin page can't tell
+  who has MFA on (our **Reset two-step** button shows for everyone).
+
+### What the product wants
+
+An admin (`user:edit`) decides who must use MFA. The user chooses the method (authenticator
+app or email) and sets it up themselves, because that needs their phone or inbox. Only an
+admin can remove it. The frontend has already hidden the user's own **Turn off** (2026-11-11),
+but that's cosmetic until the API refuses it.
+
+### What we need
+
+Shape suggestions only; the backend team owns the design.
+
+1. **`User.mfaRequired`** (boolean, default `false`).
+2. **Admin sets it:** `PATCH /users/:id` accepts `mfaRequired`, or a dedicated
+   `PUT /auth/mfa/users/:userId/requirement { required }`. Gate on `user:edit`, audit it
+   (`user.mfa_required`, `user.mfa_requirement_removed`).
+   **On invite too:** `POST /users` (`user:create`) accepts `mfaRequired`, so the admin can tick
+   "Require two-step sign-in" when inviting.
+3. **List it:** `mfaRequired` and `mfaEnabled` on each `GET /users` row and on `GET /users/:id`.
+4. **Sign-in forces set-up:** when `mfaRequired && !mfaEnabled`, `POST /auth/login` returns no
+   tokens, e.g. `{ mfaSetupRequired: true, mfaToken }`. The client then sets up a method with
+   that token: authenticator (`secret`, `otpauthUri`, then a code) or email (send code, then
+   code). A successful confirm returns the usual login body (tokens + user) **plus**
+   `recoveryCodes`. Today `/setup`, `/enable`, `/email/setup` and `/email/enable` all need an
+   access token, which this user doesn't have yet.
+   **New users:** an invited user sets a password on `/reset-password` (invite token), then signs
+   in; that first sign-in hits this step, so they set up MFA before their first session. The
+   invite link already proves the inbox, so email is the easy choice for them.
+5. **Users can't turn it off:** `POST /auth/mfa/disable` returns 403 (e.g.
+   `MFA_DISABLE_ADMIN_ONLY`) for everyone, or at least while `mfaRequired` is true. Admins keep
+   `DELETE /auth/mfa/users/:userId`. If `mfaRequired` is still true after a reset, the user sets
+   MFA up again at their next sign-in. That's the lost-phone flow.
+6. **Method switching stays self-service** (`/method-change/*`): the user picks how they get
+   their code.
+
+Side effect: this closes a PR #69 gap. `POST /disable` checks `code` only against the
+authenticator secret, and `activateOtpMethod` clears that secret for email users, so an email
+user can turn MFA off only with a recovery code.
+
+**Open question for the product owner:** may users still turn MFA **on** voluntarily when an
+admin hasn't required it? The frontend allows it for now (it only adds security). If not,
+`/setup`, `/enable`, `/email/setup` and `/email/enable` should refuse unless `mfaRequired`.
+
+### How to verify
+
+As `client_admin`: require MFA for `management_ops` → their next password sign-in returns
+`mfaSetupRequired` and no tokens → set up email or app → signed in with recovery codes.
+`POST /auth/mfa/disable` as `management_ops` → 403. Admin reset → next sign-in asks for set-up
+again. `GET /users` shows both flags. Invite a user with `mfaRequired: true` → accept the
+invite, set a password → first sign-in goes straight to set-up.
 
 ---
 

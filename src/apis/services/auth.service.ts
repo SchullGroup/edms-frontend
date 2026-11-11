@@ -1,6 +1,13 @@
 import axios from 'axios';
 import { apiClient, invalidateInFlightAuth } from '@/lib/api-client';
-import { AuthUser, ApiResponse, MfaChallenge } from '@/types/models';
+import {
+  AuthUser,
+  ApiResponse,
+  MfaChallenge,
+  MfaMethod,
+  MfaOtpChallenge,
+  MfaSettings,
+} from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
 import Cookies from 'js-cookie';
 
@@ -8,6 +15,12 @@ export interface LoginResponseData {
   user: AuthUser;
   accessToken: string;
   // refreshToken is now stripped by the Next.js Proxy and stored securely in HttpOnly cookie
+}
+
+export interface MfaMethodChange {
+  changeId: string;
+  expiresAt: string;
+  setup?: { secret: string; otpauthUri: string };
 }
 
 export interface RefreshResponseData {
@@ -44,14 +57,92 @@ export const authService = {
     return data;
   },
 
-  /** Second sign-in step (via the BFF, which keeps the refresh cookie). Exactly one of code/recoveryCode. */
+  /** Second sign-in step (via the BFF, which keeps the refresh cookie). An email code also needs its `challengeId`. */
   verifyMfa: async (
-    body: { mfaToken: string } & ({ code: string } | { recoveryCode: string }),
+    body: { mfaToken: string } & (
+      | { code: string; challengeId?: string }
+      | { recoveryCode: string }
+    ),
   ): Promise<LoginResponseData> => {
     const response = await axios.post<ApiResponse<LoginResponseData>>('/api/auth/mfa/verify', body);
     const data = response.data.data;
     if (response.data?.success !== false && data?.accessToken) startSession(data.accessToken);
     return data;
+  },
+
+  /** Emails a sign-in code (public; 60 s between requests, 5 an hour). */
+  requestLoginOtp: async (mfaToken: string): Promise<MfaOtpChallenge> => {
+    const response = await apiClient.post<ApiResponse<MfaOtpChallenge>>('/auth/mfa/otp/request', {
+      mfaToken,
+    });
+    return response.data.data;
+  },
+
+  getMfaSettings: async (): Promise<MfaSettings> => {
+    const response = await apiClient.get<ApiResponse<MfaSettings>>('/auth/mfa/settings');
+    return response.data.data;
+  },
+
+  /** Emails a code to the account's address; `enableEmailMfa` confirms it. */
+  startEmailMfa: async (): Promise<MfaOtpChallenge> => {
+    const response = await apiClient.post<ApiResponse<MfaOtpChallenge>>('/auth/mfa/email/setup');
+    return response.data.data;
+  },
+
+  enableEmailMfa: async (body: { challengeId: string; code: string }) => {
+    const response = await apiClient.post<ApiResponse<{ recoveryCodes: string[] }>>(
+      '/auth/mfa/email/enable',
+      body,
+    );
+    return response.data.data;
+  },
+
+  /** Email users only: a code to prove the current method before switching. */
+  requestCurrentMethodOtp: async (password?: string): Promise<MfaOtpChallenge> => {
+    const response = await apiClient.post<ApiResponse<MfaOtpChallenge>>(
+      '/auth/mfa/method-change/current-otp',
+      password ? { password } : {},
+    );
+    return response.data.data;
+  },
+
+  /** Proves the current method; `setup` comes back when switching to the app. */
+  startMfaMethodChange: async (
+    body: { method: MfaMethod; password?: string } & (
+      | { code: string; challengeId?: string }
+      | { recoveryCode: string }
+    ),
+  ): Promise<MfaMethodChange> => {
+    const response = await apiClient.post<ApiResponse<MfaMethodChange>>(
+      '/auth/mfa/method-change/start',
+      body,
+    );
+    return response.data.data;
+  },
+
+  /** Switching to email: sends the code that `confirmMfaMethodChange` checks. */
+  requestNewMethodOtp: async (changeId: string): Promise<MfaOtpChallenge> => {
+    const response = await apiClient.post<ApiResponse<MfaOtpChallenge>>(
+      `/auth/mfa/method-change/${changeId}/new-otp`,
+    );
+    return response.data.data;
+  },
+
+  /** Activates the new method and replaces the recovery codes. */
+  confirmMfaMethodChange: async (body: {
+    changeId: string;
+    code: string;
+    challengeId?: string;
+  }): Promise<{ recoveryCodes: string[] }> => {
+    const response = await apiClient.post<ApiResponse<{ recoveryCodes: string[] }>>(
+      '/auth/mfa/method-change/confirm',
+      body,
+    );
+    return response.data.data;
+  },
+
+  cancelMfaMethodChange: async (changeId: string): Promise<void> => {
+    await apiClient.delete(`/auth/mfa/method-change/${changeId}`);
   },
 
   /** Starts enrolment; the secret is stored but not active until `enableMfa`. */
@@ -71,12 +162,7 @@ export const authService = {
     return response.data.data;
   },
 
-  /** `password` is required for accounts that have one; exactly one of code/recoveryCode. */
-  disableMfa: async (
-    body: { password?: string } & ({ code: string } | { recoveryCode: string }),
-  ): Promise<void> => {
-    await apiClient.post('/auth/mfa/disable', body);
-  },
+  // No self turn-off (`POST /auth/mfa/disable`): only an admin removes MFA (BE-24).
 
   /** Admin reset (`user:edit`) for someone who lost their device and recovery codes. */
   resetUserMfa: async (userId: string): Promise<void> => {

@@ -53,6 +53,27 @@ export interface MfaChallenge {
   mfaRequired: true;
   /** Valid for 5 minutes. */
   mfaToken: string;
+  /** Missing on older accounts, which use the authenticator app (PR #69). */
+  mfaMethod?: MfaMethod;
+}
+
+/** `sms` exists on the backend but is never available yet (`MFA_SMS_NOT_CONFIGURED`). */
+export type MfaMethod = 'authenticator' | 'email' | 'sms';
+
+/** `GET /auth/mfa/settings`. */
+export interface MfaSettings {
+  mfaEnabled: boolean;
+  currentMethod: MfaMethod | null;
+  emailMasked: string;
+  phoneNumberMasked: string | null;
+  /** `email` is available only when the server can send codes. */
+  methodOptions: { method: MfaMethod; available: boolean }[];
+}
+
+/** An email code that was sent; the code itself never comes back. */
+export interface MfaOtpChallenge {
+  challengeId: string;
+  expiresAt: string;
 }
 
 export interface User {

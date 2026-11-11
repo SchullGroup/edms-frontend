@@ -223,7 +223,7 @@ records, that is a serious and correct architectural decision.
 | Enable a feature for one tenant | ⛔ No flag model, no evaluation logic in either codebase. |
 | Investigate a customer's issue | ⛔ Correctly cannot — no document access. Would need the impersonation flow that doesn't exist yet. |
 | Check queue depth / worker health | ⛔ `GET /health` returns `{status:'ok', timestamp}`. No DB probe, no Redis probe, no queue metrics. |
-| Turn on two-step sign-in | ✅ *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`). Unlike the rest of this portal it's real: the same backend MFA every role uses |
+| Turn on two-step sign-in | ✅ *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`). App or email codes (2026-11-11, ticket 17); turning it off is admin-only. Unlike the rest of this portal it's real: the same backend MFA every role uses |
 
 ### Why this is Phase 2 work, not neglect
 
@@ -447,7 +447,7 @@ end       → /staff/tasks  clear the queue   ✅
 | Act on assigned tasks | ✅ | |
 | Delete a document | ❌ | Not granted — correct |
 | Publish a workflow definition | ❌ | Correct — `workflow:publish` is admin-only. *(Was "⚠️ YES … no authorization on the endpoint" — DRIFT-05, fixed 2026-09-04.)* |
-| Turn on two-step sign-in | ✅ | *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`): scan a QR code, confirm a code, save 10 recovery codes. Sign-in then asks for the code. Someone who loses both phone and codes needs an admin reset |
+| Turn on two-step sign-in | ✅ | *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`): an authenticator app or, since 2026-11-11 (ticket 17), email codes; only an admin can turn it off. scan a QR code, confirm a code, save 10 recovery codes. Sign-in then asks for the code. Someone who loses both phone and codes needs an admin reset |
 
 ### Where it breaks, ranked
 
@@ -518,7 +518,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 | Get warned before a breach | 🟨 | `sla.breach` is sent to the supervisor role, `sla.warning` to the assignee (DRIFT-10); not clicked through. *(Was ⛔ "tells nobody".)* |
 | Export team stats | ✅ | `exportCsv` |
 | Index a batch of scanned invoices | ✅ | *(2026-11-10, ticket 08, verified live as `supervisor_finance`)* Select them on `/search` → **Index selected** → `/search/mass-index`: one table per cabinet, "Apply" fills a column, **Save all** sends `PUT /documents/metadata/batch`. Needs `document_metadata:edit` (seeded at department scope) and Edit on the cabinet |
-| Turn on two-step sign-in | ✅ | *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`): scan a QR code, confirm a code, save 10 recovery codes. Sign-in then asks for the code. Someone who loses both phone and codes needs an admin reset |
+| Turn on two-step sign-in | ✅ | *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`): an authenticator app or, since 2026-11-11 (ticket 17), email codes; only an admin can turn it off. scan a QR code, confirm a code, save 10 recovery codes. Sign-in then asks for the code. Someone who loses both phone and codes needs an admin reset |
 
 ### Steady state
 
