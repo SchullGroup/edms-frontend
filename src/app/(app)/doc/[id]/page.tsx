@@ -30,11 +30,13 @@ import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, UrgBadge, ConfBadge } from '@/components/ui/Badges';
 import { fmtDateTime, fmtDate } from '@/utils/helpers';
 import { documentFile } from '@/utils/documentFile';
+import { canDownloadVersion } from '@/apis/services/files.service';
 import { DocumentViewerPanel } from '@/components/documents/DocumentViewerPanel';
 import { DocumentDetailsPanel } from '@/components/documents/DocumentDetailsPanel';
 import { DocumentVersionsPanel } from '@/components/documents/DocumentVersionsPanel';
 import { DocumentSummaryPanel } from '@/components/documents/DocumentSummaryPanel';
 import { DocumentHistoryPanel } from '@/components/documents/DocumentHistoryPanel';
+import { DocumentViewTimePanel } from '@/components/documents/DocumentViewTimePanel';
 import { useDocumentViewSession } from '@/hooks/useDocumentViewSession';
 import type { DocumentWithUiExtras, DocumentSignatureFieldUI } from '@/components/documents/types';
 import type { WorkflowInstanceStatus } from '@/types/models';
@@ -198,10 +200,13 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   }
 
   const { rawFileKey, fileUrl, fileMimeType } = documentFile(doc);
-  // Watermarking still comes from the (mock) policy table. Download follows the
-  // caller's `document:download` permission and clearance, as the API does.
+  // Watermarking still comes from the (mock) policy table. Download follows the links the
+  // backend issued this viewer; without a file, `document:download` decides (text stub).
   const confPolicy = policyFor(doc.confidentiality);
-  const canDownload = allows(doc, 'download');
+  const canDownload = doc.currentVersion?.fileUrl
+    ? canDownloadVersion(doc.currentVersion)
+    : allows(doc, 'download');
+  const canDownloadOriginal = !!doc.currentVersion?.originalUrl;
   const canExport = allows(doc, 'export');
   const canPrint = allows(doc, 'print');
 
@@ -415,11 +420,32 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           onClick={actDownload}
           disabled={!canDownload || downloadVersion.isPending}
           title={
-            canDownload ? 'Download a copy' : "You don't have permission to download this document"
+            canDownload
+              ? 'Download a watermarked copy'
+              : doc.currentVersion?.downloadUrl
+                ? 'Only the original of this file type can be downloaded'
+                : "You don't have permission to download this document"
           }
         >
           <Icon name="download" size={14} /> Download
         </button>
+        {canDownloadOriginal && doc.currentVersionId && (
+          <button
+            className="btn btn-secondary"
+            onClick={() =>
+              downloadVersion.mutate({
+                id: doc.id,
+                versionId: doc.currentVersionId as string,
+                title: doc.title,
+                original: true,
+              })
+            }
+            disabled={downloadVersion.isPending}
+            title="Download the original file, without a watermark (recorded in the audit trail)"
+          >
+            <Icon name="download" size={14} /> Download original
+          </button>
+        )}
         {canExport && (
           <button
             className="btn btn-secondary"
@@ -591,7 +617,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             documentTitle={doc.title}
             currentVersionId={doc.currentVersionId}
             canView={can('document_version', 'view')}
-            canDownload={canDownload}
             canEdit={
               can('document_version', 'restore') &&
               !lockedByOther &&
@@ -606,6 +631,10 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             cabinetId={doc.cabinetId}
             canViewVersions={can('document_version', 'view')}
           />
+
+          {can('audit', 'view') && (
+            <DocumentViewTimePanel documentId={doc.id} documentTitle={doc.title} />
+          )}
 
           <div className="card">
             <div className="card-head">

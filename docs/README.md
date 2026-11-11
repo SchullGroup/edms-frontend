@@ -78,7 +78,9 @@ setting up an environment.
 
 ## The short version
 
-**65 frontend pages · 171 backend routes · 6 roles · 0 tests.**
+**69 frontend pages · 171 backend routes · 6 roles · 0 tests.**
+*(Pages re-derived 2026-11-10: +1, `/search/mass-index` (ticket 08); then +1,
+`/account/security` (ticket 09).)*
 *(Routes re-derived 2026-11-09, backend @ `dev` `42ed468` (PR #67): 154 → 171 — `/access-rules`
 (3), `/document-views` (3), `/auth/mfa` (5), `/auth/sso` (4), `PUT /documents/metadata/batch` and
 `GET /documents/:id/history`. Router files 13 → 17. Seed: 79 → 82 permissions, 219 → 227
@@ -115,11 +117,10 @@ The DOCUMENT half is real
                                                     ✅ works end to end
 
 The GOVERNANCE half is now half real
-  ✅ audit trail · circulars · SLA settings
-  🟨 notifications (emitted, not clicked through)
-  🟨 control exceptions (built, not live until the tenant is seeded)
+  ✅ audit trail · circulars · SLA settings · notifications (clicked through 2026-11-11)
+  🟨 control exceptions (built; live seeded 2026-11-11, not yet walked through)
   🟥 retention · branding · platform operations
-                                                    🟥 9 of 65 pages
+                                                    🟥 9 of 69 pages
 ```
 *(Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
 59 pages"; 2026-10-15 it was "notifications · policies … 🟥 13 of 58 pages".)*

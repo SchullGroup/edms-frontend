@@ -4,6 +4,7 @@ import {
   ACTIVITY_RECORD_TYPES,
   AUDIT_ACTIONS,
   CONFIG_RECORD_TYPES,
+  auditActionLabel,
   auditRecordType,
 } from '@/constants/auditVocabulary';
 
@@ -65,7 +66,7 @@ export function AuditTypeActionFilters({
         <option value="">All actions</option>
         {actionOptions.map((a) => (
           <option key={a} value={a}>
-            {a}
+            {auditActionLabel(a)}
           </option>
         ))}
       </select>

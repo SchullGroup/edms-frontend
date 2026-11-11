@@ -523,6 +523,17 @@ input[type="checkbox"] { accent-color: var(--focus); }
 .persona-btn .pr { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .persona-btn .arrow { margin-left: auto; color: var(--muted); }
 @media (max-width: 900px) { .login-wrap { grid-template-columns: 1fr; } .login-hero { display: none; } }
+/* A button that reads as a text link (no browser border or padding). */
+.text-btn { background: none; border: 0; padding: 0; cursor: pointer; }
+.text-btn:disabled { cursor: default; }
+/* Two-step sign-in: one box per digit (`CodeBoxes`) */
+.otp-box { width: 100%; min-width: 0; height: 56px; border: 1px solid var(--border-strong); border-radius: 12px; background: var(--panel); color: var(--ink); text-align: center; font-family: inherit; font-size: 22px; font-weight: 600; caret-color: var(--focus); transition: border-color .12s, box-shadow .12s; }
+.otp-box:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus) 18%, transparent); }
+.otp-box[aria-invalid="true"] { border-color: var(--status-overdue); }
+.otp-box[aria-invalid="true"]:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-overdue) 18%, transparent); }
+.otp-box:disabled { opacity: .65; }
+.mfa-card { background: var(--panel); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 1px 2px rgba(22,24,29,.04), 0 16px 48px rgba(22,24,29,.07); padding: 32px 32px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.mfa-icon { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--focus); background: color-mix(in srgb, var(--focus) 13%, transparent); }
 
 /* ---------- Breadcrumb ---------- */
 .crumbs { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); margin-bottom: 10px; flex-wrap: wrap; }

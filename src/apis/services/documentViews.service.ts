@@ -9,6 +9,28 @@ export interface DocumentViewSession {
   startedAt: string;
 }
 
+/** One viewer's row in `GET /document-views/report`, longest total time first. */
+export interface DocumentViewer {
+  userId: string;
+  sessions: number;
+  totalSeconds: number;
+  lastViewedAt: string | null;
+  user: { id: string; name: string; email: string } | null;
+}
+
+export interface DocumentViewReport {
+  documentId: string;
+  uniqueViewers: number;
+  totalSeconds: number;
+  viewers: DocumentViewer[];
+}
+
+/** ISO instants; `to` is exclusive and filters on when each session started. */
+export interface DocumentViewReportRange {
+  from?: string;
+  to?: string;
+}
+
 export const documentViewsService = {
   start: async (documentId: string): Promise<DocumentViewSession> => {
     const response = await apiClient.post<ApiResponse<DocumentViewSession>>('/document-views', {
@@ -31,5 +53,19 @@ export const documentViewsService = {
       keepalive: true,
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => {});
+  },
+
+  /** Needs `audit:view`. */
+  report: async (
+    documentId: string,
+    range: DocumentViewReportRange = {},
+  ): Promise<DocumentViewReport> => {
+    const response = await apiClient.get<ApiResponse<DocumentViewReport>>(
+      '/document-views/report',
+      {
+        params: { documentId, ...range },
+      },
+    );
+    return response.data.data;
   },
 };

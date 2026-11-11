@@ -534,7 +534,6 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               documentTitle={selectedDoc.title}
               currentVersionId={selectedDoc.currentVersionId}
               canView={can('document_version', 'view')}
-              canDownload={allows(selectedDoc, 'download')}
               canEdit={false}
               canUploadVersion={canUploadRevision}
             />
