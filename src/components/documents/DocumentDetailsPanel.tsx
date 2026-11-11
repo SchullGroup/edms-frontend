@@ -16,13 +16,16 @@ import type {
   DocumentConfidentiality,
   DocumentMetadataField,
   DocumentUrgency,
+  DocumentWorkstream,
 } from '@/types/models';
 import { CONF_LEVELS, TOP_SECRET_LEVEL, URG_LEVELS } from '@/constants/documentLevels';
+import { WORKSTREAMS, workstreamLabel } from '@/constants/documentWorkstreams';
 import { MetadataFieldInput, isMetadataValueMissing, toInputValue } from './MetadataFieldInput';
 
 export interface DocumentDetailsPanelProps {
   documentId: string;
   documentType?: string | null;
+  workstream?: DocumentWorkstream | null;
   cabinetId: string;
   /** The uploader; an `own`-scoped clearance covers only their documents. */
   createdBy?: string | null;
@@ -37,7 +40,7 @@ export interface DocumentDetailsPanelProps {
   canEditMetadata?: boolean;
   confidentiality: string;
   urgency: string;
-  /** Shows "Change" on the classification rows (`PATCH /documents/:id`). */
+  /** Shows "Change" on the classification and workstream rows (`PATCH /documents/:id`). */
   canEditClassification?: boolean;
 }
 
@@ -61,6 +64,7 @@ function displayValue(field: Pick<DocumentMetadataField, 'fieldType'>, value?: s
 export function DocumentDetailsPanel({
   documentId,
   documentType,
+  workstream,
   cabinetId,
   createdBy,
   ownerName,
@@ -166,6 +170,29 @@ export function DocumentDetailsPanel({
     });
   };
 
+  const openWorkstreamEditor = () => {
+    const form = { value: workstream ?? '' };
+    openModal({
+      title: 'Change workstream',
+      body: <WorkstreamEditor initial={form.value} onChange={(v) => (form.value = v)} />,
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Save changes',
+          kind: 'btn-primary',
+          onClick: () => {
+            const next = (form.value || null) as DocumentWorkstream | null;
+            if (next === (workstream ?? null)) return;
+            return updateDocument
+              .mutateAsync({ id: documentId, updates: { workstream: next } })
+              .then(() => undefined)
+              .catch(() => false);
+          },
+        },
+      ],
+    });
+  };
+
   return (
     <div className="card">
       <div className="card-head">
@@ -184,6 +211,21 @@ export function DocumentDetailsPanel({
         <div className="meta-row">
           <span className="k">Type</span>
           <span className="v">{documentType || '—'}</span>
+        </div>
+        <div className="meta-row">
+          <span className="k">Workstream</span>
+          <span className="v flex items-center gap-2">
+            {workstreamLabel(workstream) ?? '—'}
+            {canEditClassification && (
+              <button
+                className="btn btn-ghost btn-sm"
+                aria-label="Change workstream"
+                onClick={openWorkstreamEditor}
+              >
+                Change
+              </button>
+            )}
+          </span>
         </div>
         <div className="meta-row">
           <span className="k">Cabinet</span>
@@ -234,6 +276,39 @@ export function DocumentDetailsPanel({
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+/** The workstream dialog body; "None" takes the document out of its workstream. */
+function WorkstreamEditor({
+  initial,
+  onChange,
+}: {
+  initial: string;
+  onChange: (next: string) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <div className="field" style={{ marginBottom: 0 }}>
+      <label htmlFor="doc-workstream">Workstream</label>
+      <select
+        id="doc-workstream"
+        className="input"
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          onChange(e.target.value);
+        }}
+      >
+        <option value="">None</option>
+        {WORKSTREAMS.map((w) => (
+          <option key={w.value} value={w.value}>
+            {w.label}
+          </option>
+        ))}
+      </select>
+      <div className="help">The line of work it belongs to. Search can filter by it.</div>
     </div>
   );
 }

@@ -4,9 +4,13 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-10-28
+**Raised:** 2026-08-29 · **Updated:** 2026-11-11
 **Frontend:** `edms-frontend` @ `dev`
-**Backend checked against:** `edms-backend` @ `origin/dev` (`d14f250`)
+**Backend checked against:** `edms-backend` @ `origin/dev` (`4da2980`, 2026-11-11)
+
+> **2026-11-11: re-checked against `4da2980`.** Done and removed: BE-19 (500 at a parallel
+> fork), fixed in `ae08ef5` (PR #58, 2026-10-23) and confirmed working by the product owner.
+> BE-2, BE-4, BE-10, BE-12, BE-18, BE-21 and BE-22 are still open in the code.
 
 > **2026-10-21: this file now lists open asks only.** Every item was re-checked against
 > `d14f250`. Done and removed: BE-1 (access requests), BE-3 (workflow authorization), BE-5
@@ -21,8 +25,7 @@
 
 Each item states what the frontend does today, what it needs, and why.
 
-**Take BE-19 first** — no parallel workflow can run without it. Then BE-2, BE-4 and BE-21,
-which are security items rather than features. BE-22 is a product decision (no automatic AI
+**Take BE-2, BE-4, BE-21 and BE-24 first**: they are security items rather than features. BE-22 is a product decision (no automatic AI
 summaries) and costs a Gemini call per upload until it ships.
 
 ---
@@ -31,7 +34,6 @@ summaries) and costs a Gemini call per upload until it ships.
 
 | ID        | Ask                                                         | Type            | Priority | Blocking?                                  |
 | --------- | ----------------------------------------------------------- | --------------- | -------- | ------------------------------------------ |
-| **BE-19** | 500 on the first action at a parallel fork (PR #54)         | Bug             | 🔴 High  | **Yes — no parallel workflow can run**     |
 | **BE-2**  | `POST /auth/logout` + refresh-token revocation              | New endpoint    | 🔴 High  | No — fails silently today                  |
 | **BE-4**  | Reject confidentiality tiers the uploader isn't cleared for | Security fix    | 🔴 High  | No                                         |
 | **BE-21** | Check cabinet grants when a document is read                | Security fix    | 🔴 High  | No — documents are over-shared today       |
@@ -39,76 +41,79 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med   | No — 1 of 8 documents affected when raised |
 | **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
+| **BE-24** | Admins require MFA per user; users can't turn it off        | Security change | 🔴 High  | No — today every user turns MFA on/off     |
+| **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
+| **BE-26** | Mark a request `revoked` when its grant is revoked          | Small fix       | 🟡 Low   | No                                         |
 
 **Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
 them until the PM confirms the AI features are in scope.
 
 ---
 
-## 🔴 BE-19 · `POST /tasks/:id/action` returns 500 at a parallel fork
+## 🔴 BE-24 · Admins require MFA per user; users can't turn it off — **new, 2026-11-11**
 
-**Raised:** 2026-10-20 · **Backend:** live API (`edms-backend-zmfm.onrender.com`); code read at
-`origin/dev` `6700804`
+Checked against `edms-backend` `dev` at `4da2980` (PR #69, multiple MFA methods).
 
-### What we found
+### What happens today
 
-The first action at a stage with two or more unconditional transitions (a parallel fork, PR #54)
-fails every time:
+MFA is entirely self-service. Every route in `src/modules/mfa/mfa.router.ts` needs only
+`authenticate`, except the admin reset (`DELETE /auth/mfa/users/:userId`, `user:edit`). So:
 
-```
-POST /api/v1/tasks/f83de22c-89ab-4873-a80f-880f1776cf2f/action
-{"action":"review","comment":"parallel repro 2026-10-20"}
+- any user can turn MFA **off** for themselves (`POST /auth/mfa/disable`, password + code);
+- an admin can't **require** it: nothing on `User`, `Role` or the tenant says it's required,
+  and `auth.service.ts` asks for a second factor only when `mfaEnabled` is already true;
+- `GET /users` and `GET /users/:id` don't return `mfaEnabled`, so the admin page can't tell
+  who has MFA on (our **Reset two-step** button shows for everyone).
 
-500 {"success":false,"message":"An unexpected error occurred","code":"INTERNAL_SERVER_ERROR"}
-```
+### What the product wants
 
-The task stays `pending` at the fork stage and no branch task is created. Sequential workflows on
-the same backend work. First seen 2026-10-18 (TEST_PLAN TP-Q19), and reproduced over the API on
-2026-10-20 with the smallest possible fork: no join, one document, `review` only.
-
-**Re-tested 2026-10-22 on `origin/dev` `2f42695`: still a 500.** The only workflow change since
-the report is notification wiring (`c316ddb`, PR #57), which doesn't touch the fork path. A
-sequential control run the same minute (intake → finance → legal, same user and document) returned
-200 and opened the next task.
-
-### How to reproduce
-
-1. As `client_admin`, `POST /workflows` with this definition, then `POST /workflows/:id/publish`.
-   It saves and publishes cleanly:
-   ```json
-   {
-     "stages": [
-       { "id": "intake",  "name": "Intake",         "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] },
-       { "id": "finance", "name": "Finance review", "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] },
-       { "id": "legal",   "name": "Legal review",   "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] }
-     ],
-     "transitions": [{ "from": "intake", "to": "finance" }, { "from": "intake", "to": "legal" }]
-   }
-   ```
-2. As `staff_finance`, `POST /workflow-instances` with one document they own, then
-   `POST /workflow-instances/:id/start` (both succeed; one task opens at `intake`).
-3. As `staff_finance`, `POST /tasks/:taskId/action` with `{"action":"review"}`: **500**.
-
-The 2026-10-20 run's IDs, for the server logs: workflow `d607c88e-85f9-4043-9c03-74c336341ff6`
-(archived afterwards), instance `c86d381f-a2b9-4c55-bcfe-0404e86d250a` (closed afterwards), task
-`f83de22c-89ab-4873-a80f-880f1776cf2f`. The 2026-10-22 run (action at about 08:26 UTC): workflow
-`6312badb-ae27-4eae-8c3e-f279303de560`, instance `e0e52b86-b908-45d5-91d8-12f10cbdd6c5`, task
-`dcab51d1-7c26-4f30-a744-bf24799917e8`; both archived/closed afterwards. The response carries no
-request id.
-
-### Where to look
-
-The fork branch of the task action in `src/modules/workflows/tasks/tasks.service.ts` (the
-`sourceOccurrences` loop that calls `instancesRepository.forkDocumentExecution`, then
-`routeDestinationGroups`). We couldn't find the cause from the code alone. A 500 means an
-uncaught error rather than an `AppError`, so the stack trace for the request above should name
-it.
+An admin (`user:edit`) decides who must use MFA. The user chooses the method (authenticator
+app or email) and sets it up themselves, because that needs their phone or inbox. Only an
+admin can remove it. The frontend has already hidden the user's own **Turn off** (2026-11-11),
+but that's cosmetic until the API refuses it.
 
 ### What we need
 
-The fork action to succeed: one task per branch, each document execution split into children
-(`parentExecutionId` set), as PR #54 describes. The designer already builds and saves forks and
-joins (live since 2026-10-17), so the frontend is waiting only on this.
+Shape suggestions only; the backend team owns the design.
+
+1. **`User.mfaRequired`** (boolean, default `false`).
+2. **Admin sets it:** `PATCH /users/:id` accepts `mfaRequired`, or a dedicated
+   `PUT /auth/mfa/users/:userId/requirement { required }`. Gate on `user:edit`, audit it
+   (`user.mfa_required`, `user.mfa_requirement_removed`).
+   **On invite too:** `POST /users` (`user:create`) accepts `mfaRequired`, so the admin can tick
+   "Require two-step sign-in" when inviting.
+3. **List it:** `mfaRequired` and `mfaEnabled` on each `GET /users` row and on `GET /users/:id`.
+4. **Sign-in forces set-up:** when `mfaRequired && !mfaEnabled`, `POST /auth/login` returns no
+   tokens, e.g. `{ mfaSetupRequired: true, mfaToken }`. The client then sets up a method with
+   that token: authenticator (`secret`, `otpauthUri`, then a code) or email (send code, then
+   code). A successful confirm returns the usual login body (tokens + user) **plus**
+   `recoveryCodes`. Today `/setup`, `/enable`, `/email/setup` and `/email/enable` all need an
+   access token, which this user doesn't have yet.
+   **New users:** an invited user sets a password on `/reset-password` (invite token), then signs
+   in; that first sign-in hits this step, so they set up MFA before their first session. The
+   invite link already proves the inbox, so email is the easy choice for them.
+5. **Users can't turn it off:** `POST /auth/mfa/disable` returns 403 (e.g.
+   `MFA_DISABLE_ADMIN_ONLY`) for everyone, or at least while `mfaRequired` is true. Admins keep
+   `DELETE /auth/mfa/users/:userId`. If `mfaRequired` is still true after a reset, the user sets
+   MFA up again at their next sign-in. That's the lost-phone flow.
+6. **Method switching stays self-service** (`/method-change/*`): the user picks how they get
+   their code.
+
+Side effect: this closes a PR #69 gap. `POST /disable` checks `code` only against the
+authenticator secret, and `activateOtpMethod` clears that secret for email users, so an email
+user can turn MFA off only with a recovery code.
+
+**Open question for the product owner:** may users still turn MFA **on** voluntarily when an
+admin hasn't required it? The frontend allows it for now (it only adds security). If not,
+`/setup`, `/enable`, `/email/setup` and `/email/enable` should refuse unless `mfaRequired`.
+
+### How to verify
+
+As `client_admin`: require MFA for `management_ops` → their next password sign-in returns
+`mfaSetupRequired` and no tokens → set up email or app → signed in with recovery codes.
+`POST /auth/mfa/disable` as `management_ops` → 403. Admin reset → next sign-in asks for set-up
+again. `GET /users` shows both flags. Invite a user with `mfaRequired: true` → accept the
+invite, set a password → first sign-in goes straight to set-up.
 
 ---
 
@@ -377,6 +382,37 @@ catch-all returning the standard `ApiResponse` envelope would have made them obv
 app.use((_req, res) => ApiResponse.notFound(res, 'Route not found', 'ROUTE_NOT_FOUND'));
 // must sit after the routers, before errorHandler
 ```
+
+---
+
+## 🟡 BE-25 · Task notifications name the stage, not its id — **new, 2026-11-11**
+
+`task.assigned` reads "A new stage_1789748379694 task requires your attention." and
+`workflow.changes_requested` reads "Changes have been requested on your document workflow.", with no
+document named. Seen live 2026-11-11 while clicking notifications through (frontend ticket 16); the
+links themselves work.
+
+**Cause:** the messages interpolate the stage **id** (`task.stage` / `candidate.currentStage`). The
+stage schema accepts an optional `name` and stores it, but `readStoredWorkflowDefinition`
+(`definitions.validation.ts`) drops it, so `StoredWorkflowStage` has no `name` to use. The designer
+always sends one (new stages: `id: stage_<timestamp>`, `name: 'New stage'`).
+
+**Ask:** map `name` into `StoredWorkflowStage`, then use `stage.name ?? stage.id` and the document
+title at all five sites (checked on `origin/dev` `4da2980`):
+- `instances.service.ts` ~1328, first task on start (`stage` in scope)
+- `tasks.service.ts` ~1795, next task after an action (`targetStage` in scope); also name the
+  document in the changes-requested text
+- `tasks.service.ts` ~2712, task after parallel branches join (`targetStage` in scope)
+- `sla.service.ts` ~929 and ~960, SLA warning and breach (needs the definition loaded)
+
+---
+
+## 🟡 BE-26 · Mark a request `revoked` when its grant is revoked — **new, 2026-11-11**
+
+`DELETE /documents/:id/access-grants/:userId` deletes the `DocumentAccessGrant` row and leaves the
+`DocumentAccessRequest` `approved`. There is no grant list, so `/admin/access-requests` (where Revoke
+now lives) keeps showing revoked access as approved, and a second Revoke 404s. A `revoked` status (or
+`GET /documents/:id/access-grants`) would fix it.
 
 ---
 

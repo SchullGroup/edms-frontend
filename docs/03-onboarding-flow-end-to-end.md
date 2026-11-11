@@ -207,7 +207,7 @@ by design — system roles are `isSystemRole: true` and are not tenant-editable.
 cd edms-backend
 
 npx prisma generate          # ⚠️ REQUIRED. See the warning below.
-npx prisma migrate deploy    # 32 migrations (2026-10-15)
+npx prisma migrate deploy    # 42 migrations (2026-11-09)
 npm run seed:system          # roles, permissions, role_permissions
 npm run db:bootstrap         # pgcrypto extension + seed:system in one shot
 npx prisma db seed           # optional: demo users, cabinets, documents
@@ -217,35 +217,43 @@ npx prisma db seed           # optional: demo users, cabinets, documents
 
 **6 system roles** (`prisma/seed-system.ts`):
 
-*Re-counted 2026-10-29 from `prisma/seed-system.ts` and
-`src/shared/constants/permissions.constants.ts` on `edms-backend` `dev` (`82c4707`): `51e9d85`
-added `control_exception` (5 permissions, 7 grants). It was 72 / 40 / 29 / 27 / 26 / 18
+*Re-counted 2026-11-09 from `prisma/seed-system.ts` and
+`src/shared/constants/permissions.constants.ts` on `edms-backend` `dev` (`42ed468`, PR #67):
++4 `client_admin` (`document:download_original`, `access_rule:view|create|delete`), +3
+`schulltech_admin` (`access_rule:*`) and +1 `internal_auditor` (`document:download_original`),
+all `global`. On 2026-10-29 (`82c4707`) `51e9d85` had added `control_exception` (5 permissions, 7 grants). It was 72 / 40 / 29 / 27 / 26 / 18
 grants, 73 permissions and 212 grants on 2026-10-15 (`9998e05`). The table before that
 (45 / 18 / 14 / 10 / 10 / 3, 45 permissions, 100 grants) predated the 2026-09-16 RBAC refactor.*
 
 | Role | Grants | Character |
 |---|---|---|
-| `client_admin` | 73 | Full tenant control — 72 `global`, 1 `own`; reads control exceptions |
+| `client_admin` | 77 | Full tenant control — 76 `global`, 1 `own`; reads control exceptions; downloads unmarked originals; manages IP and country access rules |
 | `supervisor` | 40 | Department oversight + approval — 34 `department`; reassigns tasks, publishes circulars |
 | `staff` | 29 | Mixed `own` (16) / `department` (9) scope |
 | `management` | 29 | `global` read, plus own-scope routing, task action, delegation, circular publishing, and acknowledging/resolving control exceptions |
-| `internal_auditor` | 30 | `global` read + `audit:view/export`; raises, edits and reports control exceptions; own-scope routing, task action and delegation |
-| `schulltech_admin` | 18 | Workflow definitions, instances, tasks, delegation, audit — **no `document:*` grant** |
+| `internal_auditor` | 31 | `global` read + `audit:view/export` + unmarked originals (`document:download_original`); raises, edits and reports control exceptions; own-scope routing, task action and delegation |
+| `schulltech_admin` | 21 | Workflow definitions, instances, tasks, delegation, audit, IP and country access rules — **no `document:*` grant** |
 
 In the seed, only `client_admin` and `schulltech_admin` hold `workflow:view` — the cause of
 DRIFT-14. *(Re-tested 2026-10-16: the live tenant's non-admin roles still hold
 `workflow:view:global`, so it doesn't bite there; a tenant seeded fresh from this file would.)*
 
-**78 permissions** across 21 resources: `document`, `document_version`, `document_lock`,
+**82 permissions** across 22 resources: `document`, `document_version`, `document_lock`,
 `document_metadata`, `document_comment`, `document_signature`, `document_access_request`,
 `control_exception`, `cabinet`, `cabinet_metadata_field`, `cabinet_access`, `folder`,
 `department`, `user`, `role`, `workflow`, `workflow_instance`, `task`, `delegation`, `audit`,
-`circular`.
+`access_rule`, `circular`. *(79 across 21 at `ab7e1e8`. This line said 78 until 2026-11-09:
+it missed `document:download_original`, added by `f3ebfb4`.)*
 
 *On an existing tenant the `control_exception` grants appear only after `npm run
 seed:system` is re-run. The live tenant didn't have them on 2026-10-29.*
 
-**219 role-permission grants**, each carrying a scope of `global | department | own`.
+*PR #67's `access_rule:*` and `document:download_original` grants are in the same position:
+on 2026-11-09 no live role held any of them (`GET /roles`), and `GET /access-rules` as
+`client_admin` was a 403. **Live was re-seeded on 2026-11-11**: all of them, and the control-exception
+grants, are there now; `staff` kept `department` scope on `cabinet:view` / `folder:view`.*
+
+**227 role-permission grants** (219 before PR #67), each carrying a scope of `global | department | own`.
 
 ### The scope model — the thing to understand before anything else
 
@@ -621,6 +629,14 @@ seed grants `workflow:view` to no other role, so staff and supervisors can't rou
 7. LoginPage useEffect redirects by role
 ```
 
+**With two-step sign-in on** (since 2026-11-10): step 4 stops after `bcrypt.compare` and
+returns `{ mfaRequired: true, mfaToken }`, with no tokens and no cookie. `/` asks for the
+6-digit code (or a single-use recovery code) and sends it through the BFF's
+`POST /api/auth/mfa/verify`; its response is the one in step 4, and steps 5–7 follow. The
+challenge lasts 5 minutes, then "Start again" goes back to the password. Nobody has it on
+until they turn it on themselves (account menu → **Security**); there is no tenant-wide
+"require it" switch.
+
 ### Landing pages
 
 | Role | Lands on | Sidebar (`useNavigation.ts`) |
@@ -974,6 +990,7 @@ npm run dev                # Web   :3000
 | 7 | Design and publish workflows | `/admin/workflows` | Only `client_admin`/`schulltech_admin` can publish or archive (DRIFT-05, fixed 09-04). **On a freshly seeded tenant only they can list them, too** — staff and supervisors can't route until DRIFT-14's seed rows are added. The live tenant's roles hold the grant (re-tested 2026-10-16). |
 | 8 | Set branding | `/admin/branding` | 🟥 **Saved in this browser only** — survives a reload since 2026-10-12, but other users and the login page don't see it. |
 | 9 | ~~Set retention policy~~ | ⛔ | Mock. No enforcement job exists. |
+| 10 | Turn on two-step sign-in for your own account, and ask users to do the same | Account menu → **Security** (`/account/security`) | Optional per user: nothing can require it yet (BE-24 asks for admins to require it per user, including on invite). Each user picks an authenticator app or email codes; only an admin can turn it off. Recovery codes are shown once. Someone who loses phone and codes needs **Reset two-step** on `/admin/users`, after which a password alone signs them in. The authenticator app shows the backend's `MFA_ISSUER` (default `SchullTech EDMS`) |
 
 **Then hand over to staff — with these caveats stated up front:**
 

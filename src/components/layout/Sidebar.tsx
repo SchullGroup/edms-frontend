@@ -300,6 +300,20 @@ export const Sidebar = ({ isMobileOpen, onClose, navToggleRef }: SidebarProps) =
                   </span>{' '}
                   {prefs.theme === 'dark' ? 'Light theme' : 'Dark theme'}
                 </button>
+                <button
+                  className="menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push('/account/security');
+                    onClose();
+                  }}
+                >
+                  <span>
+                    <Icon name="shield" size={16} />
+                  </span>{' '}
+                  Security
+                </button>
                 <div className="menu-sep"></div>
                 <button className="menu-item danger" role="menuitem" onClick={handleSignOut}>
                   <span>

@@ -101,6 +101,27 @@ export function refreshAccessToken(): Promise<string> {
   return _refreshPromise;
 }
 
+/** Backend 401 codes for a wrong secret or an expired sign-in challenge, not a dead token. */
+const WRONG_SECRET_CODES = new Set([
+  'INVALID_CREDENTIALS',
+  'INVALID_MFA_CODE',
+  'MFA_CHALLENGE_INVALID',
+]);
+
+let accessRestrictedShownAt = 0;
+
+/** An IP or country rule turned this network away; every call fails alike, so say it once a while. */
+function notifyAccessRestricted() {
+  if (typeof window === 'undefined' || Date.now() - accessRestrictedShownAt < 30_000) return;
+  accessRestrictedShownAt = Date.now();
+  useUIStore
+    .getState()
+    .addToast(
+      "Your organisation's access rules block this network or location. Ask an administrator.",
+      'error',
+    );
+}
+
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api/v1`,
   headers: {
@@ -130,7 +151,10 @@ apiClient.interceptors.response.use(
   async (error: AxiosError<any>) => {
     const originalRequest = error.config as any;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // A wrong password or MFA code is also a 401, but the session is fine. Retrying
+    // would also count a wrong code twice towards the backend's 5-try lockout.
+    const notSessionFailure = WRONG_SECRET_CODES.has(error.response?.data?.code);
+    if (error.response?.status === 401 && !originalRequest._retry && !notSessionFailure) {
       // Captured before joining/starting a refresh — if a login or logout
       // happens while this 401 is being handled, the eventual outcome no
       // longer says anything about whether the *current* session is valid.
@@ -218,6 +242,9 @@ apiClient.interceptors.response.use(
       }
     }
 
+    if (error.response?.status === 403 && error.response.data?.code === 'ACCESS_RESTRICTED') {
+      notifyAccessRestricted();
+    }
     return Promise.reject(error);
   },
 );

@@ -13,6 +13,8 @@ import {
   DocumentStatsResponse,
   AccessRequest,
   DocumentAccessKind,
+  DocumentWorkstream,
+  DocumentHistoryEntry,
 } from '@/types/models';
 
 export interface AccessRequestInboxFilters {
@@ -39,10 +41,20 @@ export interface DocumentFilters {
   confidentiality?: 'public' | 'internal' | 'confidential' | 'restricted' | 'top_secret';
   urgency?: 'low' | 'normal' | 'high' | 'critical';
   documentType?: string;
+  workstream?: DocumentWorkstream;
   createdBy?: string;
+  /** Created-date window as ISO instants: `from` inclusive, `to` exclusive (PR #67). */
+  from?: string;
+  to?: string;
   includeArchived?: 'true' | 'false';
   page?: number;
   limit?: number;
+}
+
+/** One document's entries in a mass-indexing batch; only the fields being set. */
+export interface MetadataBatchItem {
+  documentId: string;
+  metadata: DocumentMetadataValueInput[];
 }
 
 export const documentsService = {
@@ -140,6 +152,11 @@ export const documentsService = {
     return response.data.data;
   },
 
+  /** Mass indexing: 1–50 documents, all-or-nothing (`PUT /documents/metadata/batch`). */
+  updateMetadataBatch: async (documents: MetadataBatchItem[]): Promise<void> => {
+    await apiClient.put('/documents/metadata/batch', { documents });
+  },
+
   // Same document as `GET /documents/:id`, through routes that also check
   // `document:export` / `document:print` and are audited as `document.exported` /
   // `document.printed` (edms-backend `0dab81a`). Call before exporting or printing.
@@ -163,6 +180,18 @@ export const documentsService = {
   requestSummary: async (id: string): Promise<DocumentSummary> => {
     const response = await apiClient.post<ApiResponse<DocumentSummary>>(`/documents/${id}/summary`);
     return response.data.data;
+  },
+
+  /** `GET /documents/:id/history`, newest first: edits, metadata, versions, restores. */
+  getHistory: async (
+    id: string,
+    params?: { page?: number; limit?: number },
+  ): Promise<PaginatedResponse<DocumentHistoryEntry>> => {
+    const response = await apiClient.get<PaginatedResponse<DocumentHistoryEntry>>(
+      `/documents/${id}/history`,
+      { params },
+    );
+    return response.data;
   },
 
   // Version Control
@@ -231,6 +260,15 @@ export const documentsService = {
       `/documents/${id}/access-requests/${requestId}/deny`,
     );
     return response.data.data;
+  },
+
+  /** Deletes the grant only: the request stays `approved`, and a second call 404s. */
+  revokeAccessGrant: async (
+    id: string,
+    userId: string,
+    permission: DocumentAccessKind,
+  ): Promise<void> => {
+    await apiClient.delete(`/documents/${id}/access-grants/${userId}`, { params: { permission } });
   },
 
   /** `GET /documents/access-requests` — client_admin-only admin inbox across

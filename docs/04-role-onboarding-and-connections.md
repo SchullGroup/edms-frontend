@@ -100,14 +100,14 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
 ```
                       ┌──────────────────────────────┐
                       │  SCHULLTECH_ADMIN (Adaeze)   │  🟥 mock portal
-                      │  Vendor operations           │  18 grants, no document:*
+                      │  Vendor operations           │  21 grants, no document:*
                       │  /platform                   │  Cannot read customer documents
                       └──────────────┬───────────────┘
                                      │  H1: provisions the tenant
                                      │      + the first admin account
                                      ▼
                       ┌──────────────────────────────┐
-                      │  CLIENT_ADMIN (Bola)         │  73 grants, 72 global
+                      │  CLIENT_ADMIN (Bola)         │  77 grants, 76 global
                       │  Tenant system owner         │  Only role bypassing
                       │  /admin                      │  cabinet access checks
                       └──┬────────┬────────┬─────────┘
@@ -139,7 +139,7 @@ Status markers are the same as doc 02: ✅ Done · 🟨 Partial · 🟥 Mock · 
                     │  H7: every action above emits an audit entry
                     ▼            ✅ written since 2026-09-18 (DRIFT-11)
          ┌──────────────────────────────┐
-         │  INTERNAL_AUDITOR (Femi)     │  30 grants, read-mostly global
+         │  INTERNAL_AUDITOR (Femi)     │  31 grants, read-mostly global
          │  Independent assurance       │  No document/cabinet/user edits
          │  /auditor                    │  🟨 trail real; dashboard SEED
          └──────────────────────────────┘
@@ -170,7 +170,7 @@ tenant-wide, and can also act on their own tasks, route their own documents and 
 
 ### Identity and rights
 
-**Backend grants — 18** *(re-counted 2026-10-15; this said "exactly three" — `workflow:view`,
+**Backend grants — 21** *(re-counted 2026-11-09: +`access_rule:view/create/delete` from PR #67, on live since the 2026-11-11 re-seed; 18 on 2026-10-15. Before that it said "exactly three" — `workflow:view`,
 `workflow:route`, `audit:view` — before the 2026-09-16 RBAC refactor)*:
 
 ```
@@ -179,6 +179,7 @@ workflow_instance: view, create, route, close                  (global)
 task:              view, action, reassign                      (global)
 delegation:        view, end (global) · create (own)
 audit:             view, export                                (global)
+access_rule:       view, create, delete                        (global, PR #67)
 document_access_request: create
 ```
 
@@ -222,6 +223,7 @@ records, that is a serious and correct architectural decision.
 | Enable a feature for one tenant | ⛔ No flag model, no evaluation logic in either codebase. |
 | Investigate a customer's issue | ⛔ Correctly cannot — no document access. Would need the impersonation flow that doesn't exist yet. |
 | Check queue depth / worker health | ⛔ `GET /health` returns `{status:'ok', timestamp}`. No DB probe, no Redis probe, no queue metrics. |
+| Turn on two-step sign-in | ✅ *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`). App or email codes (2026-11-11, ticket 17); turning it off is admin-only. Unlike the rest of this portal it's real: the same backend MFA every role uses |
 
 ### Why this is Phase 2 work, not neglect
 
@@ -256,11 +258,13 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 
 ### Identity and rights
 
-**73 grants — 72 `global`, 1 `own`** *(re-counted 2026-10-29: +`control_exception:view`;
-72 on 2026-10-15, "45 grants, every one `global`" before)*. Documents (including comments,
+**77 grants — 76 `global`, 1 `own`** *(re-counted 2026-11-09: +`document:download_original`
+and `access_rule:view/create/delete` from PR #67, on live since 2026-11-11; 73 on 2026-10-29
+(+`control_exception:view`), 72 on 2026-10-15, "45 grants, every one `global`" before)*. Documents (including comments,
 signatures and access requests), versions, locks, metadata, cabinets, metadata fields,
 cabinet access, folders, departments, users, roles, workflows, workflow instances, tasks,
-delegations, audit, circulars, and read-only control exceptions.
+delegations, audit, circulars, read-only control exceptions, IP and country access rules,
+and the unmarked original file.
 
 Two unique properties:
 - The **only** role in `CABINET_ACCESS_BYPASS_ROLES` — sees every cabinet regardless of grants
@@ -287,8 +291,9 @@ This must be done in order; each step produces the input for the next.
 | 10 | Apply branding | `/admin/branding` | — | 🟥 saved in this browser only (since 2026-10-12); other users don't see it |
 | 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 12 | Review the tenant audit trail | `/admin/audit` | `GET /audit`, `/audit/verify` | ✅ wired 2026-09-18 (was `SEED.audit`) |
+| 13 | Optional: block or allow networks and countries | `/admin/access-rules` | `GET`/`POST /access-rules`, `DELETE /access-rules/:id` | ✅ wired 2026-11-11 (block rule verified live). Before any **allow** rule, include the web app server's address: sign-in reaches the API from there. Country rules need `GEO_COUNTRY_HEADER` on the server, not set on live |
 
-**Steps 2, 3, 4, 5, 6a, 7, 8 and 12 are real; step 6 is wired but not yet verified live.** Everything else is either missing a UI or writes
+**Steps 2, 3, 4, 5, 6a, 7, 8, 12 and 13 are real; step 6 is wired but not yet verified live.** Everything else is either missing a UI or writes
 only to localStorage.
 
 ### First week
@@ -327,6 +332,7 @@ once the Access card shipped.
 | Configure branding | ❌ | 🟥 |
 | Publish circulars | ✅ `circular:*` at `global` scope | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | View the audit trail | ✅ | ✅ wired 2026-09-18 |
+| Two-step sign-in: their own, and a reset for someone who lost their phone | ✅ | ✅ *(2026-11-10, tickets 09–10, verified live)* Their own under account menu → **Security**. For others, **Reset two-step** on `/admin/users` (`user:edit`): the next sign-in needs only the password. `GET /users` doesn't say who has it on, so the button shows for every signed-up user except yourself |
 
 ### Where it breaks, ranked
 
@@ -442,6 +448,7 @@ end       → /staff/tasks  clear the queue   ✅
 | Act on assigned tasks | ✅ | |
 | Delete a document | ❌ | Not granted — correct |
 | Publish a workflow definition | ❌ | Correct — `workflow:publish` is admin-only. *(Was "⚠️ YES … no authorization on the endpoint" — DRIFT-05, fixed 2026-09-04.)* |
+| Turn on two-step sign-in | ✅ | *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`): an authenticator app or, since 2026-11-11 (ticket 17), email codes; only an admin can turn it off. scan a QR code, confirm a code, save 10 recovery codes. Sign-in then asks for the code. Someone who loses both phone and codes needs an admin reset |
 
 ### Where it breaks, ranked
 
@@ -511,6 +518,8 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 | Delegate while on leave | 🟨 | `/delegations` (create, list, end) since 2026-09-04; not re-verified end to end. *(Was ⛔ "No UI".)* |
 | Get warned before a breach | 🟨 | `sla.breach` is sent to the supervisor role, `sla.warning` to the assignee (DRIFT-10); not clicked through. *(Was ⛔ "tells nobody".)* |
 | Export team stats | ✅ | `exportCsv` |
+| Index a batch of scanned invoices | ✅ | *(2026-11-10, ticket 08, verified live as `supervisor_finance`)* Select them on `/search` → **Index selected** → `/search/mass-index`: one table per cabinet, "Apply" fills a column, **Save all** sends `PUT /documents/metadata/batch`. Needs `document_metadata:edit` (seeded at department scope) and Edit on the cabinet |
+| Turn on two-step sign-in | ✅ | *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`): an authenticator app or, since 2026-11-11 (ticket 17), email codes; only an admin can turn it off. scan a QR code, confirm a code, save 10 recovery codes. Sign-in then asks for the code. Someone who loses both phone and codes needs an admin reset |
 
 ### Steady state
 
@@ -617,6 +626,7 @@ assigned to it, route its own documents, delegate, and publish circulars. The se
 | "Show me open audit findings" | 🟥 Re-exports the auditor's findings screen, which runs on `SEED.findings`. **No `Finding` model exists.** |
 | "Export this for the board" | ✅ CSV |
 | "Email me this weekly" | ⛔ No report scheduling. A mail transport exists now (`src/config/mailer.ts`) |
+| "Can I protect my account with my phone?" | ✅ *(2026-11-10, tickets 09–10)* Two-step sign-in under account menu → **Security**; verified live as `management_ops` |
 
 ### ~~The scaling problem, quantified~~ — resolved 2026-09-21 (DRIFT-07)
 
@@ -672,7 +682,8 @@ existed by 2026-09-04 evening.
 
 ### Identity and rights
 
-**30 grants — 25 `global`, 5 `own`** *(re-counted 2026-10-29: +`control_exception`
+**31 grants — 26 `global`, 5 `own`** *(re-counted 2026-11-09: +`document:download_original`
+from PR #67, on live since 2026-11-11; 30 on 2026-10-29 after +`control_exception`
 view/create/edit/report; 26 on 2026-10-15, "10 grants, all `global`, all read-only" with
 `workflow:view:global` before)*:
 
@@ -681,7 +692,7 @@ read (global):  document view/search/view_confidential/download/export/print,
                 document_version, document_metadata, document_comment,
                 document_signature, cabinet, cabinet_access, folder,
                 department, workflow_instance, task, delegation, circular,
-                control_exception
+                control_exception, document download_original (PR #67)
 audit:          view, export (global)
 write:          workflow_instance create/route (own) · task action (own)
                 delegation create/end (own) · document_access_request create
@@ -721,12 +732,13 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | Task | Reality |
 |---|---|
 | "Show me everything Chika did last month" | ✅ `/auditor/trail` migrated 2026-09-18 — `actorId`/`action`/`from` filters against the real trail |
-| "Who viewed this confidential contract?" | ✅ confirmed live 2026-09-18 — `document.viewed` is a real, auto-emitted action (seen in a live 78-entry sample); `/auditor/trail`'s action filter surfaces it, though there's no per-document "who viewed this one" view yet, only actor/action/date |
+| "Who viewed this confidential contract?" | ✅ confirmed live 2026-09-18 — `document.viewed` is a real, auto-emitted action (seen in a live 78-entry sample); `/auditor/trail`'s action filter surfaces it. **2026-11-10 (ticket 07, verified live):** the document page's **Viewing time** card answers it per document: each viewer, sessions, total time and last viewed, with a date range and CSV (`GET /document-views/report`, `audit:view`). Time is recorded from 10 Nov 2026 (ticket 06) |
 | "Who downloaded it?" | ✅ `document.downloaded` is written by `documents.router.ts` (download gated and audited since 2026-10-08); filter by action on `/auditor/trail`. *(Was ⛔ "no download endpoint to log".)* |
 | "Prove the trail hasn't been altered" | ✅ `GET /audit/verify` exists and works, confirmed live; `/admin/audit`'s "Verify integrity" button calls it. Not yet surfaced on `/auditor/trail` itself. |
 | "Who can see the Contracts cabinet?" | ⛔ `cabinet_access:view` granted and `GET /cabinets/:id/access` exists; no auditor screen calls it. |
 | "Track this finding to closure" | 🟥 No `Finding` model in Prisma. Everything is lost on cache clear. |
 | "Export evidence for the regulator" | ✅ `/auditor/trail` exports the real trail as CSV (`GET /audit/export`). Findings would still export fixture data. *(Was ⛔ "Would export fixture data".)* |
+| "Who turned off two-step sign-in?" | ✅ *(2026-11-10, seen live)* Turning it on, off and admin resets are audited (`user.mfa_enabled`, `user.mfa_disabled`, `user.mfa_reset`), and a code sign-in is `user.login` with `step: 'mfa'`. Since 2026-11-11 (ticket 15) the trail filters and labels them, method switching and email codes included. Their own two-step sign-in is under account menu → **Security** |
 
 ### The gap between design and reality (historical — see correction above)
 

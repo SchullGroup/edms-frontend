@@ -124,7 +124,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
     ┌────────┘                       └──────────────────────────┐
     │ (a) axios → same-origin                                   │ (b) axios → cross-origin
     │     `/api/auth/*`                                         │     apiClient, baseURL
-    │     ONLY 3 routes                                         │     `${NEXT_PUBLIC_API_URL}/api/v1`
+    │     ONLY 4 routes                                         │     `${NEXT_PUBLIC_API_URL}/api/v1`
     ▼                                                           ▼
 ┌───────────────────────────────┐              ┌────────────────────────────────────────┐
 │ NEXT.JS ROUTE HANDLERS (BFF)  │              │  EXPRESS 5 BACKEND (edms-backend)      │
@@ -133,8 +133,8 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/login         │              │  POST /api/v1/auth/login    ✅          │
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
-│                               │              │                                        │
-│  Sole responsibility:         │              │  154 routes over 13 modules (11-04)    │
+│  POST /api/auth/mfa/verify    │              │  POST /api/v1/auth/mfa/verify ✅        │
+│  Sole responsibility:         │              │  171 routes over 17 modules (11-09)    │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
 │  sees it.                     │              │  │ Repository → PrismaClient        │  │
@@ -166,7 +166,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
 | Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 64 pages (60 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-29 (+5: the `/control-exceptions` pages); 59 on 2026-10-20, 58 on 2026-10-15, 46 before |
-| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 154 routes over 13 router files — re-counted 2026-11-04 (149 on 2026-10-29, 140 on 2026-10-26, 134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
+| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 171 routes over 17 router files — re-counted 2026-11-09 (154 on 2026-11-04, 149 on 2026-10-29, 140 on 2026-10-26, 134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
 | Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA + out-of-office delegation (since `436ea83`, 2026-10-29) |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |
 
@@ -176,7 +176,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 
 Two distinct paths exist. Knowing which one you are on determines where to debug.
 
-### Path A — authentication (3 routes only)
+### Path A — authentication (4 routes only)
 
 ```
 Browser
@@ -209,6 +209,17 @@ Browser
   LoginPage useEffect redirects by role → /staff | /supervisor | /management |
                                           /admin | /platform | /auditor
 ```
+
+**With two-step sign-in on (since 2026-11-10, ticket 10).** `AuthService.login` stops after
+`bcrypt.compare` and returns `{ mfaRequired: true, mfaToken }` (a 5-minute JWT signed with the
+refresh secret, so it can't pass as a bearer token). The BFF passes it through, no cookie is
+set, and `/` shows six code boxes ("Use a recovery code", "Back to sign in"); a full code submits
+itself. Since PR #69 the challenge also carries `mfaMethod`; for `email`, `/` first calls the public
+`POST /api/v1/auth/mfa/otp/request { mfaToken }` (straight to the backend, no cookie) and sends
+the returned `challengeId` with the code. The code goes
+`axios.post('/api/auth/mfa/verify')` → `src/app/api/auth/mfa/verify/route.ts` →
+`POST /api/v1/auth/mfa/verify`, whose body is the same as a password login's; from there the
+path above continues unchanged (both handlers share `src/apis/server/tokenResponse.ts`).
 
 ### Path B — everything else (132 routes, re-counted 2026-10-15; was 66)
 
@@ -263,8 +274,9 @@ Browser — response interceptor
   │         • otherwise: Cookies.remove + window.location.href = '/'
 ```
 
-**Note the asymmetry.** Only 3 routes go through the Next.js server (login, refresh and
-logout — and the backend has no logout route, DRIFT-01). The other 132 backend routes are
+**Note the asymmetry.** Only 4 routes go through the Next.js server (login, refresh,
+logout — the backend has no logout route, DRIFT-01 — and, since 2026-11-10, the MFA second
+step, which also returns a refresh token). The other 132 backend routes are
 plain browser→Express cross-origin calls *(re-counted 2026-10-15; was "the other 71")*. There is no SSR data fetching anywhere in the
 app: every page is `'use client'`.
 
@@ -276,8 +288,9 @@ app: every page is `'use client'`.
 
 | Token | Where it lives | HttpOnly | Lifetime | Set by | Read by |
 |---|---|---|---|---|---|
-| `accessToken` | browser cookie via `js-cookie` | **No** | `expires: 1` day (cookie) but JWT expires in **15m** | `authService.login/refresh` | axios request interceptor |
-| `refreshToken` | browser cookie | **Yes** | 7 days | Next.js route handler | Next.js route handler only |
+| `accessToken` | browser cookie via `js-cookie` | **No** | `expires: 1` day (cookie) but JWT expires in **15m** | `authService.login/verifyMfa/refresh` | axios request interceptor |
+| `refreshToken` | browser cookie | **Yes** | 7 days | Next.js route handlers (`login`, `mfa/verify`) | Next.js route handler only |
+| `mfaToken` | React state on `/` only | n/a | 5 minutes | `POST /auth/login` (MFA on) | `POST /api/auth/mfa/verify` |
 
 **The design intent is sound** — the long-lived credential is unreachable from JS, and only
 the short-lived one is exposed. Two things weaken it in practice:
@@ -304,6 +317,12 @@ correct here:
   If tab A refreshes and rotates the cookie, tab B's in-flight refresh will 401 — but B
   checks the timestamp, sees A refreshed <4s ago, re-reads the cookie and retries instead
   of logging the user out. This is a real bug class that most apps ship with.
+
+**Not every 401 is a dead session (2026-11-10).** The MFA routes answer a wrong code with 401
+`INVALID_MFA_CODE` and `POST /auth/mfa/disable` a wrong password with 401
+`INVALID_CREDENTIALS`. The interceptor skips refresh-and-retry for those two codes; before,
+it refreshed and re-sent the request, so each wrong code counted twice towards the backend's
+5-try lockout. Checked live: one request per wrong attempt, no `/api/auth/refresh` call.
 
 ### 🔴 DRIFT-01 — `POST /api/v1/auth/logout` does not exist
 
@@ -1025,6 +1044,28 @@ even for `client_admin`, and the viewer says so. **Verified live 2026-11-06** as
 `client_admin`: New-Memo (PDF) renders, and Download, Export and Download version 1 each save a
 watermarked PDF; Scan_20261021 (PNG) shows the permission message.
 
+**PR #67 (`42ed468`, live 2026-11-09) changed three things here.** `/files` is mounted before
+`authenticate` again, so a bare link works (checked live: 200 with no `Authorization` header;
+the token `apiClient` still sends is harmless). JPEG, PNG and TIFF are now watermarked on
+`preview` / `download` too, so the 415 is only for other types, and the image preview block
+above was the frontend's until ticket 12. And `document:download_original` is in the seed for
+`client_admin` and `internal_auditor`; live was re-seeded with it on 2026-11-11.
+
+**Since ticket 12 (2026-11-11) the frontend uses the links the backend issues per viewer.**
+Images preview with `action=preview`, watermarked like PDFs. Download, version downloads and
+export save `downloadUrl` as issued (it already carries `?action=download`). "Download original"
+(on `/doc/[id]` and per version) appears only when `originalUrl` is set. Download is offered
+only for a `downloadUrl` on a PDF, JPEG, PNG or TIFF (`canDownloadVersion`); other types 415 on
+`download`, so they say only the original can be downloaded. Fresh links come from
+`GET …/versions`, which isn't audited, so a download no longer also logs
+`document.version_viewed`. **Verified live in Edge 2026-11-11** as `staff_finance`: Scan_20261021
+(PNG) previews; Download on a PDF and on that PNG calls `GET …/versions` then
+`files?action=download` (200, the right type); no "Download original" for staff. After the
+2026-11-11 re-seed, as `client_admin`: "Download original" fetches `files?action=original` (200), audited
+`document.downloaded` with `original: true`.
+Audit shows each as `document.downloaded` with `original: false`, and no `version_viewed`. Circular
+attachments still ask for `original` (the backend serves them unmarked whatever the action).
+
 pdf.js's worker and the files it loads at runtime (WebAssembly decoders for JBIG2 and
 JPEG 2000 images, standard fonts, character maps, colour profiles) are served from
 `/pdfjs/`. `scripts/copy-pdfjs-assets.mjs` copies them out of `node_modules` at the start of
@@ -1134,38 +1175,45 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists — since PR #51 (live 2026-10-14) the login response's `user` also carries `departmentId` | ✅ — the login page stores the whole `user`, so `useMyDepartmentId` is answered from the login itself; AppShell refreshes it from `/auth/me` |
+| `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists — since PR #51 (live 2026-10-14) the login response's `user` also carries `departmentId`. **PR #67 (`bca7a10`, live 2026-11-09):** for an account with MFA on it returns `{ mfaRequired: true, mfaToken }` (valid 5 min) and **no tokens**; `user.login` is audited only when the second step succeeds | ✅ — the login page stores the whole `user`, so `useMyDepartmentId` is answered from the login itself; AppShell refreshes it from `/auth/me`. **MFA challenge handled 2026-11-10 (ticket 10, verified live):** the BFF passes a body without `refreshToken` through unchanged (shared `respondWithTokens`), `authService.login` sets no cookie for it, and `/` shows the second step |
 | `POST /api/auth/refresh` → `/api/v1/auth/refresh` | ✅ exists | ✅ |
 | `POST /api/auth/logout` → `/api/v1/auth/logout` | ❌ **not registered** | 🟨 **DRIFT-01** — frontend now *calls* it (Sidebar sign-out → `authService.logout()`, with the bearer token, 2026-09-10); backend route still missing so revocation is still a no-op |
 | `GET /auth/me` | ✅ exists — since PR #50 (live 2026-10-13) also `departmentId` (null when none); login carries it too since PR #51 (live 2026-10-14) | ✅ (`permissions` now included — DRIFT-03 resolved). **`departmentId` adopted 2026-10-13, verified live:** AppShell copies it into the store; `useMyDepartmentId` replaces the `GET /users/:id` lookups in `useConfidentialityClearance`, `useDepartmentColleagues` and `/admin/cabinets`, and the first-page lookup on `/doc/[id]` |
 | `POST /auth/forgot-password` | ✅ exists | ✅ |
 | `POST /auth/reset-password` | ✅ exists | ✅ **DRIFT-15 resolved (frontend, 2026-09-18)** — was sending `newPassword`/`confirmPassword`; backend wants `password`. Fixed both sides of the shared invitation/reset-link landing page |
+| — | `POST /auth/mfa/verify` `{ mfaToken, code \| recoveryCode }` — PR #67 (`bca7a10`, live): the second login step; public, returns the normal login response. `code` is a 6-digit TOTP; exactly one of the two is required; 5 wrong codes in a row lock the second step for 15 minutes (429 `MFA_LOCKED`) | ✅ **Wired 2026-11-10 (ticket 10, verified live)** via a new BFF route `POST /api/auth/mfa/verify`, which moves `refreshToken` into the httpOnly cookie exactly as login does (`respondWithTokens`). `authService.verifyMfa` then sets `accessToken`. An expired challenge answers 401 `MFA_CHALLENGE_INVALID` |
+| — | `POST /auth/mfa/setup`, `/enable` `{ code }`, `/disable` `{ password?, code \| recoveryCode }` — PR #67 (live): authenticated, for your own account. Setup returns `{ secret, otpauthUri }` (render the URI as a QR code); enable returns `{ recoveryCodes }`, shown once; disable needs the password unless the account is SSO-only. Audited `user.mfa_enabled` / `user.mfa_disabled`. `GET /auth/me` carries `mfaEnabled` | ✅ **Wired 2026-11-10 (ticket 09, verified live)** on `/account/security` (`useSetupMfa`, `useEnableMfa`, `useDisableMfa`, `useMe`). A wrong code or password is a **401** (`INVALID_MFA_CODE`, `INVALID_CREDENTIALS`): `api-client.ts` doesn't treat those two codes as a dead session (§3) |
+| — | PR #69 (`914e28b`, live 2026-11-10): `GET /auth/mfa/settings` (`mfaEnabled`, `currentMethod`, `emailMasked`, `methodOptions[{method, available}]`); email method `POST /email/setup` → `{ challengeId }`, `POST /email/enable { challengeId, code }` → `{ recoveryCodes }`; public `POST /otp/request { mfaToken }` → `{ challengeId }` (60 s cooldown `MFA_OTP_COOLDOWN`, 5 an hour `MFA_OTP_RATE_LIMITED`); `/verify` takes `challengeId` for email codes; switching `POST /method-change/current-otp`, `/method-change/start`, `/method-change/:changeId/new-otp`, `/method-change/confirm`, `DELETE /method-change/:changeId`. `sms` exists but always 503 `MFA_SMS_NOT_CONFIGURED` | ✅ **Wired 2026-11-11 (ticket 17)**: `/account/security` reads `/settings`, sets up email, switches method; `/` sends and resends email codes. App paths verified live as `management_ops`; 🟨 the email code paths are built but not verified end to end (no fixture inbox we can read). `MFA_CHALLENGE_INVALID` joined the 401 codes that don't trigger a refresh (§3). `POST /auth/mfa/disable` is **no longer called**: only an admin removes MFA (product decision 2026-11-11; the API still allows it, **BE-24**) |
+| — | `DELETE /auth/mfa/users/:userId` — PR #67 (live): an admin turns another user's MFA off (`user:edit`); audited `user.mfa_reset` | ✅ **Wired 2026-11-10 (ticket 10, verified live):** **Reset two-step** on `/admin/users` (`useResetUserMfa`). ⚠️ `GET /users` doesn't return `mfaEnabled`, so the button shows for every signed-up user, not only those with MFA on; resetting someone without it is a harmless no-op |
+| — | `GET /auth/sso/status`, `GET /auth/sso/login`, `GET /auth/sso/callback`, `POST /auth/sso/exchange` — PR #67 (`692c530`, live): Active Directory (Entra ID) over OIDC. `login` redirects to the provider; the callback sends the browser to `SSO_FRONTEND_URL?code=…`, which `exchange` turns into tokens. On only when all five `SSO_*` variables are set (§9) | ⛔ not wired — ticket 14. Live `GET /auth/sso/status` → `{ "enabled": false }` (2026-11-09) |
 
 ### Documents
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `GET /documents` | ✅ — since PR #51 (live 2026-10-14) also takes `departmentId` (documents whose cabinet belongs to that department); it only narrows, scope and clearance still apply. Since PR #53 (live 2026-10-20) each document carries `creator {id,name,email}`, readable without `user:view` | ✅ — `/staff/cabinets` "Uploaded by" reads `creator` since 2026-10-20 (verified live as `staff_finance`); before, it looked the id up in `GET /users`, a 403 for staff, so every row said "Unknown" |
-| `GET /documents/search` | ✅ — since PR #51 (live 2026-10-14) takes every list filter (`cabinetId`, `departmentId`, `folderId`, `status`, `confidentiality`, `urgency`, `documentType`) alongside `q`, all AND'd with clearance and scope. Carries `creator` since PR #53 (live 2026-10-20) | ✅ — **wired 2026-10-14**: `/search` sends the same filters to both the list and the search endpoint, so the facet panel stays live while text is typed (it used to fall back to Cabinet only). DRIFT-06's browse/search disagreement is closed for anything indexed since the re-index work — indexing no longer waits on OCR |
+| `GET /documents` | ✅ — since PR #51 (live 2026-10-14) also takes `departmentId` (documents whose cabinet belongs to that department); it only narrows, scope and clearance still apply. Since PR #53 (live 2026-10-20) each document carries `creator {id,name,email}`, readable without `user:view`. **PR #67 (live 2026-11-09):** `from` / `to` filter on the created date (`from` inclusive, `to` **exclusive**, any date `z.coerce.date()` accepts; a bad value is a 422) and `workstream` (one of `financial`, `legal`, `esg`, `operational`, `technical`, `tax`); every document carries `workstream` (null when unset) | ✅ — `/staff/cabinets` "Uploaded by" reads `creator` since 2026-10-20 (verified live as `staff_finance`); before, it looked the id up in `GET /users`, a 403 for staff, so every row said "Unknown". ✅ **2026-11-09:** `/search` sends `folderId` and `from` / `to` (verified live as `staff_finance`). ✅ **2026-11-10:** `/search` sends `workstream` and shows it in each result's caption and the CSV (verified live as `client_admin`) |
+| `GET /documents/search` | ✅ — since PR #51 (live 2026-10-14) takes every list filter (`cabinetId`, `departmentId`, `folderId`, `status`, `confidentiality`, `urgency`, `documentType`) alongside `q`, all AND'd with clearance and scope. Carries `creator` since PR #53 (live 2026-10-20). **PR #67 (live 2026-11-09):** also `from` / `to` and `workstream`, as on `GET /documents` | ✅ — **wired 2026-10-14**: `/search` sends the same filters to both the list and the search endpoint, so the facet panel stays live while text is typed (it used to fall back to Cabinet only). DRIFT-06's browse/search disagreement is closed for anything indexed since the re-index work — indexing no longer waits on OCR. ✅ **2026-11-09 (verified live as `staff_finance`):** Folder and Created facets send `folderId` and `from` / `to` with or without text; a one-day range returned only that day's document. ✅ **2026-11-10 (verified live as `client_admin`):** a Workstream facet sends `workstream` with or without text (`?q=Workstream&workstream=legal`) |
 | `GET /documents/:id` | ✅ — since PR #53 (live 2026-10-20) also `creator` and `currentVersion.uploader` (`{id,name,email}`) | ✅ — embeds `checkoutLock` + `locker {id,name,email}` since `edms-backend` `b4a3f81` (2026-09-29); before that only `isCheckedOut` came back, so even the lock holder couldn't check the document back in (TEST_PLAN "Things to check"). **2026-10-20 (verified live as `staff_finance`):** the owner reads `creator`, the lock holder `locker` and signers the embedded `signer`, so `/doc/[id]` no longer calls `GET /users`. That call is a 403 for staff and auditors, who saw the owner as "System" |
-| `POST /documents` | ✅ — since `edms-backend` `dd10017` (2026-10-09) takes `metadata: [{ fieldId, value }]`, checked against the cabinet's fields and saved in the same transaction. A missing **required** field fails the upload (400), so a client that sends no metadata can't file into a cabinet with required fields. **Since `82c4707` (on `dev` 2026-10-29)** `mimeType` must be `application/pdf`, `image/jpeg`, `image/png` or `image/tiff`, and a `fileUrl` extension must match it (400 otherwise); the same rule covers `POST /documents/:id/versions`. Circular attachments and signatures are unchanged. **Since PR #65 (`31bd3db`, live by 2026-11-04)** the body is `{ documents: [...] }`, 1–20 items in one transaction (all or none), returned in the order sent; the single-document body is a 422. Each `folderId` must exist and belong to its `cabinetId`, and needs folder `upload` access and the folder's confidentiality clearance (`requireUploadFolderAccess`) | ✅ — `src/constants/uploadTypes.ts` already allowed exactly these four types, so nothing changed here. `metadata` sent from `/upload` and the workflow picker's "Upload from computer" since 2026-10-09. **Verified live 2026-10-09** on `/upload`: a `staff` user (no `document_metadata:edit`) filed with a value, `GET /documents/:id/metadata` returned it, no `PUT` was made. The picker was confirmed by the product owner's testing 2026-10-09. **2026-11-04:** `documentsService.create` sends a batch of one and returns its only item, after PR #65 made the single-document body a 422. Verified live as `staff_finance`: one file from `/upload`, two through "File all" and one from the workflow picker's "Upload from computer", each 201 and opening on `/doc/[id]` |
+| `POST /documents` | ✅ — since `edms-backend` `dd10017` (2026-10-09) takes `metadata: [{ fieldId, value }]`, checked against the cabinet's fields and saved in the same transaction. A missing **required** field fails the upload (400), so a client that sends no metadata can't file into a cabinet with required fields. **Since `82c4707` (on `dev` 2026-10-29)** `mimeType` must be `application/pdf`, `image/jpeg`, `image/png` or `image/tiff`, and a `fileUrl` extension must match it (400 otherwise); the same rule covers `POST /documents/:id/versions`. Circular attachments and signatures are unchanged. **Since PR #65 (`31bd3db`, live by 2026-11-04)** the body is `{ documents: [...] }`, 1–20 items in one transaction (all or none), returned in the order sent; the single-document body is a 422. Each `folderId` must exist and belong to its `cabinetId`, and needs folder `upload` access and the folder's confidentiality clearance (`requireUploadFolderAccess`). **PR #67 (live 2026-11-09):** each item may carry `workstream`, and each file payload a `changeNote` (≤ 500 chars) | ✅ **2026-11-10:** `/upload` sends `workstream` on each item (a card select, and in "Apply to all"); verified live as `staff_finance`: 201 and stored `legal`. `changeNote` isn't sent from `/upload`: a first version has nothing to describe (new versions send it, see `POST /documents/:id/versions`) · ✅ — `src/constants/uploadTypes.ts` already allowed exactly these four types, so nothing changed here. `metadata` sent from `/upload` and the workflow picker's "Upload from computer" since 2026-10-09. **Verified live 2026-10-09** on `/upload`: a `staff` user (no `document_metadata:edit`) filed with a value, `GET /documents/:id/metadata` returned it, no `PUT` was made. The picker was confirmed by the product owner's testing 2026-10-09. **2026-11-04:** `documentsService.create` sends a batch of one and returns its only item, after PR #65 made the single-document body a 422. Verified live as `staff_finance`: one file from `/upload`, two through "File all" and one from the workflow picker's "Upload from computer", each 201 and opening on `/doc/[id]` |
 | ~~`POST /documents/batch`~~ | ❌ **removed in PR #65** (`31bd3db`, live by 2026-11-04): `POST /documents` takes the batch body instead | ✅ **2026-11-04** — `documentsService.createBatch` posts to `/documents`; was a 404 from the PR #65 deploy until this fix. *Wired 2026-10-08 for `/upload`'s "File all", in chunks of 20; each item carries its card's metadata since 2026-10-09* |
 | `POST /documents/versions/batch` (≤ 20) | ✅ | ⚠️ backend only — nothing uploads several new versions at once |
-| `PATCH /documents/:id` | ✅ — since `dd10017` (2026-10-09) also moves documents: `cabinetId` changes the cabinet (the folder is cleared unless a folder in the new cabinet is given) and `folderId: null` moves to the cabinet root; a folder from another cabinet is a 400. ✅ **Request item 7 fixed in PR #51 (live 2026-10-14):** a cross-cabinet move now needs edit on the document's **current** cabinet as well as the destination (`requireSourceCabinetAccessOnMove`), so no one can pull a document out of a cabinet they can't edit — 403 with "You need edit access to the document's current cabinet to move it" | ✅ — also, from 2026-10-08, the document page's "Change classification" dialog (`confidentiality`, `urgency`; 🟨 not verified live). Moves still send only `folderId` within the cabinet — a cross-cabinet Move UI was never built; the backend blocker for one is gone |
+| `PATCH /documents/:id` | ✅ — since `dd10017` (2026-10-09) also moves documents: `cabinetId` changes the cabinet (the folder is cleared unless a folder in the new cabinet is given) and `folderId: null` moves to the cabinet root; a folder from another cabinet is a 400. ✅ **Request item 7 fixed in PR #51 (live 2026-10-14):** a cross-cabinet move now needs edit on the document's **current** cabinet as well as the destination (`requireSourceCabinetAccessOnMove`), so no one can pull a document out of a cabinet they can't edit — 403 with "You need edit access to the document's current cabinet to move it" | ✅ — also, from 2026-10-08, the document page's "Change classification" dialog (`confidentiality`, `urgency`; 🟨 not verified live). Moves still send only `folderId` within the cabinet — a cross-cabinet Move UI was never built; the backend blocker for one is gone. **PR #67 (live 2026-11-09):** `workstream` (`null` clears it); `document.edited` audit entries now carry a field-level before/after | ✅ **2026-11-10:** the `/doc/[id]` Workstream row has its own Change dialog (same rule as classification); "None" sends `workstream: null`. Verified live as `client_admin`: legal → tax → none → ESG, each read back from `GET /documents/:id` ·
 | `POST /documents/:id/checkout` | ✅ | ✅ |
 | `POST /documents/:id/checkin` | ✅ | ✅ — holder, **or** a `document_lock:delete` holder at `global` scope / `department` scope for the cabinet's department (`canReleaseLock`). Frontend offers that "Force check in" only once the lock is past `expectedReturnAt` (2026-10-02) |
 | `GET /documents/:id/metadata` | ✅ | ✅ |
 | `PUT /documents/:id/metadata` | ✅ — re-indexes search after a change since `dd10017`, and since PR #51 (live 2026-10-14) `POST /documents`/`/batch` index at create time rather than waiting for OCR, `PATCH` re-indexes when the title actually changes, and restoring a version re-indexes (re-running OCR first if the source's never finished). An OCR failure indexes anyway, so a document with no extractable text is still findable by title and metadata | ✅ (cannot clear values — see backend analysis). Since 2026-10-09 only the document page's metadata editor calls it; uploads send metadata with the create call |
-| `GET /documents/:id/versions` | ✅ — each version carries `uploader {id,name,email}` since PR #53 (live 2026-10-20) | ✅ — the versions panel (`/doc/[id]`, the workflow page) names uploaders from `uploader` since 2026-10-20 (verified live); before, from `GET /users`, so staff saw "User" |
+| `GET /documents/:id/versions` | ✅ — each version carries `uploader {id,name,email}` since PR #53 (live 2026-10-20). **PR #67 (`44474a0`, live 2026-11-09):** also `changeNote` (a restore writes "Restored from version N"), `downloadUrl` (`fileUrl?action=download`, null without `document:download`) and `originalUrl` (`?action=original`, null without `document:download_original`). Checked live as `staff_finance`: `downloadUrl` set, `originalUrl` null | ✅ — the versions panel (`/doc/[id]`, the workflow page) names uploaders from `uploader` since 2026-10-20 (verified live); before, from `GET /users`, so staff saw "User". ✅ **2026-11-10 (ticket 05, verified live):** `changeNote` shown under its version, on both pages. ✅ **2026-11-11 (ticket 12, verified live):** every download fetches this list for a fresh `downloadUrl` / `originalUrl`; each version's Download shows only with `downloadUrl`, "Original" only with `originalUrl` |
 | `GET /documents/:id/summary` | ✅ — PR #49 (live 2026-10-13): Gemini summary of the current version, written after OCR; `summaryStatus` pending → processing → completed / failed / skipped. Older versions are queued the first time it's asked for. Each call is audited (`document.summary_viewed`). A failed summary can be re-queued with `POST` on the same path since PR #56 (row below; backend spec N2) | ✅ wired 2026-10-13, verified live — `/doc/[id]` "AI summary" card; polls every 10 s for at most a minute per version while it's being written, then offers "Check again". Also on `/workflow-instances/[id]` for the selected document since 2026-10-23 (verified live; never for a Restricted one). **Since 2026-10-23 called only after the user asks** (product decision: no automatic summaries): `GET` queues a missing summary, so the card reads `currentVersion.aiSummary`/`summaryStatus` from `GET /documents/:id` and offers **Summarize**; `GET …/summary` only follows a `POST` it made. Verified with mocked `/summary` responses: no call on load in any state. The OCR worker still summarises every upload (BE-22) |
 | `POST /documents/:id/summary` | ✅ — PR #56 (live 2026-10-20): queues a fresh summary of the current version, **202** with `summaryStatus: 'pending'` and the old text, which `GET` keeps returning until the new one replaces it. Same access as `GET`; audited `document.summary_requested`. 409 `OCR_IN_PROGRESS` / `SUMMARY_IN_PROGRESS`, 422 `NO_EXTRACTABLE_TEXT`, 503 `SUMMARY_UNAVAILABLE` | ✅ wired 2026-10-20, verified live — "Try again" on a failed summary, "Regenerate" on a finished one; the old text stays up while the new one is written. A real Regenerate on `e8e22fcd…` returned 202 and the card moved to the new summary by polling. `OCR_IN_PROGRESS` and `NO_EXTRACTABLE_TEXT` confirmed on the API (`487006a2…`, `dcca68ff…`); the 503 and `SUMMARY_IN_PROGRESS` states checked with mocked responses |
-| `GET /documents/:id/versions/:versionId` | ✅ — since `edms-backend` `0dab81a` (2026-10-08) needs `document:download` on top of confidentiality clearance, and is audited as `document.downloaded` | 🟨 **wired 2026-10-08** as the only download path (`useDownloadDocumentVersion`): `/doc/[id]`'s Download, the workflow viewer's Download, and each version's Open in `DocumentVersionsPanel`. Permissions confirmed live on `/auth/me`. ✅ **Clicked through 2026-10-09** (Finance supervisor, `department` scope): Download on `/doc/[id]` and in the workflow viewer each called this route (200) and sent the new tab to the signed S3 URL. *Was marked ✅ before, but nothing called it: the versions panel opened the list's own signed `fileUrl`. Corrected 2026-10-08* |
-| `GET /files/:token` | ✅ new in PR #64 (`f7f013b`, live by 2026-11-04). **Since `f3ebfb4` (2026-11-04) behind `authenticate`**: needs the Bearer token as well as the link. `?action=preview` (default) / `download` → watermarked PDF, 415 for non-PDFs; `original` → raw bytes with Range, needs `document:download_original` (held by no role). `Cache-Control: private, no-store`; 404 bad token, 410 expired | ✅ `filesService.fetch` / `.save` (2026-11-06) — every `fileUrl` is fetched through `apiClient` as a Blob for the viewer, images, download, export and circular attachments; until then they were opened bare and got 401 |
-| `POST /documents/:id/versions` | ✅ | ✅ |
+| `GET /documents/:id/versions/:versionId` | ✅ — since `edms-backend` `0dab81a` (2026-10-08) needs `document:download` on top of confidentiality clearance, and is audited as `document.downloaded`. **PR #67 (`44474a0`, live 2026-11-09):** audited as `document.version_viewed` instead; `document.downloaded` is now written by `GET /files/:token?action=download\|original` when the bytes are actually fetched | ✅ **No longer called for downloads (ticket 12, 2026-11-11):** they take `downloadUrl` from `GET …/versions` instead, so a download isn't also logged as `document.version_viewed`. Nothing in the app calls it now · *History:* 🟨 **wired 2026-10-08** as the only download path (`useDownloadDocumentVersion`): `/doc/[id]`'s Download, the workflow viewer's Download, and each version's Open in `DocumentVersionsPanel`. Permissions confirmed live on `/auth/me`. ✅ **Clicked through 2026-10-09** (Finance supervisor, `department` scope): Download on `/doc/[id]` and in the workflow viewer each called this route (200) and sent the new tab to the signed S3 URL. *Was marked ✅ before, but nothing called it: the versions panel opened the list's own signed `fileUrl`. Corrected 2026-10-08* |
+| `GET /files/:token` | ✅ new in PR #64 (`f7f013b`, live by 2026-11-04). ~~Since `f3ebfb4` (2026-11-04) behind `authenticate`~~ — **PR #67 (live 2026-11-09) mounts it before `authenticate` again**: the encrypted token names the user and the service re-checks their permissions, so a bare link works (checked live: 200 with no `Authorization` header). `?action=preview` (default) / `download` → watermarked copy; since PR #67 (`d6ed97d`) PDF, JPEG, PNG and TIFF are all watermarked, other types 415, files over `WATERMARK_MAX_FILE_MB` refused. `original` → raw bytes with Range, needs `document:download_original` (seeded for `client_admin` and `internal_auditor` by PR #67, **held by no live role** until the 2026-11-11 re-seed). `download` and `original` are audited `document.downloaded` (`original: true` on the latter). `Cache-Control: private, no-store`; 404 bad token, 410 expired | ✅ `filesService.fetch` / `.save` (2026-11-06) — every `fileUrl` is fetched through `apiClient` as a Blob for the viewer, images, download, export and circular attachments; until then they were opened bare and got 401. The token is no longer required but does no harm. ✅ **Ticket 12 (2026-11-11):** `fileActionFor` is gone. Images preview with `action=preview`; downloads and export save the backend's `downloadUrl` / `originalUrl` as issued (verified live) |
+| `POST /documents/:id/versions` | ✅ — **PR #67 (`9f320d6`, live 2026-11-09):** optional `changeNote` (≤ 500 chars) | ✅ · ✅ **2026-11-10 (ticket 05):** after picking the file, the versions panel asks "What changed?" (optional, ≤ 500 with a counter) and sends it trimmed; only offered on the workflow page, in answer to a request for changes. Verified live as `staff_finance`: the POST carried `changeNote` and the list showed it |
+| — | `GET /documents/:id/history?page&limit` — PR #67 (`9f320d6`, live 2026-11-09): the document's change history from the audit trail (`uploaded`, `edited`, `metadata_updated`, `version_created`, `version_restored`, `deleted`), each edit with a field-level before/after. `document:view` plus clearance. Checked live as `staff_finance`: 200 | ✅ **2026-11-10 (ticket 05):** History card on `/doc/[id]` (`useDocumentHistory`, 20 a page, "Load more"). Checked live: `details` is `{ before, after }`, document fields by key and metadata by field name; version rows carry only `{ documentId }`, so the card takes the version number and note from the versions list. Verified live as `client_admin`: an urgency change, a metadata value and a revision with a note all listed |
+| `documentsService.updateMetadataBatch` | `PUT /documents/metadata/batch` `{ documents: [{ documentId, metadata }] }` — PR #67 (`4e20b93`, live 2026-11-09): mass indexing, 1–50 documents, no duplicates, each with its own values. `document_metadata:edit` (seeded for `client_admin`, and `supervisor` at department scope) plus edit access to each cabinet and view clearance; one `document.metadata_updated` audit entry per document | ✅ **2026-11-10 (ticket 08):** `/search/mass-index` via `useUpdateMetadataBatch`, in sequential batches of 50 with only the changed fields. The batch is all-or-nothing and its errors (e.g. "Invoice Amount is required") don't name the document, so rows are checked client-side first. An empty value is skipped, not stored, so a saved value can't be cleared (same for the single `PUT`). Verified live as `supervisor_finance`: three documents in one request, each audited with `batch: true, documentCount: 3` |
 | `GET /documents/:id/export`, `GET /documents/:id/print` | ✅ new in `0dab81a` — `document:export` / `document:print` plus clearance; audited as `document.exported` / `document.printed`; return the document like `GET /documents/:id` | ✅ `/print` — wired 2026-10-08 (`usePrintDocument`): the PDF viewer's Print calls it first and only prints if it succeeds; verified in a browser against the live API · ✅ `/export` — wired 2026-10-08 (`useExportDocument`), `/doc/[id]`'s Export button; **clicked through 2026-10-09**: the call returned 200 and the new tab went to the signed S3 URL |
 | `GET/POST /documents/:id/comments`, `/signatures` | ✅ both exist, real endpoints | 🟥 **deliberately unused (reverted 2026-09-18, same day)** — briefly wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel` earlier the same day, then removed: product decision to keep every comment/signature scoped to the workflow trail (`POST /tasks/:id/action`'s `comment`/`approve`'s `signature`) rather than split across a second, task-independent thread. See DRIFT-08's note below and BE-16/BE-17 in `BACKEND_REQUESTS.md` |
 | `GET/POST /documents/:id/access-requests`, `/grant`, `/deny`, admin inbox `GET /documents/access-requests` | ✅ — since `3014b89` (PR #47, live by 2026-10-12) the POST body **requires** `permission: 'view' \| 'route'`, and a grant is per permission (unique on document + user + permission). A `route` grant lets the user act on the document in a workflow despite its tier; it never allows download/export/print | ✅ **DRIFT-20 fixed 2026-10-12, verified live.** Wired 2026-09-18; from `3014b89` until the fix the frontend posted only `{ reason }` and every request was refused (422 `VALIDATION_ERROR`). `/doc/[id]` asks for View access (`permission: 'view'`); the workflow page's Restricted document card offers "Open the document" and "Act on this document" tick boxes (both pre-ticked for the task's holder) and sends one request per kind, one toast each, a 409 reading "Already pending". `/admin/access-requests` shows the kind (Open / Act) and a kind-specific grant confirmation |
-| — | `DELETE /documents/:id/access-grants/:userId?permission=view\|route` (query required since `3014b89`) | No UI — nothing revokes a document grant |
+| — | `DELETE /documents/:id/access-grants/:userId?permission=view\|route` (query required since `3014b89`) | ✅ **Wired 2026-11-11 (ticket 11, verified live in Edge):** **Revoke** on approved rows of `/admin/access-requests` (`document_access_request:revoke`, held by `client_admin`), with a confirm. Gate: `requirePermission('document_access_request', 'revoke')` only, no confidentiality or cabinet check. Deletes the grant; the request stays `approved` (no grant list exists), and a second revoke is 404 "Access grant not found", shown as "already revoked". Checked: `staff_finance` 200 after grant, 403 after revoke |
 | `DELETE /documents/:id` (archive) | ✅ | ✅ wired — "Archive document" in `/doc/[id]`'s overflow menu (`useArchiveDocument`) |
 | `POST /documents/:id/versions/:versionId/restore` | ✅ | ✅ wired — "Restore" in `DocumentVersionsPanel` (`useRestoreDocumentVersion`). Both rows were stale here — caught in passing 2026-09-18, not otherwise part of that day's work |
 
@@ -1242,6 +1290,20 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 *These two rows said "backend only — no UI", with a paragraph calling the access gap out
 twice. Both screens have existed since at least 2026-09-21 (see the 2026-09-21 correction in
 §1 and the DRIFT register). Rows corrected 2026-10-09.*
+
+### Document views *(backend PR #67, live 2026-11-09; no UI)*
+
+| Frontend call | Backend route | Status |
+|---|---|---|
+| — | `POST /document-views` `{ documentId }` → a session id; `POST /document-views/:sessionId/heartbeat`. `document:view`. The viewer beats about every 30 s; a gap longer than 90 s (`VIEW_SESSION_MAX_GAP_SECONDS`) credits only 90 s | ✅ **2026-11-10 (ticket 06):** `useDocumentViewSession` on `/doc/[id]` and the workflow page (follows the selected document tab, only once it loaded). Starts 1 s after opening, beats every 30 s while the tab is visible, sends a `keepalive` beat when hidden or left; back after more than 10 s hidden starts a new session, so the hidden time isn't credited. Errors are silent. Verified live as `supervisor_finance`: 125 s visible, 100 s hidden, 35 s visible → report 158 s over 2 sessions, one start under strict mode |
+| `documentViewsService.report` | `GET /document-views/report?documentId&from&to` → per viewer `{ userId, sessions, totalSeconds, lastViewedAt }`. `audit:view` (`client_admin`, `internal_auditor`, `schulltech_admin`); `documentId` required (422 without it, checked live); `from` ≤ `to` | ✅ **2026-11-10 (ticket 07):** the Viewing time card on `/doc/[id]` (`useDocumentViewReport`), shown with `audit:view`. `to` is exclusive and both bounds filter on a session's `startedAt`, so the card sends the end day's next local midnight. Verified live as `auditor` |
+
+### Access rules *(backend PR #67, live 2026-11-09; grants re-seeded and UI wired 2026-11-11)*
+
+| Frontend call | Backend route | Status |
+|---|---|---|
+| — | `GET /access-rules`, `POST /access-rules` `{ ruleType: 'ip'\|'country', effect: 'allow'\|'deny', value, description? }`, `DELETE /access-rules/:id`. `access_rule:view\|create\|delete`, seeded for `client_admin` and `schulltech_admin`; audited `access_rule.created` / `.deleted`. `value` is an IP or CIDR range, or a two-letter country code | ✅ **Wired 2026-11-11 (ticket 13, verified live in Edge):** `/admin/access-rules` lists and removes, `/admin/access-rules/new` adds. A TEST-NET-2 block rule was added (201) and removed (200), audited both ways. A country rule is **422 `GEO_NOT_CONFIGURED` on live**: no `GEO_COUNTRY_HEADER` there, so the form disables countries with the reason. The server refuses a rule that would block the caller's own IP (`WOULD_LOCK_OUT_CALLER`), shown in words, but checks neither removals nor the web app server: sign-in goes through the BFF (`/api/auth/*`), and with `trust proxy` 1 the API sees the BFF host's address for it, so an IP allow list without that host blocks every sign-in. The page warns about both |
+| *(every call)* | `enforceAccessRules` runs on all of `/api/v1`, login and file links included: a matching deny blocks; any allow rule of a type means the caller must match one. Blocked → **403 `ACCESS_RESTRICTED`** "Access from your network or location is not permitted". Country rules need `GEO_COUNTRY_HEADER` (§9) | ✅ Since 2026-11-11 (ticket 13) `apiClient` shows one toast per 30 s for it ("Your organisation's access rules block this network or location"); not seen live, since no live rule blocks a fixture account. The BFF sign-in shows the backend's message |
 
 ### Circulars *(wired 2026-10-05)*
 
@@ -1430,7 +1492,19 @@ above: there is no write endpoint to point it at, by design.
 > scratch. Control exceptions sat here for one day (backend 2026-10-29) and got their UI
 > the same day.
 
-Nothing currently known to be backend-complete with zero UI.
+**Since PR #67 (live 2026-11-09)** — tickets in `.scratch/backend-dev-2026-11-09/`:
+
+| Capability | Routes / fields | Ticket |
+|---|---|---|
+| ~~Workstreams on documents~~ ✅ wired 2026-11-10 | `workstream` on create, `PATCH`, list and search | 04 |
+| ~~Change history and version notes~~ ✅ wired 2026-11-10 | `GET /documents/:id/history`, `changeNote` | 05 |
+| ~~Viewing time — recording and report~~ ✅ wired 2026-11-10 | `POST /document-views`, heartbeat, `GET /document-views/report` | 06, 07 |
+| ~~Mass indexing~~ ✅ wired 2026-11-10 | `PUT /documents/metadata/batch` | 08 |
+| ~~TOTP MFA~~ ✅ wired 2026-11-10 | `/auth/mfa/*`, login challenge, `mfaEnabled` | 09, 10 |
+| ~~Revoke a document grant~~ ✅ wired 2026-11-11 | `DELETE /documents/:id/access-grants/:userId` | 11 |
+| ~~Server-built download links~~ ✅ wired 2026-11-11 | `downloadUrl` / `originalUrl` on versions | 12 |
+| ~~IP and country rules~~ ✅ wired 2026-11-11 | `/access-rules` | 13 |
+| Active Directory SSO | `/auth/sso/*` | 14 |
 
 ---
 
@@ -1564,6 +1638,12 @@ The four path-only mappings are `redirects()` in `next.config.ts`, which run **b
 (307s to the right targets, query string kept). `/tasks/[id]` is a thin lookup page.
 Previously every one of these 404'd.
 
+**2026-11-11 (ticket 16, clicked through live):** in-app links keep only their path, so they work on
+any host, not just `APP_URL`'s (they went nowhere on localhost or a white-label domain before). And
+`GET /notifications` now asks for `channel=in_app`: `notifyUser` writes an `in_app` and an `email` row
+per event, the list returned both, and the email row is never read, so every notification showed
+twice and half stayed unread. `unread-count` and `read-all` were already in-app only.
+
 **Still open:** `/admin/access-requests` is gated on `document_access_request:view` since
 2026-10-12 (it was `user:edit`, which no access-request route checks). But the
 access-requested notification goes to the document's **creator**, who usually lacks that
@@ -1577,6 +1657,31 @@ converting `bigint` → `Number`, so the wire format is a JS number — fine bel
 undocumented in Swagger. All timestamps are ISO strings from `@db.Timestamptz`; the
 frontend `SEED` uses epoch milliseconds (`d()` helper in `initialData.ts`). Any component
 reading both must handle both.
+
+**Date filters (PR #67).** `from` / `to` on `GET /documents` and `/documents/search` go
+through `z.coerce.date()`: a bare `2026-10-22` is **UTC** midnight, and `to` is exclusive.
+A one-day range for a user east of UTC (Lagos is UTC+1) must send local midnights as ISO
+instants, or it misses the first hour of the day and picks up the first hour of the next.
+`/search` does (`dayStartIso`): 22 Oct in Lagos is `2026-10-21T23:00:00.000Z` →
+`2026-10-22T23:00:00.000Z`.
+
+### 8.6 PR #67 contract changes (backend `42ed468`, live 2026-11-09)
+
+Same URLs, new behaviour. Each is harmless to the current frontend unless noted.
+
+| Change | Where | Frontend impact |
+|---|---|---|
+| Login can answer with `{ mfaRequired: true, mfaToken }` and no tokens | `POST /auth/login` | ✅ Handled since 2026-11-10 (ticket 10): `/` shows the second step |
+| `mfaEnabled` on the user | `GET /auth/me` | Read by `/account/security` from 2026-11-10 (ticket 09) until 2026-11-11, which now reads `GET /auth/mfa/settings` (ticket 17). Not on `GET /users` (BE-24) |
+| `workstream` on every document (nullable enum) and as a filter | documents create, `PATCH`, list, search | ✅ Set on `/upload`, changed on `/doc/[id]`, filtered on `/search` since 2026-11-10 |
+| `from` / `to` created-date filter | `GET /documents`, `/documents/search` | ✅ Sent by `/search` since 2026-11-09, as local midnights (§8.5) |
+| `changeNote` (≤ 500) on file payloads, returned on versions | `POST /documents`, `POST /documents/:id/versions`, `GET …/versions` | ✅ Sent with new versions and shown in the versions list and History since 2026-11-10 (not sent on a first upload) |
+| `downloadUrl` / `originalUrl` on versions, null when not allowed | `GET /documents/:id/versions`, and `currentVersion` on `GET /documents/:id` and the list. `GET /documents/:id/export` always carries `downloadUrl` (`document:export` stands in for `download`) | ✅ Used for every download and export since 2026-11-11 (ticket 12) |
+| Version read audited `document.version_viewed`, not `document.downloaded`; the file fetch with `?action=download\|original` records the download | `GET /documents/:id/versions/:versionId`, `GET /files/:token` | ✅ Filtered and labelled on `/admin/audit` and `/auditor/trail` since 2026-11-11 (ticket 15, verified live) |
+| File links work without the Bearer token again | `GET /files/:token` | None (the token is still sent) |
+| JPEG, PNG and TIFF are watermarked on `preview` / `download`, not only PDF | `GET /files/:token` | ✅ Images preview and download watermarked since 2026-11-11 (ticket 12) |
+| Any call can be refused with 403 `ACCESS_RESTRICTED` | everything under `/api/v1` | ✅ A toast says the network or location is blocked (2026-11-11, ticket 13) |
+| `document.edited` and `document.metadata_updated` audit entries carry a field-level before/after | audit trail | ✅ Shown in the `/doc/[id]` History card since 2026-11-10 (ticket 05); the audit viewers show only the first two metadata fields, so a before/after reads `[object Object]` (full JSON on hover; not in any ticket) |
 
 ---
 
@@ -1681,10 +1786,21 @@ its values have changed. A `custom` copy is the `/admin/branding` page's publish
 | `DELEGATION_RECONCILE_INTERVAL_MS` | `300000` (min `60000`) | `delegation-reconcile.worker` schedule — moves open tasks to the delegate of a delegation in effect (added `436ea83`, 2026-10-29) |
 | `CHECKOUT_REMINDER_HOURS` | `24` | `checkout-overdue.worker` — `checkout.reminder` to the holder this long before `expectedReturnAt` (added `b4a3f81`, 2026-09-29) |
 | `CHECKOUT_OVERDUE_RECONCILE_INTERVAL_MS` | `300000` | `checkout-overdue.worker` schedule; once past due it sends `checkout.overdue` to the holder and to `supervisor`s in the holder's department |
-| `APP_URL` | `https://edms-kappa.vercel.app` (was `http://localhost:3000` until PR #49) | Base for every notification/email `actionUrl` — must be this app's origin, or `notificationHref` drops the link as cross-origin (see §8.4). Links from the deployed backend now open the Vercel app, so a notification clicked while testing on `localhost:3000` leaves the local app |
+| `APP_URL` | `https://edms-kappa.vercel.app` (was `http://localhost:3000` until PR #49) | Base for every notification/email `actionUrl`. In-app links work on any host since 2026-11-11 (`notificationHref` keeps only the path; before, it dropped links whose origin wasn't this app's, so they went nowhere on localhost or another domain). **Email** links still open `APP_URL`, so a white-label deployment needs its own `APP_URL` |
 | `GEMINI_API_KEY` | unset | `summary.workers` — AI document summaries. Without it every summary is `skipped`. Set on the live backend (summaries complete, checked 2026-10-13) |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | `ai-summarizer` |
 | `SUMMARY_MAX_INPUT_CHARS` | `120000` | Cap on OCR text sent for a summary |
+
+**Added by PR #67 (`42ed468`, 2026-11-09).** Backend-only: the frontend reads none of them.
+
+| Variable | Default | Used by |
+|---|---|---|
+| `GEO_COUNTRY_HEADER` | unset | Access rules: the request header carrying the caller's country code, set by the CDN (`CF-IPCountry`, `CloudFront-Viewer-Country`). Country rules are refused without it (422 `GEO_NOT_CONFIGURED`) — **not set on live** (2026-11-11). Set it only when every request passes through that proxy, or callers can send the header themselves |
+| `WATERMARK_ENABLED` | `true` | `GET /files/:token` — stamps the viewer's name, time and IP on every page of a `preview` / `download` |
+| `WATERMARK_MAX_FILE_MB` | `50` | Larger files are refused rather than served unmarked |
+| `MFA_ENCRYPTION_KEY` | derived from `JWT_SECRET` | Encrypts stored TOTP secrets. Changing it makes existing enrolments unreadable |
+| `MFA_ISSUER` | `SchullTech EDMS` | The name shown next to the account in the authenticator app |
+| `SSO_ISSUER`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `SSO_REDIRECT_URI`, `SSO_FRONTEND_URL` | unset | Active Directory sign-in, on only when all five are set. `SSO_REDIRECT_URI` is the API's `/api/v1/auth/sso/callback`; `SSO_FRONTEND_URL` is the web-app page that finishes sign-in (it gets `?code=` or `?error=`), which doesn't exist yet (ticket 14). Live: not configured (`enabled: false`) |
 
 ### Port alignment
 

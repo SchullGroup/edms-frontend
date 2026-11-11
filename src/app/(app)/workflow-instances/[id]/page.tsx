@@ -24,6 +24,7 @@ import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { fmtDateTime } from '@/utils/helpers';
 import { documentsLabel, isActionedTaskDocument, taskDueAt } from '@/utils/workflowDocuments';
 import { needsSubmitter } from '@/hooks/useRouteToWorkflow';
+import { useDocumentViewSession } from '@/hooks/useDocumentViewSession';
 import type {
   DocumentAccessKind,
   Task,
@@ -169,6 +170,8 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
   // itself fetches it too — same query, deduplicated). A Restricted document is
   // never fetched: it would only 403.
   const { data: selectedDoc } = useDocument(selected && !selected.restricted ? selected.id : '');
+  // Viewing time follows the selected document tab, once that document loaded.
+  useDocumentViewSession(selectedDoc?.id);
 
   const workflowName = instance?.workflowDefinition?.name || 'Workflow';
   useEffect(() => {
@@ -531,7 +534,6 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               documentTitle={selectedDoc.title}
               currentVersionId={selectedDoc.currentVersionId}
               canView={can('document_version', 'view')}
-              canDownload={allows(selectedDoc, 'download')}
               canEdit={false}
               canUploadVersion={canUploadRevision}
             />

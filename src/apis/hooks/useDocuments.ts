@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   documentsService,
   DocumentFilters,
   DocumentStatsParams,
   AccessRequestInboxFilters,
+  type MetadataBatchItem,
 } from '@/apis/services/documents.service';
 import {
   CreateVersionRequest,
@@ -16,13 +17,7 @@ import {
 import { ACCESS_KIND_LABEL } from '@/constants/documentLevels';
 import { useUIStore } from '@/store/useUIStore';
 import { fetchAllPages } from '@/apis/utils/fetchAllPages';
-import { documentFile } from '@/utils/documentFile';
-import {
-  downloadFileName,
-  fileActionFor,
-  FileFetchError,
-  filesService,
-} from '@/apis/services/files.service';
+import { downloadFileName, FileFetchError, filesService } from '@/apis/services/files.service';
 
 export const documentKeys = {
   all: ['documents'] as const,
@@ -32,6 +27,8 @@ export const documentKeys = {
   detail: (id: string) => [...documentKeys.details(), id] as const,
   metadata: (id: string) => [...documentKeys.detail(id), 'metadata'] as const,
   versions: (id: string) => [...documentKeys.detail(id), 'versions'] as const,
+  /** Under `detail`, so every edit, metadata save, upload and restore refreshes it. */
+  history: (id: string) => [...documentKeys.detail(id), 'history'] as const,
   /** Outside `documents` on purpose: each fetch is audited, so broad
    *  `['documents']` or detail invalidations must not refetch it. */
   summary: (id: string) => ['document-summary', id] as const,
@@ -117,6 +114,21 @@ export function useDocumentVersions(id: string) {
   return useQuery({
     queryKey: documentKeys.versions(id),
     queryFn: () => documentsService.getVersions(id),
+    enabled: !!id,
+  });
+}
+
+const HISTORY_PAGE_SIZE = 20;
+
+/** The document's change history, a page at a time ("Load more"). */
+export function useDocumentHistory(id: string) {
+  return useInfiniteQuery({
+    queryKey: documentKeys.history(id),
+    queryFn: ({ pageParam }) =>
+      documentsService.getHistory(id, { page: pageParam, limit: HISTORY_PAGE_SIZE }),
+    initialPageParam: 1,
+    getNextPageParam: (last) =>
+      last.pagination.page < last.pagination.totalPages ? last.pagination.page + 1 : undefined,
     enabled: !!id,
   });
 }
@@ -354,6 +366,35 @@ export function useDenyAccessRequest() {
   });
 }
 
+export function useRevokeAccessGrant() {
+  const queryClient = useQueryClient();
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      userId,
+      permission,
+    }: {
+      id: string;
+      userId: string;
+      permission: DocumentAccessKind;
+    }) => documentsService.revokeAccessGrant(id, userId, permission),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: documentKeys.accessRequests(id) });
+      queryClient.invalidateQueries({ queryKey: accessRequestInboxKeys.all });
+      addToast('Access revoked', 'success');
+    },
+    onError: (err: any) => {
+      if (err.response?.status === 404) {
+        addToast('This access was already revoked', 'info');
+        return;
+      }
+      addToast(err.response?.data?.message || 'Failed to revoke access', 'error');
+    },
+  });
+}
+
 export function useArchiveDocument() {
   const queryClient = useQueryClient();
   const { addToast } = useUIStore.getState();
@@ -389,6 +430,53 @@ export function useUpdateDocumentMetadata() {
   });
 }
 
+/** The API's cap on one `PUT /documents/metadata/batch`. */
+export const METADATA_BATCH_SIZE = 50;
+
+/**
+ * Mass indexing in sequential batches of 50. Each batch is all-or-nothing; a failure stops
+ * the run and reports the documents already saved, so the caller can keep the rest.
+ */
+export function useUpdateMetadataBatch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      items,
+      onProgress,
+    }: {
+      items: MetadataBatchItem[];
+      onProgress?: (saved: number) => void;
+    }) => {
+      const saved: string[] = [];
+      try {
+        for (let i = 0; i < items.length; i += METADATA_BATCH_SIZE) {
+          const chunk = items.slice(i, i + METADATA_BATCH_SIZE);
+          await documentsService.updateMetadataBatch(chunk);
+          saved.push(...chunk.map((item) => item.documentId));
+          onProgress?.(saved.length);
+        }
+      } catch (error) {
+        throw new MetadataBatchError(saved, error);
+      } finally {
+        saved.forEach((id) => queryClient.invalidateQueries({ queryKey: documentKeys.detail(id) }));
+        if (saved.length) queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+      }
+      return saved;
+    },
+  });
+}
+
+/** A failed mass-indexing run: `saved` made it in earlier batches, `cause` is the API error. */
+export class MetadataBatchError extends Error {
+  constructor(
+    public saved: string[],
+    public cause: unknown,
+  ) {
+    super((cause as any)?.response?.data?.message || 'Failed to save metadata');
+  }
+}
+
 export function useAddDocumentVersion() {
   const queryClient = useQueryClient();
   const { addToast } = useUIStore.getState();
@@ -411,32 +499,44 @@ export function useAddDocumentVersion() {
   });
 }
 
+/** Toast text for a failed save; 415 means the type can't be watermarked, so only the original exists. */
+function downloadErrorMessage(err: any, verb: 'download' | 'export') {
+  const status = err.response?.status ?? err.status;
+  if (status === 403) return `You don't have permission to ${verb} this document`;
+  if (status === 415) return 'Only the original of this file type can be downloaded';
+  return err.response?.data?.message || err.message || `Failed to ${verb} the file`;
+}
+
 /**
- * Opens a version's file through `GET /documents/:id/versions/:versionId`, which
- * checks `document:download` plus confidentiality clearance and is audited as
- * `document.downloaded`, then saves the file from its link with the session
- * (watermarked for a PDF, the original otherwise).
+ * Saves a version from the link the backend issued this viewer: `downloadUrl` (watermarked) or,
+ * with `original`, `originalUrl`. Links last 15 min, so they come fresh from the unaudited version list.
  */
 export function useDownloadDocumentVersion() {
   const { addToast } = useUIStore.getState();
 
   return useMutation({
-    mutationFn: async ({ id, versionId, title }: { id: string; versionId: string; title: string }) => {
-      const version = await documentsService.getVersion(id, versionId);
-      if (!version.fileUrl) throw new FileFetchError('This version has no file attached');
-      const action = fileActionFor(version.mimeType, 'download');
-      const name = downloadFileName(`${title} v${version.versionNumber}`, version.mimeType, action);
-      await filesService.save(version.fileUrl, name, action);
-    },
-    onError: (err: any) => {
-      const status = err.response?.status ?? err.status;
-      addToast(
-        status === 403
-          ? "You don't have permission to download this document"
-          : err.response?.data?.message || err.message || 'Failed to download the file',
-        'error',
+    mutationFn: async ({
+      id,
+      versionId,
+      title,
+      original = false,
+    }: {
+      id: string;
+      versionId: string;
+      title: string;
+      original?: boolean;
+    }) => {
+      const version = (await documentsService.getVersions(id)).find((v) => v.id === versionId);
+      if (!version) throw new FileFetchError('This version no longer exists', 404);
+      const link = original ? version.originalUrl : version.downloadUrl;
+      if (!link) throw new FileFetchError('Not permitted', 403);
+      const name = downloadFileName(
+        `${title} v${version.versionNumber}${original ? ' original' : ''}`,
+        version.mimeType,
       );
+      await filesService.save(link, name);
     },
+    onError: (err: any) => addToast(downloadErrorMessage(err, 'download'), 'error'),
   });
 }
 
@@ -458,28 +558,19 @@ export function usePrintDocument() {
   });
 }
 
-/** `GET /documents/:id/export` — checks `document:export`, audits
- *  `document.exported`, then saves the watermarked file (the original if not a PDF). */
+/** `GET /documents/:id/export` checks `document:export`, audits `document.exported`, and returns a
+ *  `downloadUrl` the files service accepts on `document:export` alone. */
 export function useExportDocument() {
   const { addToast } = useUIStore.getState();
 
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
       const doc = await documentsService.exportDocument(id);
-      const { fileUrl, fileMimeType } = documentFile(doc);
-      if (!fileUrl) throw new FileFetchError('This document has no file to export');
-      const action = fileActionFor(fileMimeType, 'preview');
-      await filesService.save(fileUrl, downloadFileName(doc.title, fileMimeType, action), action);
+      const link = doc.currentVersion?.downloadUrl;
+      if (!link) throw new FileFetchError('This document has no file to export');
+      await filesService.save(link, downloadFileName(doc.title, doc.currentVersion?.mimeType ?? ''));
     },
-    onError: (err: any) => {
-      const status = err.response?.status ?? err.status;
-      addToast(
-        status === 403
-          ? "You don't have permission to export this document"
-          : err.response?.data?.message || err.message || 'Failed to export the document',
-        'error',
-      );
-    },
+    onError: (err: any) => addToast(downloadErrorMessage(err, 'export'), 'error'),
   });
 }
 

@@ -1,6 +1,6 @@
 import { useStore } from '@/store/useStore';
 import { useCabinet } from '@/apis/hooks/useCabinets';
-import type { CabinetAccessPermission, User } from '@/types/models';
+import type { Cabinet, CabinetAccessPermission, User } from '@/types/models';
 
 /**
  * Per-cabinet access levels, weakest first. Each level includes every level
@@ -59,7 +59,14 @@ export function grantableLevels(level: CabinetAccessPermission | null | undefine
 export function useMyCabinetAccess(cabinetId: string | null | undefined) {
   const currentUser = useStore((s) => s.currentUser);
   const { data: cabinet } = useCabinet(cabinetId || undefined);
+  return cabinetLevelFor(cabinet, currentUser);
+}
 
+/** `useMyCabinetAccess` for an already-loaded cabinet detail; null while either is missing. */
+export function cabinetLevelFor(
+  cabinet: Pick<Cabinet, 'access'> | undefined,
+  currentUser: { id: string; roles?: string[] } | null | undefined,
+): CabinetAccessPermission | null {
   if (!currentUser) return null;
   if (currentUser.roles?.includes(CABINET_BYPASS_ROLE)) return 'delete';
   if (!cabinet) return null;

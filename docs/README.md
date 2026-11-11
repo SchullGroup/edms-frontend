@@ -78,7 +78,13 @@ setting up an environment.
 
 ## The short version
 
-**65 frontend pages · 154 backend routes · 6 roles · 0 tests.**
+**69 frontend pages · 171 backend routes · 6 roles · 0 tests.**
+*(Pages re-derived 2026-11-10: +1, `/search/mass-index` (ticket 08); then +1,
+`/account/security` (ticket 09).)*
+*(Routes re-derived 2026-11-09, backend @ `dev` `42ed468` (PR #67): 154 → 171 — `/access-rules`
+(3), `/document-views` (3), `/auth/mfa` (5), `/auth/sso` (4), `PUT /documents/metadata/batch` and
+`GET /documents/:id/history`. Router files 13 → 17. Seed: 79 → 82 permissions, 219 → 227
+grants; the new grants are not on live yet. Pages unchanged at 65.)*
 *(Pages re-derived 2026-11-04: +1, `/staff/cabinets/[cabinetId]/folders/[folderId]/access`.)*
 *(Routes re-derived 2026-11-04, backend @ `dev` `4368bc6`: 149 → 154 — PR #65 added the five
 folder access routes and removed `POST /documents/batch`; PR #64 added `GET /files/:token`.
@@ -111,11 +117,10 @@ The DOCUMENT half is real
                                                     ✅ works end to end
 
 The GOVERNANCE half is now half real
-  ✅ audit trail · circulars · SLA settings
-  🟨 notifications (emitted, not clicked through)
-  🟨 control exceptions (built, not live until the tenant is seeded)
+  ✅ audit trail · circulars · SLA settings · notifications (clicked through 2026-11-11)
+  🟨 control exceptions (built; live seeded 2026-11-11, not yet walked through)
   🟥 retention · branding · platform operations
-                                                    🟥 9 of 65 pages
+                                                    🟥 9 of 69 pages
 ```
 *(Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
 59 pages"; 2026-10-15 it was "notifications · policies … 🟥 13 of 58 pages".)*
@@ -194,6 +199,12 @@ above was found; and the three "7-line stub" pages are **re-exports**, one of wh
 **Corrected 2026-10-19:** doc 02's C2 story said `tasks.repository` "prioritises by document urgency then due date" and ticked "Paginated". On `origin/dev`, `listTasks` orders by `createdAt` unless `sort=dueAt` is passed, and has no urgency order or filter; `/staff/tasks` fetched only the default first page (20, oldest first) with no paging. C2 is now 🟨 Partial. Found while checking whether My Tasks' filters use the API.
 
 **Corrected 2026-10-20:** two lines still described the old My Tasks after the 2026-10-19 change: doc 05's `GET /tasks` wired-API line (`?overdue=true|false&sort=dueAt`; it now sends `page`, `limit`, `overdue=true` and `sort=createdAt|dueAt`) and doc 05's staff journey row "Prioritised by urgency then due date". Doc 04's supervisor row "Clear the approvals queue … Prioritised by urgency then due date" was wrong the same way: `GET /tasks/approvals` also orders by `createdAt` unless `sort=dueAt` is passed. Separately, docs 02 and 05 said `validateParallelRouting` "mirrors the backend's checks"; it lacked the per-stage fallback rule and the backend's "cannot reach a terminal stage" loop check, so stage add/delete could still 422. Both now run in `validateDefinition`.
+
+**Corrected 2026-11-09:** doc 01's `GET /files/:token` row said file links need the Bearer token as well as the link (`f3ebfb4`, 2026-11-04). PR #67 (`42ed468`) mounted `/files` before `authenticate` again: the encrypted token names the user and the files service re-checks their permissions. Checked live: a version's `fileUrl` fetched with no `Authorization` header returned 200. The frontend still sends the token, which is harmless. The "no UI" sections of doc 01 §7 and doc 05 ("nothing currently known to be backend-complete with zero UI") stopped being true when PR #67 landed and now list its routes. Two counts were already wrong before PR #67: doc 03 Phase 1 said 78 permissions, but `f3ebfb4` had made it 79 (`document:download_original`); and doc 02's personas still had the 2026-10-15 grant counts for management (27, really 29) and the auditor (26, really 30) after the 2026-10-29 control-exception grants. Re-derived from `seed-system.ts` and `permissions.constants.ts` at `ab7e1e8` and `42ed468`. Found while recording PR #67.
+
+**Corrected 2026-11-10 (2):** doc 05's page table gave `/workflow-instances/[id]` 547 lines; on `feat/workstreams` (`f4e313e`) it was 548. Re-counted with `wc -l` after tickets 05–06 (551). Found while recording them.
+
+**Corrected 2026-11-10:** doc 05's page table gave `/upload` 926 lines and `/doc/[id]` 707; on `dev` (`4a267e1`) they were 818 and 693. Re-counted with `wc -l` after the workstream change (856 and 694). Found while recording ticket 04.
 
 **Corrected 2026-11-03:** doc 05's backlog item 20a still said the backend accepts any upload `mimeType`. edms-backend `82c4707` (on `dev` 2026-10-29) enforces PDF, JPEG, PNG and TIFF, which doc 01 §7 already recorded. Found while syncing the docs with backend PR #62.
 
