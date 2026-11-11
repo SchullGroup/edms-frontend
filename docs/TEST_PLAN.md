@@ -700,8 +700,8 @@ steps need a stage to have more than one other stage available to route to.
 condition) branches from one stage run at the same time, each with its own task and SLA. If the
 branches meet again, the stage where they meet waits until every branch has arrived, then opens
 one task. **Status 2026-10-19:** the designer works (TP-Q15–Q18, Q21–Q23 and Q25 passed in a
-browser); **running a parallel workflow fails on the live backend** at the first fork (TP-Q19),
-so the runtime steps say what *should* happen and what you will see today.
+browser). Running one failed at the first fork (TP-Q19, BE-19) until backend `ae08ef5`
+(PR #58, 2026-10-23); the product owner confirmed parallel runs work on 2026-11-11.
 
 **Setup.** As `client_admin`, open `/admin/workflows` → **New workflow**. Add stages until there
 are four, named and assigned like this (Properties tab, then **Save changes** on each):
@@ -778,18 +778,17 @@ document **you own**: as `staff_finance`, upload a new document and use **Route 
 it. Routing someone else's document fails with *"You do not have permission to create a
 workflow instance for this document"*.
 
-- [ ] **TP-Q19 (the normal run).** ⛔ *Blocked by the backend (2026-10-18, re-checked
-      2026-10-19, and over the API 2026-10-20: BE-19 in BACKEND_REQUESTS).* As `staff_finance`, open the task and **Mark reviewed** at Intake. **Today
-      you get a red toast, "An unexpected error occurred" (HTTP 500), and the task stays at
-      Intake** — on every fork, even the simplest. Once the backend is fixed: the stage rail
+- [ ] **TP-Q19 (the normal run).** *Unblocked: the 500 at the fork (2026-10-18 to 10-22,
+      BE-19) was fixed in backend `ae08ef5`.* As `staff_finance`, open the task and **Mark
+      reviewed** at Intake. The stage rail
       shows Finance review *and* Legal review as current, each with its own holder and deadline,
       and `supervisor_finance` and `staff_finance` each have a task. Mark Finance reviewed as
       `supervisor_finance`: Finance reads done, Final approval reads **"waiting for the other
       branches"** with no deadline, and management has no task yet. Mark Legal reviewed: Final
       approval becomes current, with a task for `management_ops`. Review it there and the
       workflow closes.
-- [ ] **TP-Q20 (request changes inside a branch — suspected backend gap).** ⛔ *Blocked by
-      TP-Q19.* On a fresh run, after the fork, **Request changes** on Finance review. The
+- [ ] **TP-Q20 (request changes inside a branch — suspected backend gap).** *Was blocked by
+      TP-Q19 (now unblocked).* On a fresh run, after the fork, **Request changes** on Finance review. The
       document goes back to Intake for that branch only; Legal's task is untouched. Upload a new
       version at Intake (you must own the document — see TP-Q27) and mark it reviewed. **Reading
       the backend code, Intake forks that branch again** into new Finance *and* Legal branches,

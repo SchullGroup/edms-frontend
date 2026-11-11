@@ -6,7 +6,11 @@
 
 **Raised:** 2026-08-29 · **Updated:** 2026-11-11
 **Frontend:** `edms-frontend` @ `dev`
-**Backend checked against:** `edms-backend` @ `origin/dev` (`d14f250`)
+**Backend checked against:** `edms-backend` @ `origin/dev` (`4da2980`, 2026-11-11)
+
+> **2026-11-11: re-checked against `4da2980`.** Done and removed: BE-19 (500 at a parallel
+> fork), fixed in `ae08ef5` (PR #58, 2026-10-23) and confirmed working by the product owner.
+> BE-2, BE-4, BE-10, BE-12, BE-18, BE-21 and BE-22 are still open in the code.
 
 > **2026-10-21: this file now lists open asks only.** Every item was re-checked against
 > `d14f250`. Done and removed: BE-1 (access requests), BE-3 (workflow authorization), BE-5
@@ -21,8 +25,7 @@
 
 Each item states what the frontend does today, what it needs, and why.
 
-**Take BE-19 first** — no parallel workflow can run without it. Then BE-2, BE-4 and BE-21,
-which are security items rather than features. BE-22 is a product decision (no automatic AI
+**Take BE-2, BE-4, BE-21 and BE-24 first**: they are security items rather than features. BE-22 is a product decision (no automatic AI
 summaries) and costs a Gemini call per upload until it ships.
 
 ---
@@ -31,7 +34,6 @@ summaries) and costs a Gemini call per upload until it ships.
 
 | ID        | Ask                                                         | Type            | Priority | Blocking?                                  |
 | --------- | ----------------------------------------------------------- | --------------- | -------- | ------------------------------------------ |
-| **BE-19** | 500 on the first action at a parallel fork (PR #54)         | Bug             | 🔴 High  | **Yes — no parallel workflow can run**     |
 | **BE-2**  | `POST /auth/logout` + refresh-token revocation              | New endpoint    | 🔴 High  | No — fails silently today                  |
 | **BE-4**  | Reject confidentiality tiers the uploader isn't cleared for | Security fix    | 🔴 High  | No                                         |
 | **BE-21** | Check cabinet grants when a document is read                | Security fix    | 🔴 High  | No — documents are over-shared today       |
@@ -45,73 +47,6 @@ summaries) and costs a Gemini call per upload until it ships.
 
 **Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
 them until the PM confirms the AI features are in scope.
-
----
-
-## 🔴 BE-19 · `POST /tasks/:id/action` returns 500 at a parallel fork
-
-**Raised:** 2026-10-20 · **Backend:** live API (`edms-backend-zmfm.onrender.com`); code read at
-`origin/dev` `6700804`
-
-### What we found
-
-The first action at a stage with two or more unconditional transitions (a parallel fork, PR #54)
-fails every time:
-
-```
-POST /api/v1/tasks/f83de22c-89ab-4873-a80f-880f1776cf2f/action
-{"action":"review","comment":"parallel repro 2026-10-20"}
-
-500 {"success":false,"message":"An unexpected error occurred","code":"INTERNAL_SERVER_ERROR"}
-```
-
-The task stays `pending` at the fork stage and no branch task is created. Sequential workflows on
-the same backend work. First seen 2026-10-18 (TEST_PLAN TP-Q19), and reproduced over the API on
-2026-10-20 with the smallest possible fork: no join, one document, `review` only.
-
-**Re-tested 2026-10-22 on `origin/dev` `2f42695`: still a 500.** The only workflow change since
-the report is notification wiring (`c316ddb`, PR #57), which doesn't touch the fork path. A
-sequential control run the same minute (intake → finance → legal, same user and document) returned
-200 and opened the next task.
-
-### How to reproduce
-
-1. As `client_admin`, `POST /workflows` with this definition, then `POST /workflows/:id/publish`.
-   It saves and publishes cleanly:
-   ```json
-   {
-     "stages": [
-       { "id": "intake",  "name": "Intake",         "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] },
-       { "id": "finance", "name": "Finance review", "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] },
-       { "id": "legal",   "name": "Legal review",   "user_id": "<staff_finance id>", "sla_hours": 48, "actions": ["review"] }
-     ],
-     "transitions": [{ "from": "intake", "to": "finance" }, { "from": "intake", "to": "legal" }]
-   }
-   ```
-2. As `staff_finance`, `POST /workflow-instances` with one document they own, then
-   `POST /workflow-instances/:id/start` (both succeed; one task opens at `intake`).
-3. As `staff_finance`, `POST /tasks/:taskId/action` with `{"action":"review"}`: **500**.
-
-The 2026-10-20 run's IDs, for the server logs: workflow `d607c88e-85f9-4043-9c03-74c336341ff6`
-(archived afterwards), instance `c86d381f-a2b9-4c55-bcfe-0404e86d250a` (closed afterwards), task
-`f83de22c-89ab-4873-a80f-880f1776cf2f`. The 2026-10-22 run (action at about 08:26 UTC): workflow
-`6312badb-ae27-4eae-8c3e-f279303de560`, instance `e0e52b86-b908-45d5-91d8-12f10cbdd6c5`, task
-`dcab51d1-7c26-4f30-a744-bf24799917e8`; both archived/closed afterwards. The response carries no
-request id.
-
-### Where to look
-
-The fork branch of the task action in `src/modules/workflows/tasks/tasks.service.ts` (the
-`sourceOccurrences` loop that calls `instancesRepository.forkDocumentExecution`, then
-`routeDestinationGroups`). We couldn't find the cause from the code alone. A 500 means an
-uncaught error rather than an `AppError`, so the stack trace for the request above should name
-it.
-
-### What we need
-
-The fork action to succeed: one task per branch, each document execution split into children
-(`parentExecutionId` set), as PR #54 describes. The designer already builds and saves forks and
-joins (live since 2026-10-17), so the frontend is waiting only on this.
 
 ---
 
