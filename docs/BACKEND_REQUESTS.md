@@ -452,12 +452,23 @@ app.use((_req, res) => ApiResponse.notFound(res, 'Route not found', 'ROUTE_NOT_F
 
 ## 🟡 BE-25 · Task notifications name the stage, not its id — **new, 2026-11-11**
 
-`task.assigned` and `workflow.changes_requested` read "A new stage_1789748379694 task requires your
-attention." and "Changes have been requested on your document workflow." (`tasks.service.ts`
-`pendingNotifications.push`, `instances.service.ts` `notifyAssignment`). The stage's `name` from the
-definition ("Supervisor review") and the document title or reference would let people tell their
-tasks apart from the bell. Seen live 2026-11-11 while clicking notifications through (frontend
-ticket 16); the links themselves work.
+`task.assigned` reads "A new stage_1789748379694 task requires your attention." and
+`workflow.changes_requested` reads "Changes have been requested on your document workflow.", with no
+document named. Seen live 2026-11-11 while clicking notifications through (frontend ticket 16); the
+links themselves work.
+
+**Cause:** the messages interpolate the stage **id** (`task.stage` / `candidate.currentStage`). The
+stage schema accepts an optional `name` and stores it, but `readStoredWorkflowDefinition`
+(`definitions.validation.ts`) drops it, so `StoredWorkflowStage` has no `name` to use. The designer
+always sends one (new stages: `id: stage_<timestamp>`, `name: 'New stage'`).
+
+**Ask:** map `name` into `StoredWorkflowStage`, then use `stage.name ?? stage.id` and the document
+title at all five sites (checked on `origin/dev` `4da2980`):
+- `instances.service.ts` ~1328, first task on start (`stage` in scope)
+- `tasks.service.ts` ~1795, next task after an action (`targetStage` in scope); also name the
+  document in the changes-requested text
+- `tasks.service.ts` ~2712, task after parallel branches join (`targetStage` in scope)
+- `sla.service.ts` ~929 and ~960, SLA warning and breach (needs the definition loaded)
 
 ---
 
