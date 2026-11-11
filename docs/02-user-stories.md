@@ -638,6 +638,11 @@ images with the watermark burned in; Export (document page) goes through
       live API (audited call made, watermarked print frame built)
 - [x] Download and Export clicked through end to end in the UI (2026-10-09): each made its
       audited call and opened the signed URL
+- [x] Downloads use the per-viewer `downloadUrl` the backend issues (PR #67), watermarked for
+      PDFs and images alike, and are audited when the file is fetched (2026-11-11, verified live
+      in Edge as `staff_finance`)
+- [ ] 🟨 **Download original** (the unmarked file, `originalUrl`) is built but not seen live: no
+      live role holds `document:download_original` until the re-seed
 
 ---
 
@@ -957,6 +962,8 @@ and search. The design is sound.
       `top_secret`, and the document page's "Change classification" dialog (2026-10-08)
       disables uncleared tiers using the backend's rule. *(This item used to say the
       doc-detail edit form offered Top Secret from `SEED.policies`; no such form existed.)*
+- [x] A one-off grant to a document (an approved access request, View or Action) can be
+      revoked again: **Revoke** on `/admin/access-requests` (2026-11-11, verified live in Edge)
 
 ---
 

@@ -262,6 +262,15 @@ export const documentsService = {
     return response.data.data;
   },
 
+  /** Deletes the grant only: the request stays `approved`, and a second call 404s. */
+  revokeAccessGrant: async (
+    id: string,
+    userId: string,
+    permission: DocumentAccessKind,
+  ): Promise<void> => {
+    await apiClient.delete(`/documents/${id}/access-grants/${userId}`, { params: { permission } });
+  },
+
   /** `GET /documents/access-requests` — client_admin-only admin inbox across
    *  every document, newest first. */
   getAccessRequestsInbox: async (

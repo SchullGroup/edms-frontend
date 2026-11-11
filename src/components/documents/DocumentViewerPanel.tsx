@@ -2,12 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import {
-  downloadFileName,
-  fileActionFor,
-  filesService,
-  type FileFetchError,
-} from '@/apis/services/files.service';
+import { filesService, isWatermarkable, type FileFetchError } from '@/apis/services/files.service';
 import { Icon } from '@/components/ui/Icons';
 import { PdfViewer } from '@/components/documents/PdfViewer';
 import type { DocumentSignatureFieldUI } from '@/components/documents/types';
@@ -30,10 +25,10 @@ export interface DocumentViewerPanelProps {
   sealed: boolean;
   lockedByOther: boolean;
   onSignatureFieldClick: (index: number) => void;
-  /** `document:download` plus clearance for this document's tier. Also decides
-   *  whether a PDF's text can be selected and copied. */
+  /** The backend issued a `downloadUrl` for a type it can watermark (`canDownloadVersion`).
+   *  Also decides whether a PDF's text can be selected and copied. */
   canDownload: boolean;
-  /** The page's own (audited) download; without one the button opens the file. */
+  /** The page's own download, from the backend's `downloadUrl`. */
   onDownload?: () => void;
   /** Leaves Download out of the PDF viewer bar, for a page with its own button. */
   hideDownloadButton?: boolean;
@@ -55,7 +50,7 @@ function useFirstUrlFor(fileKey: string | undefined, url: string | undefined) {
   return first.key === key ? first.url : url;
 }
 
-/** The image behind a file link, fetched with the session; images exist only as the original. */
+/** The image behind a file link, fetched with the session; watermarked like a PDF (PR #67). */
 function SecureImage({ url, alt }: { url: string; alt: string }) {
   const [state, setState] = useState<{ src?: string; error?: string }>({});
   useEffect(() => {
@@ -63,7 +58,7 @@ function SecureImage({ url, alt }: { url: string; alt: string }) {
     let src: string | undefined;
     setState({});
     filesService
-      .fetch(url, 'original')
+      .fetch(url, 'preview')
       .then((blob) => {
         src = URL.createObjectURL(blob);
         if (cancelled) URL.revokeObjectURL(src);
@@ -74,7 +69,7 @@ function SecureImage({ url, alt }: { url: string; alt: string }) {
         setState({
           error:
             err.status === 403
-              ? "Viewing this image needs permission to download the original file."
+              ? "You don't have permission to view this image."
               : err.message || "The image couldn't be loaded.",
         });
       });
@@ -149,24 +144,6 @@ export function DocumentViewerPanel({
   // Shown from the first link; download links take the newest, which hasn't expired.
   const shownUrl = useFirstUrlFor(rawFileKey, fileUrl);
 
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const saveFile = async () => {
-    if (!fileUrl) return;
-    const action = fileActionFor(fileMimeType, 'download');
-    setSaving(true);
-    setSaveError(null);
-    try {
-      await filesService.save(fileUrl, downloadFileName(documentTitle, fileMimeType, action), action);
-    } catch (err: any) {
-      setSaveError(
-        err?.status === 403 ? "You don't have permission to download this file." : err?.message,
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (shownUrl && isPdf) {
     return (
       <div className="viewer doc-viewer-col">
@@ -185,7 +162,7 @@ export function DocumentViewerPanel({
           actions={
             canDownload &&
             !hideDownloadButton &&
-            (onDownload ? (
+            onDownload && (
               <button
                 className="icon-btn"
                 onClick={onDownload}
@@ -194,17 +171,7 @@ export function DocumentViewerPanel({
               >
                 <Icon name="download" size={16} />
               </button>
-            ) : (
-              <button
-                className="icon-btn"
-                onClick={saveFile}
-                disabled={saving}
-                title={saveError ?? downloadLabel}
-                aria-label={downloadLabel}
-              >
-                <Icon name="download" size={16} />
-              </button>
-            ))
+            )
           }
         />
       </div>
@@ -268,19 +235,15 @@ export function DocumentViewerPanel({
                 {fileKindLabel(fileMimeType)} can’t be previewed yet.
                 {canDownload
                   ? ' Download it to read it.'
-                  : ` Download is turned off for ${confidentiality} documents.`}
+                  : isWatermarkable(fileMimeType)
+                    ? ` Download is turned off for ${confidentiality} documents.`
+                    : ' Only the original file can be downloaded, with the Download original permission.'}
               </p>
-              {canDownload &&
-                (onDownload ? (
-                  <button className="btn btn-secondary btn-sm" onClick={onDownload}>
-                    <Icon name="download" size={13} /> Download
-                  </button>
-                ) : (
-                  <button className="btn btn-secondary btn-sm" onClick={saveFile} disabled={saving}>
-                    <Icon name="download" size={13} /> Download
-                  </button>
-                ))}
-              {saveError && <p className="caption mt-2">{saveError}</p>}
+              {canDownload && onDownload && (
+                <button className="btn btn-secondary btn-sm" onClick={onDownload}>
+                  <Icon name="download" size={13} /> Download
+                </button>
+              )}
             </div>
           )}
 

@@ -206,6 +206,10 @@ export interface DocumentVersion {
    * Not guaranteed on version-list responses, so treat as optional.
    */
   fileUrl?: string | null;
+  /** `fileUrl?action=download` (watermarked); null unless this viewer may download (PR #67). */
+  downloadUrl?: string | null;
+  /** `fileUrl?action=original`, unmarked; null without `document:download_original`. */
+  originalUrl?: string | null;
   fileSize?: number | null;
   mimeType: string;
   checksum: string;
