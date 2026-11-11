@@ -61,6 +61,14 @@ export const useNavigation = () => {
     anyPermissions: ['document_access_request:view'],
   };
 
+  // IP and country rules: `access_rule:*` is seeded for client_admin and schulltech_admin.
+  const accessRulesItem = {
+    route: '/admin/access-rules',
+    label: 'IP & Country Rules',
+    icon: 'shield',
+    anyPermissions: ['access_rule:view'],
+  };
+
   const NAV: Record<string, any> = {
     staff: {
       surface: 'Staff Workspace',
@@ -492,6 +500,7 @@ export const useNavigation = () => {
               anyPermissions: ['audit:view'],
             },
             accessRequestsItem,
+            accessRulesItem,
           ],
         },
       ],
@@ -520,7 +529,10 @@ export const useNavigation = () => {
         },
         {
           label: 'Governance',
-          items: [{ route: '/platform/audit', label: 'Platform Audit', icon: 'list' }],
+          items: [
+            { route: '/platform/audit', label: 'Platform Audit', icon: 'list' },
+            accessRulesItem,
+          ],
         },
       ],
     },

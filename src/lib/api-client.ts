@@ -108,6 +108,20 @@ const WRONG_SECRET_CODES = new Set([
   'MFA_CHALLENGE_INVALID',
 ]);
 
+let accessRestrictedShownAt = 0;
+
+/** An IP or country rule turned this network away; every call fails alike, so say it once a while. */
+function notifyAccessRestricted() {
+  if (typeof window === 'undefined' || Date.now() - accessRestrictedShownAt < 30_000) return;
+  accessRestrictedShownAt = Date.now();
+  useUIStore
+    .getState()
+    .addToast(
+      "Your organisation's access rules block this network or location. Ask an administrator.",
+      'error',
+    );
+}
+
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api/v1`,
   headers: {
@@ -228,6 +242,9 @@ apiClient.interceptors.response.use(
       }
     }
 
+    if (error.response?.status === 403 && error.response.data?.code === 'ACCESS_RESTRICTED') {
+      notifyAccessRestricted();
+    }
     return Promise.reject(error);
   },
 );

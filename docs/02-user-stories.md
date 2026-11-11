@@ -220,7 +220,7 @@ findings that quietly die.
 (served by the hash-chained `GET /audit` since 2026-09-18 — DRIFT-11), `cabinet_access:view`,
 `circular:view`, `control_exception:view/create/edit/report` (2026-10-29) and, since PR #67,
 `document:download_original` — the unmarked stored file, to check against its checksum
-(not on live yet: ticket 01 of `.scratch/backend-dev-2026-11-09`). `document:view_confidential:global` lets them read confidential-tier
+(on live since the 2026-11-11 re-seed). `document:view_confidential:global` lets them read confidential-tier
 documents (a permission since `edms-backend` `0dab81a`; it was a role list before).
 **No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)* *(Was "10 grants, read-only … `audit:view` (for which
 no endpoint exists)" and "deliberately cannot mutate anything". The seed now also grants
@@ -249,7 +249,7 @@ silently stalling every document in a cabinet.
 **Backend rights (77 grants, 76 `global` + 1 `own`; re-counted 2026-11-09 — 72 on
 2026-10-15, 45 before):** effectively full control of the tenant, across all 22 resources
 including `role`, `workflow`, `cabinet_access`, `circular` and, since PR #67, `access_rule`
-(IP and country restrictions) and `document:download_original` (not on live yet).
+(IP and country restrictions) and `document:download_original` (both on live since 2026-11-11).
 They are the **only** role in `CABINET_ACCESS_BYPASS_ROLES` (they see every cabinet
 regardless of grants) and the only seeded role holding `document:view_restricted`.
 
@@ -271,8 +271,8 @@ liability, not a capability.
 **Backend rights: 21 grants** *(re-counted 2026-11-09 — 18 on 2026-10-15, "3 grants only"
 before)* — `workflow:view/create/edit/publish/archive`, `workflow_instance:view/create/route/close`,
 `task:view/action/reassign`, `delegation:view/end` plus `create:own`, `audit:view/export`,
-`document_access_request:create` and, since PR #67, `access_rule:view/create/delete` (not on
-live yet). Still **no `document:*` grant of any kind.** This is
+`document_access_request:create` and, since PR #67, `access_rule:view/create/delete` (on
+live since 2026-11-11). Still **no `document:*` grant of any kind.** This is
 deliberate and important: the platform admin is
 **excluded from `CABINET_ACCESS_BYPASS_ROLES`, from every confidentiality tier list, and
 from all document permissions.** The vendor cannot read customer documents. The
@@ -641,8 +641,9 @@ images with the watermark burned in; Export (document page) goes through
 - [x] Downloads use the per-viewer `downloadUrl` the backend issues (PR #67), watermarked for
       PDFs and images alike, and are audited when the file is fetched (2026-11-11, verified live
       in Edge as `staff_finance`)
-- [ ] 🟨 **Download original** (the unmarked file, `originalUrl`) is built but not seen live: no
-      live role holds `document:download_original` until the re-seed
+- [x] **Download original** (the unmarked file, `originalUrl`) for holders of
+      `document:download_original`: verified live in Edge as `client_admin` (2026-11-11, after the re-seed),
+      audited with `original: true`
 
 ---
 
@@ -1728,9 +1729,9 @@ error paths and workers).
       resets it for someone who lost their phone (**Reset two-step** on `/admin/users`)
 - [ ] Sign in with Active Directory (GBB 1.3) — *backend done, no UI:* `/auth/sso/*` over
       OIDC (PR #67). Not configured on live (`enabled: false`). Ticket 14
-- [ ] Block or allow access by IP range and country (GBB 1.6) — *backend done, no UI:*
-      `/access-rules`, enforced on every request (PR #67). The grants aren't on live yet.
-      Ticket 13
+- [x] Block or allow access by IP range and country (GBB 1.6) — `/admin/access-rules` (2026-11-11,
+      verified live with a TEST-NET block rule). 🟨 Country rules are refused on live until the server
+      sets `GEO_COUNTRY_HEADER`
 
 ---
 

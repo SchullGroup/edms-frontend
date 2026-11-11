@@ -158,6 +158,18 @@ export const routeConfig: RouteRule[] = [
     matchType: 'prefix',
     anyPermissions: ['document_access_request:view'],
   },
+  // IP and country rules: each page gated on what its API checks. Ahead of `/admin`,
+  // so the platform admin (who holds `access_rule:*` but no admin-qualifying key) gets in.
+  {
+    path: '/admin/access-rules/new',
+    matchType: 'prefix',
+    anyPermissions: ['access_rule:create'],
+  },
+  {
+    path: '/admin/access-rules',
+    matchType: 'prefix',
+    anyPermissions: ['access_rule:view'],
+  },
   // Role-gated, not permission-gated — per an explicit call: stays scoped to the
   // role it was built for (client_admin) rather than opening up to any custom
   // role that happens to hold an admin-qualifying permission. Same exception

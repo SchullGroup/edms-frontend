@@ -170,7 +170,7 @@ tenant-wide, and can also act on their own tasks, route their own documents and 
 
 ### Identity and rights
 
-**Backend grants — 21** *(re-counted 2026-11-09: +`access_rule:view/create/delete` from PR #67, not on live yet; 18 on 2026-10-15. Before that it said "exactly three" — `workflow:view`,
+**Backend grants — 21** *(re-counted 2026-11-09: +`access_rule:view/create/delete` from PR #67, on live since the 2026-11-11 re-seed; 18 on 2026-10-15. Before that it said "exactly three" — `workflow:view`,
 `workflow:route`, `audit:view` — before the 2026-09-16 RBAC refactor)*:
 
 ```
@@ -259,7 +259,7 @@ The `/platform` portal is a design prototype for a phase that hasn't started.
 ### Identity and rights
 
 **77 grants — 76 `global`, 1 `own`** *(re-counted 2026-11-09: +`document:download_original`
-and `access_rule:view/create/delete` from PR #67, not on live yet; 73 on 2026-10-29
+and `access_rule:view/create/delete` from PR #67, on live since 2026-11-11; 73 on 2026-10-29
 (+`control_exception:view`), 72 on 2026-10-15, "45 grants, every one `global`" before)*. Documents (including comments,
 signatures and access requests), versions, locks, metadata, cabinets, metadata fields,
 cabinet access, folders, departments, users, roles, workflows, workflow instances, tasks,
@@ -291,8 +291,9 @@ This must be done in order; each step produces the input for the next.
 | 10 | Apply branding | `/admin/branding` | — | 🟥 saved in this browser only (since 2026-10-12); other users don't see it |
 | 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 12 | Review the tenant audit trail | `/admin/audit` | `GET /audit`, `/audit/verify` | ✅ wired 2026-09-18 (was `SEED.audit`) |
+| 13 | Optional: block or allow networks and countries | `/admin/access-rules` | `GET`/`POST /access-rules`, `DELETE /access-rules/:id` | ✅ wired 2026-11-11 (block rule verified live). Before any **allow** rule, include the web app server's address: sign-in reaches the API from there. Country rules need `GEO_COUNTRY_HEADER` on the server, not set on live |
 
-**Steps 2, 3, 4, 5, 6a, 7, 8 and 12 are real; step 6 is wired but not yet verified live.** Everything else is either missing a UI or writes
+**Steps 2, 3, 4, 5, 6a, 7, 8, 12 and 13 are real; step 6 is wired but not yet verified live.** Everything else is either missing a UI or writes
 only to localStorage.
 
 ### First week
@@ -682,7 +683,7 @@ existed by 2026-09-04 evening.
 ### Identity and rights
 
 **31 grants — 26 `global`, 5 `own`** *(re-counted 2026-11-09: +`document:download_original`
-from PR #67, not on live yet; 30 on 2026-10-29 after +`control_exception`
+from PR #67, on live since 2026-11-11; 30 on 2026-10-29 after +`control_exception`
 view/create/edit/report; 26 on 2026-10-15, "10 grants, all `global`, all read-only" with
 `workflow:view:global` before)*:
 

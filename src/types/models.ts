@@ -1726,3 +1726,28 @@ export interface Branding {
   /** `custom` = published from /admin/branding; otherwise preset-owned. */
   source?: 'preset' | 'custom';
 }
+
+// --- Access rules (edms-backend PR #67, `b4aced3`) ---
+
+export type AccessRuleType = 'ip' | 'country';
+export type AccessRuleEffect = 'allow' | 'deny';
+
+/** `GET /access-rules`, oldest first. Unique per (type, effect, value). */
+export interface AccessRule {
+  id: string;
+  ruleType: AccessRuleType;
+  effect: AccessRuleEffect;
+  /** An IP or CIDR range for `ip`; an upper-case ISO 3166 code for `country`. */
+  value: string;
+  description: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface AccessRuleInput {
+  ruleType: AccessRuleType;
+  effect: AccessRuleEffect;
+  value: string;
+  /** ≤ 255 characters. */
+  description?: string;
+}

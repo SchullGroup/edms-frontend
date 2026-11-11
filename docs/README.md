@@ -78,7 +78,7 @@ setting up an environment.
 
 ## The short version
 
-**67 frontend pages · 171 backend routes · 6 roles · 0 tests.**
+**69 frontend pages · 171 backend routes · 6 roles · 0 tests.**
 *(Pages re-derived 2026-11-10: +1, `/search/mass-index` (ticket 08); then +1,
 `/account/security` (ticket 09).)*
 *(Routes re-derived 2026-11-09, backend @ `dev` `42ed468` (PR #67): 154 → 171 — `/access-rules`
@@ -119,9 +119,9 @@ The DOCUMENT half is real
 The GOVERNANCE half is now half real
   ✅ audit trail · circulars · SLA settings
   🟨 notifications (emitted, not clicked through)
-  🟨 control exceptions (built, not live until the tenant is seeded)
+  🟨 control exceptions (built; live seeded 2026-11-11, not yet walked through)
   🟥 retention · branding · platform operations
-                                                    🟥 9 of 67 pages
+                                                    🟥 9 of 69 pages
 ```
 *(Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
 59 pages"; 2026-10-15 it was "notifications · policies … 🟥 13 of 58 pages".)*

@@ -138,7 +138,8 @@ For each of the six role dashboards this document lists:
 
 ## Portfolio summary
 
-**67 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
+**69 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
+2026-11-11 — +2: `/admin/access-rules` and `/new`, under Client Administration; 67 on
 2026-11-10 — +1: `/account/security`, under Shared pages; 66 earlier on 2026-11-10 — +1:
 `/search/mass-index`, under Shared pages; 65 on 2026-11-04 — +1:
 `/staff/cabinets/[cabinetId]/folders/[folderId]/access`, under Staff Workspace;
@@ -170,11 +171,11 @@ Every classification below was verified by inspecting what each page destructure
 | Staff Workspace | 5 | 5 | — | — | — | **Strongest.** Real data throughout. |
 | Supervisor Console | 7 | 5 | 1 | 1 | — | Approvals, ageing and the Workflow Monitor real; exceptions/performance fixture. |
 | Management Portal | 7 | 5 | 1 | — | 1 | The only fully API-driven pages — and the ones that don't scale. `/management/findings` redirects to control exceptions. |
-| Client Administration | 13 | 8 | 2 | 1 | 2 | Structure real; branding mock, policies Hybrid (SLA tab real). `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
+| Client Administration | 15 | 10 | 2 | 1 | 2 | Structure real; branding mock, policies Hybrid (SLA tab real). `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
 | Audit & Compliance | 4 | 1 | 1 | 1 | 1 | Trail real; dashboard fixture; `/auditor/findings` redirects to control exceptions. |
 | Platform Admin | 6 | — | — | 6 | — | Mock by design (Phase 2). |
-| Shared | 25 | 11 | 10 | — | 4 | Login (with two-step sign-in), account security, upload, search, circulars and the workflow page live; delegations, notifications and the password pages 🟨 not re-verified; `/doc/[id]` Hybrid; the 5 control-exceptions pages 🟨 until the live tenant is seeded. |
-| **Total** | **67** | **35** | **15** | **9** | **8** | |
+| Shared | 25 | 11 | 10 | — | 4 | Login (with two-step sign-in), account security, upload, search, circulars and the workflow page live; delegations, notifications and the password pages 🟨 not re-verified; `/doc/[id]` Hybrid; the 5 control-exceptions pages 🟨 until walked through on live (seeded 2026-11-11). |
+| **Total** | **69** | **37** | **15** | **9** | **8** | |
 
 *(Re-tallied 2026-10-08 from each page's row in this doc: all 57 `page.tsx` files. Later the
 same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → 🟨, and `/help`
@@ -183,7 +184,8 @@ same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → �
 2026-10-29: five control-exceptions pages added 🟨, and both Findings pages 🟥 → ↪️ redirect, making 64.
 2026-11-04: the folder permissions page added ✅, making 65.
 2026-11-10: the mass-indexing page `/search/mass-index` added ✅, making 66; then
-`/account/security` (two-step sign-in) added ✅, making 67.)*
+`/account/security` (two-step sign-in) added ✅, making 67.
+2026-11-11: the IP and country rules pages `/admin/access-rules` and `/new` added ✅, making 69.)*
 
 *Confirmed by the product owner's own testing, 2026-10-08:* the admin setup checklist, the SLA
 settings, sub-folders, batch upload ("File all") and multi-document workflows. Page markers
@@ -211,8 +213,8 @@ after the user tested cabinet management end to end.)*
 ### By data source
 
 ```
-Renders live API data      ███████████████████████████████░░░░░░░░░  52 pages (78%)
-Renders fixture data       ███████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  12 pages (18%)
+Renders live API data      ███████████████████████████████░░░░░░░░░  54 pages (78%)
+Renders fixture data       ███████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  12 pages (17%)
 Both, on the same page     ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   3 pages (4%)
 Neither (redirect/static)  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   6 pages (9%)
 ```
@@ -235,7 +237,8 @@ pages are exactly the 11 🟥 in the portfolio table. 2026-10-20: the `/admin/wo
 list is API-only, so 41 + 11 + 3 + 4 = 59. 2026-10-29: the five control-exceptions pages
 are API-only and both Findings pages are redirects, so 46 + 9 + 3 + 6 = 64. 2026-11-04: the
 folder permissions page is API-only, so 47 + 9 + 3 + 6 = 65. 2026-11-10: the mass-indexing
-page is API-only, so 48 + 9 + 3 + 6 = 66; `/account/security` too, so 49 + 9 + 3 + 6 = 67.*
+page is API-only, so 48 + 9 + 3 + 6 = 66; `/account/security` too, so 49 + 9 + 3 + 6 = 67. 2026-11-11: both IP and country
+rules pages are API-only, so 51 + 9 + 3 + 6 = 69.*
 
 The split is clean: most pages are decisively one thing or the other. The **9 mock pages
 cluster in three places** — Platform (6/6, by design), the auditor's dashboard, and two
@@ -728,6 +731,8 @@ approximation, not a silent one.
 | `/admin/circulars` | 20 | — | — | ↪️ redirect to `/circulars/manage` (2026-10-05) — management moved to a shared area because supervisors and management author and publish circulars too, and can't enter this portal |
 | `/admin/audit` | 236 | — | `useAuditEntries`, `useExportAuditCsv`, `useVerifyAuditChain` ✅ · `UserSearchCombobox` (`GET /users?search=`) ✅ | ✅ Live — wired 2026-09-18 (was `SEED.audit`). **2026-10-08 (confirmed by the product owner's testing 2026-10-09):** record-type and action dropdowns replace the free-text action box. That box sent partial text to `GET /audit`, which only accepts exact action names, so typing "doc" was a 400 and the table showed "Failed to load". The record types' **Configuration** group (roles, departments, cabinets, folders, workflow designs, users) is the configuration history (18.7). Export sends the same filters. SLA settings aren't audited by the backend, so they can't appear. **Actor filter (2026-10-13, verified live):** a searchable `UserPicker` replaces the select, which listed only the first 20 users. Searching "finance" and picking Finance Staff User sent `GET /audit?actorId=`. The Actor column then named people from a `GET /users` lookup; since 2026-10-20 it reads each entry's `actor` (edms-backend PR #53), verified live. **Actor search box (2026-10-16, verified live):** `UserSearchCombobox` replaces the `UserPicker`. You type into the box itself; under 3 characters it shows a hint and sends nothing, from 3 it sends `GET /users?search=` (debounced, 20 results). The list is at most 300px tall and sits above modals and toasts (z-index 1100). Picking sets `actorId`; emptying the box or ✕ goes back to all actors. Verified: "tj" sent no request, "tjo" sent `search=tjo`, picking Finance Staff User sent `GET /audit?actorId=…` and only their rows showed. **2026-11-11 (ticket 15, verified live in Edge):** the action filter and the Action column read as words (`auditActionLabel`: "Document version viewed"; raw key on hover), and the vocabulary is re-copied from the backend: +17 actions (MFA incl. method switching and email codes, `document.version_viewed`, `workflow.version_created`, `control_exception.*`, `access_rule.*`) and two record types (IP & country rules, Control exceptions). Filtering on `document.version_viewed` lists the live entry |
 | `/admin/access-requests` | 275 | — | `useAccessRequestsInbox`, `useGrantAccessRequest`, `useDenyAccessRequest`, `useRevokeAccessGrant` ✅ | ✅ Live — **new page, 2026-09-18**. Grant/deny inbox for `POST /documents/:id/access-requests`. **Gated on `document_access_request:view` since 2026-10-12** (was `user:edit`, which no access-request route checks), with a sidebar link in any portal whose user holds it; Grant/Deny need `:grant`. Seeded, only `client_admin` holds either (verified live: client admin in, staff and supervisor sent to `/unauthorized`). Since `3014b89` each request is for `view` (View access) or `route` (Action access: act on the document in a workflow without opening it). **2026-10-12:** an **Access** column shows "Open" or "Act" (older requests read "Open"), and the grant confirmation describes that kind; verified live 2026-10-12 for both kinds: "Open" and "Act" rows, both confirmations, and granting an Act request (200). **2026-11-11 (ticket 11):** approved rows get **Revoke** (`document_access_request:revoke`), with a confirm; the request still reads approved afterwards (there's no grant list), and revoking twice says "already revoked". Verified live in Edge: grant, revoke (204), `staff_finance` back to 403 |
+| `/admin/access-rules` | 167 | — | `useAccessRules`, `useRemoveAccessRule`, `useUsersByIds` (creator names) ✅ | ✅ Live — **new 2026-11-11** (ticket 13). IP and country rules (`GET /access-rules`, `DELETE /access-rules/:id`), gated on `access_rule:view` (`client_admin`, `schulltech_admin`; sidebar under Governance in both portals). Lists each rule as Allow/Block with its note, creator and date; Remove (`access_rule:delete`) asks first and says what removing an allow rule does, since the server doesn't check removals for lock-outs. A warning explains that sign-in reaches the API from the web app's server, so an IP allow list must include that server. **Verified live in Edge 2026-11-11** as `client_admin`: added and removed a block rule for TEST-NET-2 `198.51.100.7` (201, 200, list refreshed, audited `access_rule.created` / `.deleted`); staff unaffected. Live now has no rules |
+| `/admin/access-rules/new` | 225 | — | `useCreateAccessRule` ✅ | ✅ Live — **new 2026-11-11** (ticket 13). Its own page (`access_rule:create`): effect, IP/range or country (picked by name from the browser's region list, sent as the ISO code), note. Checks the IP's shape first; explains the server's refusals in place: `WOULD_LOCK_OUT_CALLER`, a duplicate, and `GEO_NOT_CONFIGURED`, after which the country option is disabled with the reason. An allow rule shows the allow-list warning. **Verified live 2026-11-11:** an IP block rule saved; a country rule (Antarctica) refused 422 — **live has no `GEO_COUNTRY_HEADER`, so country rules can't be used there**. The lock-out refusal and allow warnings were checked against mocked responses (no allow rule was created on live) |
 
 ### APIs wired ✅
 
@@ -782,12 +787,12 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 | Branding model + endpoints | Not built | Theming is per-browser (survives reload since 2026-10-12; other users never see it) |
 | ~~Circulars model + endpoints~~ | ✅ **Built** (backend `circulars` module, 15 routes) and wired 2026-10-05 | Confirmed in the product owner's testing 2026-10-09 |
 | `GET /audit` | ✅ **Built & wired 2026-09-18** | Tenant audit view is real now |
-| `GET/POST /access-rules`, `DELETE /access-rules/:id` | ⛔ **Backend live, not wired** (PR #67) — ticket 13. The `access_rule:*` grants aren't on live (ticket 01): `GET /access-rules` as `client_admin` → 403 | No IP allow/deny or country blocking from the UI |
+| `GET/POST /access-rules`, `DELETE /access-rules/:id` | ✅ **Wired 2026-11-11** — ticket 13, `/admin/access-rules` (verified live). Country rules are refused on live: no `GEO_COUNTRY_HEADER` | — |
 | ~~`DELETE /auth/mfa/users/:userId`~~ | ✅ **Wired 2026-11-10** (ticket 10): **Reset two-step** on `/admin/users`, verified live | — |
 | `DELETE /documents/:id/access-grants/:userId` *(older)* | ✅ **Wired 2026-11-11** — ticket 11, Revoke on `/admin/access-requests` | — |
 | ~~`PUT /documents/metadata/batch`~~ | ✅ **Wired 2026-11-10** (ticket 08) — `/search/mass-index` | — |
 | ~~`GET /document-views/report`~~ | ✅ **Wired 2026-11-10** (ticket 07) — the Viewing time card on `/doc/[id]` (`audit:view`) | — |
-| `originalUrl` on versions (`document:download_original`) | 🟨 **Read since 2026-11-11** (ticket 12): "Download original" on `/doc/[id]` and per version when set. Not seen live: no live role holds the grant (ticket 01) | No live user can take the unmarked original yet |
+| `originalUrl` on versions (`document:download_original`) | ✅ **Read since 2026-11-11** (ticket 12): "Download original" on `/doc/[id]` and "Original" per version when set. Verified live in Edge as `client_admin` after the re-seed: `files?action=original` 200, audited `document.downloaded` with `original: true` | — |
 | ~~PR #67 document routes for every user (MFA)~~ | ✅ **Wired 2026-11-10** — same as Staff's rows, tickets 09–10 *(document history and view tracking, tickets 05–06, are wired too)* | — |
 
 ### Dummy data 🟥
@@ -902,7 +907,7 @@ its recipient/acknowledgement report (`GET /circulars`, `/circulars/:id`,
 | Document view logging | ✅ confirmed — `document.viewed` is a real, auto-emitted action (seen live 2026-09-18). Downloads are logged too: `document.downloaded` since the gated download landed (2026-10-08; in code, not yet seen in a live pull). *(Was "no download endpoint exists to log downloads".)* **Since PR #67** the version read is `document.version_viewed` and `document.downloaded` comes from the file fetch itself; both audit viewers filter and label it since 2026-11-11 (ticket 15) |
 | ~~`GET /document-views/report` (time spent per document, per person)~~ | ✅ **Wired 2026-11-10** (ticket 07) — the **Viewing time** card on `/doc/[id]`, shown with `audit:view`. View sessions are recorded since 2026-11-10 (ticket 06), so it has data from then on. Verified live as `auditor` |
 | ~~`GET /documents/:id/history` (before/after of each change)~~ | ✅ **Wired 2026-11-10** (ticket 05) — the History card on `/doc/[id]`, for anyone who can open the document |
-| `originalUrl` on versions (`document:download_original`, the unmarked file for checksum checks) | 🟨 **Read since 2026-11-11** (ticket 12); not seen live until the grant is re-seeded (ticket 01) |
+| `originalUrl` on versions (`document:download_original`, the unmarked file for checksum checks) | ✅ **Read since 2026-11-11** (ticket 12); the auditor holds the grant on live since that day's re-seed (checked as `client_admin`, same grant) |
 
 ### The core problem (historical — see correction above)
 
@@ -1038,8 +1043,9 @@ This is a **phase**, not a backlog item:
 10. ~~Align the frontend permission model with the backend's 3 grants~~ — done 2026-09-10 (DRIFT-04)
 
 **Within today's single tenant (PR #67, 2026-11-09):** `schulltech_admin` is seeded
-`access_rule:view|create|delete` (not on live yet, ticket 01), so the IP and country rules page
-(ticket 13) is theirs as well as `client_admin`'s. Its routes are ⛔ not wired.
+`access_rule:view|create|delete` (on live since the 2026-11-11 re-seed), so the IP and country rules
+page (`/admin/access-rules`, ticket 13) is theirs as well as `client_admin`'s: it's in their sidebar
+under Governance. ✅ wired 2026-11-11.
 
 ---
 
@@ -1160,8 +1166,8 @@ Doc 01 §7 has each route; the tickets are in `.scratch/backend-dev-2026-11-09/`
 | ~~Mass indexing~~ ✅ wired 2026-11-10 | `PUT /documents/metadata/batch` | `client_admin`, `supervisor` | 08 |
 | ~~MFA~~ ✅ wired 2026-11-10 | `/auth/mfa/setup\|enable\|disable\|verify`; admin reset `DELETE /auth/mfa/users/:userId` | everyone; reset `client_admin` | 09, 10 |
 | ~~Revoke a document grant~~ ✅ 2026-11-11 | `DELETE /documents/:id/access-grants/:userId` | `client_admin` | 11 |
-| ~~Server-built download links~~ ✅ 2026-11-11 (originals not seen live, ticket 01) | `downloadUrl` / `originalUrl` on versions | download holders; originals `client_admin`, `internal_auditor` | 12 |
-| IP and country rules | `/access-rules` | `client_admin`, `schulltech_admin` | 13 |
+| ~~Server-built download links~~ ✅ 2026-11-11 | `downloadUrl` / `originalUrl` on versions | download holders; originals `client_admin`, `internal_auditor` | 12 |
+| ~~IP and country rules~~ ✅ 2026-11-11 (country rules need `GEO_COUNTRY_HEADER`, not set on live) | `/access-rules` | `client_admin`, `schulltech_admin` | 13 |
 | Active Directory SSO | `/auth/sso/*` (not configured on live) | everyone | 14 |
 
 **`GET /workflow-history` is the quiet win.** It is the closest thing the backend has to a
@@ -1293,7 +1299,7 @@ resolved in SQL, confidentiality filtered in the query rather than after it.
 
 **Most of the governance half is real now too** *(re-written 2026-10-15)*. The audit trail,
 notifications, circulars and the SLA settings all run on the backend. What is still a UI
-over fixture data is **12 of the 67 pages** (9 entirely, 3 in part — "By data source"
+over fixture data is **12 of the 69 pages** (9 entirely, 3 in part — "By data source"
 above): Platform (6/6, by design), the auditor's dashboard, branding,
 `/supervisor/exceptions`, and the retention/confidentiality tabs of `/admin/policies`. The
 fixture findings tracker gave way to control exceptions on 2026-10-29.
