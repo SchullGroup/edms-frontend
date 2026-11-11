@@ -51,6 +51,12 @@ export interface DocumentFilters {
   limit?: number;
 }
 
+/** One document's entries in a mass-indexing batch; only the fields being set. */
+export interface MetadataBatchItem {
+  documentId: string;
+  metadata: DocumentMetadataValueInput[];
+}
+
 export const documentsService = {
   // Core Document Endpoints
   getAll: async (params?: DocumentFilters): Promise<PaginatedResponse<Document>> => {
@@ -144,6 +150,11 @@ export const documentsService = {
       values,
     );
     return response.data.data;
+  },
+
+  /** Mass indexing: 1–50 documents, all-or-nothing (`PUT /documents/metadata/batch`). */
+  updateMetadataBatch: async (documents: MetadataBatchItem[]): Promise<void> => {
+    await apiClient.put('/documents/metadata/batch', { documents });
   },
 
   // Same document as `GET /documents/:id`, through routes that also check
@@ -249,6 +260,15 @@ export const documentsService = {
       `/documents/${id}/access-requests/${requestId}/deny`,
     );
     return response.data.data;
+  },
+
+  /** Deletes the grant only: the request stays `approved`, and a second call 404s. */
+  revokeAccessGrant: async (
+    id: string,
+    userId: string,
+    permission: DocumentAccessKind,
+  ): Promise<void> => {
+    await apiClient.delete(`/documents/${id}/access-grants/${userId}`, { params: { permission } });
   },
 
   /** `GET /documents/access-requests` — client_admin-only admin inbox across

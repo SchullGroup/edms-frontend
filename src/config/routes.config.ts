@@ -158,6 +158,18 @@ export const routeConfig: RouteRule[] = [
     matchType: 'prefix',
     anyPermissions: ['document_access_request:view'],
   },
+  // IP and country rules: each page gated on what its API checks. Ahead of `/admin`,
+  // so the platform admin (who holds `access_rule:*` but no admin-qualifying key) gets in.
+  {
+    path: '/admin/access-rules/new',
+    matchType: 'prefix',
+    anyPermissions: ['access_rule:create'],
+  },
+  {
+    path: '/admin/access-rules',
+    matchType: 'prefix',
+    anyPermissions: ['access_rule:view'],
+  },
   // Role-gated, not permission-gated — per an explicit call: stays scoped to the
   // role it was built for (client_admin) rather than opening up to any custom
   // role that happens to hold an admin-qualifying permission. Same exception
@@ -277,10 +289,18 @@ export const routeConfig: RouteRule[] = [
   },
 
   // 4. Global authenticated paths (no gate = any authenticated user)
+  // Mass indexing: before `/search`, which would otherwise match it ungated.
+  {
+    path: '/search/mass-index',
+    matchType: 'prefix',
+    anyPermissions: ['document_metadata:edit'],
+  },
   { path: '/search', matchType: 'prefix' },
   // The recipient inbox: being sent a circular is the grant, so no permission.
   { path: '/circulars', matchType: 'prefix' },
   { path: '/notifications', matchType: 'prefix' },
+  // The signed-in user's own settings (two-step sign-in).
+  { path: '/account', matchType: 'prefix' },
   { path: '/delegations', matchType: 'prefix' },
   { path: '/doc', matchType: 'prefix' }, // viewing a document
   {

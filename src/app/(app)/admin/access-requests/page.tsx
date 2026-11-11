@@ -10,6 +10,7 @@ import {
   useAccessRequestsInbox,
   useGrantAccessRequest,
   useDenyAccessRequest,
+  useRevokeAccessGrant,
 } from '@/apis/hooks/useDocuments';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
@@ -28,6 +29,7 @@ export default function AccessRequestsInboxPage() {
   const { setPageTitle, openConfirm } = useUIStore();
   const { can } = usePermissions();
   const canGrant = can('document_access_request', 'grant');
+  const canRevoke = can('document_access_request', 'revoke');
 
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<'' | 'pending' | 'approved' | 'denied'>('pending');
@@ -42,6 +44,7 @@ export default function AccessRequestsInboxPage() {
 
   const grantRequest = useGrantAccessRequest();
   const denyRequest = useDenyAccessRequest();
+  const revokeGrant = useRevokeAccessGrant();
 
   useEffect(() => {
     setPageTitle('Access Requests');
@@ -69,6 +72,28 @@ export default function AccessRequestsInboxPage() {
       danger: true,
       onConfirm: () =>
         denyRequest.mutateAsync({ id: r.documentId, requestId: r.id }).then(() => {}),
+    });
+  };
+
+  // No grant list exists, so the request stays "approved" after a revoke.
+  const handleRevoke = (r: AccessRequest) => {
+    const kind = accessKind(r);
+    openConfirm({
+      title: 'Revoke access?',
+      message:
+        kind === 'route'
+          ? `${r.requester.name} will no longer be able to act on "${r.document?.title}" in workflows, unless their role allows it. This request will still show as approved.`
+          : `${r.requester.name} will no longer be able to open "${r.document?.title}", unless their role or department allows it. This request will still show as approved.`,
+      confirmLabel: 'Revoke access',
+      danger: true,
+      onConfirm: () =>
+        revokeGrant
+          .mutateAsync({ id: r.documentId, userId: r.requesterId, permission: kind })
+          .then(() => {})
+          // Already revoked: nothing left to do, so the modal may close.
+          .catch((err) => {
+            if (err.response?.status !== 404) throw err;
+          }),
     });
   };
 
@@ -166,10 +191,24 @@ export default function AccessRequestsInboxPage() {
             </button>
           </div>
         ) : (
-          <span className="caption">
-            {r.reviewer ? `by ${r.reviewer.name}` : ''}
-            {r.reviewedAt ? ` · ${fmtDateTime(r.reviewedAt)}` : ''}
-          </span>
+          <div className="flex gap-2" style={{ alignItems: 'center' }}>
+            <span className="caption">
+              {r.reviewer ? `by ${r.reviewer.name}` : ''}
+              {r.reviewedAt ? ` · ${fmtDateTime(r.reviewedAt)}` : ''}
+            </span>
+            {r.status === 'approved' && canRevoke && (
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={revokeGrant.isPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRevoke(r);
+                }}
+              >
+                Revoke
+              </button>
+            )}
+          </div>
         ),
     },
   ];
@@ -182,7 +221,7 @@ export default function AccessRequestsInboxPage() {
           <div className="page-sub">
             Requests from users blocked by a document’s confidentiality level or department,
             either to open it or to act on it in workflows. Each grant covers one document and
-            stands until it’s revoked.
+            stands until it’s revoked from its approved request.
           </div>
         </div>
         <div className="actions">

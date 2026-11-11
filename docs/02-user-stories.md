@@ -220,7 +220,7 @@ findings that quietly die.
 (served by the hash-chained `GET /audit` since 2026-09-18 — DRIFT-11), `cabinet_access:view`,
 `circular:view`, `control_exception:view/create/edit/report` (2026-10-29) and, since PR #67,
 `document:download_original` — the unmarked stored file, to check against its checksum
-(not on live yet: ticket 01 of `.scratch/backend-dev-2026-11-09`). `document:view_confidential:global` lets them read confidential-tier
+(on live since the 2026-11-11 re-seed). `document:view_confidential:global` lets them read confidential-tier
 documents (a permission since `edms-backend` `0dab81a`; it was a role list before).
 **No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)* *(Was "10 grants, read-only … `audit:view` (for which
 no endpoint exists)" and "deliberately cannot mutate anything". The seed now also grants
@@ -249,7 +249,7 @@ silently stalling every document in a cabinet.
 **Backend rights (77 grants, 76 `global` + 1 `own`; re-counted 2026-11-09 — 72 on
 2026-10-15, 45 before):** effectively full control of the tenant, across all 22 resources
 including `role`, `workflow`, `cabinet_access`, `circular` and, since PR #67, `access_rule`
-(IP and country restrictions) and `document:download_original` (not on live yet).
+(IP and country restrictions) and `document:download_original` (both on live since 2026-11-11).
 They are the **only** role in `CABINET_ACCESS_BYPASS_ROLES` (they see every cabinet
 regardless of grants) and the only seeded role holding `document:view_restricted`.
 
@@ -271,8 +271,8 @@ liability, not a capability.
 **Backend rights: 21 grants** *(re-counted 2026-11-09 — 18 on 2026-10-15, "3 grants only"
 before)* — `workflow:view/create/edit/publish/archive`, `workflow_instance:view/create/route/close`,
 `task:view/action/reassign`, `delegation:view/end` plus `create:own`, `audit:view/export`,
-`document_access_request:create` and, since PR #67, `access_rule:view/create/delete` (not on
-live yet). Still **no `document:*` grant of any kind.** This is
+`document_access_request:create` and, since PR #67, `access_rule:view/create/delete` (on
+live since 2026-11-11). Still **no `document:*` grant of any kind.** This is
 deliberate and important: the platform admin is
 **excluded from `CABINET_ACCESS_BYPASS_ROLES`, from every confidentiality tier list, and
 from all document permissions.** The vendor cannot read customer documents. The
@@ -440,10 +440,11 @@ below.)*
 - [ ] Document detail renders and edits them
 - [ ] ⚠️ Backend bug: sending all-null values to clear metadata silently no-ops
       (`normalized.length === 0` short-circuits the write)
-- [ ] Mass indexing: fill in metadata for many existing documents at once (GBB 4.3) —
-      *backend done, no UI:* `PUT /documents/metadata/batch`, 1–50 documents each with its own
-      values (PR #67, live 2026-11-09). Screen design still open (ticket 08 of
-      `.scratch/backend-dev-2026-11-09`)
+- [x] Mass indexing: fill in metadata for many existing documents at once (GBB 4.3) —
+      *wired 2026-11-10, verified live:* **Index selected** on `/search` opens
+      `/search/mass-index`, one table per cabinet with an "Apply to all" per column, saved
+      through `PUT /documents/metadata/batch` (PR #67) in batches of 50. For
+      `document_metadata:edit` holders (`client_admin`, `supervisor`) with Edit on the cabinet
 
 ---
 
@@ -637,6 +638,12 @@ images with the watermark burned in; Export (document page) goes through
       live API (audited call made, watermarked print frame built)
 - [x] Download and Export clicked through end to end in the UI (2026-10-09): each made its
       audited call and opened the signed URL
+- [x] Downloads use the per-viewer `downloadUrl` the backend issues (PR #67), watermarked for
+      PDFs and images alike, and are audited when the file is fetched (2026-11-11, verified live
+      in Edge as `staff_finance`)
+- [x] **Download original** (the unmarked file, `originalUrl`) for holders of
+      `document:download_original`: verified live in Edge as `client_admin` (2026-11-11, after the re-seed),
+      audited with `original: true`
 
 ---
 
@@ -835,7 +842,7 @@ lifecycle.
       `workflow:view:global` grant". That constant is gone, and no non-admin role holds
       `workflow:view` in today's seed.)*
 - [x] ✅ `// @ts-nocheck` removed 2026-10-08 — the page type-checks
-- [ ] 🟨 Parallel branches — backend merged 2026-10-16 (edms-backend PR #54: unconditional
+- [x] ✅ Parallel branches — backend merged 2026-10-16 (edms-backend PR #54: unconditional
       fan-out, child executions with their own task and SLA, `join: 'all'` barrier stages).
       Designer since 2026-10-17: **"+ Add parallel branch"** and **Branches meet at** in
       `BranchEditorCard`; `applyStageRouting` saves the fork, its branches' onward routes and
@@ -844,8 +851,8 @@ lifecycle.
       2026-10-20). The
       backend accepted and rejected the same definitions as the frontend in a live API check
       (2026-10-17), and the designer was clicked through in a browser on 2026-10-18 (TEST_PLAN
-      TP-Q2, Q15–Q18). ⛔ **Running a parallel workflow fails on the live backend:** the first
-      action at a fork stage returns 500, even on a minimal fork with no join (2026-10-18)
+      TP-Q2, Q15–Q18). Running one failed with a 500 at the fork (2026-10-18, BE-19) until
+      backend `ae08ef5` (PR #58, 2026-10-23); confirmed working by the product owner 2026-11-11
 - [x] Conditional branches — backend conditional routing merged 2026-10-06
       (`definitions.validation.ts` condition rules, `matchesWorkflowCondition` in
       `tasks.service.ts`), and the designer has a branch editor since 2026-09-29
@@ -956,6 +963,8 @@ and search. The design is sound.
       `top_secret`, and the document page's "Change classification" dialog (2026-10-08)
       disables uncleared tiers using the backend's rule. *(This item used to say the
       doc-detail edit form offered Top Secret from `SEED.policies`; no such form existed.)*
+- [x] A one-off grant to a document (an approved access request, View or Action) can be
+      revoked again: **Revoke** on `/admin/access-requests` (2026-11-11, verified live in Edge)
 
 ---
 
@@ -1310,10 +1319,11 @@ alignment), not to count records.
 - [ ] Entries capture actor, actor type, action, object type, object ID, before/after diff,
       IP address and user agent *(PR #67: document edits and metadata changes now carry a
       field-level before/after)*
-- [ ] Time spent viewing each document, per person (GBB 2.2) — *recorded since 2026-11-10*
+- [x] Time spent viewing each document, per person (GBB 2.2) — *recorded since 2026-11-10*
       (ticket 06, verified live): `/doc/[id]` and the workflow page keep a view session with
-      heartbeats (`/document-views`) while visible. *No report screen yet:*
-      `GET /document-views/report` (PR #67) is ticket 07 of `.scratch/backend-dev-2026-11-09`
+      heartbeats (`/document-views`) while visible. *Report wired 2026-11-10 (ticket 07,
+      verified live):* a **Viewing time** card on `/doc/[id]` for `audit:view` holders, with a
+      date range and CSV export (`GET /document-views/report`)
 - [x] `entryHash` chains to `prevHash`; a verification endpoint proves chain integrity —
       `GET /audit/verify`, chain checked intact live 2026-09-18 (DRIFT-11)
 - [ ] The database role used by the app cannot `UPDATE` or `DELETE` the table
@@ -1550,7 +1560,8 @@ workflow completed), `sla.service.ts` (SLA warning and breach), `documents.servi
 (access requested, granted, denied), `checkout-overdue.service.ts` (overdue checkouts) and
 `circulars.service.ts` (published, reminders). Doc 01 records this as DRIFT-10, resolved
 2026-09-21. Stays 🟨 because nobody has yet clicked through a notification arriving end
-to end (doc 05 lists `/notifications` as 🟨 for the same reason).
+to end. *(2026-11-11: now clicked through, see the criteria; the story stays 🟨 for digest, email
+and delegation activation, which aren't verified.)*
 
 *Superseded (2026-09-04): "the pipe is built end to end and nothing is ever put into it."*
 
@@ -1576,7 +1587,9 @@ wired to an endpoint that correctly returns an empty list, forever.~~ *(True on
 - [x] `NotificationPreference` model respected by the read/write endpoints
 - [x] **Notifications actually emitted** on task assignment, completion, reassignment,
       delegation, SLA warning/breach and workflow outcomes *(in code since 2026-09-21,
-      DRIFT-10; not yet clicked through end to end)*. ~~**nothing calls `notifyUser`**~~
+      DRIFT-10)*. **Clicked through live 2026-11-11** (ticket 16): uploads and new versions to the
+      cabinet's people (public/internal only), task assigned, changes requested, workflow completed
+      and access decisions all arrive, read well and open the right page; read state persists. ~~**nothing calls `notifyUser`**~~
 - [ ] Notification when a date-bounded `Delegation` activates — `delegations` emits
       nothing; only per-task delegation (`task.delegated`) notifies
 - [ ] Digest mode honoured by a scheduled job — *in code* (`notifications/workers/digest.workers.ts`,
@@ -1710,14 +1723,18 @@ error paths and workers).
 - [ ] No `helmet` or comparable security headers
 - [ ] No request body size limit on `express.json()`
 - [ ] Access-token cookie TTL (1 day) disagrees with the JWT TTL (15 min)
-- [ ] Two-factor sign-in with an authenticator app (GBB 1.2) — *backend done, no UI:*
-      `/auth/mfa/*`, a login challenge and an admin reset (PR #67, live 2026-11-09). Tickets 09
-      and 10 of `.scratch/backend-dev-2026-11-09`
+- [x] Two-factor sign-in with an authenticator app (GBB 1.2) — *wired 2026-11-10, verified
+      live (tickets 09, 10):* **Security** in the account menu (`/account/security`) sets it up
+      (QR code or key, a confirming code, 10 recovery codes to copy or download). Since
+      2026-11-11 (ticket 17) the code can come by email instead, users can switch method, and
+      only an admin can turn it off (🟨 admins can't *require* it yet: BE-24). Sign-in then asks for the 6-digit code, or a
+      single-use recovery code, within 5 minutes of the password. An admin with `user:edit`
+      resets it for someone who lost their phone (**Reset two-step** on `/admin/users`)
 - [ ] Sign in with Active Directory (GBB 1.3) — *backend done, no UI:* `/auth/sso/*` over
       OIDC (PR #67). Not configured on live (`enabled: false`). Ticket 14
-- [ ] Block or allow access by IP range and country (GBB 1.6) — *backend done, no UI:*
-      `/access-rules`, enforced on every request (PR #67). The grants aren't on live yet.
-      Ticket 13
+- [x] Block or allow access by IP range and country (GBB 1.6) — `/admin/access-rules` (2026-11-11,
+      verified live with a TEST-NET block rule). 🟨 Country rules are refused on live until the server
+      sets `GEO_COUNTRY_HEADER`
 
 ---
 

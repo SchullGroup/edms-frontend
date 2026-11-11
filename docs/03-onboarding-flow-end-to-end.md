@@ -250,7 +250,8 @@ seed:system` is re-run. The live tenant didn't have them on 2026-10-29.*
 
 *PR #67's `access_rule:*` and `document:download_original` grants are in the same position:
 on 2026-11-09 no live role held any of them (`GET /roles`), and `GET /access-rules` as
-`client_admin` was a 403. Waiting on a re-seed (`.scratch/backend-dev-2026-11-09` ticket 01).*
+`client_admin` was a 403. **Live was re-seeded on 2026-11-11**: all of them, and the control-exception
+grants, are there now; `staff` kept `department` scope on `cabinet:view` / `folder:view`.*
 
 **227 role-permission grants** (219 before PR #67), each carrying a scope of `global | department | own`.
 
@@ -628,6 +629,14 @@ seed grants `workflow:view` to no other role, so staff and supervisors can't rou
 7. LoginPage useEffect redirects by role
 ```
 
+**With two-step sign-in on** (since 2026-11-10): step 4 stops after `bcrypt.compare` and
+returns `{ mfaRequired: true, mfaToken }`, with no tokens and no cookie. `/` asks for the
+6-digit code (or a single-use recovery code) and sends it through the BFF's
+`POST /api/auth/mfa/verify`; its response is the one in step 4, and steps 5–7 follow. The
+challenge lasts 5 minutes, then "Start again" goes back to the password. Nobody has it on
+until they turn it on themselves (account menu → **Security**); there is no tenant-wide
+"require it" switch.
+
 ### Landing pages
 
 | Role | Lands on | Sidebar (`useNavigation.ts`) |
@@ -981,6 +990,7 @@ npm run dev                # Web   :3000
 | 7 | Design and publish workflows | `/admin/workflows` | Only `client_admin`/`schulltech_admin` can publish or archive (DRIFT-05, fixed 09-04). **On a freshly seeded tenant only they can list them, too** — staff and supervisors can't route until DRIFT-14's seed rows are added. The live tenant's roles hold the grant (re-tested 2026-10-16). |
 | 8 | Set branding | `/admin/branding` | 🟥 **Saved in this browser only** — survives a reload since 2026-10-12, but other users and the login page don't see it. |
 | 9 | ~~Set retention policy~~ | ⛔ | Mock. No enforcement job exists. |
+| 10 | Turn on two-step sign-in for your own account, and ask users to do the same | Account menu → **Security** (`/account/security`) | Optional per user: nothing can require it yet (BE-24 asks for admins to require it per user, including on invite). Each user picks an authenticator app or email codes; only an admin can turn it off. Recovery codes are shown once. Someone who loses phone and codes needs **Reset two-step** on `/admin/users`, after which a password alone signs them in. The authenticator app shows the backend's `MFA_ISSUER` (default `SchullTech EDMS`) |
 
 **Then hand over to staff — with these caveats stated up front:**
 

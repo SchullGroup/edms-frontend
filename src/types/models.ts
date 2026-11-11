@@ -44,6 +44,36 @@ export interface AuthUser {
    *  since PR #51). `null` means the user has no department. Read it with
    *  `useMyDepartmentId`. */
   departmentId?: string | null;
+  /** Two-step sign-in is on. Sent by `GET /auth/me` only, not by login (PR #67). */
+  mfaEnabled?: boolean;
+}
+
+/** `POST /auth/login` for an account with MFA on: no tokens until `/auth/mfa/verify`. */
+export interface MfaChallenge {
+  mfaRequired: true;
+  /** Valid for 5 minutes. */
+  mfaToken: string;
+  /** Missing on older accounts, which use the authenticator app (PR #69). */
+  mfaMethod?: MfaMethod;
+}
+
+/** `sms` exists on the backend but is never available yet (`MFA_SMS_NOT_CONFIGURED`). */
+export type MfaMethod = 'authenticator' | 'email' | 'sms';
+
+/** `GET /auth/mfa/settings`. */
+export interface MfaSettings {
+  mfaEnabled: boolean;
+  currentMethod: MfaMethod | null;
+  emailMasked: string;
+  phoneNumberMasked: string | null;
+  /** `email` is available only when the server can send codes. */
+  methodOptions: { method: MfaMethod; available: boolean }[];
+}
+
+/** An email code that was sent; the code itself never comes back. */
+export interface MfaOtpChallenge {
+  challengeId: string;
+  expiresAt: string;
 }
 
 export interface User {
@@ -176,6 +206,10 @@ export interface DocumentVersion {
    * Not guaranteed on version-list responses, so treat as optional.
    */
   fileUrl?: string | null;
+  /** `fileUrl?action=download` (watermarked); null unless this viewer may download (PR #67). */
+  downloadUrl?: string | null;
+  /** `fileUrl?action=original`, unmarked; null without `document:download_original`. */
+  originalUrl?: string | null;
   fileSize?: number | null;
   mimeType: string;
   checksum: string;
@@ -1691,4 +1725,29 @@ export interface Branding {
   brandKey?: string;
   /** `custom` = published from /admin/branding; otherwise preset-owned. */
   source?: 'preset' | 'custom';
+}
+
+// --- Access rules (edms-backend PR #67, `b4aced3`) ---
+
+export type AccessRuleType = 'ip' | 'country';
+export type AccessRuleEffect = 'allow' | 'deny';
+
+/** `GET /access-rules`, oldest first. Unique per (type, effect, value). */
+export interface AccessRule {
+  id: string;
+  ruleType: AccessRuleType;
+  effect: AccessRuleEffect;
+  /** An IP or CIDR range for `ip`; an upper-case ISO 3166 code for `country`. */
+  value: string;
+  description: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface AccessRuleInput {
+  ruleType: AccessRuleType;
+  effect: AccessRuleEffect;
+  value: string;
+  /** ≤ 255 characters. */
+  description?: string;
 }

@@ -1,6 +1,13 @@
 import axios from 'axios';
 import { apiClient, invalidateInFlightAuth } from '@/lib/api-client';
-import { AuthUser, ApiResponse } from '@/types/models';
+import {
+  AuthUser,
+  ApiResponse,
+  MfaChallenge,
+  MfaMethod,
+  MfaOtpChallenge,
+  MfaSettings,
+} from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
 import Cookies from 'js-cookie';
 
@@ -10,40 +17,156 @@ export interface LoginResponseData {
   // refreshToken is now stripped by the Next.js Proxy and stored securely in HttpOnly cookie
 }
 
+export interface MfaMethodChange {
+  changeId: string;
+  expiresAt: string;
+  setup?: { secret: string; otpauthUri: string };
+}
+
 export interface RefreshResponseData {
   accessToken: string;
 }
 
+/** Stores the access token and clears state left over from any earlier session. */
+function startSession(accessToken: string): void {
+  // Set accessToken securely in js-cookie for API Client interception
+  Cookies.set('accessToken', accessToken, {
+    expires: 1,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
+  // A refresh still in flight from an ended session must not act on this one.
+  invalidateInFlightAuth();
+
+  // The proxy's redirect for a dead token isn't a logout, so `sessionExpired` can still be set.
+  useUIStore.getState().setSessionExpired(false);
+}
+
 export const authService = {
-  login: async (credentials: any): Promise<LoginResponseData> => {
+  /** Either a session, or `MfaChallenge` when the account has two-step sign-in on. */
+  login: async (credentials: any): Promise<LoginResponseData | MfaChallenge> => {
     // Call the local Next.js proxy route, which intercepts the refreshToken
-    const response = await axios.post<ApiResponse<LoginResponseData>>(
+    const response = await axios.post<ApiResponse<LoginResponseData | MfaChallenge>>(
       '/api/auth/login',
       credentials,
     );
-
-    // Set accessToken securely in js-cookie for API Client interception
-    if (response.data?.success !== false && response.data?.data?.accessToken) {
-      Cookies.set('accessToken', response.data.data.accessToken, {
-        expires: 1,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-      });
-      // A refresh from a previous, since-ended session (e.g. the tab sat open
-      // overnight and something 401'd before this fresh login) could still be
-      // in flight — invalidate it so its late result can't act on this session.
-      invalidateInFlightAuth();
-
-      // A session that ended earlier can leave `sessionExpired` set: it's
-      // cleared by `performLogout`, but the proxy's redirect to `/` for a dead
-      // token isn't a logout, so a bounce to the login screen followed by a
-      // sign-in on that same page arrives here with the flag still true — and
-      // the "session ended" modal then covers the app the moment AppShell
-      // mounts. A fresh session is by definition not an expired one.
-      useUIStore.getState().setSessionExpired(false);
+    const data = response.data.data;
+    if (response.data?.success !== false && 'accessToken' in data && data.accessToken) {
+      startSession(data.accessToken);
     }
+    return data;
+  },
 
+  /** Second sign-in step (via the BFF, which keeps the refresh cookie). An email code also needs its `challengeId`. */
+  verifyMfa: async (
+    body: { mfaToken: string } & (
+      | { code: string; challengeId?: string }
+      | { recoveryCode: string }
+    ),
+  ): Promise<LoginResponseData> => {
+    const response = await axios.post<ApiResponse<LoginResponseData>>('/api/auth/mfa/verify', body);
+    const data = response.data.data;
+    if (response.data?.success !== false && data?.accessToken) startSession(data.accessToken);
+    return data;
+  },
+
+  /** Emails a sign-in code (public; 60 s between requests, 5 an hour). */
+  requestLoginOtp: async (mfaToken: string): Promise<MfaOtpChallenge> => {
+    const response = await apiClient.post<ApiResponse<MfaOtpChallenge>>('/auth/mfa/otp/request', {
+      mfaToken,
+    });
     return response.data.data;
+  },
+
+  getMfaSettings: async (): Promise<MfaSettings> => {
+    const response = await apiClient.get<ApiResponse<MfaSettings>>('/auth/mfa/settings');
+    return response.data.data;
+  },
+
+  /** Emails a code to the account's address; `enableEmailMfa` confirms it. */
+  startEmailMfa: async (): Promise<MfaOtpChallenge> => {
+    const response = await apiClient.post<ApiResponse<MfaOtpChallenge>>('/auth/mfa/email/setup');
+    return response.data.data;
+  },
+
+  enableEmailMfa: async (body: { challengeId: string; code: string }) => {
+    const response = await apiClient.post<ApiResponse<{ recoveryCodes: string[] }>>(
+      '/auth/mfa/email/enable',
+      body,
+    );
+    return response.data.data;
+  },
+
+  /** Email users only: a code to prove the current method before switching. */
+  requestCurrentMethodOtp: async (password?: string): Promise<MfaOtpChallenge> => {
+    const response = await apiClient.post<ApiResponse<MfaOtpChallenge>>(
+      '/auth/mfa/method-change/current-otp',
+      password ? { password } : {},
+    );
+    return response.data.data;
+  },
+
+  /** Proves the current method; `setup` comes back when switching to the app. */
+  startMfaMethodChange: async (
+    body: { method: MfaMethod; password?: string } & (
+      | { code: string; challengeId?: string }
+      | { recoveryCode: string }
+    ),
+  ): Promise<MfaMethodChange> => {
+    const response = await apiClient.post<ApiResponse<MfaMethodChange>>(
+      '/auth/mfa/method-change/start',
+      body,
+    );
+    return response.data.data;
+  },
+
+  /** Switching to email: sends the code that `confirmMfaMethodChange` checks. */
+  requestNewMethodOtp: async (changeId: string): Promise<MfaOtpChallenge> => {
+    const response = await apiClient.post<ApiResponse<MfaOtpChallenge>>(
+      `/auth/mfa/method-change/${changeId}/new-otp`,
+    );
+    return response.data.data;
+  },
+
+  /** Activates the new method and replaces the recovery codes. */
+  confirmMfaMethodChange: async (body: {
+    changeId: string;
+    code: string;
+    challengeId?: string;
+  }): Promise<{ recoveryCodes: string[] }> => {
+    const response = await apiClient.post<ApiResponse<{ recoveryCodes: string[] }>>(
+      '/auth/mfa/method-change/confirm',
+      body,
+    );
+    return response.data.data;
+  },
+
+  cancelMfaMethodChange: async (changeId: string): Promise<void> => {
+    await apiClient.delete(`/auth/mfa/method-change/${changeId}`);
+  },
+
+  /** Starts enrolment; the secret is stored but not active until `enableMfa`. */
+  setupMfa: async (): Promise<{ secret: string; otpauthUri: string }> => {
+    const response = await apiClient.post<ApiResponse<{ secret: string; otpauthUri: string }>>(
+      '/auth/mfa/setup',
+    );
+    return response.data.data;
+  },
+
+  /** Recovery codes come back once, here only. */
+  enableMfa: async (code: string): Promise<{ recoveryCodes: string[] }> => {
+    const response = await apiClient.post<ApiResponse<{ recoveryCodes: string[] }>>(
+      '/auth/mfa/enable',
+      { code },
+    );
+    return response.data.data;
+  },
+
+  // No self turn-off (`POST /auth/mfa/disable`): only an admin removes MFA (BE-24).
+
+  /** Admin reset (`user:edit`) for someone who lost their device and recovery codes. */
+  resetUserMfa: async (userId: string): Promise<void> => {
+    await apiClient.delete(`/auth/mfa/users/${userId}`);
   },
 
   refresh: async (): Promise<RefreshResponseData> => {

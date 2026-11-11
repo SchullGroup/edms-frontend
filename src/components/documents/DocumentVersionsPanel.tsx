@@ -10,6 +10,7 @@ import {
 } from '@/apis/hooks/useDocuments';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 import { calculateChecksum } from '@/apis/services/s3.service';
+import { canDownloadVersion } from '@/apis/services/files.service';
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
 import { fmtDate } from '@/utils/helpers';
@@ -25,9 +26,6 @@ interface Props {
   currentVersionId?: string | null;
   /** Reader — controls whether the panel renders at all. */
   canView: boolean;
-  /** Opening a version is a download to the API (`document:download` plus
-   *  confidentiality clearance) — controls the per-version "Open" button. */
-  canDownload: boolean;
   /** Writer — controls the "Restore" affordance. */
   canEdit: boolean;
   /** Controls the "New version" upload affordance specifically — true only
@@ -42,7 +40,6 @@ export function DocumentVersionsPanel({
   documentTitle,
   currentVersionId,
   canView,
-  canDownload,
   canEdit,
   canUploadVersion,
 }: Props) {
@@ -194,7 +191,7 @@ export function DocumentVersionsPanel({
                     {v.uploader?.name || 'Unknown user'} · {fmtDate(v.createdAt)}
                     {v.ocrStatus && v.ocrStatus !== 'completed' ? ` · OCR ${v.ocrStatus}` : ''}
                   </span>
-                  {v.fileUrl && canDownload && (
+                  {canDownloadVersion(v) && (
                     <button
                       className="btn btn-ghost btn-sm"
                       onClick={() =>
@@ -209,6 +206,23 @@ export function DocumentVersionsPanel({
                       aria-label={`Download version ${v.versionNumber}`}
                     >
                       <Icon name="download" size={13} />
+                    </button>
+                  )}
+                  {v.originalUrl && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() =>
+                        downloadVersion.mutate({
+                          id: documentId,
+                          versionId: v.id,
+                          title: documentTitle,
+                          original: true,
+                        })
+                      }
+                      disabled={downloadVersion.isPending}
+                      title="Download the original file, without a watermark"
+                    >
+                      Original
                     </button>
                   )}
                   {canEdit && !isCurrent && (

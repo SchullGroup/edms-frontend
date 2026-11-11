@@ -14,6 +14,7 @@ import { ConfBadge } from '@/components/ui/Badges';
 import { Icon } from '@/components/ui/Icons';
 import { Skeleton } from '@/components/common/Skeleton';
 import { documentFile } from '@/utils/documentFile';
+import { canDownloadVersion } from '@/apis/services/files.service';
 import type { DocumentAccessKind } from '@/types/models';
 
 export interface WorkflowDocumentViewerProps {
@@ -149,7 +150,7 @@ export function WorkflowDocumentViewer({
       sealed={false}
       lockedByOther={lockedByOther}
       onSignatureFieldClick={() => {}}
-      canDownload={allows(doc, 'download')}
+      canDownload={canDownloadVersion(doc.currentVersion)}
       onDownload={
         currentVersionId
           ? () =>
