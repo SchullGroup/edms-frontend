@@ -1665,11 +1665,11 @@ Same URLs, new behaviour. Each is harmless to the current frontend unless noted.
 | `from` / `to` created-date filter | `GET /documents`, `/documents/search` | ✅ Sent by `/search` since 2026-11-09, as local midnights (§8.5) |
 | `changeNote` (≤ 500) on file payloads, returned on versions | `POST /documents`, `POST /documents/:id/versions`, `GET …/versions` | ✅ Sent with new versions and shown in the versions list and History since 2026-11-10 (not sent on a first upload) |
 | `downloadUrl` / `originalUrl` on versions, null when not allowed | `GET /documents/:id/versions`, and `currentVersion` on `GET /documents/:id` and the list. `GET /documents/:id/export` always carries `downloadUrl` (`document:export` stands in for `download`) | ✅ Used for every download and export since 2026-11-11 (ticket 12) |
-| Version read audited `document.version_viewed`, not `document.downloaded`; the file fetch with `?action=download\|original` records the download | `GET /documents/:id/versions/:versionId`, `GET /files/:token` | Audit viewers need the new action label (ticket 15) |
+| Version read audited `document.version_viewed`, not `document.downloaded`; the file fetch with `?action=download\|original` records the download | `GET /documents/:id/versions/:versionId`, `GET /files/:token` | ✅ Filtered and labelled on `/admin/audit` and `/auditor/trail` since 2026-11-11 (ticket 15, verified live) |
 | File links work without the Bearer token again | `GET /files/:token` | None (the token is still sent) |
 | JPEG, PNG and TIFF are watermarked on `preview` / `download`, not only PDF | `GET /files/:token` | ✅ Images preview and download watermarked since 2026-11-11 (ticket 12) |
 | Any call can be refused with 403 `ACCESS_RESTRICTED` | everything under `/api/v1` | ⚠️ No dedicated message (ticket 13) |
-| `document.edited` and `document.metadata_updated` audit entries carry a field-level before/after | audit trail | ✅ Shown in the `/doc/[id]` History card since 2026-11-10 (ticket 05); the audit viewers don't read them yet (ticket 15) |
+| `document.edited` and `document.metadata_updated` audit entries carry a field-level before/after | audit trail | ✅ Shown in the `/doc/[id]` History card since 2026-11-10 (ticket 05); the audit viewers show only the first two metadata fields, so a before/after reads `[object Object]` (full JSON on hover; not in any ticket) |
 
 ---
 

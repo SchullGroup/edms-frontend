@@ -737,7 +737,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | "Who can see the Contracts cabinet?" | ⛔ `cabinet_access:view` granted and `GET /cabinets/:id/access` exists; no auditor screen calls it. |
 | "Track this finding to closure" | 🟥 No `Finding` model in Prisma. Everything is lost on cache clear. |
 | "Export evidence for the regulator" | ✅ `/auditor/trail` exports the real trail as CSV (`GET /audit/export`). Findings would still export fixture data. *(Was ⛔ "Would export fixture data".)* |
-| "Who turned off two-step sign-in?" | ✅ *(2026-11-10, seen live)* Turning it on, off and admin resets are audited (`user.mfa_enabled`, `user.mfa_disabled`, `user.mfa_reset`), and a code sign-in is `user.login` with `step: 'mfa'`. The trail's action labels don't cover them yet (ticket 15). Their own two-step sign-in is under account menu → **Security** |
+| "Who turned off two-step sign-in?" | ✅ *(2026-11-10, seen live)* Turning it on, off and admin resets are audited (`user.mfa_enabled`, `user.mfa_disabled`, `user.mfa_reset`), and a code sign-in is `user.login` with `step: 'mfa'`. Since 2026-11-11 (ticket 15) the trail filters and labels them, method switching and email codes included. Their own two-step sign-in is under account menu → **Security** |
 
 ### The gap between design and reality (historical — see correction above)
 

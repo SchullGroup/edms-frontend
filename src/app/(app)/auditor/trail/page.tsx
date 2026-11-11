@@ -13,6 +13,7 @@ import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { AuditEntry } from '@/types/models';
 import { AuditTypeActionFilters } from '@/components/audit/AuditTypeActionFilters';
+import { auditActionLabel } from '@/constants/auditVocabulary';
 
 const PAGE_SIZE = 20;
 
@@ -144,7 +145,15 @@ export default function AuditorTrailPage() {
       render: (a) => new Date(a.occurredAt).toLocaleString(),
     },
     { key: 'actorId', label: 'Actor', render: (a) => actorName(a) },
-    { key: 'action', label: 'Action', render: (a) => <span className="kbd">{a.action}</span> },
+    {
+      key: 'action',
+      label: 'Action',
+      render: (a) => (
+        <span title={a.action} style={{ fontWeight: 500 }}>
+          {auditActionLabel(a.action)}
+        </span>
+      ),
+    },
     {
       key: 'objectId',
       label: 'Object',
