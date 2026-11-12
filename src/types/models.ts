@@ -588,8 +588,8 @@ export interface WorkflowDocumentExecution {
  * What the caller may do with one document in a workflow (edms-backend
  * `3014b89`). A document they can't open comes back as a Restricted document:
  * title "Restricted document", classification and version nulled.
- * `canRoute` is Action access (act on it in a workflow without opening it):
- * always on task documents, only on restricted workflow documents.
+ * `canRoute` is Action access. The page also needs `canView` to act (product
+ * decision 2026-11-12): `GET /tasks/:id` reports `canRoute` without it.
  */
 export interface WorkflowDocumentAccess {
   canView: boolean;

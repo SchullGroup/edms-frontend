@@ -4,7 +4,7 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-11-11
+**Raised:** 2026-08-29 · **Updated:** 2026-11-12 (BE-27, BE-28)
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `origin/dev` (`4da2980`, 2026-11-11)
 
@@ -25,7 +25,8 @@
 
 Each item states what the frontend does today, what it needs, and why.
 
-**Take BE-2, BE-4, BE-21 and BE-24 first**: they are security items rather than features. BE-22 is a product decision (no automatic AI
+**Take BE-28 first** (it blocks parallel workflows), **then BE-2, BE-4, BE-21, BE-24 and
+BE-27**: they are security items rather than features. BE-22 is a product decision (no automatic AI
 summaries) and costs a Gemini call per upload until it ships.
 
 ---
@@ -44,6 +45,8 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-24** | Admins require MFA per user; users can't turn it off        | Security change | 🔴 High  | No — today every user turns MFA on/off     |
 | **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
 | **BE-26** | Mark a request `revoked` when its grant is revoked          | Small fix       | 🟡 Low   | No                                         |
+| **BE-27** | Acting on a document requires being able to open it         | Security fix    | 🔴 High  | No — the frontend enforces it; the API doesn't |
+| **BE-28** | 500 on the first review at a parallel fork (BE-19 again)    | Bug             | 🔴 High  | **Yes** — parallel workflows can't move past the fork |
 
 **Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
 them until the PM confirms the AI features are in scope.
@@ -114,6 +117,78 @@ As `client_admin`: require MFA for `management_ops` → their next password sign
 `POST /auth/mfa/disable` as `management_ops` → 403. Admin reset → next sign-in asks for set-up
 again. `GET /users` shows both flags. Invite a user with `mfaRequired: true` → accept the
 invite, set a password → first sign-in goes straight to set-up.
+
+---
+
+## 🔴 BE-27 · Acting on a document requires being able to open it — **new, 2026-11-12**
+
+Checked against `edms-backend` `dev` at `c95b9fb` and on live. **Product decision (2026-11-12):
+nobody may approve, review, reject or otherwise act on a document they aren't allowed to open.**
+
+### What happens today
+
+A `staff` user who can't open an `internal` document (another department's cabinet, no grant)
+can still act on it at a stage assigned to their role. On 2026-11-11 such a user **rejected** a
+workflow and closed it with no access granted.
+
+- `isConfidentialityActionAllowed` (`src/shared/constants/access-control.constants.ts:107`) skips
+  the tier check for `public` and `internal`, and `route` has no entry in `ACTION_PERMISSION`
+  (line 53), so it returns `true`. `POST /tasks/:id/action` relies on it
+  (`assertTaskRouteConfidentiality`, `tasks.service.ts`), and so does `canRoute` in
+  `GET /tasks/:id`. Viewing uses the stricter check (department, cabinet access, grants).
+- The two endpoints report different flags for the same document and user. Seen on live as
+  `staff_finance` on instance `8a218839-f1ef-4421-974e-f46158166c95`:
+  - `GET /workflow-instances/:id` → `{ canView: false, canRoute: false, canRequestView: true }`
+    (hard-coded for locked documents, `workflow-document-access.ts`)
+  - `GET /tasks/:id` → `{ canView: false, canRoute: true, canRequestView: true, canRequestRoute: false }`
+
+The frontend now treats a document as actionable only when `canView && canRoute` (2026-11-12), so
+the page no longer offers the actions. The API still accepts them.
+
+### What we need
+
+1. **Route clearance includes view.** A document is routable by a user only if they can also
+   view it (the same department / cabinet / grant check `GET /documents/:id` uses). An approved
+   `view` grant counts. `POST /tasks/:id/action` returns 403 for any document that fails it,
+   like it does for a tier the user isn't cleared for.
+2. **One answer for `canRoute`.** `GET /tasks/:id` and `GET /workflow-instances/:id` report the
+   same `canRoute` for the same user and document, and `canRoute` is never `true` while
+   `canView` is `false`.
+3. **Request flags follow from it.** For a document the user can't open, `canRequestView: true`;
+   `canRequestRoute` only when a `route` grant would still be needed once they can view it.
+
+### How to verify
+
+As `staff_finance` on a task whose document sits in another department's cabinet (e.g. instance
+`8a218839…`, task `b36072de-1f47-43ca-b743-3c597ac6ecab`, document "test 48mb"): both endpoints
+report `canRoute: false`, and `POST /tasks/:id/action { action: 'reject' }` returns 403. Approve a
+`view` access request for them: both report `canView: true, canRoute: true`, and the action
+succeeds.
+
+---
+
+## 🔴 BE-28 · 500 on the first review at a parallel fork (BE-19 again) — **new, 2026-11-12**
+
+BE-19 was removed on 2026-11-11 as fixed in `ae08ef5` (PR #58). It isn't, or not for this shape.
+Reproduced on live 2026-11-12 on a **fresh** instance, so it is not limited to instances started
+before the fix, and it doesn't depend on who acts.
+
+Definition `fa6a0f43-68a1-4059-b749-dee9771cbecd` ("ZZ test — parallel error cases (copy)"), the
+TP-Q15 layout: `intake` (staff) → `finance` (supervisor) **and** `stage_1792417332414` Legal
+Review (staff) → `final` (management, `join: all`). No conditions.
+
+| Instance (started 12:17Z by `client_admin`) | Actor | Can open the documents | `POST /tasks/:id/action { action: 'review', signature, comment }` |
+|---|---|---|---|
+| `1054af51-e92e-4a9f-bec5-a8298ef2475e`, task `58967a8d-2f2a-4c46-a194-11dfc0c40876` (2 documents) | `staff_finance` | yes | **500** `INTERNAL_SERVER_ERROR` (12:23Z through the UI, again 12:24Z through the API) |
+| `8a218839-f1ef-4421-974e-f46158166c95`, task `b36072de-1f47-43ca-b743-3c597ac6ecab` (1 document) | `staff_finance` | no | **500** `INTERNAL_SERVER_ERROR` (12:24Z) |
+
+The signature was a real upload (`edmsSignatures/signature-58967a8d-…-1794486213727.png`); the
+same 500 with the URL's `%2F` decoded. Nothing was written: the task stays `pending` at `intake`.
+**We left both instances open** so the server log for these requests can be found. Close them
+when done.
+
+**Ask:** find the exception in the server log for those requests and fix the fork path. Running
+TP-Q19 (`docs/TEST_PLAN.md`) end to end is the check.
 
 ---
 

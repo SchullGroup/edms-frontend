@@ -20,10 +20,10 @@ export interface WorkflowTaskActionsArgs {
   /** The task being actioned — must be the caller's active, current-stage task. */
   taskId: string | undefined;
   stageLabel: string;
-  /** The task's documents the caller has Action access to — the only ones an
-   *  action can cover. */
+  /** The task's documents the caller can open and has Action access to: the
+   *  only ones an action can cover. */
   documents: { id: string; title: string }[];
-  /** The task's documents the caller has no Action access to. They're never
+  /** The task's other documents (can't open, or no Action access). Never
    *  offered, and any action then names its documents. */
   heldBackDocuments?: { id: string; title: string }[];
   /** The task's documents already actioned on it (a partial action keeps the
