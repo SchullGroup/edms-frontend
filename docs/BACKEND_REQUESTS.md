@@ -46,7 +46,7 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
 | **BE-26** | Mark a request `revoked` when its grant is revoked          | Small fix       | 🟡 Low   | No                                         |
 | **BE-27** | Acting on a document requires being able to open it         | Security fix    | 🔴 High  | No — the frontend enforces it; the API doesn't |
-| **BE-28** | 500 on the first review at a parallel fork (BE-19 again)    | Bug             | 🔴 High  | **Yes** — parallel workflows can't move past the fork |
+| **BE-28** | Intermittent 500 when a parallel fork splits (BE-19 again)  | Bug             | 🔴 High  | **Yes** — a fork with 2+ documents never moves on |
 
 **Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
 them until the PM confirms the AI features are in scope.
@@ -167,28 +167,43 @@ succeeds.
 
 ---
 
-## 🔴 BE-28 · 500 on the first review at a parallel fork (BE-19 again) — **new, 2026-11-12**
+## 🔴 BE-28 · Intermittent 500 when a parallel fork splits (BE-19 again) — **new, 2026-11-12**
 
-BE-19 was removed on 2026-11-11 as fixed in `ae08ef5` (PR #58). It isn't, or not for this shape.
-Reproduced on live 2026-11-12 on a **fresh** instance, so it is not limited to instances started
-before the fix, and it doesn't depend on who acts.
+BE-19 was removed on 2026-11-11 as fixed in `ae08ef5` (PR #58). It isn't. Measured on live
+2026-11-12 with three definitions, fresh instances, as `staff_finance` (`review` with a real
+signature; the time is the action request alone, after sign-in):
 
-Definition `fa6a0f43-68a1-4059-b749-dee9771cbecd` ("ZZ test — parallel error cases (copy)"), the
-TP-Q15 layout: `intake` (staff) → `finance` (supervisor) **and** `stage_1792417332414` Legal
-Review (staff) → `final` (management, `join: all`). No conditions.
-
-| Instance (started 12:17Z by `client_admin`) | Actor | Can open the documents | `POST /tasks/:id/action { action: 'review', signature, comment }` |
+| Action | Definition | Documents | Results |
 |---|---|---|---|
-| `1054af51-e92e-4a9f-bec5-a8298ef2475e`, task `58967a8d-2f2a-4c46-a194-11dfc0c40876` (2 documents) | `staff_finance` | yes | **500** `INTERNAL_SERVER_ERROR` (12:23Z through the UI, again 12:24Z through the API) |
-| `8a218839-f1ef-4421-974e-f46158166c95`, task `b36072de-1f47-43ca-b743-3c597ac6ecab` (1 document) | `staff_finance` | no | **500** `INTERNAL_SERVER_ERROR` (12:24Z) |
+| Review at the fork stage (the split) | `fa6a0f43…` (TP-Q15 layout, fork + `join: all`) | 2 | **500 ×6** (6.5–7.2 s) |
+| Review at the fork stage | `fa6a0f43…` | 1 | 500, 500, then **200** (6.8 s) |
+| Review at the fork stage | `90c37c8e…` (new: fork to two branches, no join) | 1 | 500, 500, then **200** (6.8 s) |
+| Review at the fork stage | `5f9fa178…` (new: same shape as TP-Q15, built fresh) | 1 | **200** first time |
+| Branch reviews, incl. the last one arriving at the join | `5f9fa178…` | 1 | 200, 200 (4.4 s) |
 
-The signature was a real upload (`edmsSignatures/signature-58967a8d-…-1794486213727.png`); the
-same 500 with the URL's `%2F` decoded. Nothing was written: the task stays `pending` at `intake`.
-**We left both instances open** so the server log for these requests can be found. Close them
-when done.
+So it isn't one definition, the actor, or their access: the **same request fails and then succeeds**,
+and two documents (twice the fork work) always fail. A failed attempt writes nothing; the task
+stays `pending`.
 
-**Ask:** find the exception in the server log for those requests and fix the fork path. Running
-TP-Q19 (`docs/TEST_PLAN.md`) end to end is the check.
+**Likely cause (unconfirmed without the server log):** `completeTaskAndRouteDestinationGroups` runs
+the whole routing in one interactive `db.$transaction` (`tasks.service.ts` ~1962–2274) with no `timeout`, so Prisma's
+default **5 s** applies. Forking does many sequential round trips per document and branch
+(`forkDocumentExecution`, history entries, new tasks, SLA), and against the hosted database a
+one-document fork sits right at 5 s. A timed-out transaction throws `P2028` ("Transaction already
+closed"), which surfaces as the generic 500.
+
+**Ask:**
+1. Confirm in the server log (search `P2028` / "Transaction already closed" around 2026-11-12
+   12:23–13:10Z for `POST /tasks/:id/action`).
+2. Give the action transaction a realistic budget (`db.$transaction(fn, { timeout: 20000, maxWait:
+   5000 })`) and batch the per-document writes (`createMany`), so the time doesn't grow with
+   documents × branches.
+3. Map a transaction timeout to a retryable error (e.g. 503 `TRANSACTION_TIMEOUT`) rather than
+   a 500, so the frontend can say "try again".
+
+Still open on live for the log search: instance `1054af51-e92e-4a9f-bec5-a8298ef2475e` (2 documents,
+task `58967a8d-2f2a-4c46-a194-11dfc0c40876`, still at Intake). TP-Q19 (`docs/TEST_PLAN.md`) with
+two documents is the check.
 
 ---
 

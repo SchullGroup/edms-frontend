@@ -855,7 +855,8 @@ lifecycle.
       (2026-10-17), and the designer was clicked through in a browser on 2026-10-18 (TEST_PLAN
       TP-Q2, Q15–Q18). Running one failed with a 500 at the fork (2026-10-18, BE-19) until
       backend `ae08ef5` (PR #58, 2026-10-23); confirmed working by the product owner 2026-11-11.
-      ⛔ **500 at the fork again on 2026-11-12** on a fresh instance (BE-28), so not runnable now
+      ⛔ **500 at the fork again on 2026-11-12** (BE-28): about half the time with one document,
+      always with two
 - [x] Conditional branches — backend conditional routing merged 2026-10-06
       (`definitions.validation.ts` condition rules, `matchesWorkflowCondition` in
       `tasks.service.ts`), and the designer has a branch editor since 2026-09-29
