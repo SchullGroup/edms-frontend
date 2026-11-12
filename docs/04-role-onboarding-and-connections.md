@@ -154,7 +154,7 @@ tenant-wide, and can also act on their own tasks, route their own documents and 
 
 1. ~~**Every arrow into the auditor is broken.**~~ H7 works now: audit entries are written
    automatically and `/auditor/trail` reads them (DRIFT-11). The auditor's *dashboard* is
-   still fixture data; *findings* gave way to control exceptions on 2026-10-29 (🟨, not live).
+   still fixture data; *findings* gave way to control exceptions on 2026-10-29 (✅ live 2026-11-12).
 2. **`client_admin` is still close to a single point of failure.** Five of the seven
    handoffs originate with them. Since 2026-10-06 a cabinet can be *delegated*: a user
    granted `delete` on it manages its folders, metadata schema and access grants from
@@ -612,7 +612,7 @@ assigned to it, route its own documents, delegate, and publish circulars. The se
 | 3 | Review trends | `/management/trends` | ✅ same |
 | 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED`; the sensitive-activity panel needs `audit:view`, which `management` doesn't hold, so it says so (2026-10-13) |
 | 5 | Review performance | `/management/performance` | ✅ `useTaskStats`, server-aggregated (85 lines) |
-| 6 | Review control exceptions reported to them; acknowledge and resolve | `/control-exceptions` (`/management/findings` redirects) | 🟨 built 2026-10-29; mocked responses only, live not seeded. Was 🟥, a re-export of the fixture `/auditor/findings` |
+| 6 | Review control exceptions reported to them; acknowledge and resolve | `/control-exceptions` (`/management/findings` redirects) | ✅ live 2026-11-12 (acknowledge and resolve as `management_ops`). Was 🟥, a re-export of the fixture `/auditor/findings` |
 | 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
 
 ### First week
@@ -724,7 +724,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
 | 4 | Search for evidence | `/search` | ✅ index built on backend; page rebuilt 2026-09-30 *(confirmed by the product owner’s testing, 2026-10-09)* |
-| 5 | Raise a control exception, then report it to the permanent secretary | `/control-exceptions/new` (a page), then the exception's page | 🟨 built 2026-10-29; mocked responses only, live not seeded. Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
+| 5 | Raise a control exception, then report it to the permanent secretary | `/control-exceptions/new` (a page), then the exception's page | ✅ live 2026-11-12 (raise, edit, report as `tjoel+auditor`). Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
 | 6 | Review compliance posture | `/auditor/compliance` | 🟥 re-export of `/management/compliance` |
 
 ### First week — what they would try to do
@@ -1014,7 +1014,7 @@ acted yet.
 | Approval decisions | `supervisor` | Documents never close; management sees permanent backlog |
 | Task activity | `staff` + `supervisor` | Management dashboards are empty |
 | Audit entries | ✅ backend, auto-written | Real, and `/auditor/trail` reads them (H7) |
-| Control exceptions *(were Findings)* | `internal_auditor` (🟨, not live) | Management has nothing to acknowledge or resolve. Both roles share `/control-exceptions`; the old Findings pages redirect there (2026-10-29) |
+| Control exceptions *(were Findings)* | `internal_auditor` (✅ live 2026-11-12) | Management has nothing to acknowledge or resolve. Both roles share `/control-exceptions`; the old Findings pages redirect there (2026-10-29) |
 
 **Read the table bottom-up and the shape of the product becomes clear:** the operational
 layer (staff → supervisor → management) is wired (DRIFT-14 only affects a freshly seeded tenant — re-tested 2026-10-16). The governance layer
