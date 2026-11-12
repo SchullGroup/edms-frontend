@@ -34,13 +34,10 @@ export const URG_LEVELS: { label: string; value: Urgency }[] = [
 ];
 
 // --- Confidentiality clearance ------------------------------------------------
-// Mirrors `isConfidentialityActionAllowed` in edms-backend
-// `src/shared/constants/access-control.constants.ts` (`0dab81a`). Viewing a tier
-// above `internal` needs that tier's `document:view_*` permission, and its scope
-// narrows which documents it covers. Download, export and print each also need
-// their own `document:*` permission, whatever the tier.
+// Mirrors edms-backend `isConfidentialityActionAllowed` (access-control.constants.ts, `f3ebfb4`):
+// tier clearance and each action's own permission must both be held at a scope covering the doc.
 
-export type ConfidentialityAction = 'view' | 'download' | 'export' | 'print';
+export type ConfidentialityAction = 'view' | 'download' | 'download_original' | 'export' | 'print';
 
 const TIER_CLEARANCE_ACTION: Partial<Record<Confidentiality, string>> = {
   confidential: 'view_confidential',
@@ -50,6 +47,7 @@ const TIER_CLEARANCE_ACTION: Partial<Record<Confidentiality, string>> = {
 
 const ACTION_PERMISSION: Partial<Record<ConfidentialityAction, string>> = {
   download: 'download',
+  download_original: 'download_original',
   export: 'export',
   print: 'print',
 };
@@ -76,17 +74,22 @@ export function isConfidentialityActionAllowed(
   subject: ClearanceSubject,
 ): boolean {
   const clearance = TIER_CLEARANCE_ACTION[doc.confidentiality as Confidentiality];
-  if (clearance) {
-    const scope = subject.scopeFor('document', clearance);
-    if (!scope) return false;
-    if (
-      scope === 'department' &&
-      (subject.departmentId === null || doc.cabinetDepartmentId !== subject.departmentId)
-    ) {
-      return false;
-    }
-    if (scope === 'own' && doc.createdBy !== subject.userId) return false;
+  if (clearance && !coversDocument(subject.scopeFor('document', clearance), doc, subject)) {
+    return false;
   }
   const permission = ACTION_PERMISSION[action];
-  return !permission || subject.scopeFor('document', permission) !== null;
+  return !permission || coversDocument(subject.scopeFor('document', permission), doc, subject);
+}
+
+/** Whether a held scope reaches this document: any at global, its cabinet's department, or own uploads. */
+function coversDocument(
+  scope: ReturnType<ClearanceSubject['scopeFor']>,
+  doc: ClearanceDocument,
+  subject: ClearanceSubject,
+): boolean {
+  if (scope === 'global') return true;
+  if (scope === 'department') {
+    return subject.departmentId !== null && doc.cabinetDepartmentId === subject.departmentId;
+  }
+  return scope === 'own' && doc.createdBy === subject.userId;
 }

@@ -1372,7 +1372,7 @@ Categories: `missing_competitive_quotes`, `missing_approval`, `missing_documenta
 
 | Frontend service | Endpoints called | Backend | Status |
 |---|---|---|---|
-| `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 — since 2026-10-08 only its `watermark` flag is read. Download now follows the `document:download` permission and clearance, so `/admin/policies`' Download and Print toggles change nothing |
+| `policies.service.ts` | none — returns `SEED.policies` | **module directory is empty** | 🔴 — nothing reads it since 2026-11-03 (every document is watermarked). Download now follows the `document:download` permission and clearance, so `/admin/policies`' Download and Print toggles change nothing |
 | `branding.service.ts` | none — returns `SEED.branding` | no module, no schema | 🔴 |
 
 **DRIFT-10 (notifications) — ✅ RESOLVED (verified 2026-09-21).**
@@ -1606,7 +1606,11 @@ That is now recoverable, but still a trap.
 
 The frontend copies the backend's check as `isConfidentialityActionAllowed` in
 `src/constants/documentLevels.ts`, fed by `useConfidentialityClearance` (permissions from
-`/auth/me`, department from `GET /users/:id`). The upload form never offers `top_secret`
+`/auth/me`, department from `GET /users/:id`). Since backend `f3ebfb4` (2026-11-04) the
+`document:download` / `download_original` / `export` / `print` permission must also be held at
+a scope that covers the document (`department` = its cabinet's department, `own` = its
+uploader), not merely held; the frontend copy follows suit since 2026-11-09 (not verified
+live). The upload form never offers `top_secret`
 (`CONF_LEVELS` omits it). The document page's "Change classification" dialog disables any
 tier the caller couldn't open the document at, and lists Top Secret only for a caller
 cleared for it. The API still accepts any tier on `PATCH /documents/:id`, so the backend

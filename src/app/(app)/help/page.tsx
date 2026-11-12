@@ -173,10 +173,9 @@ const TOPICS: Topic[] = [
           permissions.
         </p>
         <p>
-          Confidential and higher documents carry a watermark with the level and your name, on
-          screen and on anything you print. Downloaded copies of PDFs and images carry your name,
-          the time and your network address too. Only some roles can download the unmarked
-          original.
+          Every document carries a watermark with its level and your name, on screen and on
+          anything you print. Downloaded copies of PDFs and images carry your name, the time and
+          your network address too. Only some roles can download the unmarked original.
         </p>
         <p>
           If you can’t open a document, choose <b>Request access</b>. Your request goes for

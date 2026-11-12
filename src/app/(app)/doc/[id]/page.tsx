@@ -14,7 +14,6 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { scopeAtLeast } from '@/lib/permissions';
 import { cabinetAllows, useMyCabinetAccess } from '@/components/cabinets/cabinetAccess';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
-import { useConfidentialityPolicy } from '@/hooks/useConfidentialityPolicy';
 import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useCabinets } from '@/apis/hooks/useCabinets';
 import {
@@ -67,7 +66,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
   const { data: cabinetsData, isLoading: isLoadingCabs } = useCabinets();
-  const { policyFor, isLoading: isLoadingPolicies } = useConfidentialityPolicy();
   const cabinets = cabinetsData?.data || [];
 
   const { can, scopeFor } = usePermissions();
@@ -158,7 +156,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
     }
   }, [me?.id, doc?.id, doc?.title, recordDocumentView]);
 
-  if (isLoading || isLoadingCabs || isLoadingPolicies) {
+  if (isLoading || isLoadingCabs) {
     return <DocumentDetailSkeleton />;
   }
 
@@ -200,9 +198,8 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
   }
 
   const { rawFileKey, fileUrl, fileMimeType } = documentFile(doc);
-  // Watermarking still comes from the (mock) policy table. Download follows the links the
-  // backend issued this viewer; without a file, `document:download` decides (text stub).
-  const confPolicy = policyFor(doc.confidentiality);
+  // Download follows the links the backend issued this viewer; without a file,
+  // `document:download` decides (text stub).
   const canDownload = doc.currentVersion?.fileUrl
     ? canDownloadVersion(doc.currentVersion)
     : allows(doc, 'download');
@@ -386,7 +383,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         </a>{' '}
         <span className="sep">›</span>
         <span>{folderLabel}</span> <span className="sep">›</span>
-        <span className="cur">{doc.id.toUpperCase()}</span>
+        <span className="cur">{doc.referenceNumber ?? doc.id.toUpperCase()}</span>
       </div>
 
       <div className="page-head">
@@ -399,7 +396,13 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
             <ConfBadge level={doc.confidentiality} />
             <UrgBadge level={doc.urgency} />
             <span className="caption" style={{ alignSelf: 'center' }}>
-              v{doc.currentVersion?.versionNumber ?? 1} · {fmtDate(doc.createdAt)}
+              {[
+                doc.referenceNumber,
+                `v${doc.currentVersion?.versionNumber ?? 1}`,
+                fmtDate(doc.createdAt),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
           </div>
         </div>
@@ -560,7 +563,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           fileUrl={fileUrl}
           rawFileKey={rawFileKey}
           fileMimeType={fileMimeType}
-          showWatermark={confPolicy.watermark}
           watermarkText={`${doc.confidentiality} · ${me.name}`}
           zoom={zoom}
           onZoomChange={setZoom}
@@ -585,6 +587,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
         <div className="flex flex-col gap-4">
           <DocumentDetailsPanel
             documentId={doc.id}
+            referenceNumber={doc.referenceNumber}
             documentType={doc.documentType}
             workstream={doc.workstream}
             cabinetId={doc.cabinetId}
