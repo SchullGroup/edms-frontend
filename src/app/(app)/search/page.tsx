@@ -594,6 +594,7 @@ export default function SearchPage() {
                 exportCsv(
                   'Search_Results',
                   results.map((d) => ({
+                    reference: d.referenceNumber ?? '',
                     title: d.title,
                     type: d.documentType ?? '',
                     workstream: workstreamLabel(d.workstream) ?? '',
@@ -702,6 +703,7 @@ export default function SearchPage() {
                       <div className="task-title">{d.title}</div>
                       <div className="caption" style={{ margin: '4px 0' }}>
                         {[
+                          d.referenceNumber,
                           d.documentType,
                           workstreamLabel(d.workstream),
                           cabinetName.get(d.cabinetId),
