@@ -323,6 +323,8 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
 - [x] Cabinet and folder dropdowns are populated from the live API (`useCabinets`, `useCabinetFolders`)
 - [x] Folder options refresh when the cabinet changes
 - [x] Backend generates a unique reference (`DOC-YYYYMMDD-HHmmss`)
+- [x] The reference is shown on `/doc/[id]` and in `/search` results — 2026-11-09, verified live;
+      it isn't searchable yet (not in `search_vector`)
 - [x] Document + version 1 are created in a single transaction
 - [x] Upload failure reverts the card to `ready` and surfaces the error
 - [x] ~~⚠️ **The IDU classification is hardcoded.**~~ **Removed 2026-10-14** — the card no

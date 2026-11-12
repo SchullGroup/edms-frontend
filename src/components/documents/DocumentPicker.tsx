@@ -15,7 +15,8 @@ interface DocumentPickerProps {
   ariaLabel?: string;
 }
 
-/** Single-select document picker over `GET /documents/search` (title, reference or text). */
+/** Single-select document picker over `GET /documents/search`; the reference shows as a hint
+ *  but isn't searchable (the index holds title, OCR text and metadata values only). */
 export function DocumentPicker({
   value,
   onChange,
@@ -39,7 +40,11 @@ export function DocumentPicker({
     () =>
       pending || !debounced
         ? []
-        : (data?.data ?? []).map((d) => ({ value: d.id, label: d.title, hint: d.referenceNumber })),
+        : (data?.data ?? []).map((d) => ({
+            value: d.id,
+            label: d.title,
+            hint: d.referenceNumber ?? undefined,
+          })),
     [pending, debounced, data],
   );
 
@@ -58,7 +63,7 @@ export function DocumentPicker({
       loading={pending}
       knownOptions={knownOptions}
       placeholder={placeholder}
-      searchPlaceholder="Title, reference or text…"
+      searchPlaceholder="Title or text…"
       emptyText={
         isError
           ? "Couldn't search documents."
