@@ -23,6 +23,8 @@ import type {
 interface ControlExceptionFormProps {
   /** The exception being edited; omitted when raising a new one. */
   initial?: ControlException;
+  /** Starting values for a new finding, e.g. from an audit-trail entry. */
+  prefill?: { description?: string; documentId?: string; documentOption?: ComboboxOption };
   submitLabel: string;
   onSubmit: (values: ControlExceptionInput) => Promise<unknown>;
   onCancel: () => void;
@@ -31,6 +33,7 @@ interface ControlExceptionFormProps {
 /** Raise or edit a control exception. Both live on their own page, not in a modal. */
 export function ControlExceptionForm({
   initial,
+  prefill,
   submitLabel,
   onSubmit,
   onCancel,
@@ -44,11 +47,13 @@ export function ControlExceptionForm({
   );
 
   const [title, setTitle] = useState(initial?.title ?? '');
-  const [description, setDescription] = useState(initial?.description ?? '');
+  const [description, setDescription] = useState(
+    initial?.description ?? prefill?.description ?? '',
+  );
   const [category, setCategory] = useState<ControlExceptionCategory | ''>(initial?.category ?? '');
   const [severity, setSeverity] = useState<ControlExceptionSeverity>(initial?.severity ?? 'medium');
   const [departmentId, setDepartmentId] = useState(initial?.departmentId ?? '');
-  const [documentId, setDocumentId] = useState(initial?.documentId ?? '');
+  const [documentId, setDocumentId] = useState(initial?.documentId ?? prefill?.documentId ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
 
@@ -229,7 +234,7 @@ export function ControlExceptionForm({
                           label: initial.document.title,
                           hint: initial.document.referenceNumber,
                         }
-                      : null
+                      : (prefill?.documentOption ?? null)
                   }
                   ariaLabel="Document"
                 />
