@@ -24,6 +24,8 @@ import { Icon } from '@/components/ui/Icons';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { fmtDate, fmtDateTime } from '@/utils/helpers';
 import { METHOD_LABEL } from '@/components/security/mfaParts';
+import { RowActionsMenu, type RowAction } from '@/components/ui/RowActionsMenu';
+import { Mail, RotateCcw, ShieldCheck, ShieldOff, UserCheck, UserX } from 'lucide-react';
 
 const USERS_PAGE_SIZE = 10;
 
@@ -474,65 +476,61 @@ export default function UsersPage() {
           >
             Edit
           </button>
-          {/* A pending user becomes active by accepting the invitation, not
-              from here: activating them would leave an account with no password. */}
-          {u.status !== 'Pending' && (
-            <button
-              className="btn btn-secondary btn-sm"
-              disabled={!canEditUser}
-              title={!canEditUser ? "You don't have permission to edit users" : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleToggleStatus(u);
-              }}
-            >
-              {u.status === 'Active' ? 'Suspend' : 'Activate'}
-            </button>
-          )}
-          {(u.status === 'Pending' || (u.status === 'Active' && !u.lastLoginAt)) && (
-            <button
-              className="btn btn-secondary btn-sm"
-              disabled={resendInvitation.isPending || !canCreateUser}
-              title={!canCreateUser ? "You don't have permission to invite users" : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleResendInvitation(u);
-              }}
-            >
-              Resend invite
-            </button>
-          )}
-          {/* Not on your own row: requiring it without MFA would stop your session mid-way. */}
-          {canRequireMfa && u.id !== currentUser?.id && (
-            <button
-              className="btn btn-secondary btn-sm"
-              style={{ whiteSpace: 'nowrap' }}
-              disabled={updateUser.isPending}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleRequireMfa(u);
-              }}
-            >
-              {u.mfaRequired ? 'Stop requiring two-step' : 'Require two-step'}
-            </button>
-          )}
-          {canResetMfa && u.mfaEnabled && u.id !== currentUser?.id && (
-            <button
-              className="btn btn-secondary btn-sm"
-              style={{ whiteSpace: 'nowrap' }}
-              title="For someone who lost their device and recovery codes"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleResetMfa(u);
-              }}
-            >
-              Reset two-step
-            </button>
-          )}
+          <RowActionsMenu label={`More actions for ${u.name}`} actions={rowActions(u)} />
         </div>
       ),
     },
   ];
+
+  /** Everything but Edit, for the row's ⋮ menu. */
+  function rowActions(u: any): RowAction[] {
+    const isSelf = u.id === currentUser?.id;
+    const actions: RowAction[] = [];
+    if (u.status === 'Pending' || (u.status === 'Active' && !u.lastLoginAt)) {
+      actions.push({
+        key: 'resend',
+        label: 'Resend invite',
+        icon: <Mail size={15} />,
+        disabled: resendInvitation.isPending || !canCreateUser,
+        title: !canCreateUser ? "You don't have permission to invite users" : undefined,
+        onSelect: () => handleResendInvitation(u),
+      });
+    }
+    // Not on your own row: requiring it without MFA would stop your session mid-way.
+    if (canRequireMfa && !isSelf) {
+      actions.push({
+        key: 'require',
+        label: u.mfaRequired ? 'Stop requiring two-step sign-in' : 'Require two-step sign-in',
+        icon: u.mfaRequired ? <ShieldOff size={15} /> : <ShieldCheck size={15} />,
+        disabled: updateUser.isPending,
+        onSelect: () => handleRequireMfa(u),
+      });
+    }
+    if (canResetMfa && u.mfaEnabled && !isSelf) {
+      actions.push({
+        key: 'reset',
+        label: 'Reset two-step sign-in',
+        icon: <RotateCcw size={15} />,
+        title: 'For someone who lost their device and recovery codes',
+        onSelect: () => handleResetMfa(u),
+      });
+    }
+    // A pending user becomes active by accepting the invitation, not from here.
+    if (u.status !== 'Pending') {
+      const suspending = u.status === 'Active';
+      actions.push({
+        key: 'status',
+        label: suspending ? 'Suspend user' : 'Activate user',
+        icon: suspending ? <UserX size={15} /> : <UserCheck size={15} />,
+        danger: suspending,
+        separatorBefore: actions.length > 0,
+        disabled: !canEditUser,
+        title: !canEditUser ? "You don't have permission to edit users" : undefined,
+        onSelect: () => handleToggleStatus(u),
+      });
+    }
+    return actions;
+  }
 
   return (
     <div>
