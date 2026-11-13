@@ -1058,7 +1058,8 @@ role takes effect in the UI without a code change.
 - [x] The UI matrix editor calls the API instead of the local store
 - [x] Create / rename / delete roles, assign / remove roles on a user
 - [ ] Guard rails preventing an admin from removing their own admin rights
-- [ ] `role.permissions_updated` audit entry (frontend writes a local `auditAction` only)
+- [x] `role.permissions_updated` audit entry: written by the backend (`roles.router.ts`), seen in
+      the live trail 2026-09-18. The frontend's duplicate local `auditAction` call was removed 2026-11-13
 
 ---
 

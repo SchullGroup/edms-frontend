@@ -22,7 +22,7 @@ import { CabinetAccessCard } from '@/components/cabinets/CabinetAccessCard';
 
 export default function CabinetDesignerPage() {
   const router = useRouter();
-  const { auditAction, currentUser } = useStore();
+  const { currentUser } = useStore();
   const { can, scopeFor } = usePermissions();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
 
@@ -148,7 +148,6 @@ export default function CabinetDesignerPage() {
                 departmentId: form.departmentId || undefined,
               })
               .then((newCab) => {
-                auditAction('CABINET_CREATE', newCab.id, 'Created cabinet ' + name);
                 setActiveCabId(newCab.id);
                 closeModal();
                 createFolder.mutate({ cabinetId: newCab.id, data: { name: 'General' } });
@@ -228,7 +227,6 @@ export default function CabinetDesignerPage() {
                 },
               })
               .then(() => {
-                auditAction('CABINET_EDIT', activeCab.id, 'Updated cabinet ' + name);
                 closeModal();
               })
               .catch(() => false);
@@ -284,7 +282,6 @@ export default function CabinetDesignerPage() {
         deleteCabinet
           .mutateAsync(activeCab.id)
           .then(() => {
-            auditAction('CABINET_DELETE', activeCab.id, 'Deleted cabinet ' + activeCab.name);
             setActiveCabId(undefined);
           })
           .catch(() => {

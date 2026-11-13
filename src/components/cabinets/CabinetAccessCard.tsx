@@ -40,7 +40,7 @@ export function useCanGrantAccess(cabinet: Cabinet | null | undefined) {
  * aren't offered either.
  */
 export function CabinetAccessCard({ cabinet }: { cabinet: Cabinet }) {
-  const { auditAction, currentUser } = useStore();
+  const { currentUser } = useStore();
   const { can } = usePermissions();
   const { openModal, openConfirm, closeModal, addToast } = useUIStore();
 
@@ -187,13 +187,6 @@ export function CabinetAccessCard({ cabinet }: { cabinet: Cabinet }) {
               ),
             )
               .then(() => {
-                auditAction(
-                  'CABINET_ACCESS_GRANT',
-                  cabinet.id,
-                  `Granted ${form.permission} to ${ids.length} ${form.targetType}${
-                    ids.length === 1 ? '' : 's'
-                  }`,
-                );
                 closeModal();
               })
               .catch(() => false);
@@ -220,9 +213,7 @@ export function CabinetAccessCard({ cabinet }: { cabinet: Cabinet }) {
       onConfirm: () =>
         revokeAccess
           .mutateAsync({ cabinetId: cabinet.id, grantId: g.id })
-          .then(() => {
-            auditAction('CABINET_ACCESS_REVOKE', cabinet.id, `Revoked ${g.permission}`);
-          })
+          .then(() => {})
           .catch(() => {}),
     });
   };

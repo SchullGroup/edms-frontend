@@ -3,7 +3,6 @@
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import {
   useWorkflow,
@@ -47,7 +46,6 @@ import type {
 export default function WorkflowDesignerPage({ params }: { params: Promise<{ id: string }> }) {
   const workflowId = use(params).id;
   const router = useRouter();
-  const { auditAction } = useStore();
   const { setPageTitle, openConfirm, addToast } = useUIStore();
   const { can } = usePermissions();
   const canCreateWorkflow = can('workflow', 'create');
@@ -228,9 +226,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
   };
 
   const publish = () =>
-    publishWfMutation.mutateAsync(wf.id).then(() => {
-      auditAction('WORKFLOW_PUBLISH', wf.id, `Published ${wf.name}`);
-    });
+    publishWfMutation.mutateAsync(wf.id).then(() => {});
 
   // Publishing a version archives the active one (PR #59), so say so first.
   const activeVersion = versions.find((v) => v.status === 'published' && v.id !== wf.id);
