@@ -24,6 +24,18 @@ function toCamelCaseFolderName(name: string): string {
     .join('');
 }
 
+/** "scan.pdf" -> "scan-3f2a9c1b7d4e.pdf": the storage key is `<folder>/<name>`, so a shared name
+ *  would overwrite another document's file. The id goes last because downloads take this name. */
+export function uniqueStorageName(fileName: string): string {
+  const safe = sanitizeFileName(fileName);
+  const dot = safe.lastIndexOf('.');
+  const [base, ext] = dot > 0 ? [safe.slice(0, dot), safe.slice(dot)] : [safe, ''];
+  const id = Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
+  return `${base || 'file'}-${id}${ext}`;
+}
+
 export interface UploaderOptions {
   file: File;
   fileName?: string;
@@ -150,7 +162,7 @@ export class Uploader {
   private async initialize(): Promise<void> {
     try {
       const videoInitializationUploadInput = {
-        name: sanitizeFileName(this.fileName),
+        name: uniqueStorageName(this.fileName),
         contentType: this.contentType,
         folderName: this.folderName,
       };
