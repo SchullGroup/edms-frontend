@@ -20,12 +20,12 @@ export default function EditControlExceptionPage({ params }: { params: Promise<{
   const updateException = useUpdateControlException();
 
   useEffect(() => {
-    setPageTitle('Edit exception');
+    setPageTitle('Edit finding');
   }, [setPageTitle]);
 
   if (isLoading) return <SkeletonPage columns={['Field', 'Value']} rows={6} />;
   if (isError || !ce) {
-    return <ErrorMessage message="Failed to load this exception." retry={() => refetch()} />;
+    return <ErrorMessage message="Failed to load this finding." retry={() => refetch()} />;
   }
 
   const back = `/control-exceptions/${id}`;
@@ -35,11 +35,11 @@ export default function EditControlExceptionPage({ params }: { params: Promise<{
         <div className="card-body">
           <p>
             {ce.status !== 'open'
-              ? 'This exception has been reported to the permanent secretary, so it can no longer be edited.'
-              : "You don't have permission to edit control exceptions."}
+              ? 'This finding has been reported, so it can no longer be edited.'
+              : "You don't have permission to edit audit findings."}
           </p>
           <Link href={back} className="btn btn-secondary btn-sm mt-2">
-            Back to the exception
+            Back to the finding
           </Link>
         </div>
       </div>
@@ -50,7 +50,7 @@ export default function EditControlExceptionPage({ params }: { params: Promise<{
     <div>
       <div className="page-head">
         <div>
-          <div className="page-title">Edit exception</div>
+          <div className="page-title">Edit finding</div>
           <div className="page-sub">{ce.title}</div>
         </div>
       </div>

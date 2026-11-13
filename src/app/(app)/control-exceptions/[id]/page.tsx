@@ -26,7 +26,7 @@ import type { ControlException } from '@/types/models';
 function timeline(ce: ControlException) {
   return [
     { label: 'Raised', at: ce.raisedAt, by: ce.raiser?.name },
-    { label: 'Reported to the permanent secretary', at: ce.reportedAt },
+    { label: 'Findings reported', at: ce.reportedAt },
     { label: 'Acknowledged', at: ce.acknowledgedAt },
     { label: 'Resolved', at: ce.resolvedAt },
   ];
@@ -51,7 +51,7 @@ export default function ControlExceptionPage({ params }: { params: Promise<{ id:
   const [noteError, setNoteError] = useState(false);
 
   useEffect(() => {
-    setPageTitle('Control exception');
+    setPageTitle('Audit finding');
   }, [setPageTitle]);
 
   if (isLoading) return <SkeletonPage columns={['Field', 'Value']} rows={6} />;
@@ -59,7 +59,7 @@ export default function ControlExceptionPage({ params }: { params: Promise<{ id:
     const notFound = (error as any)?.response?.status === 404;
     return (
       <ErrorMessage
-        message={notFound ? 'This exception no longer exists.' : 'Failed to load this exception.'}
+        message={notFound ? 'This finding no longer exists.' : 'Failed to load this finding.'}
         retry={notFound ? undefined : () => refetch()}
       />
     );
@@ -73,10 +73,9 @@ export default function ControlExceptionPage({ params }: { params: Promise<{ id:
 
   const confirmReport = () =>
     openConfirm({
-      title: 'Report to the permanent secretary?',
-      message:
-        'Management will be notified and can acknowledge and resolve it. You won’t be able to edit it afterwards.',
-      confirmLabel: 'Report',
+      title: 'Report findings?',
+      message: 'Management will be notified and can acknowledge and resolve it.',
+      confirmLabel: 'Submit',
       onConfirm: () =>
         reportException
           .mutateAsync(ce.id)
@@ -100,11 +99,13 @@ export default function ControlExceptionPage({ params }: { params: Promise<{ id:
 
   return (
     <div>
+      <div className="crumbs">
+        <Link href="/control-exceptions" className="back">
+          <Icon name="chevL" size={13} /> Audit findings
+        </Link>
+      </div>
       <div className="page-head">
         <div>
-          <div className="caption mb-1">
-            <Link href="/control-exceptions">Control exceptions</Link>
-          </div>
           <div className="page-title">{ce.title}</div>
           <div className="flex gap-2 items-center mt-1">
             <ControlExceptionStatusBadge status={ce.status} />
@@ -127,7 +128,7 @@ export default function ControlExceptionPage({ params }: { params: Promise<{ id:
               onClick={confirmReport}
               disabled={reportException.isPending}
             >
-              <Icon name="send" size={15} /> Report to permanent secretary
+              <Icon name="send" size={15} /> Report findings
             </button>
           )}
           {canAcknowledge && (
@@ -158,7 +159,7 @@ export default function ControlExceptionPage({ params }: { params: Promise<{ id:
           {resolving && (
             <div className="card mb-4">
               <div className="card-head">
-                <span className="h3">Resolve this exception</span>
+                <span className="h3">Resolve this finding</span>
               </div>
               <div className="card-body">
                 <div className="field">

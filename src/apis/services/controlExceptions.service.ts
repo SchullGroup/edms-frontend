@@ -62,7 +62,7 @@ export const controlExceptionsService = {
     return res.data.data;
   },
 
-  /** Sends it to the permanent secretary (every active `management` user is notified). */
+  /** Sends it to management (every active `management` user is notified). */
   report: async (id: string): Promise<ControlException> => {
     const res = await apiClient.post<ApiResponse<ControlException>>(
       `/control-exceptions/${id}/report`,

@@ -72,7 +72,7 @@ export const useNavigation = () => {
   // Auditor and management act on control exceptions; client_admin reads the register.
   const controlExceptionsItem = {
     route: '/control-exceptions',
-    label: 'Control Exceptions',
+    label: 'Audit Findings',
     icon: 'finding',
     anyPermissions: ['control_exception:view'],
   };

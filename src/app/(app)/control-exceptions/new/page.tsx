@@ -6,28 +6,26 @@ import { useUIStore } from '@/store/useUIStore';
 import { useCreateControlException } from '@/apis/hooks/useControlExceptions';
 import { ControlExceptionForm } from '@/components/controlExceptions/ControlExceptionForm';
 
-/** Raises an exception as `open`; reporting it to the permanent secretary is a step on its page. */
+/** Raises an exception as `open`; reporting it to management is a step on its page. */
 export default function NewControlExceptionPage() {
   const router = useRouter();
   const { setPageTitle } = useUIStore();
   const createException = useCreateControlException();
 
   useEffect(() => {
-    setPageTitle('Raise exception');
+    setPageTitle('Raise finding');
   }, [setPageTitle]);
 
   return (
     <div>
       <div className="page-head">
         <div>
-          <div className="page-title">Raise a control exception</div>
-          <div className="page-sub">
-            Saved as open. You can still edit it until you report it to the permanent secretary.
-          </div>
+          <div className="page-title">Raise an audit finding</div>
+          <div className="page-sub">Saved as open. You can still edit it until you report it.</div>
         </div>
       </div>
       <ControlExceptionForm
-        submitLabel="Raise exception"
+        submitLabel="Raise finding"
         onCancel={() => router.push('/control-exceptions')}
         onSubmit={async (values) => {
           const created = await createException.mutateAsync(values);

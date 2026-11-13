@@ -1176,7 +1176,7 @@ export type ControlExceptionCategory =
 
 export type ControlExceptionSeverity = 'low' | 'medium' | 'high' | 'critical';
 
-/** open → reported (to the permanent secretary) → acknowledged → resolved. */
+/** open → reported (to management) → acknowledged → resolved. */
 export type ControlExceptionStatus = 'open' | 'reported' | 'acknowledged' | 'resolved';
 
 export interface ControlException {

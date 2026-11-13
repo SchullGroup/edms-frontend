@@ -193,7 +193,7 @@ export const ACTIVITY_RECORD_TYPES: AuditRecordType[] = [
   { value: 'circular', label: 'Circulars', actions: byPrefix('circular.') },
   {
     value: 'control_exception',
-    label: 'Control exceptions',
+    label: 'Audit findings',
     actions: byPrefix('control_exception.'),
   },
   { value: 'search', label: 'Searches', actions: byPrefix('search.') },

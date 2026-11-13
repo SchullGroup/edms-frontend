@@ -68,8 +68,8 @@ function useControlExceptionMutation<V, R>(
 export function useCreateControlException() {
   return useControlExceptionMutation(
     (data: ControlExceptionInput) => controlExceptionsService.create(data),
-    'Exception raised',
-    'Failed to raise exception',
+    'Finding raised',
+    'Failed to raise finding',
   );
 }
 
@@ -77,24 +77,24 @@ export function useUpdateControlException() {
   return useControlExceptionMutation(
     ({ id, data }: { id: string; data: Partial<ControlExceptionInput> }) =>
       controlExceptionsService.update(id, data),
-    'Exception updated',
-    'Failed to update exception',
+    'Finding updated',
+    'Failed to update finding',
   );
 }
 
 export function useReportControlException() {
   return useControlExceptionMutation(
     (id: string) => controlExceptionsService.report(id),
-    'Reported to the permanent secretary',
-    'Failed to report exception',
+    'Findings reported',
+    'Failed to report findings',
   );
 }
 
 export function useAcknowledgeControlException() {
   return useControlExceptionMutation(
     (id: string) => controlExceptionsService.acknowledge(id),
-    'Exception acknowledged',
-    'Failed to acknowledge exception',
+    'Finding acknowledged',
+    'Failed to acknowledge finding',
   );
 }
 
@@ -102,7 +102,7 @@ export function useResolveControlException() {
   return useControlExceptionMutation(
     ({ id, resolutionNote }: { id: string; resolutionNote: string }) =>
       controlExceptionsService.resolve(id, resolutionNote),
-    'Exception resolved',
-    'Failed to resolve exception',
+    'Finding resolved',
+    'Failed to resolve finding',
   );
 }

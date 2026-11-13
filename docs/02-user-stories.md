@@ -1372,17 +1372,18 @@ gone, so H2 is ⬜: nothing tracks owners or due dates until a `Finding` model e
 
 ---
 
-### H4 — Report control exceptions to the permanent secretary · 🟨 **Partial** *(new 2026-10-29)*
+### H4 — Report audit findings to management · 🟨 **Partial** *(new 2026-10-29)*
 
 > **As** Femi, in the internal control unit,
-> **I want to** record an issue I found in a transaction or department and report it to the
-> permanent secretary,
+> **I want to** record an issue I found in a transaction or department and report it to
+> management,
 > **so that** someone with authority acknowledges it and records how it was resolved.
 
 **Current state:** `edms-backend` `51e9d85` adds `control_exceptions` and 8 routes. The
 frontend built the same day: a shared register at `/control-exceptions`, a raise page and an
 edit page (pages, not modals, by product decision), a detail page with the lifecycle actions,
-and a report. The auditor's and management's Findings menu items open it. Live was re-seeded
+and a report. The auditor's and management's Findings menu items open it. The UI calls them
+**audit findings** (renamed 2026-11-13); the API and module keep `control-exceptions`. Live was re-seeded
 2026-11-11 and the whole lifecycle walked through on live 2026-11-12. It stays 🟨 for the two
 open criteria below: the history's unnamed actors and the missing workflow link.
 
@@ -1390,7 +1391,7 @@ open criteria below: the history's unnamed actors and the missing workflow link.
 - [x] Backend: exception with category, severity, status and optional department, document and
       workflow links; open → reported → acknowledged → resolved (`51e9d85`)
 - [x] Raise and edit (while open) on their own pages; required title, description, category
-- [x] Report to the permanent secretary; every active `management` user is notified
+- [x] Report to management; every active `management` user is notified
 - [x] Management acknowledges, then resolves with a required note
 - [x] Register filtered by status, category, severity, department and date; counts report
       with CSV export

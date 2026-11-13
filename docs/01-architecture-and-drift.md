@@ -1359,7 +1359,7 @@ management's Findings menu items open them, and client admin's Governance sectio
 | `getById` | `GET /control-exceptions/:id` (`view`) | ✅ detail page; also the notification's `actionUrl` |
 | `create` | `POST /control-exceptions` (`create`): `title`, `description`, `category`, `severity?`, optional `departmentId`/`documentId`/`workflowInstanceId` | ✅ `/control-exceptions/new`. The form links a department and a document, not a workflow |
 | `update` | `PATCH /control-exceptions/:id` (`edit`, while `open`) | ✅ `/[id]/edit`; sends `null` to unlink |
-| `report` | `POST /control-exceptions/:id/report` (`report`) | ✅ "Report to permanent secretary", after a confirm |
+| `report` | `POST /control-exceptions/:id/report` (`report`) | ✅ "Report findings", after a confirm ("Report findings?" → Submit) |
 | `acknowledge`, `resolve` | `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` `{resolutionNote}` (`respond`) | ✅ detail page; Resolve opens an inline note |
 
 Gap: the responses embed `raiser` but give only ids for the reporter, acknowledger and

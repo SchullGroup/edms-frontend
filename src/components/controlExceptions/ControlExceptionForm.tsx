@@ -5,6 +5,8 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useDepartments } from '@/apis/hooks/useDepartments';
 import { departmentOptions } from '@/apis/utils/managementAggregation';
 import { DocumentPicker } from '@/components/documents/DocumentPicker';
+import { Combobox, type ComboboxOption } from '@/components/ui/Combobox';
+import { Icon } from '@/components/ui/Icons';
 import {
   CATEGORIES,
   CATEGORY_LABEL,
@@ -36,7 +38,10 @@ export function ControlExceptionForm({
   const { hasPermission } = usePermissions();
   const canLinkDocuments = hasPermission('document', 'view');
   const { data: deptData } = useDepartments();
-  const departments = useMemo(() => departmentOptions(deptData?.data ?? []), [deptData]);
+  const departments = useMemo<ComboboxOption[]>(
+    () => departmentOptions(deptData?.data ?? []).map((d) => ({ value: d.id, label: d.label })),
+    [deptData],
+  );
 
   const [title, setTitle] = useState(initial?.title ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
@@ -48,7 +53,7 @@ export function ControlExceptionForm({
   const [showErrors, setShowErrors] = useState(false);
 
   const errors = {
-    title: title.trim() ? null : 'Give the exception a title.',
+    title: title.trim() ? null : 'Give the finding a title.',
     description: description.trim() ? null : 'Describe what was found.',
     category: category ? null : 'Pick a category.',
   };
@@ -184,21 +189,32 @@ export function ControlExceptionForm({
             <span className="h3">Where it was seen</span>
           </div>
           <div className="card-body">
+            <div className="banner info" style={{ alignItems: 'flex-start' }}>
+              <span style={{ flexShrink: 0, marginTop: 1 }}>
+                <Icon name="info" size={15} />
+              </span>
+              <span>Link a department or document if this concerns one. Both are optional.</span>
+            </div>
             <div className="field">
-              <label htmlFor="ce-department">Department</label>
-              <select
-                id="ce-department"
-                className="input"
+              <label>Department</label>
+              <Combobox
+                options={departments}
                 value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value)}
-              >
-                <option value="">Not tied to a department</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setDepartmentId(v as string)}
+                placeholder="Search for a department…"
+                searchPlaceholder="Search departments…"
+                emptyText="No departments match"
+                ariaLabel="Department"
+              />
+              {departmentId && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm mt-2"
+                  onClick={() => setDepartmentId('')}
+                >
+                  Remove department
+                </button>
+              )}
             </div>
             {canLinkDocuments && (
               <div className="field">
@@ -228,9 +244,6 @@ export function ControlExceptionForm({
                 )}
               </div>
             )}
-            <div className="help">
-              Both are optional. Link them when the exception can be pinned to one.
-            </div>
           </div>
         </div>
       </div>

@@ -588,9 +588,9 @@ write:          workflow_instance create/route (own) · task action (own)
                 control_exception respond (global): acknowledge, resolve
 ```
 
-Management is the permanent secretary the internal control unit reports to: reported
-control exceptions notify every active management user. Since 2026-10-29 the sidebar's
-Control Exceptions item (formerly Findings) lists them, and the detail page offers
+Management is who the internal control unit reports to: reported audit findings
+(`control-exceptions` in the API) notify every active management user. The sidebar's
+Audit Findings item (Findings until 2026-10-29, then Control Exceptions until 2026-11-13) lists them, and the detail page offers
 Acknowledge and Resolve. 🟨 Verified against mocked responses only: the live tenant isn't
 seeded with the grants (doc 01, Internal control).
 
@@ -699,10 +699,9 @@ write:          workflow_instance create/route (own) · task action (own)
                 control_exception create, edit, report (global)
 ```
 
-The auditor is the internal control unit: it raises control exceptions and reports them to
-management (the permanent secretary), from the Control Exceptions item that replaced
-Findings on 2026-10-29. 🟨 Verified against mocked responses only: the live tenant lacks the
-grants (doc 01, Internal control).
+The auditor is the internal control unit: it raises audit findings and reports them to
+management, from the Audit Findings item (Findings until 2026-10-29, then Control Exceptions
+until 2026-11-13). ✅ Walked through on live 2026-11-12.
 
 `document:view_confidential:global` lets them read `confidential`-tier documents (a
 permission since `edms-backend` `0dab81a`; it was a role list before). They cannot change
@@ -724,7 +723,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
 | 4 | Search for evidence | `/search` | ✅ index built on backend; page rebuilt 2026-09-30 *(confirmed by the product owner’s testing, 2026-10-09)* |
-| 5 | Raise a control exception, then report it to the permanent secretary | `/control-exceptions/new` (a page), then the exception's page | ✅ live 2026-11-12 (raise, edit, report as `tjoel+auditor`). Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
+| 5 | Raise an audit finding, then report it to management | `/control-exceptions/new` (a page), then the exception's page | ✅ live 2026-11-12 (raise, edit, report as `tjoel+auditor`). Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
 | 6 | Review compliance posture | `/auditor/compliance` | 🟥 re-export of `/management/compliance` |
 
 ### First week — what they would try to do
