@@ -320,6 +320,8 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
 **Acceptance criteria**
 - [x] Multiple files can be queued and filed independently
 - [x] A SHA-256 checksum is computed client-side and stored with the version
+- [x] Each upload gets its own storage key, so two files with the same name can't overwrite
+      each other's bytes: 2026-11-13, verified live (doc 01 §5, problem i)
 - [x] Cabinet and folder dropdowns are populated from the live API (`useCabinets`, `useCabinetFolders`)
 - [x] Folder options refresh when the cabinet changes
 - [x] Backend generates a unique reference (`DOC-YYYYMMDD-HHmmss`)
@@ -968,7 +970,8 @@ and search. The design is sound.
       disables uncleared tiers using the backend's rule. *(This item used to say the
       doc-detail edit form offered Top Secret from `SEED.policies`; no such form existed.)*
 - [x] A one-off grant to a document (an approved access request, View or Action) can be
-      revoked again: **Revoke** on `/admin/access-requests` (2026-11-11, verified live in Edge)
+      revoked again: **Revoke** on `/admin/access-requests` (2026-11-11, verified live in Edge); since 2026-11-13 the request then reads
+      **Revoked**, and the person can ask again (verified live)
 
 ---
 

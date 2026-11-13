@@ -343,6 +343,32 @@ Since 2026-11-13 the set-up token's 401s (`MFA_SETUP_TOKEN_INVALID`,
 `MFA_SETUP_SESSION_INVALID`) are skipped too: `/setup/start` goes through `apiClient` before
 there is any session to refresh.
 
+**Sessions ended by a security change (2026-11-13, `backend-dev-2026-11-12/04`, verified
+live as `staff_hr`).** Since backend PR #71 a session can end for two security reasons, and
+both now say so instead of a generic "session ended":
+
+| Cause | What the backend sends | What the user sees |
+|---|---|---|
+| An admin requires MFA for a signed-in user who hasn't set it up | every call: 403 `FORBIDDEN`, message "MFA setup is required…"; refresh: 403 `MFA_SETUP_REQUIRED` | **Two-step sign-in required** → sign in → the set-up step |
+| MFA was enrolled (or re-enrolled) after this session's tokens were issued | every call: 401 → refresh: 401 `SESSION_SECURITY_CHANGED` | **Signed out**: "Your two-step sign-in settings changed" |
+
+`sessionEndReasonFrom()` (`src/lib/sessionEnd.ts`) reads the reason from status and body. It
+matches the 403's message text because the middleware sends no code of its own (backend ask
+in the 11-12 spec); that match lives only there. Two places use it:
+- **`api-client.ts`**: a refresh failing with either code, or the 403 on any call, sets
+  `sessionExpired` with a `sessionEndReason`; `SessionExpiredModal` words itself from it. A
+  later plain "expired" (e.g. `AppShell`'s own `/auth/me` 403) can't overwrite a specific
+  reason.
+- **`proxy.ts`**: a navigation is checked server-side first, so it usually sees the refusal
+  before any client call does. It redirects to `/?signedOut=<reason>` (cookies deleted, as
+  before), and the sign-in page shows the same wording in a banner, then drops the parameter.
+
+Verified live 2026-11-13: navigating after the requirement → banner → sign-in → set-up step;
+staying on `/staff` → the next notifications poll (403) → the modal after ~60 s → "Sign in to
+set it up" → `/`; a second session open while the user enrolled elsewhere → "Signed out".
+Fixture restored (`mfaRequired: false`, MFA reset). Every user with MFA on was signed out
+once when PR #71 deployed (old tokens have no `mfaState`); that already happened.
+
 ### 🔴 DRIFT-01 — `POST /api/v1/auth/logout` does not exist
 
 `src/apis/server/auth.server.ts:19` calls `POST ${API_URL}/api/v1/auth/logout`.
@@ -881,7 +907,8 @@ being grouped under "Workflow" — cosmetic, not incorrect.
    └─ useMultipartUploader().startUpload({file, fileName, folderName:'edmsDocuments'})
         └─ Uploader  (src/apis/services/uploader.ts) — chunked multipart, 5 MB/part
              ├─ POST {gatewayBaseURL}/initialize      { name, contentType, folderName }
-             │    → { fileId, fileKey }
+             │    name = uniqueStorageName(fileName): "scan.pdf" → "scan-3f2a9c1b7d4e.pdf" (2026-11-13)
+             │    → { fileId, fileKey }                fileKey = "edmsdocuments/<name>"
              ├─ POST {gatewayBaseURL}/presigned-url   { uploadId, filePath, parts }
              │    → one presigned PUT url per part
              ├─ N × PUT <part bytes> → part.signedUrl   (5 concurrent, retry ≤6× w/
@@ -1023,6 +1050,7 @@ revision checked this against:
 | f | ~~**Most non-image/PDF types silently rejected**~~ — **now the intended policy**: PDF and images only (PM, 2026-10-21), stated up front in the dropzone text | Same behavior, new gatekeeper: `validateUpload()` in `useMultipartUploader.ts` only allows 6 image MIME types and `application/pdf`; anything else — Word, Excel, plain text — throws `"Unsupported file type"` before any network call. The dead `uploadFile()`'s equivalent check is no longer where this actually happens; the rejection itself hasn't gone anywhere. |
 | g | **Stale index on edit** | Unchanged — `updateDocument` (title), `updateDocumentMetadata`, and `restoreVersion` never re-enqueue indexing. `search_vector` drifts from the row. Entirely backend-side, independent of the uploader. |
 | h | ~~**New — the dropzone advertises capabilities the validator doesn't have**~~ — **resolved 2026-10-02**: one list (`src/constants/uploadTypes.ts`) feeds the validator, every `accept` and the dropzone text | `upload/page.tsx`'s dropzone text reads *"PDF, DOCX, XLSX, TIFF, JPG up to 100 MB."* `validateUpload()` accepts none of DOCX/XLSX/TIFF (not in either allowlist — TIFF isn't even in the image one) and caps out at 50 MB for PDF / 10 MB for images, both well under the advertised 100 MB. A user follows the on-screen instructions, picks a 60 MB PDF or any `.docx`, and gets rejected with no indication beforehand that the dropzone's own text was wrong. |
+| i | ~~**Files with the same name shared one storage object**~~ — **resolved 2026-11-13** (`upload-storage-keys/01`, verified live) | The gateway stores an upload at `edmsdocuments/<name>` and adds nothing unique, and every caller sent the file's own name. A second `scan.pdf` replaced the first document's file in S3 (overwrite by key) while that document kept its old checksum. On 2026-11-11, 26 live documents used 19 keys; the shared ones were re-uploads of the same bytes, so no file had been lost yet. Now `Uploader` sends `uniqueStorageName()`: the sanitised name plus `-` and 12 random hex digits before the extension. That covers all five callers (upload, new version, workflow picker, signatures, circular attachments). The id goes after the name because the backend names downloads after the key's last segment (`storage.ts`, `fileKey.split('/').pop()`), so a download arrives as `scan-3f2a9c1b7d4e.pdf`. Verified live: two different files both named `same-name.pdf` got two keys, and each document's original download matched its own file. Still worth asking the backend: is bucket versioning on, and should the gateway or backend own key uniqueness? |
 
 ### Viewing a file (2026-10-08)
 
@@ -1234,7 +1262,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents/:id/export`, `GET /documents/:id/print` | ✅ new in `0dab81a` — `document:export` / `document:print` plus clearance; audited as `document.exported` / `document.printed`; return the document like `GET /documents/:id` | ✅ `/print` — wired 2026-10-08 (`usePrintDocument`): the PDF viewer's Print calls it first and only prints if it succeeds; verified in a browser against the live API · ✅ `/export` — wired 2026-10-08 (`useExportDocument`), `/doc/[id]`'s Export button; **clicked through 2026-10-09**: the call returned 200 and the new tab went to the signed S3 URL |
 | `GET/POST /documents/:id/comments`, `/signatures` | ✅ both exist, real endpoints | 🟥 **deliberately unused (reverted 2026-09-18, same day)** — briefly wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel` earlier the same day, then removed: product decision to keep every comment/signature scoped to the workflow trail (`POST /tasks/:id/action`'s `comment`/`approve`'s `signature`) rather than split across a second, task-independent thread. See DRIFT-08's note below and BE-16/BE-17 in `BACKEND_REQUESTS.md` |
 | `GET/POST /documents/:id/access-requests`, `/grant`, `/deny`, admin inbox `GET /documents/access-requests` | ✅ — since `3014b89` (PR #47, live by 2026-10-12) the POST body **requires** `permission: 'view' \| 'route'`, and a grant is per permission (unique on document + user + permission). A `route` grant lets the user act on the document in a workflow despite its tier; it never allows download/export/print | ✅ **DRIFT-20 fixed 2026-10-12, verified live.** Wired 2026-09-18; from `3014b89` until the fix the frontend posted only `{ reason }` and every request was refused (422 `VALIDATION_ERROR`). `/doc/[id]` asks for View access (`permission: 'view'`); the workflow page's Restricted document card offers "Open the document" and "Act on this document" tick boxes (both pre-ticked for the task's holder) and sends one request per kind, one toast each, a 409 reading "Already pending". `/admin/access-requests` shows the kind (Open / Act) and a kind-specific grant confirmation |
-| — | `DELETE /documents/:id/access-grants/:userId?permission=view\|route` (query required since `3014b89`) | ✅ **Wired 2026-11-11 (ticket 11, verified live in Edge):** **Revoke** on approved rows of `/admin/access-requests` (`document_access_request:revoke`, held by `client_admin`), with a confirm. Gate: `requirePermission('document_access_request', 'revoke')` only, no confidentiality or cabinet check. Deletes the grant; the request stays `approved` (no grant list exists), and a second revoke is 404 "Access grant not found", shown as "already revoked". Checked: `staff_finance` 200 after grant, 403 after revoke |
+| — | `DELETE /documents/:id/access-grants/:userId?permission=view\|route` (query required since `3014b89`) | ✅ **Wired 2026-11-11 (ticket 11, verified live in Edge):** **Revoke** on approved rows of `/admin/access-requests` (`document_access_request:revoke`, held by `client_admin`), with a confirm. Gate: `requirePermission('document_access_request', 'revoke')` only, no confidentiality or cabinet check. Deletes the grant. **Since backend `142be0b` (PR #71, live 2026-11-12)** it also sets the matching approved requests to `revoked` in the same transaction, so request `status` is `pending \| approved \| denied \| revoked` and both request lists accept `status=revoked`; grants revoked before that deploy keep `approved` (no backfill), and revoking one is 404 "Access grant not found", shown as "already revoked". **Frontend 2026-11-13 (`backend-dev-2026-11-12/05`, verified live):** a revoked row reads Revoked (grey badge, "Approved · <time>", no button) and the status filter offers Revoked. Checked: `staff_finance` 200 after grant, 403 after revoke, then a new request from `/doc/[id]` (201): only a pending request blocks another |
 | `DELETE /documents/:id` (archive) | ✅ | ✅ wired — "Archive document" in `/doc/[id]`'s overflow menu (`useArchiveDocument`) |
 | `POST /documents/:id/versions/:versionId/restore` | ✅ | ✅ wired — "Restore" in `DocumentVersionsPanel` (`useRestoreDocumentVersion`). Both rows were stale here — caught in passing 2026-09-18, not otherwise part of that day's work |
 
@@ -1715,7 +1743,7 @@ Admin-managed MFA. Checked live 2026-11-13.
 | `mfaRequired` on the user and on the settings | `GET /auth/me`, `GET /auth/mfa/settings` | ✅ `/account/security` shows "Required by your administrator" since 2026-11-13 |
 | `mfaRequired`, `mfaEnabled`, `mfaMethod`, `phoneNumber` on every user | `GET /users`, `GET /users/:id` | ✅ `/admin/users` Two-step column since 2026-11-13; `phoneNumber` unused |
 | Self-service set-up, turn-off and method switch are gone (404) | `/auth/mfa/setup`, `/enable`, `/disable`, `/email/*`, `/method-change/*` | ✅ Nothing calls them since 2026-11-13 |
-| Tokens carry `mfaState`; a changed `mfaEnabledAt` ends every session, and `mfaRequired && !mfaEnabled` makes every call 403 | every authenticated call, `POST /auth/refresh` | ⛔ Not handled: the user sees a generic "session expired", or pages that fail with 403 (`backend-dev-2026-11-12/04`) |
+| Tokens carry `mfaState`; a changed `mfaEnabledAt` ends every session, and `mfaRequired && !mfaEnabled` makes every call 403 | every authenticated call, `POST /auth/refresh` | ✅ Since 2026-11-13 (`backend-dev-2026-11-12/04`, verified live): "Two-step sign-in required" or "Signed out", as a modal in the app or a banner on `/` after a navigation (§3). Before, a generic "session expired", or pages failing with 403 |
 
 ---
 
