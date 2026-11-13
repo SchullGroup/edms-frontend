@@ -215,3 +215,15 @@ export function auditActionLabel(action: string): string {
   const text = words.join(' ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/** Access and privilege changes shown as "sensitive activity" on the audit and compliance dashboards. */
+export const SENSITIVE_AUDIT_ACTIONS: readonly string[] = [
+  'document.access_requested',
+  'document.access_granted',
+  'document.access_denied',
+  'role.permissions_updated',
+  'role.created',
+  'role.deleted',
+  'user.deactivated',
+  'user.password_reset',
+];

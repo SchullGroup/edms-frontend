@@ -719,7 +719,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in, land on Audit Dashboard | `/auditor` | 🟥 `SEED.findings`, `SEED.audit` |
+| 1 | Log in, land on the Audit dashboard | `/auditor` | 🟨 real data since 2026-11-13 (findings to report, sensitive activity, sampling shortcuts); not yet verified live |
 | 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
 | 4 | Search for evidence | `/search` | ✅ index built on backend; page rebuilt 2026-09-30 *(confirmed by the product owner’s testing, 2026-10-09)* |

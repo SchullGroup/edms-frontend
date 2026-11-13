@@ -172,10 +172,10 @@ Every classification below was verified by inspecting what each page destructure
 | Supervisor Console | 7 | 5 | 1 | 1 | — | Approvals, ageing and the Workflow Monitor real; exceptions/performance fixture. |
 | Management Portal | 7 | 5 | 1 | — | 1 | The only fully API-driven pages — and the ones that don't scale. `/management/findings` redirects to control exceptions. |
 | Client Administration | 15 | 10 | 2 | 1 | 2 | Structure real; branding mock, policies Hybrid (SLA tab real). `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
-| Audit & Compliance | 4 | 1 | 1 | 1 | 1 | Trail real; dashboard fixture; `/auditor/findings` redirects to control exceptions. |
+| Audit & Compliance | 4 | 1 | 2 | — | 1 | Trail real; dashboard and compliance overview on real data since 2026-11-13 (🟨 until verified live); `/auditor/findings` redirects to audit findings. |
 | Platform Admin | 6 | — | — | 6 | — | Mock by design (Phase 2). |
 | Shared | 25 | 17 | 4 | — | 4 | Login (with two-step sign-in), account security, upload, search, circulars, notifications, the workflow page and the 5 control-exceptions pages live; delegations and the password pages 🟨 not re-verified; `/doc/[id]` Hybrid. |
-| **Total** | **69** | **43** | **9** | **9** | **8** | |
+| **Total** | **69** | **43** | **10** | **8** | **8** | |
 
 *(Re-tallied 2026-10-08 from each page's row in this doc: all 57 `page.tsx` files. Later the
 same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → 🟨, and `/help`
@@ -188,7 +188,9 @@ same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → �
 2026-11-11: the IP and country rules pages `/admin/access-rules` and `/new` added ✅, making 69;
 `/notifications` 🟨 → ✅ after a live click-through (ticket 16).
 2026-11-12: the five control-exceptions pages 🟨 → ✅ after a live walkthrough as auditor,
-management, client admin and staff (live re-seeded 2026-11-11), making 43 ✅ and 9 🟨.)*
+management, client admin and staff (live re-seeded 2026-11-11), making 43 ✅ and 9 🟨.
+2026-11-13: `/auditor` 🟥 → 🟨, rebuilt on audit findings and the audit trail, not yet verified
+live, making 10 🟨 and 8 🟥.)*
 
 *Confirmed by the product owner's own testing, 2026-10-08:* the admin setup checklist, the SLA
 settings, sub-folders, batch upload ("File all") and multi-document workflows. Page markers
@@ -216,8 +218,8 @@ after the user tested cabinet management end to end.)*
 ### By data source
 
 ```
-Renders live API data      ███████████████████████████████░░░░░░░░░  54 pages (78%)
-Renders fixture data       ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  10 pages (14%)
+Renders live API data      ████████████████████████████████░░░░░░░░  55 pages (80%)
+Renders fixture data       █████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   9 pages (13%)
 Both, on the same page     █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   1 page (1%)
 Neither (redirect/static)  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   6 pages (9%)
 ```
@@ -243,12 +245,12 @@ folder permissions page is API-only, so 47 + 9 + 3 + 6 = 65. 2026-11-10: the mas
 page is API-only, so 48 + 9 + 3 + 6 = 66; `/account/security` too, so 49 + 9 + 3 + 6 = 67. 2026-11-11: both IP and country
 rules pages are API-only, so 51 + 9 + 3 + 6 = 69. 2026-11-13: `/management/compliance` and
 `/auditor/compliance` dropped `SEED.findings`, so 53 + 9 + 1 + 6 = 69 (`/admin/policies` is the
-one page left on both).*
+one page left on both). Then `/auditor` dropped `SEED`, so 54 + 8 + 1 + 6 = 69.*
 
-The split is clean: most pages are decisively one thing or the other. The **9 mock pages
-cluster in three places** — Platform (6/6, by design), the auditor's dashboard, and two
-Client Admin/Supervisor screens (`/admin/branding`, `/supervisor/exceptions`). *(The
-auditor's findings and management's re-export of it were the other two until 2026-10-29.)* *(Was "20 mock pages … Auditor (4/4),
+The split is clean: most pages are decisively one thing or the other. The **8 mock pages
+cluster in two places** — Platform (6/6, by design) and two Client Admin/Supervisor screens
+(`/admin/branding`, `/supervisor/exceptions`). *(The auditor's dashboard was a third until
+2026-11-13; the auditor's findings and management's re-export of it were two more until 2026-10-29.)* *(Was "20 mock pages … Auditor (4/4),
 Platform (6/6), and the governance half of Client Admin (4/8)".)*
 
 ### The ~~four~~ three mock service modules
@@ -859,8 +861,9 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 
 **Landing:** `/auditor` · **Sidebar:** Review / Findings / Posture
 **Overall: 🟨 `/auditor/trail` now reads the real audit backend (migrated 2026-09-18).**
-**`/auditor` (the dashboard) is still fixture-only. Since 2026-10-29 the Findings item opens**
-**the control-exceptions register (✅, live since 2026-11-12); `/auditor/findings` redirects there.**
+**`/auditor` (the dashboard) reads real data since 2026-11-13 (🟨 until verified live). Since**
+**2026-10-29 the Findings item opens the audit findings register (✅, live since 2026-11-12);**
+**`/auditor/findings` redirects there.**
 
 > ⚠️ **Correction (2026-09-18).** This section previously stated the audit backend was
 > entirely unbuilt (`GET /audit` "no endpoint", `audit.middleware.ts` "0 bytes", table
@@ -878,7 +881,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
-| `/auditor` | 132 | `findings`, `audit`, `users` | **none** | 🟥 Mock · Quick access card (pinned / recent / saved searches, browser-only) added 2026-10-08 |
+| `/auditor` | 269 | — | `useControlExceptionReport`, `useControlExceptions` (open, latest 8), `useAuditActionTotal` (8 × `GET /audit?action=…&limit=1`, last 7 days), `useAuditEntries` ✅ | 🟨 API-only, not yet verified live — **rebuilt 2026-11-13** (was 🟥 on `SEED.findings`/`SEED.audit`). Tiles: not yet reported, with management, resolved, sensitive events in 7 days; open findings table; recent sensitive activity (shared `SENSITIVE_AUDIT_ACTIONS`); sampling shortcuts (Restricted, Top Secret, Closed, created in the last 30 days). Removed: the due-soon banner (findings have no due date), "Control test coverage" (hard-coded), the `?status=Overdue` shortcut (not a search filter) and the untrue "read-only" footer. Quick access card kept |
 | `/auditor/trail` | 294 | `auditAction` (finding-raise only) | `useAuditEntries`, `useExportAuditCsv` ✅ · `UserSearchCombobox` (`GET /users?search=`) 🟨 | ✅ Live — migrated 2026-09-18. **2026-10-08 (confirmed by the product owner's testing 2026-10-09):** same record-type/action dropdowns as `/admin/audit` (`AuditTypeActionFilters`), fixing the same free-text 400. **2026-10-13:** the actor filter is the same searchable `UserPicker`; since 2026-10-16 the same `UserSearchCombobox` as `/admin/audit`. Not verified as the auditor: `internal_auditor` gets 403 on `GET /users` (seed gap), so the picker shows "Couldn't load people." until the backend grants `user:view`. **2026-10-20 (verified live as `auditor`):** the Actor column reads each entry's `actor` (edms-backend PR #53). It used to look actors up in `GET /users`, the same 403, so the auditor saw UUIDs. **2026-11-11 (ticket 15, verified live in Edge):** the action filter and the Action column read as words (`auditActionLabel`: "Document version viewed"; raw key on hover), and the vocabulary is re-copied from the backend: +17 actions (MFA incl. method switching and email codes, `document.version_viewed`, `workflow.version_created`, `control_exception.*`, `access_rule.*`) and two record types (IP & country rules, Control exceptions). Filtering on `document.version_viewed` lists the live entry |
 | `/auditor/findings` | 16 | — | — | ↪️ Redirect to `/control-exceptions` since 2026-10-29. It was a 367-line 🟥 mock on `SEED.findings` |
 | `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟨 API-only, not yet verified live — the Compliance overview (2026-11-13), see `/management/compliance` |
@@ -950,9 +953,9 @@ claims above were re-checked against live API behavior 2026-09-18, not by re-rea
 | Verify chain integrity | ⛔ on this page — `GET /audit/verify` exists and works, but only `/admin/audit`'s "Verify integrity" button calls it |
 | Sample documents | ✅ shared `/staff/cabinets` |
 | Search for evidence | ✅ `/search` confirmed 2026-10-09; indexed at create since PR #51. *(Was "⛔ index never built" — stale until 2026-10-15.)* |
-| Raise a finding | 🟥 localStorage |
-| Assign an owner and due date | 🟥 localStorage |
-| Track a finding to closure | 🟥 localStorage |
+| Raise a finding | ✅ audit findings, `/control-exceptions/new` (live 2026-11-12). ⚠️ The audit trail's per-row "Raise finding" button still only writes the local pseudo-log and saves nothing |
+| Assign an owner and due date | ⛔ not built: audit findings have no owner or due date (story H2) |
+| Track a finding to closure | ✅ open → reported → acknowledged → resolved (live 2026-11-12) |
 | Review the compliance overview | 🟨 re-export of `/management/compliance`, all real since 2026-11-13; not yet verified live |
 | See who can access a cabinet | ⛔ on auditor screens — the endpoint exists and the admin Access card uses it |
 | Export evidence for a regulator | ✅ confirmed live 2026-09-18 — `internal_auditor` holds `audit:export:global` and a real export succeeds. *(`client_admin` holds it too in today's seed — the "unlike `client_admin`" note was stale, re-checked 2026-10-15.)* |
@@ -1308,9 +1311,10 @@ resolved in SQL, confidentiality filtered in the query rather than after it.
 
 **Most of the governance half is real now too** *(re-written 2026-10-15)*. The audit trail,
 notifications, circulars and the SLA settings all run on the backend. What is still a UI
-over fixture data is **12 of the 69 pages** (9 entirely, 3 in part — "By data source"
-above): Platform (6/6, by design), the auditor's dashboard, branding,
-`/supervisor/exceptions`, and the retention/confidentiality tabs of `/admin/policies`. The
+over fixture data is **9 of the 69 pages** (8 entirely, 1 in part — "By data source"
+above): Platform (6/6, by design), branding, `/supervisor/exceptions`, and the
+retention/confidentiality tabs of `/admin/policies` *(2026-11-13: the auditor's dashboard and
+both compliance pages left the list)*. The
 fixture findings tracker gave way to control exceptions on 2026-10-29.
 
 **DRIFT-14 is a provisioning gap, not an outage** *(re-tested 2026-10-16)*. On the live

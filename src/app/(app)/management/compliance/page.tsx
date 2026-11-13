@@ -18,21 +18,9 @@ import {
   STATUS_LABEL,
   SeverityBadge,
 } from '@/components/controlExceptions/controlExceptionLabels';
-import { auditActionLabel } from '@/constants/auditVocabulary';
+import { SENSITIVE_AUDIT_ACTIONS, auditActionLabel } from '@/constants/auditVocabulary';
 import { fmtDate } from '@/utils/helpers';
 import type { ControlException, ControlExceptionStatus } from '@/types/models';
-
-/** Access-control and privilege changes, as named in the real `GET /audit` trail. */
-const SENSITIVE_ACTIONS = [
-  'document.access_requested',
-  'document.access_granted',
-  'document.access_denied',
-  'role.permissions_updated',
-  'role.created',
-  'role.deleted',
-  'user.deactivated',
-  'user.password_reset',
-];
 
 const STATUS_COLOR: Record<ControlExceptionStatus, string> = {
   open: 'var(--status-pending)',
@@ -81,7 +69,7 @@ export default function ComplianceOverviewPage() {
 
   // `GET /audit` is newest first, so the first matches are the most recent.
   const sensitive = (audit.data?.data ?? [])
-    .filter((a) => SENSITIVE_ACTIONS.includes(a.action))
+    .filter((a) => SENSITIVE_AUDIT_ACTIONS.includes(a.action))
     .slice(0, 8);
 
   const cols: Column<ControlException>[] = [
