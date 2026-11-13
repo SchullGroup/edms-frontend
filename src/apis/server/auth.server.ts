@@ -36,6 +36,23 @@ export const authServer = {
     return data;
   },
 
+  /** `POST /auth/mfa/setup/confirm` (public): set-up token plus a code, for real tokens. */
+  confirmMfaSetupWithBackend: async (body: any): Promise<any> => {
+    const response = await fetch(`${API_URL}/api/v1/auth/mfa/setup/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw { status: response.status || 400, data };
+    }
+
+    return data;
+  },
+
   logoutWithBackend: async (authHeader: string): Promise<void> => {
     try {
       await fetch(`${API_URL}/api/v1/auth/logout`, {

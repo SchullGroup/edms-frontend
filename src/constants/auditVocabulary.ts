@@ -17,12 +17,16 @@ export const AUDIT_ACTIONS = [
   'user.mfa_reset',
   'user.mfa_otp_requested',
   'user.mfa_otp_request_failed',
+  'user.phone_verification_requested',
+  'user.phone_verified',
 
   // MFA method switching
   'user.mfa_method_change_started',
   'user.mfa_method_change_completed',
   'user.mfa_method_change_cancelled',
   'user.mfa_method_change_failed',
+  'user.mfa_required',
+  'user.mfa_requirement_removed',
 
   // Identity & configuration
   'user.created',
