@@ -40,7 +40,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 export default function UsersPage() {
-  const { auditAction, currentUser } = useStore();
+  const { currentUser } = useStore();
   const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
   const { can } = usePermissions();
   const canCreateUser = can('user', 'create');
@@ -215,9 +215,7 @@ export default function UsersPage() {
                   managerId: u.managerId || undefined,
                   roleIds: u.roleIds.length ? u.roleIds : undefined,
                 })
-                .then((newUser: any) => {
-                  auditAction('USER_INVITE', newUser.id, 'Invited ' + u.email);
-                })
+                .then(() => {})
                 .catch(() => false);
             }
             // Returning the combined promise keeps the modal open (with a
@@ -238,9 +236,7 @@ export default function UsersPage() {
                       : {}),
                   } as any,
                 })
-                .then(() => {
-                  auditAction('USER_EDIT', u.id, 'Updated profile');
-                }),
+                .then(() => {}),
             ];
             // Role changes: `POST /users/:id/roles` adds, `DELETE .../roles/:roleId`
             // removes one. Additions go first and removals after, one at a time,
@@ -260,18 +256,7 @@ export default function UsersPage() {
                       Promise.resolve(),
                     ),
                   )
-                  .then(() => {
-                    auditAction(
-                      'USER_ROLE_CHANGE',
-                      u.id,
-                      [
-                        added.length ? `added ${added.join(', ')}` : '',
-                        removed.length ? `removed ${removed.join(', ')}` : '',
-                      ]
-                        .filter(Boolean)
-                        .join('; '),
-                    );
-                  }),
+                  .then(() => {}),
               );
             }
             return Promise.all(tasks)
@@ -294,21 +279,16 @@ export default function UsersPage() {
         onConfirm: () =>
           updateUser
             .mutateAsync({ id: u.id, updates: { status: 'suspended' } })
-            .then(() => {
-              auditAction('USER_SUSPEND', u.id, 'Suspended');
-            })
+            .then(() => {})
             .catch(() => false),
       });
     } else {
       updateUser.mutate({ id: u.id, updates: { status: 'active' } });
-      auditAction('USER_ACTIVATE', u.id, 'Re-activated');
     }
   };
 
   const handleResendInvitation = (u: any) => {
-    resendInvitation.mutate(u.id, {
-      onSuccess: () => auditAction('USER_INVITE_RESEND', u.id, `Resent invitation to ${u.email}`),
-    });
+    resendInvitation.mutate(u.id);
   };
 
   // `GET /users` doesn't say who has it on, so this is offered for every signed-up user.

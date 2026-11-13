@@ -154,7 +154,7 @@ tenant-wide, and can also act on their own tasks, route their own documents and 
 
 1. ~~**Every arrow into the auditor is broken.**~~ H7 works now: audit entries are written
    automatically and `/auditor/trail` reads them (DRIFT-11). The auditor's *dashboard* is
-   still fixture data; *findings* gave way to control exceptions on 2026-10-29 (🟨, not live).
+   still fixture data; *findings* gave way to control exceptions on 2026-10-29 (✅ live 2026-11-12).
 2. **`client_admin` is still close to a single point of failure.** Five of the seven
    handoffs originate with them. Since 2026-10-06 a cabinet can be *delegated*: a user
    granted `delete` on it manages its folders, metadata schema and access grants from
@@ -569,7 +569,7 @@ being the approval bottleneck, this is the most consequential missing screen in 
 
 > **Persona:** Eniola · executive, divisional or C-suite
 > **Landing page:** `/management` · **Sidebar:** Management Portal
-> **Overall status:** ✅ **Server-aggregated since 2026-09-21** (DRIFT-07) — findings and the compliance chart are still `SEED` *(was 🟨 "Works today, will not scale")*
+> **Overall status:** ✅ **Server-aggregated since 2026-09-21** (DRIFT-07) — no `SEED` left: the compliance overview reads audit findings since 2026-11-13 *(was 🟨 "Works today, will not scale")*
 
 ### Identity and rights
 
@@ -588,9 +588,9 @@ write:          workflow_instance create/route (own) · task action (own)
                 control_exception respond (global): acknowledge, resolve
 ```
 
-Management is the permanent secretary the internal control unit reports to: reported
-control exceptions notify every active management user. Since 2026-10-29 the sidebar's
-Control Exceptions item (formerly Findings) lists them, and the detail page offers
+Management is who the internal control unit reports to: reported audit findings
+(`control-exceptions` in the API) notify every active management user. The sidebar's
+Audit Findings item (Findings until 2026-10-29, then Control Exceptions until 2026-11-13) lists them, and the detail page offers
 Acknowledge and Resolve. 🟨 Verified against mocked responses only: the live tenant isn't
 seeded with the grants (doc 01, Internal control).
 
@@ -610,9 +610,9 @@ assigned to it, route its own documents, delegate, and publish circulars. The se
 | 1 | Log in, land on Organization Overview | `/management` | ✅ server-aggregated (DRIFT-07) |
 | 2 | Compare departments | `/management/departments` | ✅ same |
 | 3 | Review trends | `/management/trends` | ✅ same |
-| 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED`; the sensitive-activity panel needs `audit:view`, which `management` doesn't hold, so it says so (2026-10-13) |
+| 4 | Check the compliance overview | `/management/compliance` | ✅ API-only since 2026-11-13 (confirmed by the product owner's testing, 2026-11-13): audit findings by status, latest findings, and recent sensitive activity (that panel needs `audit:view`, which `management` doesn't hold, so it says so). The sidebar item now shows with `control_exception:view` too |
 | 5 | Review performance | `/management/performance` | ✅ `useTaskStats`, server-aggregated (85 lines) |
-| 6 | Review control exceptions reported to them; acknowledge and resolve | `/control-exceptions` (`/management/findings` redirects) | 🟨 built 2026-10-29; mocked responses only, live not seeded. Was 🟥, a re-export of the fixture `/auditor/findings` |
+| 6 | Review control exceptions reported to them; acknowledge and resolve | `/control-exceptions` (`/management/findings` redirects) | ✅ live 2026-11-12 (acknowledge and resolve as `management_ops`). Was 🟥, a re-export of the fixture `/auditor/findings` |
 | 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
 
 ### First week
@@ -699,10 +699,9 @@ write:          workflow_instance create/route (own) · task action (own)
                 control_exception create, edit, report (global)
 ```
 
-The auditor is the internal control unit: it raises control exceptions and reports them to
-management (the permanent secretary), from the Control Exceptions item that replaced
-Findings on 2026-10-29. 🟨 Verified against mocked responses only: the live tenant lacks the
-grants (doc 01, Internal control).
+The auditor is the internal control unit: it raises audit findings and reports them to
+management, from the Audit Findings item (Findings until 2026-10-29, then Control Exceptions
+until 2026-11-13). ✅ Walked through on live 2026-11-12.
 
 `document:view_confidential:global` lets them read `confidential`-tier documents (a
 permission since `edms-backend` `0dab81a`; it was a role list before). They cannot change
@@ -720,12 +719,12 @@ One of these grants now has a real screen behind it, and one still doesn't:
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in, land on Audit Dashboard | `/auditor` | 🟥 `SEED.findings`, `SEED.audit` |
+| 1 | Log in, land on the Audit dashboard | `/auditor` | ✅ real data since 2026-11-13 (findings to report, sensitive activity, sampling shortcuts); confirmed by the product owner's testing, 2026-11-13 |
 | 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
 | 4 | Search for evidence | `/search` | ✅ index built on backend; page rebuilt 2026-09-30 *(confirmed by the product owner’s testing, 2026-10-09)* |
-| 5 | Raise a control exception, then report it to the permanent secretary | `/control-exceptions/new` (a page), then the exception's page | 🟨 built 2026-10-29; mocked responses only, live not seeded. Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
-| 6 | Review compliance posture | `/auditor/compliance` | 🟥 re-export of `/management/compliance` |
+| 5 | Raise an audit finding, then report it to management | `/control-exceptions/new` (a page), then the exception's page | ✅ live 2026-11-12 (raise, edit, report as `tjoel+auditor`). Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
+| 6 | Review the compliance overview | `/auditor/compliance` | ✅ re-export of `/management/compliance`, all API since 2026-11-13; confirmed by the product owner's testing, 2026-11-13 |
 
 ### First week — what they would try to do
 
@@ -775,7 +774,7 @@ this role's own screens reading it — a frontend migration, not a backend build
    backend exists).
 2. 🔴 **No `Finding` model** — 367 lines of UI over localStorage
 3. ✅ ~~No `/audit` endpoint despite the permission being granted~~ — **exists now**
-4. 🟥 **`/auditor/compliance` re-exports the management page** — partly `SEED`-backed
+4. ✅ ~~**`/auditor/compliance` re-exports the management page** — partly `SEED`~~ — all API since 2026-11-13 and confirmed working; it still shares management's view
 5. ~~⛔ **Search is empty**~~ — search works (confirmed 2026-10-09; indexed at create since PR #51)
 6. ~~⛔ **No SoD enforcement** despite it being claimed in the older docs~~ — SoD and
    redaction dropped from scope (PM, 2026-10-21)
@@ -1014,7 +1013,7 @@ acted yet.
 | Approval decisions | `supervisor` | Documents never close; management sees permanent backlog |
 | Task activity | `staff` + `supervisor` | Management dashboards are empty |
 | Audit entries | ✅ backend, auto-written | Real, and `/auditor/trail` reads them (H7) |
-| Control exceptions *(were Findings)* | `internal_auditor` (🟨, not live) | Management has nothing to acknowledge or resolve. Both roles share `/control-exceptions`; the old Findings pages redirect there (2026-10-29) |
+| Control exceptions *(were Findings)* | `internal_auditor` (✅ live 2026-11-12) | Management has nothing to acknowledge or resolve. Both roles share `/control-exceptions`; the old Findings pages redirect there (2026-10-29) |
 
 **Read the table bottom-up and the shape of the product becomes clear:** the operational
 layer (staff → supervisor → management) is wired (DRIFT-14 only affects a freshly seeded tenant — re-tested 2026-10-16). The governance layer

@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Table, Column } from '@/components/ui/Table';
@@ -44,7 +43,6 @@ export function useCanManageSchema(cabinet: Cabinet | null | undefined) {
  * permission and `edit` on this cabinet — the two checks the API makes.
  */
 export function CabinetSchemaCard({ cabinet }: { cabinet: Cabinet }) {
-  const { auditAction } = useStore();
   const { can } = usePermissions();
   const { openModal } = useUIStore();
 
@@ -94,9 +92,7 @@ export function CabinetSchemaCard({ cabinet }: { cabinet: Cabinet }) {
                 fieldId: r.id,
                 updates: { name: fn.trim(), isRequired: rq },
               })
-              .then(() => {
-                auditAction('SCHEMA_EDIT', cabinet.id, `Edited field ${fn}`);
-              })
+              .then(() => {})
               .catch(() => false);
           },
         },
@@ -157,9 +153,7 @@ export function CabinetSchemaCard({ cabinet }: { cabinet: Cabinet }) {
                   displayOrder: schema.length,
                 },
               })
-              .then(() => {
-                auditAction('SCHEMA_EDIT', cabinet.id, 'Added field ' + fn);
-              })
+              .then(() => {})
               .catch(() => false);
           },
         },
@@ -196,14 +190,7 @@ export function CabinetSchemaCard({ cabinet }: { cabinet: Cabinet }) {
             <button
               className="btn btn-ghost btn-sm"
               onClick={() => {
-                deleteMetadataField.mutate(
-                  { cabinetId: cabinet.id, fieldId: r.id },
-                  {
-                    onSuccess: () => {
-                      auditAction('SCHEMA_EDIT', cabinet.id, 'Removed field ' + r.name);
-                    },
-                  },
-                );
+                deleteMetadataField.mutate({ cabinetId: cabinet.id, fieldId: r.id });
               }}
             >
               Remove

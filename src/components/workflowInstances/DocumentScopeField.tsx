@@ -14,7 +14,7 @@ export interface ScopeDocument {
  * person. `chosen` is mutated in place, like the other uncontrolled modal
  * bodies here.
  *
- * `documents` are the ones the caller has Action access to. `heldBack` counts
+ * `documents` are the ones the caller can open and act on. `heldBack` counts
  * the task's other documents: they can't be picked, and stay waiting the same
  * way. With one document and none held back there's nothing to choose or say,
  * so it renders nothing.
@@ -63,7 +63,7 @@ export function HeldBackNote({ count }: { count: number }) {
   return (
     <div className="banner warning mt-2">
       {count === 1 ? '1 document' : `${count} documents`} in this task{' '}
-      {count === 1 ? 'needs' : 'need'} Action access before you can act on{' '}
+      {count === 1 ? 'needs' : 'need'} more access before you can act on{' '}
       {count === 1 ? 'it' : 'them'}. {count === 1 ? 'It stays' : 'They stay'} at this stage, in a
       new task for you.
     </div>

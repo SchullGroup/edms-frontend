@@ -1335,31 +1335,32 @@ supervisors and management lack, so their audience editor offers department grou
 named people but not role groups. Circular notifications carry `actionUrl: /circulars/:id`
 (published, reminder) or `/circulars` (withdrawn) — both are real routes here.
 
-### Internal control *(backend on `dev` 2026-10-29; UI built the same day, not live)*
+### Internal control *(backend on `dev` 2026-10-29; UI built the same day; live since 2026-11-12)*
 
 `edms-backend` `51e9d85` adds `control_exceptions` (migration
 `20261029090000_add_control_exceptions`). An exception is open → reported → acknowledged →
 resolved. The `internal_auditor` raises, edits (while open) and reports it; reporting notifies
 every active `management` user (`control_exception.reported`); `management` acknowledges and
 resolves it, with a required note. `client_admin` can read. Each action is audited as
-`control_exception.*`. **Not usable on live yet:** on 2026-10-29 the live `auditor` login
-held no `control_exception:*` permission (so `seed:system` hasn't run there), and the list
-route timed out twice. Live deployment is unverified.
+`control_exception.*`. ~~**Not usable on live yet:** on 2026-10-29 the live `auditor` login
+held no `control_exception:*` permission.~~ Live was re-seeded 2026-11-11 and the whole
+lifecycle was walked through on live 2026-11-12 (`POST …/report` takes ~4 s there).
 
 **Frontend (2026-10-29):** `controlExceptions.service.ts` / `useControlExceptions.ts` and five
 shared pages under `/control-exceptions` (doc 05, Shared pages); the auditor's and
-management's Findings menu items open them. 🟨 everywhere below: verified only against a
-local mock of these routes (with the grants added to `/auth/me`), never against live.
+management's Findings menu items open them, and client admin's Governance section since
+2026-11-12. ✅ everywhere below: first built against a local mock, then verified on live
+2026-11-12 as auditor, management, client admin and staff.
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `getAll` | `GET /control-exceptions` (`view`; `status`, `category`, `severity`, `departmentId`, `from`/`to`, `page`/`limit` ≤ 100) | 🟨 the register. `to` is compared with `lte` on a timestamp, so the page sends the end of the chosen day |
-| `getReport` | `GET /control-exceptions/report` (`view`; same filters): counts by status, category, severity, department | 🟨 `/control-exceptions/report` |
-| `getById` | `GET /control-exceptions/:id` (`view`) | 🟨 detail page; also the notification's `actionUrl` |
-| `create` | `POST /control-exceptions` (`create`): `title`, `description`, `category`, `severity?`, optional `departmentId`/`documentId`/`workflowInstanceId` | 🟨 `/control-exceptions/new`. The form links a department and a document, not a workflow |
-| `update` | `PATCH /control-exceptions/:id` (`edit`, while `open`) | 🟨 `/[id]/edit`; sends `null` to unlink |
-| `report` | `POST /control-exceptions/:id/report` (`report`) | 🟨 "Report to permanent secretary", after a confirm |
-| `acknowledge`, `resolve` | `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` `{resolutionNote}` (`respond`) | 🟨 detail page; Resolve opens an inline note |
+| `getAll` | `GET /control-exceptions` (`view`; `status`, `category`, `severity`, `departmentId`, `from`/`to`, `page`/`limit` ≤ 100) | ✅ the register. `to` is compared with `lte` on a timestamp, so the page sends the end of the chosen day |
+| `getReport` | `GET /control-exceptions/report` (`view`; same filters): counts by status, category, severity, department | ✅ `/control-exceptions/report` |
+| `getById` | `GET /control-exceptions/:id` (`view`) | ✅ detail page; also the notification's `actionUrl` |
+| `create` | `POST /control-exceptions` (`create`): `title`, `description`, `category`, `severity?`, optional `departmentId`/`documentId`/`workflowInstanceId` | ✅ `/control-exceptions/new`. The form links a department and a document, not a workflow |
+| `update` | `PATCH /control-exceptions/:id` (`edit`, while `open`) | ✅ `/[id]/edit`; sends `null` to unlink |
+| `report` | `POST /control-exceptions/:id/report` (`report`) | ✅ "Report findings", after a confirm ("Report findings?" → Submit) |
+| `acknowledge`, `resolve` | `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` `{resolutionNote}` (`respond`) | ✅ detail page; Resolve opens an inline note |
 
 Gap: the responses embed `raiser` but give only ids for the reporter, acknowledger and
 resolver, so the history can't name them (management can't read `GET /users`).
@@ -1865,6 +1866,7 @@ suspiciously few documents.
 | ~~DRIFT-20~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `POST /documents/:id/access-requests` requires `permission: 'view' \| 'route'` since `edms-backend` `3014b89`; `documentsService.requestAccess` sent only `{ reason }` | Frontend | Was: **Request access refused for everyone (422)**, on `/doc/[id]` and the workflow page. Fix: send `view` from the document page; on the workflow page, ask for whichever of `view`/`route` the document's `access` lacks. Show the permission in `/admin/access-requests` |
 | ~~DRIFT-21~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `GET /tasks/:id` and `GET /workflow-instances/:id` now return documents the caller can't see, redacted ("Restricted document", `confidentiality: null`, no version) with an `access` object | Frontend | **The workflow page throws** for anyone whose task holds such a document: the access overlay renders `ConfBadge` with `null`, and `titleCase(null)` calls `.replace` on null. Fix: drive the overlay from `access`/`isLocked`, guard null fields, and keep locked documents out of the action pickers unless `canRoute`. Workflow history also blanks comments, notes and signatures in workflows holding such a document (by design) |
 | **DRIFT-22** | 🟠 Med (found 2026-10-12; **intended**, per the backend developer the same day) | At `own` scope, workflow visibility (`buildInstanceAccessFilter`, `canActorAccessInstance`) follows task assignment only; `3014b89` dropped the "created one of its documents" clause | Backend (decision) | A `staff` user who routes a document to a supervisor stage can't see or open that workflow; `/doc/[id]`'s Workflows card goes empty and offers "Route to workflow" again. Confirmed intended; the frontend follow-up is explaining the empty state (doc 05 backlog 14b) |
+| **DRIFT-25** | 🔴 High (found 2026-11-11, verified live 2026-11-12) — **frontend mitigated 2026-11-12; backend fix shipped 2026-11-13 (PR #72), live re-check pending** | Route clearance ignores view access: `isConfidentialityActionAllowed` (`access-control.constants.ts`) skips the tier check for `public`/`internal` and `route` has no `ACTION_PERMISSION` entry, so `POST /tasks/:id/action` accepts an action on a document the actor can't open. `GET /tasks/:id` reports `canRoute: true` there; `GET /workflow-instances/:id` hard-codes `false` | Backend (BE-27) | A user with no access rejected and closed a workflow (2026-11-11). The workflow page now requires `canView && canRoute` (product decision 2026-11-12: acting needs opening). PR #72 (`9497fae`) makes the API agree: 403 `TASK_DOCUMENT_VIEW_FORBIDDEN`, and `canRoute` needs `canView`. Checked in the code, not yet on live |
 | ~~DRIFT-23~~ | ✅ **Resolved (frontend, 2026-10-14)**, verified live incl. the counterfactual | `sessionExpired` was cleared only by `performLogout`, but a session can also end via `proxy.ts`'s redirect to `/` (a dead token on a navigation) — not a logout | Frontend | Was: the "your session ended" modal covered the app immediately after a *successful* re-login, because the flag set during the dead session outlived it (`useUIStore` isn't persisted, so it persisted for the tab's lifetime). Fix: clear it on login success and on a live `GET /auth/me` — see §3 |
 | ~~DRIFT-24~~ | ✅ **Resolved (frontend, 2026-10-14)**, verified live | The login page trusted the store's persisted `currentUser` as proof of a session, and `proxy.ts` left dead cookies in place on its redirect | Frontend | Was: **with a dead session `/` rendered nothing at all and stayed that way across reloads** — the persisted user made the page return `null` while its portal push was bounced back by the proxy, so signing in was impossible without clearing site data. Fix: the proxy deletes the dead cookies, and the login page drops a persisted user with no `accessToken` behind it — see §3 |
 | ~~DRIFT-18~~ | ✅ **Resolved (frontend, 2026-10-02)** | `request_changes` required a `documents` array the frontend didn't send (`5144fc7`, multi-document workflows) | Frontend | Was: "Send back" failed validation for every user. Fixed as part of the doc/workflow page split — the new `/workflow-instances/[id]` asks which of the task's documents need changes. Not yet verified e2e |

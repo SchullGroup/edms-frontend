@@ -118,7 +118,7 @@ The DOCUMENT half is real
 
 The GOVERNANCE half is now half real
   ✅ audit trail · circulars · SLA settings · notifications (clicked through 2026-11-11)
-  🟨 control exceptions (built; live seeded 2026-11-11, not yet walked through)
+     · control exceptions (walked through on live 2026-11-12)
   🟥 retention · branding · platform operations
                                                     🟥 9 of 69 pages
 ```
