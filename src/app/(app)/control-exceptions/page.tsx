@@ -34,7 +34,7 @@ import type {
 } from '@/types/models';
 
 const PAGE_SIZE = 20;
-const COLUMNS = ['Exception', 'Severity', 'Status', 'Department', 'Raised'];
+const COLUMNS = ['Finding', 'Severity', 'Status', 'Department', 'Raised'];
 
 export default function ControlExceptionsPage() {
   // useSearchParams needs a Suspense boundary above it.
@@ -47,7 +47,7 @@ export default function ControlExceptionsPage() {
 
 /**
  * The control exceptions register: the internal control unit raises and reports them,
- * the permanent secretary (management) acknowledges and resolves them.
+ * management acknowledges and resolves them.
  */
 function ControlExceptionsList() {
   const router = useRouter();
@@ -83,7 +83,7 @@ function ControlExceptionsList() {
   const filtered = !!(status || category || severity || departmentId || from || to);
 
   useEffect(() => {
-    setPageTitle('Control exceptions');
+    setPageTitle('Audit findings');
   }, [setPageTitle]);
 
   // Every filter change starts again from the first page.
@@ -97,7 +97,7 @@ function ControlExceptionsList() {
   const cols: Column<ControlException>[] = [
     {
       key: 'title',
-      label: 'Exception',
+      label: 'Finding',
       render: (c) => (
         <span>
           <b>{c.title}</b>
@@ -134,10 +134,10 @@ function ControlExceptionsList() {
     <div>
       <div className="page-head">
         <div>
-          <div className="page-title">Control exceptions</div>
+          <div className="page-title">Audit findings</div>
           <div className="page-sub">
-            Issues the internal control unit found in a transaction or department, and what the
-            permanent secretary did about them.
+            Issues the internal control unit found in a transaction or department, and what
+            management did about them.
           </div>
         </div>
         <div className="actions">
@@ -152,7 +152,7 @@ function ControlExceptionsList() {
               className="btn btn-primary"
               onClick={() => router.push('/control-exceptions/new')}
             >
-              <Icon name="plus" size={15} /> Raise exception
+              <Icon name="plus" size={15} /> Raise finding
             </button>
           )}
         </div>
@@ -235,7 +235,7 @@ function ControlExceptionsList() {
       {isLoading ? (
         <SkeletonTable columns={COLUMNS} rows={8} />
       ) : isError ? (
-        <ErrorMessage message="Failed to load control exceptions." retry={() => refetch()} />
+        <ErrorMessage message="Failed to load audit findings." retry={() => refetch()} />
       ) : (
         <>
           <div className="card">
@@ -243,9 +243,7 @@ function ControlExceptionsList() {
               cols={cols}
               rows={rows}
               onRow={(c) => router.push(`/control-exceptions/${c.id}`)}
-              emptyMsg={
-                filtered ? 'No exceptions match these filters.' : 'No control exceptions yet.'
-              }
+              emptyMsg={filtered ? 'No findings match these filters.' : 'No audit findings yet.'}
             />
           </div>
           {data?.pagination && (

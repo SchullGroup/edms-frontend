@@ -46,6 +46,7 @@ const paths: Record<string, string> = {
   plus: 'M12 5v14m-7-7h14',
   edit: 'M14 5l5 5L8 21H3v-5L14 5Zm2-2 3-1 2 2-1 3',
   chevR: 'm9 5 7 7-7 7',
+  chevL: 'm15 5-7 7 7 7',
   chevD: 'm5 9 7 7 7-7',
   menu: 'M4 6h16M4 12h16M4 18h16',
   moreV: 'M12 5v.01M12 12v.01M12 19v.01',

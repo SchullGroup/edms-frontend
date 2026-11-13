@@ -4,9 +4,16 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-11-11
+**Raised:** 2026-08-29 · **Updated:** 2026-11-13 (BE-27 shipped, BE-28 done)
 **Frontend:** `edms-frontend` @ `dev`
-**Backend checked against:** `edms-backend` @ `origin/dev` (`4da2980`, 2026-11-11)
+**Backend checked against:** `edms-backend` @ `origin/dev` (`e033b58`, 2026-11-13)
+
+> **2026-11-13: BE-28 done and removed** (intermittent 500 when a parallel fork splits). Fixed
+> in `9bdb9a6` (PR #73, a longer routing transaction timeout); confirmed on live by the product
+> owner the same day. Its write-up is in git history.
+
+> **2026-11-13: BE-27 shipped** in PR #72 (`9497fae`, merged as `bf24f1a`), live the same day.
+> It stays listed until the live check in its section is run.
 
 > **2026-11-11: re-checked against `4da2980`.** Done and removed: BE-19 (500 at a parallel
 > fork), fixed in `ae08ef5` (PR #58, 2026-10-23) and confirmed working by the product owner.
@@ -25,7 +32,8 @@
 
 Each item states what the frontend does today, what it needs, and why.
 
-**Take BE-2, BE-4, BE-21 and BE-24 first**: they are security items rather than features. BE-22 is a product decision (no automatic AI
+**Take BE-2, BE-4, BE-21 and BE-24 first**:
+they are security items rather than features. BE-22 is a product decision (no automatic AI
 summaries) and costs a Gemini call per upload until it ships.
 
 ---
@@ -44,6 +52,7 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-24** | Admins require MFA per user; users can't turn it off        | Security change | 🔴 High  | No — today every user turns MFA on/off     |
 | **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
 | **BE-26** | Mark a request `revoked` when its grant is revoked          | Small fix       | 🟡 Low   | No                                         |
+| **BE-27** | Acting on a document requires being able to open it         | Security fix    | 🟨 Shipped | No — shipped in PR #72 (live 2026-11-13); live re-check pending |
 
 **Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
 them until the PM confirms the AI features are in scope.
@@ -114,6 +123,64 @@ As `client_admin`: require MFA for `management_ops` → their next password sign
 `POST /auth/mfa/disable` as `management_ops` → 403. Admin reset → next sign-in asks for set-up
 again. `GET /users` shows both flags. Invite a user with `mfaRequired: true` → accept the
 invite, set a password → first sign-in goes straight to set-up.
+
+---
+
+## 🟨 BE-27 · Acting on a document requires being able to open it — **shipped 2026-11-13, live re-check pending**
+
+**Shipped in PR #72** (`9497fae`, `tasks.service.ts`), live 2026-11-13. Checked in the code, not yet
+on live:
+
+- Ask 1: `POST /tasks/:id/action` first checks that the actor can view every selected document
+  (folder visibility, then the same policy as `GET /documents/:id`), else **403
+  `TASK_DOCUMENT_VIEW_FORBIDDEN`**. The tier and grant checks still run after it.
+- Ask 2: `GET /tasks/:id` sets `canRoute` only when `canView`, matching `GET /workflow-instances/:id`.
+- Ask 3: `canRequestRoute` also requires `canView`.
+
+Run **How to verify** below on live, then remove this item and mark DRIFT-25 fixed.
+
+Checked against `edms-backend` `dev` at `c95b9fb` and on live. **Product decision (2026-11-12):
+nobody may approve, review, reject or otherwise act on a document they aren't allowed to open.**
+
+### What happens today
+
+A `staff` user who can't open an `internal` document (another department's cabinet, no grant)
+can still act on it at a stage assigned to their role. On 2026-11-11 such a user **rejected** a
+workflow and closed it with no access granted.
+
+- `isConfidentialityActionAllowed` (`src/shared/constants/access-control.constants.ts:107`) skips
+  the tier check for `public` and `internal`, and `route` has no entry in `ACTION_PERMISSION`
+  (line 53), so it returns `true`. `POST /tasks/:id/action` relies on it
+  (`assertTaskRouteConfidentiality`, `tasks.service.ts`), and so does `canRoute` in
+  `GET /tasks/:id`. Viewing uses the stricter check (department, cabinet access, grants).
+- The two endpoints report different flags for the same document and user. Seen on live as
+  `staff_finance` on instance `8a218839-f1ef-4421-974e-f46158166c95`:
+  - `GET /workflow-instances/:id` → `{ canView: false, canRoute: false, canRequestView: true }`
+    (hard-coded for locked documents, `workflow-document-access.ts`)
+  - `GET /tasks/:id` → `{ canView: false, canRoute: true, canRequestView: true, canRequestRoute: false }`
+
+The frontend now treats a document as actionable only when `canView && canRoute` (2026-11-12), so
+the page no longer offers the actions. The API still accepts them.
+
+### What we need
+
+1. **Route clearance includes view.** A document is routable by a user only if they can also
+   view it (the same department / cabinet / grant check `GET /documents/:id` uses). An approved
+   `view` grant counts. `POST /tasks/:id/action` returns 403 for any document that fails it,
+   like it does for a tier the user isn't cleared for.
+2. **One answer for `canRoute`.** `GET /tasks/:id` and `GET /workflow-instances/:id` report the
+   same `canRoute` for the same user and document, and `canRoute` is never `true` while
+   `canView` is `false`.
+3. **Request flags follow from it.** For a document the user can't open, `canRequestView: true`;
+   `canRequestRoute` only when a `route` grant would still be needed once they can view it.
+
+### How to verify
+
+As `staff_finance` on a task whose document sits in another department's cabinet (e.g. instance
+`8a218839…`, task `b36072de-1f47-43ca-b743-3c597ac6ecab`, document "test 48mb"): both endpoints
+report `canRoute: false`, and `POST /tasks/:id/action { action: 'reject' }` returns 403. Approve a
+`view` access request for them: both report `canView: true, canRoute: true`, and the action
+succeeds.
 
 ---
 

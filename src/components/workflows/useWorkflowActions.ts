@@ -1,6 +1,5 @@
 'use client';
 
-import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import {
   useArchiveWorkflow,
@@ -28,7 +27,6 @@ export function unarchiveBlockedReason(
 /** Clone, new version, archive, unarchive and delete for one workflow, with their confirms;
  *  shared by the workflow list and the designer. */
 export function useWorkflowActions() {
-  const { auditAction } = useStore();
   const { openConfirm } = useUIStore();
   const createMutation = useCreateWorkflow();
   const versionMutation = useCreateWorkflowVersion();
@@ -44,7 +42,6 @@ export function useWorkflowActions() {
     };
     createMutation.mutate(copy, {
       onSuccess: (data) => {
-        auditAction('WORKFLOW_CLONE', data.id, 'Cloned from ' + wf.name);
         onCloned?.(data.id);
       },
     });
@@ -54,7 +51,6 @@ export function useWorkflowActions() {
   const newVersion = (wf: WorkflowDefinition, onCreated?: (id: string) => void) => {
     versionMutation.mutate(wf.id, {
       onSuccess: (data) => {
-        auditAction('WORKFLOW_VERSION', data.id, `Created v${data.version} of ${wf.name}`);
         onCreated?.(data.id);
       },
     });
@@ -68,10 +64,7 @@ export function useWorkflowActions() {
         'It can no longer be routed to for new documents. Files already in flight are unaffected. You can unarchive it later from the Archived tab.',
       confirmLabel: 'Archive',
       danger: true,
-      onConfirm: () =>
-        archiveMutation.mutateAsync(wf.id).then(() => {
-          auditAction('WORKFLOW_ARCHIVE', wf.id, `Archived ${wf.name}`);
-        }),
+      onConfirm: () => archiveMutation.mutateAsync(wf.id).then(() => {}),
     });
   };
 

@@ -854,7 +854,9 @@ lifecycle.
       backend accepted and rejected the same definitions as the frontend in a live API check
       (2026-10-17), and the designer was clicked through in a browser on 2026-10-18 (TEST_PLAN
       TP-Q2, Q15–Q18). Running one failed with a 500 at the fork (2026-10-18, BE-19) until
-      backend `ae08ef5` (PR #58, 2026-10-23); confirmed working by the product owner 2026-11-11
+      backend `ae08ef5` (PR #58, 2026-10-23); confirmed working by the product owner 2026-11-11.
+      The 500 came back on 2026-11-12 (BE-28: half the time with one document, always with
+      two); fixed in backend `9bdb9a6` (PR #73) and confirmed on live by the product owner 2026-11-13
 - [x] Conditional branches — backend conditional routing merged 2026-10-06
       (`definitions.validation.ts` condition rules, `matchesWorkflowCondition` in
       `tasks.service.ts`), and the designer has a branch editor since 2026-09-29
@@ -1056,7 +1058,8 @@ role takes effect in the UI without a code change.
 - [x] The UI matrix editor calls the API instead of the local store
 - [x] Create / rename / delete roles, assign / remove roles on a user
 - [ ] Guard rails preventing an admin from removing their own admin rights
-- [ ] `role.permissions_updated` audit entry (frontend writes a local `auditAction` only)
+- [x] `role.permissions_updated` audit entry: written by the backend (`roles.router.ts`), seen in
+      the live trail 2026-09-18. The frontend's duplicate local `auditAction` call was removed 2026-11-13
 
 ---
 
@@ -1370,29 +1373,30 @@ gone, so H2 is ⬜: nothing tracks owners or due dates until a `Finding` model e
 
 ---
 
-### H4 — Report control exceptions to the permanent secretary · 🟨 **Partial** *(new 2026-10-29)*
+### H4 — Report audit findings to management · 🟨 **Partial** *(new 2026-10-29)*
 
 > **As** Femi, in the internal control unit,
-> **I want to** record an issue I found in a transaction or department and report it to the
-> permanent secretary,
+> **I want to** record an issue I found in a transaction or department and report it to
+> management,
 > **so that** someone with authority acknowledges it and records how it was resolved.
 
 **Current state:** `edms-backend` `51e9d85` adds `control_exceptions` and 8 routes. The
 frontend built the same day: a shared register at `/control-exceptions`, a raise page and an
 edit page (pages, not modals, by product decision), a detail page with the lifecycle actions,
-and a report. The auditor's and management's Findings menu items open it. It is 🟨 because
-it was verified only against a local mock: the live tenant has neither the table nor the
-grants until `prisma migrate deploy` and `seed:system` run (doc 01, Internal control).
+and a report. The auditor's and management's Findings menu items open it. The UI calls them
+**audit findings** (renamed 2026-11-13); the API and module keep `control-exceptions`. Live was re-seeded
+2026-11-11 and the whole lifecycle walked through on live 2026-11-12. It stays 🟨 for the two
+open criteria below: the history's unnamed actors and the missing workflow link.
 
 **Acceptance criteria**
 - [x] Backend: exception with category, severity, status and optional department, document and
       workflow links; open → reported → acknowledged → resolved (`51e9d85`)
 - [x] Raise and edit (while open) on their own pages; required title, description, category
-- [x] Report to the permanent secretary; every active `management` user is notified
+- [x] Report to management; every active `management` user is notified
 - [x] Management acknowledges, then resolves with a required note
 - [x] Register filtered by status, category, severity, department and date; counts report
       with CSV export
-- [ ] Verified end to end on the live tenant (needs the migration and `seed:system`)
+- [x] Verified end to end on the live tenant (2026-11-12, after the 2026-11-11 re-seed)
 - [ ] History names who reported, acknowledged and resolved (the API returns ids only)
 - [ ] Link a workflow from the form (the API accepts one; the form offers department and
       document only)
@@ -1754,7 +1758,7 @@ error paths and workers).
 | E — Access Control | 2 | 3 | 0 | 0 | Well designed; under-enforced on reads; folder-level restriction live (E5, 2026-11-04) |
 | F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; SLA warnings and breaches notify (in code, DRIFT-10) |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | On server aggregation endpoints (DRIFT-07); no PDF export or forecasting |
-| H — Audit & Compliance | 0 | 2 | 0 | 1 | Audit trail real (H1 🟨, 2026-10-15); control exceptions built, not live (H4 🟨); findings not built (H2 ⬜); SoD dropped from scope (2026-10-21) |
+| H — Audit & Compliance | 0 | 2 | 0 | 1 | Audit trail real (H1 🟨, 2026-10-15); control exceptions live, two gaps (H4 🟨); findings not built (H2 ⬜); SoD dropped from scope (2026-10-21) |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |

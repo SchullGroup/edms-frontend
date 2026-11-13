@@ -51,11 +51,13 @@ interface PageDocument {
   versionNumber?: number;
   /** A Restricted document: the viewer can't open it. */
   restricted: boolean;
-  /** The viewer has Action access: stage actions may include it. */
+  /** The viewer can open it and has Action access: stage actions may include it. */
   actionable: boolean;
   /** Already actioned on this (still open) task: a partial action leaves it
    *  listed (edms-backend PR #52). Neither actionable nor held back. */
   actioned: boolean;
+  /** The access it lacks before it's actionable; empty when it is. */
+  missing: DocumentAccessKind[];
   /** The kinds of access the viewer may still request for it. */
   requestable: DocumentAccessKind[];
 }
@@ -65,13 +67,29 @@ interface PageDocument {
  *  returned was one the viewer could open and act on. */
 function accessFlags(access: WorkflowDocumentAccess | undefined, isLocked?: boolean) {
   const restricted = isLocked ?? (access ? !access.canView : false);
+  const missing: DocumentAccessKind[] = [];
   const requestable: DocumentAccessKind[] = [];
-  if (access?.canRequestView ?? restricted) requestable.push('view');
-  // Task documents say outright; workflow documents (shown until the task
-  // loads) don't, but the backend offers Action access whenever a document
-  // isn't actionable, and they mark a Restricted one `canRoute: false`.
-  if (access?.canRequestRoute ?? access?.canRoute === false) requestable.push('route');
-  return { restricted, actionable: access?.canRoute ?? !restricted, requestable };
+  if (restricted) {
+    // Acting needs opening first (product decision, 2026-11-12), whatever
+    // `canRoute` says: `GET /tasks/:id` and the workflow disagree on it here.
+    missing.push('view');
+    if (access?.canRequestView ?? true) requestable.push('view');
+    if (access?.canRequestRoute === true) {
+      missing.push('route');
+      requestable.push('route');
+    }
+  } else if (access?.canRoute === false) {
+    missing.push('route');
+    if (access.canRequestRoute ?? true) requestable.push('route');
+  }
+  return { restricted, actionable: missing.length === 0, missing, requestable };
+}
+
+/** "View access", "Action access" or both: what the documents still lack. */
+function neededAccess(docs: Pick<PageDocument, 'missing'>[]) {
+  const kinds = new Set(docs.flatMap((d) => d.missing));
+  if (kinds.has('view') && kinds.has('route')) return 'View and Action access';
+  return kinds.has('view') ? 'View access' : 'Action access';
 }
 
 /**
@@ -223,8 +241,8 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
       (a !== 'review' || !arr.includes('approve')) && !(a === 'request_changes' && isFirstStage),
   );
 
-  // Stage actions only ever cover documents the caller has Action access to.
-  // The backend refuses an action that would touch any other. Acting on some
+  // Stage actions only ever cover documents the caller can open and has Action
+  // access to. The backend refuses an action that would touch any other. Acting on some
   // documents keeps this same task open with the rest; the ones already
   // actioned stay listed but count as neither actionable nor held back.
   const actionableDocuments = documents.filter((d) => d.actionable && !d.actioned);
@@ -257,10 +275,11 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
     me: { id: me?.id ?? '', name: me?.name ?? '' },
   });
 
+  const needed = neededAccess(heldBackDocuments);
   const accessReason =
     documents.length === 1
-      ? 'You need Action access to this document before you can act on it.'
-      : 'You need Action access to the documents in this task before you can act on them.';
+      ? `You need ${needed} to this document before you can act on it.`
+      : `You need ${needed} to the documents in this task before you can act on them.`;
 
   if (isLoading) return <SkeletonPage charts={2} />;
   if (isError || !instance) {
@@ -366,7 +385,7 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               : actionableDocuments.length === 0
                 ? accessReason
                 : b.wholeTask && heldBack > 0
-                  ? `${b.label} covers every document in this task, and ${heldBack === 1 ? 'one needs' : `${heldBack} need`} Action access first`
+                  ? `${b.label} covers every document in this task, and ${heldBack === 1 ? 'one needs' : `${heldBack} need`} ${needed} first`
                   : null;
             return (
               <button
@@ -395,8 +414,8 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
         {canAct && heldBack > 0 && actionableDocuments.length > 0 && (
           <>
             {' '}
-            {heldBack === 1 ? 'One document needs' : `${heldBack} documents need`} Action access
-            before you can act on {heldBack === 1 ? 'it' : 'them'}, so Delegate and Close are
+            {heldBack === 1 ? 'One document needs' : `${heldBack} documents need`} {needed} before
+            you can act on {heldBack === 1 ? 'it' : 'them'}, so Delegate and Close are
             unavailable.
           </>
         )}
