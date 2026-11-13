@@ -343,6 +343,8 @@ export type DocumentAccessKind = 'view' | 'route';
  * (inbox only) `document` are present once populated; absent/undefined
  * otherwise, not `null`.
  */
+export type AccessRequestStatus = 'pending' | 'approved' | 'denied' | 'revoked';
+
 export interface AccessRequest {
   id: string;
   documentId: string;
@@ -351,7 +353,8 @@ export interface AccessRequest {
   /** Missing on requests made before `3014b89`, which were all for viewing. */
   permission?: DocumentAccessKind;
   reason: string | null;
-  status: 'pending' | 'approved' | 'denied';
+  /** `revoked`: approved, then the grant was revoked (edms-backend `142be0b`). Older revokes stay `approved`. */
+  status: AccessRequestStatus;
   reviewedBy: string | null;
   reviewedAt: string | null;
   createdAt: string;

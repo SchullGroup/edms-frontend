@@ -12,13 +12,14 @@ import {
   UploadDocumentRequest,
   DocumentStatsResponse,
   AccessRequest,
+  AccessRequestStatus,
   DocumentAccessKind,
   DocumentWorkstream,
   DocumentHistoryEntry,
 } from '@/types/models';
 
 export interface AccessRequestInboxFilters {
-  status?: 'pending' | 'approved' | 'denied';
+  status?: AccessRequestStatus;
   page?: number;
   limit?: number;
 }
