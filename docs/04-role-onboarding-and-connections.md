@@ -610,7 +610,7 @@ assigned to it, route its own documents, delegate, and publish circulars. The se
 | 1 | Log in, land on Organization Overview | `/management` | ✅ server-aggregated (DRIFT-07) |
 | 2 | Compare departments | `/management/departments` | ✅ same |
 | 3 | Review trends | `/management/trends` | ✅ same |
-| 4 | Check the compliance overview | `/management/compliance` | 🟨 API-only since 2026-11-13, not yet verified live: audit findings by status, latest findings, and recent sensitive activity (that panel needs `audit:view`, which `management` doesn't hold, so it says so). The sidebar item now shows with `control_exception:view` too |
+| 4 | Check the compliance overview | `/management/compliance` | ✅ API-only since 2026-11-13 (confirmed by the product owner's testing, 2026-11-13): audit findings by status, latest findings, and recent sensitive activity (that panel needs `audit:view`, which `management` doesn't hold, so it says so). The sidebar item now shows with `control_exception:view` too |
 | 5 | Review performance | `/management/performance` | ✅ `useTaskStats`, server-aggregated (85 lines) |
 | 6 | Review control exceptions reported to them; acknowledge and resolve | `/control-exceptions` (`/management/findings` redirects) | ✅ live 2026-11-12 (acknowledge and resolve as `management_ops`). Was 🟥, a re-export of the fixture `/auditor/findings` |
 | 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
@@ -719,12 +719,12 @@ One of these grants now has a real screen behind it, and one still doesn't:
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in, land on the Audit dashboard | `/auditor` | 🟨 real data since 2026-11-13 (findings to report, sensitive activity, sampling shortcuts); not yet verified live |
+| 1 | Log in, land on the Audit dashboard | `/auditor` | ✅ real data since 2026-11-13 (findings to report, sensitive activity, sampling shortcuts); confirmed by the product owner's testing, 2026-11-13 |
 | 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
 | 4 | Search for evidence | `/search` | ✅ index built on backend; page rebuilt 2026-09-30 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 5 | Raise an audit finding, then report it to management | `/control-exceptions/new` (a page), then the exception's page | ✅ live 2026-11-12 (raise, edit, report as `tjoel+auditor`). Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
-| 6 | Review the compliance overview | `/auditor/compliance` | 🟨 re-export of `/management/compliance`, all API since 2026-11-13; not yet verified live |
+| 6 | Review the compliance overview | `/auditor/compliance` | ✅ re-export of `/management/compliance`, all API since 2026-11-13; confirmed by the product owner's testing, 2026-11-13 |
 
 ### First week — what they would try to do
 
@@ -774,7 +774,7 @@ this role's own screens reading it — a frontend migration, not a backend build
    backend exists).
 2. 🔴 **No `Finding` model** — 367 lines of UI over localStorage
 3. ✅ ~~No `/audit` endpoint despite the permission being granted~~ — **exists now**
-4. 🟨 **`/auditor/compliance` re-exports the management page** — all API since 2026-11-13 (was partly `SEED`)
+4. ✅ ~~**`/auditor/compliance` re-exports the management page** — partly `SEED`~~ — all API since 2026-11-13 and confirmed working; it still shares management's view
 5. ~~⛔ **Search is empty**~~ — search works (confirmed 2026-10-09; indexed at create since PR #51)
 6. ~~⛔ **No SoD enforcement** despite it being claimed in the older docs~~ — SoD and
    redaction dropped from scope (PM, 2026-10-21)

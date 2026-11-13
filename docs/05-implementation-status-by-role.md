@@ -170,12 +170,12 @@ Every classification below was verified by inspecting what each page destructure
 |---|---:|---:|---:|---:|---:|---|
 | Staff Workspace | 5 | 5 | — | — | — | **Strongest.** Real data throughout. |
 | Supervisor Console | 7 | 5 | 1 | 1 | — | Approvals, ageing and the Workflow Monitor real; exceptions/performance fixture. |
-| Management Portal | 7 | 5 | 1 | — | 1 | The only fully API-driven pages — and the ones that don't scale. `/management/findings` redirects to control exceptions. |
+| Management Portal | 7 | 6 | — | — | 1 | The only fully API-driven pages — and the ones that don't scale. `/management/findings` redirects to control exceptions. |
 | Client Administration | 15 | 10 | 2 | 1 | 2 | Structure real; branding mock, policies Hybrid (SLA tab real). `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
-| Audit & Compliance | 4 | 1 | 2 | — | 1 | Trail real; dashboard and compliance overview on real data since 2026-11-13 (🟨 until verified live); `/auditor/findings` redirects to audit findings. |
+| Audit & Compliance | 4 | 3 | — | — | 1 | Trail, dashboard and compliance overview all live (the last two rebuilt 2026-11-13); `/auditor/findings` redirects to audit findings. |
 | Platform Admin | 6 | — | — | 6 | — | Mock by design (Phase 2). |
 | Shared | 25 | 17 | 4 | — | 4 | Login (with two-step sign-in), account security, upload, search, circulars, notifications, the workflow page and the 5 control-exceptions pages live; delegations and the password pages 🟨 not re-verified; `/doc/[id]` Hybrid. |
-| **Total** | **69** | **43** | **10** | **8** | **8** | |
+| **Total** | **69** | **46** | **7** | **8** | **8** | |
 
 *(Re-tallied 2026-10-08 from each page's row in this doc: all 57 `page.tsx` files. Later the
 same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → 🟨, and `/help`
@@ -190,7 +190,8 @@ same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → �
 2026-11-12: the five control-exceptions pages 🟨 → ✅ after a live walkthrough as auditor,
 management, client admin and staff (live re-seeded 2026-11-11), making 43 ✅ and 9 🟨.
 2026-11-13: `/auditor` 🟥 → 🟨, rebuilt on audit findings and the audit trail, not yet verified
-live, making 10 🟨 and 8 🟥.)*
+live, making 10 🟨 and 8 🟥. Then `/auditor`, `/auditor/compliance` and `/management/compliance`
+🟨 → ✅ (confirmed by the product owner's testing, 2026-11-13), making 46 ✅ and 7 🟨.)*
 
 *Confirmed by the product owner's own testing, 2026-10-08:* the admin setup checklist, the SLA
 settings, sub-folders, batch upload ("File all") and multi-document workflows. Page markers
@@ -614,7 +615,7 @@ already holds warning and escalation rows written by the SLA worker.
 | `/management/departments` | 218 | **none** | `useDepartments`, `useDocumentStats`, `useTaskStats`, `useQueries`-over-`workflowInstancesService.getStats` (one per department shown) ✅ | ✅ Live — server-aggregated · **2026-10-14 (verified live, TP-X4 / TP-Z5):** with one department selected, **View records** opens `/search?dept=<id>` and **View workflows** (`global` `workflow_instance:view` only) the Workflow Monitor for it |
 | `/management/trends` | 171 | **none** | `useDepartments`, `useDocumentStats`, `useWorkflowInstanceStats` ✅ | ✅ Live — server-aggregated (the forecast/backlog math is still client-side, but it's arithmetic on two already-aggregated series, not a full-list walk) |
 | `/management/performance` | 85 | **none** | `useTaskStats` ✅ | ✅ Live — server-aggregated |
-| `/management/compliance` | 292 | — | `useControlExceptionReport` (×2: all time, last 30 days), `useControlExceptions` (latest 8), `useAuditEntries` ✅ | 🟨 API-only, not yet verified live — **rebuilt 2026-11-13 as "Compliance overview"** (was "Compliance Posture"). Tiles from `GET /control-exceptions/report`: not yet reported, with management (reported + acknowledged), resolved, raised in the last 30 days; findings by status; latest findings table; recent sensitive activity from `GET /audit` with readable action labels. Removed: `SEED.findings` and three hard-coded tiles ("Exceptions (30d)" 4, "Controls passing" 98.6%, "Legal holds active" 1; no backend has legal holds or control tests). Findings parts need `control_exception:view`, the activity panel `audit:view`; each says so when missing, and the sidebar item shows with either |
+| `/management/compliance` | 292 | — | `useControlExceptionReport` (×2: all time, last 30 days), `useControlExceptions` (latest 8), `useAuditEntries` ✅ | ✅ Live (confirmed by the product owner's testing, 2026-11-13) — **rebuilt 2026-11-13 as "Compliance overview"** (was "Compliance Posture"). Tiles from `GET /control-exceptions/report`: not yet reported, with management (reported + acknowledged), resolved, raised in the last 30 days; findings by status; latest findings table; recent sensitive activity from `GET /audit` with readable action labels. Removed: `SEED.findings` and three hard-coded tiles ("Exceptions (30d)" 4, "Controls passing" 98.6%, "Legal holds active" 1; no backend has legal holds or control tests). Findings parts need `control_exception:view`, the activity panel `audit:view`; each says so when missing, and the sidebar item shows with either |
 | `/management/reports` | 322 | — | `useDepartments` ✅ · `getOpenItemsByCabinet`, `getBottlenecksAgeing` (paged, up to 2,000 rows), `tasksService.getStats`, `getTeamStatusMatrix` ✅ | ✅ Live — **rebuilt 2026-10-08, (confirmed by the product owner’s testing, 2026-10-09):** four real reports (open items by cabinet, ageing register, SLA compliance by department, workload by member), each filterable by department, previewed in a table and downloaded as CSV (with a BOM so Excel reads it as UTF-8). Scheduled reports were fake and are now a "not available yet" note: there's no report-job backend |
 | `/management/findings` | 16 | — | — | ↪️ Redirect to `/control-exceptions` since 2026-10-29 (was a re-export of the fixture `/auditor/findings`, 🟥). The sidebar's Findings item is now **Audit Findings** (Control Exceptions 2026-10-29 → 2026-11-13) |
 
@@ -693,7 +694,7 @@ approximation, not a silent one.
 | Compare departments | ✅ same |
 | Trends over time | ✅ same; forecast/backlog projection still client-side arithmetic on the two aggregated series (unchanged behavior, just no longer walking raw records to build them) |
 | Performance overview | ✅ same; org SLA is now summed from `useTaskStats`'s own buckets rather than a second full task walk |
-| Compliance overview | 🟨 all real since 2026-11-13 (audit findings and the audit trail); not yet verified live |
+| Compliance overview | ✅ all real since 2026-11-13 (audit findings and the audit trail); confirmed by the product owner's testing, 2026-11-13 |
 | Findings review | 🟥 re-export of a mock page |
 | Export CSV | ✅ |
 | Scheduled report by email | ⛔ |
@@ -861,7 +862,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 
 **Landing:** `/auditor` · **Sidebar:** Review / Findings / Posture
 **Overall: 🟨 `/auditor/trail` now reads the real audit backend (migrated 2026-09-18).**
-**`/auditor` (the dashboard) reads real data since 2026-11-13 (🟨 until verified live). Since**
+**`/auditor` (the dashboard) reads real data since 2026-11-13 (✅, confirmed by the product owner's testing, 2026-11-13). Since**
 **2026-10-29 the Findings item opens the audit findings register (✅, live since 2026-11-12);**
 **`/auditor/findings` redirects there.**
 
@@ -881,10 +882,10 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 
 | Page | LOC | Store reads | API hooks | Status |
 |---|---:|---|---|---|
-| `/auditor` | 269 | — | `useControlExceptionReport`, `useControlExceptions` (open, latest 8), `useAuditActionTotal` (8 × `GET /audit?action=…&limit=1`, last 7 days), `useAuditEntries` ✅ | 🟨 API-only, not yet verified live — **rebuilt 2026-11-13** (was 🟥 on `SEED.findings`/`SEED.audit`). Tiles: not yet reported, with management, resolved, sensitive events in 7 days; open findings table; recent sensitive activity (shared `SENSITIVE_AUDIT_ACTIONS`); sampling shortcuts (Restricted, Top Secret, Closed, created in the last 30 days). Removed: the due-soon banner (findings have no due date), "Control test coverage" (hard-coded), the `?status=Overdue` shortcut (not a search filter) and the untrue "read-only" footer. Quick access card kept |
+| `/auditor` | 269 | — | `useControlExceptionReport`, `useControlExceptions` (open, latest 8), `useAuditActionTotal` (8 × `GET /audit?action=…&limit=1`, last 7 days), `useAuditEntries` ✅ | ✅ Live (confirmed by the product owner's testing, 2026-11-13) — **rebuilt 2026-11-13** (was 🟥 on `SEED.findings`/`SEED.audit`). Tiles: not yet reported, with management, resolved, sensitive events in 7 days; open findings table; recent sensitive activity (shared `SENSITIVE_AUDIT_ACTIONS`); sampling shortcuts (Restricted, Top Secret, Closed, created in the last 30 days). Removed: the due-soon banner (findings have no due date), "Control test coverage" (hard-coded), the `?status=Overdue` shortcut (not a search filter) and the untrue "read-only" footer. Quick access card kept |
 | `/auditor/trail` | 234 | — | `useAuditEntries`, `useExportAuditCsv` ✅ · `UserSearchCombobox` (`GET /users?search=`) 🟨 | ✅ Live — migrated 2026-09-18. **2026-10-08 (confirmed by the product owner's testing 2026-10-09):** same record-type/action dropdowns as `/admin/audit` (`AuditTypeActionFilters`), fixing the same free-text 400. **2026-10-13:** the actor filter is the same searchable `UserPicker`; since 2026-10-16 the same `UserSearchCombobox` as `/admin/audit`. Not verified as the auditor: `internal_auditor` gets 403 on `GET /users` (seed gap), so the picker shows "Couldn't load people." until the backend grants `user:view`. **2026-10-20 (verified live as `auditor`):** the Actor column reads each entry's `actor` (edms-backend PR #53). It used to look actors up in `GET /users`, the same 403, so the auditor saw UUIDs. **2026-11-11 (ticket 15, verified live in Edge):** the action filter and the Action column read as words (`auditActionLabel`: "Document version viewed"; raw key on hover), and the vocabulary is re-copied from the backend: +17 actions (MFA incl. method switching and email codes, `document.version_viewed`, `workflow.version_created`, `control_exception.*`, `access_rule.*`) and two record types (IP & country rules, Control exceptions). Filtering on `document.version_viewed` lists the live entry |
 | `/auditor/findings` | 16 | — | — | ↪️ Redirect to `/control-exceptions` since 2026-10-29. It was a 367-line 🟥 mock on `SEED.findings` |
-| `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟨 API-only, not yet verified live — the Compliance overview (2026-11-13), see `/management/compliance` |
+| `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | ✅ Live (confirmed by the product owner's testing, 2026-11-13) — the Compliance overview, see `/management/compliance` |
 
 *The auditor also uses the shared `/staff/cabinets` (✅ live) and `/search` (✅ rebuilt 2026-09-30, confirmed 2026-10-09).*
 
@@ -898,7 +899,7 @@ the old app-invented codes (`REDACT_RELEASE`, `SIGN`, …), which matched nothin
 "Raise a finding" button on each row wrote only to the local `auditAction` pseudo-log until
 2026-11-13; it now opens `/control-exceptions/new?fromAudit=<entry id>`, which fills the
 finding's description (and, for a document event, its document) from `GET /audit/:id`. The
-button shows only with `control_exception:create`. Not yet verified live.
+button shows only with `control_exception:create`. *(Confirmed by the product owner's testing, 2026-11-13.)*
 
 **Circulars** (✅ wired 2026-10-05, confirmed 2026-10-09): the recipient inbox
 (`/circulars/inbox*`) like every role, plus read-only `/circulars/manage` — auditors hold
@@ -955,10 +956,10 @@ claims above were re-checked against live API behavior 2026-09-18, not by re-rea
 | Verify chain integrity | ⛔ on this page — `GET /audit/verify` exists and works, but only `/admin/audit`'s "Verify integrity" button calls it |
 | Sample documents | ✅ shared `/staff/cabinets` |
 | Search for evidence | ✅ `/search` confirmed 2026-10-09; indexed at create since PR #51. *(Was "⛔ index never built" — stale until 2026-10-15.)* |
-| Raise a finding | ✅ audit findings, `/control-exceptions/new` (live 2026-11-12). 🟨 From an audit-trail event too, since 2026-11-13 (prefilled from the entry); not yet verified live |
+| Raise a finding | ✅ audit findings, `/control-exceptions/new` (live 2026-11-12). ✅ From an audit-trail event too, since 2026-11-13 (prefilled from the entry; confirmed by the product owner's testing, 2026-11-13) |
 | Assign an owner and due date | ⛔ not built: audit findings have no owner or due date (story H2) |
 | Track a finding to closure | ✅ open → reported → acknowledged → resolved (live 2026-11-12) |
-| Review the compliance overview | 🟨 re-export of `/management/compliance`, all real since 2026-11-13; not yet verified live |
+| Review the compliance overview | ✅ re-export of `/management/compliance`, all real since 2026-11-13; confirmed by the product owner's testing, 2026-11-13 |
 | See who can access a cabinet | ⛔ on auditor screens — the endpoint exists and the admin Access card uses it |
 | Export evidence for a regulator | ✅ confirmed live 2026-09-18 — `internal_auditor` holds `audit:export:global` and a real export succeeds. *(`client_admin` holds it too in today's seed — the "unlike `client_admin`" note was stale, re-checked 2026-10-15.)* |
 
@@ -1079,7 +1080,7 @@ under Governance. ✅ wired 2026-11-11.
 | `/circulars/manage/new` | 41 | `circular:create` | — | `useCreateCircular` → `POST /circulars` · `useDepartments`, `useRoles` (only with `role:view`), `UserMultiPicker` (`GET /users?search=&status=active`), `useDocuments`, multipart upload | ✅ Live — **new 2026-10-05** — compose a draft: audience (all staff / department+role groups / named people), acknowledgement + deadline + reminders, expiry, file and linked-document attachments. *(confirmed by the product owner’s testing, 2026-10-09)* |
 | `/circulars/manage/[id]` | 712 | `circular:view` | — | `useCircular`, `useCircularRecipients`, update / delete / publish / cancel-schedule / withdraw / revise / reminders mutations | ✅ Live — **new 2026-10-05** — detail, inline draft editing, lifecycle actions gated per permission, stats + per-department breakdown + recipients report. *(confirmed by the product owner’s testing, 2026-10-09)* **2026-10-12 (verified live):** the recipients report has **Download CSV**: every recipient matching the current filter and search (all pages, 100 at a time), with department, read and — when the circular asks for it — acknowledged, reminders sent and last reminded |
 | `/control-exceptions` | 264 | `control_exception:view` (auditor, management, client_admin) | — | `useControlExceptions` → `GET /control-exceptions` (status, category, severity, department, raised-date filters, paging); `useDepartments` ✅ | ✅ Live (2026-11-12) — API-only, no `SEED`; the register; reads `?status=` from the report's tiles. "Raise finding" for `control_exception:create` only (auditor). Verified live as auditor, management and client admin; staff has no sidebar item and the URL goes to `/unauthorized`. The client admin sidebar had no link to it until 2026-11-12 (now under Governance) |
-| `/control-exceptions/new` | 95 | `control_exception:create` (auditor) | — | `useCreateControlException` → `POST /control-exceptions`; `ControlExceptionForm` (`DocumentPicker` → `GET /documents/search`, `useDepartments`) ✅ | ✅ Live (2026-11-12) — the raise form is a page, not a modal (product decision). Required title, description and category (empty submit shows errors); raised live with a department. Linking a document not exercised in the live run; management is sent to `/unauthorized`. **2026-11-13:** `?fromAudit=<entry id>` (from the audit trail) prefills the description and, for a document event, the document, via `useAuditEntry` → `GET /audit/:id`; not yet verified live |
+| `/control-exceptions/new` | 95 | `control_exception:create` (auditor) | — | `useCreateControlException` → `POST /control-exceptions`; `ControlExceptionForm` (`DocumentPicker` → `GET /documents/search`, `useDepartments`) ✅ | ✅ Live (2026-11-12) — the raise form is a page, not a modal (product decision). Required title, description and category (empty submit shows errors); raised live with a department. Linking a document not exercised in the live run; management is sent to `/unauthorized`. **2026-11-13:** `?fromAudit=<entry id>` (from the audit trail) prefills the description and, for a document event, the document, via `useAuditEntry` → `GET /audit/:id`; confirmed by the product owner's testing, 2026-11-13 |
 | `/control-exceptions/[id]` | 293 | `control_exception:view` | — | `useControlException`, report / acknowledge / resolve mutations | ✅ Live (2026-11-12) — detail, links to the document and workflow, a four-step history. Actions by status and permission: Edit and Report (confirm) while open; Acknowledge when reported; Resolve (inline note, required) when reported or acknowledged. Every transition checked live, each role seeing only its own buttons; client admin read-only. `POST …/report` takes ~4 s on live, with only a disabled button meanwhile. Reporter, acknowledger and resolver come back as ids only, so the history names only the raiser |
 | `/control-exceptions/[id]/edit` | 68 | `control_exception:edit` | — | `useControlException`, `useUpdateControlException` → `PATCH /control-exceptions/:id` | ✅ Live (2026-11-12) — same form as a page; edit saved live while open; the form is withheld once reported |
 | `/control-exceptions/report` | 212 | `control_exception:view` | — | `useControlExceptionReport` → `GET /control-exceptions/report` | ✅ Live (2026-11-12) — totals tiles and bars by category, severity and department, filtered by department and raised date; CSV export (not clicked in the live run). Loaded live as auditor and client admin |
