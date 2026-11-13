@@ -4,9 +4,12 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-11-12 (BE-27, BE-28)
+**Raised:** 2026-08-29 · **Updated:** 2026-11-13 (BE-27 shipped)
 **Frontend:** `edms-frontend` @ `dev`
-**Backend checked against:** `edms-backend` @ `origin/dev` (`4da2980`, 2026-11-11)
+**Backend checked against:** `edms-backend` @ `origin/dev` (`bf24f1a`, 2026-11-13)
+
+> **2026-11-13: BE-27 shipped** in PR #72 (`9497fae`, merged as `bf24f1a`), live the same day.
+> It stays listed until the live check in its section is run. BE-28 is untouched by PR #72.
 
 > **2026-11-11: re-checked against `4da2980`.** Done and removed: BE-19 (500 at a parallel
 > fork), fixed in `ae08ef5` (PR #58, 2026-10-23) and confirmed working by the product owner.
@@ -25,8 +28,8 @@
 
 Each item states what the frontend does today, what it needs, and why.
 
-**Take BE-28 first** (it blocks parallel workflows), **then BE-2, BE-4, BE-21, BE-24 and
-BE-27**: they are security items rather than features. BE-22 is a product decision (no automatic AI
+**Take BE-28 first** (it blocks parallel workflows), **then BE-2, BE-4, BE-21 and BE-24**:
+they are security items rather than features. BE-22 is a product decision (no automatic AI
 summaries) and costs a Gemini call per upload until it ships.
 
 ---
@@ -45,7 +48,7 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-24** | Admins require MFA per user; users can't turn it off        | Security change | 🔴 High  | No — today every user turns MFA on/off     |
 | **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
 | **BE-26** | Mark a request `revoked` when its grant is revoked          | Small fix       | 🟡 Low   | No                                         |
-| **BE-27** | Acting on a document requires being able to open it         | Security fix    | 🔴 High  | No — the frontend enforces it; the API doesn't |
+| **BE-27** | Acting on a document requires being able to open it         | Security fix    | 🟨 Shipped | No — shipped in PR #72 (live 2026-11-13); live re-check pending |
 | **BE-28** | Intermittent 500 when a parallel fork splits (BE-19 again)  | Bug             | 🔴 High  | **Yes** — a fork with 2+ documents never moves on |
 
 **Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
@@ -120,7 +123,18 @@ invite, set a password → first sign-in goes straight to set-up.
 
 ---
 
-## 🔴 BE-27 · Acting on a document requires being able to open it — **new, 2026-11-12**
+## 🟨 BE-27 · Acting on a document requires being able to open it — **shipped 2026-11-13, live re-check pending**
+
+**Shipped in PR #72** (`9497fae`, `tasks.service.ts`), live 2026-11-13. Checked in the code, not yet
+on live:
+
+- Ask 1: `POST /tasks/:id/action` first checks that the actor can view every selected document
+  (folder visibility, then the same policy as `GET /documents/:id`), else **403
+  `TASK_DOCUMENT_VIEW_FORBIDDEN`**. The tier and grant checks still run after it.
+- Ask 2: `GET /tasks/:id` sets `canRoute` only when `canView`, matching `GET /workflow-instances/:id`.
+- Ask 3: `canRequestRoute` also requires `canView`.
+
+Run **How to verify** below on live, then remove this item and mark DRIFT-25 fixed.
 
 Checked against `edms-backend` `dev` at `c95b9fb` and on live. **Product decision (2026-11-12):
 nobody may approve, review, reject or otherwise act on a document they aren't allowed to open.**
