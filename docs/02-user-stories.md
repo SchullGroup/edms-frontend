@@ -1382,9 +1382,9 @@ gone, so H2 is ⬜: nothing tracks owners or due dates until a `Finding` model e
 **Current state:** `edms-backend` `51e9d85` adds `control_exceptions` and 8 routes. The
 frontend built the same day: a shared register at `/control-exceptions`, a raise page and an
 edit page (pages, not modals, by product decision), a detail page with the lifecycle actions,
-and a report. The auditor's and management's Findings menu items open it. It is 🟨 because
-it was verified only against a local mock: the live tenant has neither the table nor the
-grants until `prisma migrate deploy` and `seed:system` run (doc 01, Internal control).
+and a report. The auditor's and management's Findings menu items open it. Live was re-seeded
+2026-11-11 and the whole lifecycle walked through on live 2026-11-12. It stays 🟨 for the two
+open criteria below: the history's unnamed actors and the missing workflow link.
 
 **Acceptance criteria**
 - [x] Backend: exception with category, severity, status and optional department, document and
@@ -1394,7 +1394,7 @@ grants until `prisma migrate deploy` and `seed:system` run (doc 01, Internal con
 - [x] Management acknowledges, then resolves with a required note
 - [x] Register filtered by status, category, severity, department and date; counts report
       with CSV export
-- [ ] Verified end to end on the live tenant (needs the migration and `seed:system`)
+- [x] Verified end to end on the live tenant (2026-11-12, after the 2026-11-11 re-seed)
 - [ ] History names who reported, acknowledged and resolved (the API returns ids only)
 - [ ] Link a workflow from the form (the API accepts one; the form offers department and
       document only)
@@ -1753,7 +1753,7 @@ error paths and workers).
 | E — Access Control | 2 | 3 | 0 | 0 | Well designed; under-enforced on reads; folder-level restriction live (E5, 2026-11-04) |
 | F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; SLA warnings and breaches notify (in code, DRIFT-10) |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | On server aggregation endpoints (DRIFT-07); no PDF export or forecasting |
-| H — Audit & Compliance | 0 | 2 | 0 | 1 | Audit trail real (H1 🟨, 2026-10-15); control exceptions built, not live (H4 🟨); findings not built (H2 ⬜); SoD dropped from scope (2026-10-21) |
+| H — Audit & Compliance | 0 | 2 | 0 | 1 | Audit trail real (H1 🟨, 2026-10-15); control exceptions live, two gaps (H4 🟨); findings not built (H2 ⬜); SoD dropped from scope (2026-10-21) |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |

@@ -1335,31 +1335,32 @@ supervisors and management lack, so their audience editor offers department grou
 named people but not role groups. Circular notifications carry `actionUrl: /circulars/:id`
 (published, reminder) or `/circulars` (withdrawn) — both are real routes here.
 
-### Internal control *(backend on `dev` 2026-10-29; UI built the same day, not live)*
+### Internal control *(backend on `dev` 2026-10-29; UI built the same day; live since 2026-11-12)*
 
 `edms-backend` `51e9d85` adds `control_exceptions` (migration
 `20261029090000_add_control_exceptions`). An exception is open → reported → acknowledged →
 resolved. The `internal_auditor` raises, edits (while open) and reports it; reporting notifies
 every active `management` user (`control_exception.reported`); `management` acknowledges and
 resolves it, with a required note. `client_admin` can read. Each action is audited as
-`control_exception.*`. **Not usable on live yet:** on 2026-10-29 the live `auditor` login
-held no `control_exception:*` permission (so `seed:system` hasn't run there), and the list
-route timed out twice. Live deployment is unverified.
+`control_exception.*`. ~~**Not usable on live yet:** on 2026-10-29 the live `auditor` login
+held no `control_exception:*` permission.~~ Live was re-seeded 2026-11-11 and the whole
+lifecycle was walked through on live 2026-11-12 (`POST …/report` takes ~4 s there).
 
 **Frontend (2026-10-29):** `controlExceptions.service.ts` / `useControlExceptions.ts` and five
 shared pages under `/control-exceptions` (doc 05, Shared pages); the auditor's and
-management's Findings menu items open them. 🟨 everywhere below: verified only against a
-local mock of these routes (with the grants added to `/auth/me`), never against live.
+management's Findings menu items open them, and client admin's Governance section since
+2026-11-12. ✅ everywhere below: first built against a local mock, then verified on live
+2026-11-12 as auditor, management, client admin and staff.
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `getAll` | `GET /control-exceptions` (`view`; `status`, `category`, `severity`, `departmentId`, `from`/`to`, `page`/`limit` ≤ 100) | 🟨 the register. `to` is compared with `lte` on a timestamp, so the page sends the end of the chosen day |
-| `getReport` | `GET /control-exceptions/report` (`view`; same filters): counts by status, category, severity, department | 🟨 `/control-exceptions/report` |
-| `getById` | `GET /control-exceptions/:id` (`view`) | 🟨 detail page; also the notification's `actionUrl` |
-| `create` | `POST /control-exceptions` (`create`): `title`, `description`, `category`, `severity?`, optional `departmentId`/`documentId`/`workflowInstanceId` | 🟨 `/control-exceptions/new`. The form links a department and a document, not a workflow |
-| `update` | `PATCH /control-exceptions/:id` (`edit`, while `open`) | 🟨 `/[id]/edit`; sends `null` to unlink |
-| `report` | `POST /control-exceptions/:id/report` (`report`) | 🟨 "Report to permanent secretary", after a confirm |
-| `acknowledge`, `resolve` | `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` `{resolutionNote}` (`respond`) | 🟨 detail page; Resolve opens an inline note |
+| `getAll` | `GET /control-exceptions` (`view`; `status`, `category`, `severity`, `departmentId`, `from`/`to`, `page`/`limit` ≤ 100) | ✅ the register. `to` is compared with `lte` on a timestamp, so the page sends the end of the chosen day |
+| `getReport` | `GET /control-exceptions/report` (`view`; same filters): counts by status, category, severity, department | ✅ `/control-exceptions/report` |
+| `getById` | `GET /control-exceptions/:id` (`view`) | ✅ detail page; also the notification's `actionUrl` |
+| `create` | `POST /control-exceptions` (`create`): `title`, `description`, `category`, `severity?`, optional `departmentId`/`documentId`/`workflowInstanceId` | ✅ `/control-exceptions/new`. The form links a department and a document, not a workflow |
+| `update` | `PATCH /control-exceptions/:id` (`edit`, while `open`) | ✅ `/[id]/edit`; sends `null` to unlink |
+| `report` | `POST /control-exceptions/:id/report` (`report`) | ✅ "Report to permanent secretary", after a confirm |
+| `acknowledge`, `resolve` | `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` `{resolutionNote}` (`respond`) | ✅ detail page; Resolve opens an inline note |
 
 Gap: the responses embed `raiser` but give only ids for the reporter, acknowledger and
 resolver, so the history can't name them (management can't read `GET /users`).
