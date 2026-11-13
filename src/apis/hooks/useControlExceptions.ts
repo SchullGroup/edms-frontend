@@ -30,10 +30,14 @@ export function useControlExceptions(
   });
 }
 
-export function useControlExceptionReport(params: ControlExceptionFilters = {}) {
+export function useControlExceptionReport(
+  params: ControlExceptionFilters = {},
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: controlExceptionKeys.report(params),
     queryFn: () => controlExceptionsService.getReport(params),
+    enabled: options?.enabled ?? true,
   });
 }
 

@@ -307,9 +307,9 @@ export const useNavigation = () => {
           items: [
             {
               route: '/management/compliance',
-              label: 'Compliance Posture',
+              label: 'Compliance Overview',
               icon: 'shield',
-              anyPermissions: ['audit:view'],
+              anyPermissions: ['audit:view', 'control_exception:view'],
             },
             {
               route: '/management/performance',
@@ -578,11 +578,11 @@ export const useNavigation = () => {
           ],
         },
         {
-          label: 'Posture',
+          label: 'Compliance',
           items: [
             {
               route: '/auditor/compliance',
-              label: 'Compliance Posture',
+              label: 'Compliance Overview',
               icon: 'shield',
               anyPermissions: ['audit:view'],
             },

@@ -77,6 +77,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   document_access_request: 'Document access requests',
   cabinet_metadata_field: 'Cabinet metadata fields',
   cabinet_access: 'Cabinet access grants',
+  control_exception: 'Audit findings',
 };
 const resourceLabel = (r: string) => RESOURCE_LABELS[r] ?? titleize(r);
 

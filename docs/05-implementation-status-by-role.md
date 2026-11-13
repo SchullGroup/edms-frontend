@@ -217,8 +217,8 @@ after the user tested cabinet management end to end.)*
 
 ```
 Renders live API data      ███████████████████████████████░░░░░░░░░  54 pages (78%)
-Renders fixture data       ███████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  12 pages (17%)
-Both, on the same page     ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   3 pages (4%)
+Renders fixture data       ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  10 pages (14%)
+Both, on the same page     █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   1 page (1%)
 Neither (redirect/static)  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   6 pages (9%)
 ```
 
@@ -241,7 +241,9 @@ list is API-only, so 41 + 11 + 3 + 4 = 59. 2026-10-29: the five control-exceptio
 are API-only and both Findings pages are redirects, so 46 + 9 + 3 + 6 = 64. 2026-11-04: the
 folder permissions page is API-only, so 47 + 9 + 3 + 6 = 65. 2026-11-10: the mass-indexing
 page is API-only, so 48 + 9 + 3 + 6 = 66; `/account/security` too, so 49 + 9 + 3 + 6 = 67. 2026-11-11: both IP and country
-rules pages are API-only, so 51 + 9 + 3 + 6 = 69.*
+rules pages are API-only, so 51 + 9 + 3 + 6 = 69. 2026-11-13: `/management/compliance` and
+`/auditor/compliance` dropped `SEED.findings`, so 53 + 9 + 1 + 6 = 69 (`/admin/policies` is the
+one page left on both).*
 
 The split is clean: most pages are decisively one thing or the other. The **9 mock pages
 cluster in three places** — Platform (6/6, by design), the auditor's dashboard, and two
@@ -610,7 +612,7 @@ already holds warning and escalation rows written by the SLA worker.
 | `/management/departments` | 218 | **none** | `useDepartments`, `useDocumentStats`, `useTaskStats`, `useQueries`-over-`workflowInstancesService.getStats` (one per department shown) ✅ | ✅ Live — server-aggregated · **2026-10-14 (verified live, TP-X4 / TP-Z5):** with one department selected, **View records** opens `/search?dept=<id>` and **View workflows** (`global` `workflow_instance:view` only) the Workflow Monitor for it |
 | `/management/trends` | 171 | **none** | `useDepartments`, `useDocumentStats`, `useWorkflowInstanceStats` ✅ | ✅ Live — server-aggregated (the forecast/backlog math is still client-side, but it's arithmetic on two already-aggregated series, not a full-list walk) |
 | `/management/performance` | 85 | **none** | `useTaskStats` ✅ | ✅ Live — server-aggregated |
-| `/management/compliance` | 194 | **`findings`**, `users` | `useAuditEntries` ✅ (migrated 2026-09-18) | 🟨 Hybrid — `findings`/hbar chart still `SEED`. **2026-10-13 (verified live):** the sensitive-activity panel reads `GET /audit` only with `audit:view`; the seeded `management` role lacks it, so the panel now says so instead of a 403 and an empty list. Whether management should hold `audit:view` is a question for the backend/PM (backend spec Q5). **2026-10-20:** the panel names actors from each entry's `actor` (PR #53); `useAllUsers` stayed for the `SEED` findings' Owner column. **2026-11-05:** that lookup could never match (`SEED` owners like `u-bola` aren't live ids), so the Owner column now reads `SEED.users` and the page makes no `/users` call |
+| `/management/compliance` | 292 | — | `useControlExceptionReport` (×2: all time, last 30 days), `useControlExceptions` (latest 8), `useAuditEntries` ✅ | 🟨 API-only, not yet verified live — **rebuilt 2026-11-13 as "Compliance overview"** (was "Compliance Posture"). Tiles from `GET /control-exceptions/report`: not yet reported, with management (reported + acknowledged), resolved, raised in the last 30 days; findings by status; latest findings table; recent sensitive activity from `GET /audit` with readable action labels. Removed: `SEED.findings` and three hard-coded tiles ("Exceptions (30d)" 4, "Controls passing" 98.6%, "Legal holds active" 1; no backend has legal holds or control tests). Findings parts need `control_exception:view`, the activity panel `audit:view`; each says so when missing, and the sidebar item shows with either |
 | `/management/reports` | 322 | — | `useDepartments` ✅ · `getOpenItemsByCabinet`, `getBottlenecksAgeing` (paged, up to 2,000 rows), `tasksService.getStats`, `getTeamStatusMatrix` ✅ | ✅ Live — **rebuilt 2026-10-08, (confirmed by the product owner’s testing, 2026-10-09):** four real reports (open items by cabinet, ageing register, SLA compliance by department, workload by member), each filterable by department, previewed in a table and downloaded as CSV (with a BOM so Excel reads it as UTF-8). Scheduled reports were fake and are now a "not available yet" note: there's no report-job backend |
 | `/management/findings` | 16 | — | — | ↪️ Redirect to `/control-exceptions` since 2026-10-29 (was a re-export of the fixture `/auditor/findings`, 🟥). The sidebar's Findings item is now **Audit Findings** (Control Exceptions 2026-10-29 → 2026-11-13) |
 
@@ -618,7 +620,8 @@ already holds warning and escalation rows written by the SLA worker.
 > read no fixtures at all, and (as of 2026-09-21) all four also let the database do the
 > aggregating instead of the browser. *(2026-10-29: `reports` went live on 2026-10-08 and
 > `findings` is now a redirect to control exceptions. Only `compliance`'s findings panel
-> still reads `SEED.findings`.)*
+> still reads `SEED.findings`.)* *(2026-11-13: not any more; `compliance` reads audit findings
+> from the API.)*
 
 ### APIs wired ✅
 
@@ -654,8 +657,8 @@ so they were deleted rather than left dead.
 
 | Needed | Currently |
 |---|---|
-| `GET /findings` | 🟥 No `Finding` model exists. Only `/management/compliance`'s findings panel still needs it; the Findings pages redirect to control exceptions since 2026-10-29 |
-| `GET /audit` (for the findings/compliance panel specifically — the sensitive-activity half already reads it) | Partially addressed — see `/management/compliance` above |
+| ~~`GET /findings`~~ | Not needed: no page reads `SEED.findings` for findings any more. The Findings pages redirect to audit findings (2026-10-29) and the Compliance overview reads them (2026-11-13) |
+| ~~`GET /audit` for the compliance page~~ | Done: the activity panel reads it (needs `audit:view`) |
 | Scheduled/emailed reports | No report scheduler. A mail transport exists now (`src/config/mailer.ts`, used for invitations and notification emails) *(re-checked 2026-10-15)* |
 | `workflow:view` for management | 🟠 Seed gap (DRIFT-14) — on a freshly seeded tenant management holds `workflow_instance:route:own` but can't list definitions; the live tenant's management role can (re-tested 2026-10-16) *(added 2026-10-15)* |
 | Control exceptions inbox: `GET /control-exceptions`, `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` | ✅ **Live — walked through on live 2026-11-12** (fixture accounts, Edge) — `edms-backend` `51e9d85`. Management holds `control_exception:view` and `respond`, and gets a `control_exception.reported` notification (in-app and email, seen live). The shared `/control-exceptions` pages (Shared pages below) offer Acknowledge and an inline Resolve with a required note; both worked live as `management_ops`, and the register has no Raise button for them |
@@ -676,7 +679,7 @@ approximation, not a silent one.
 
 | Where | Fixture |
 |---|---|
-| `/management/compliance` | `findings`/hbar chart still `SEED.findings` — the sensitive-activity panel is real now (migrated 2026-09-18) |
+| ~~`/management/compliance`~~ | ~~`findings`/hbar chart `SEED.findings` and three hard-coded tiles~~ — real audit findings since 2026-11-13 |
 | ~~`/management/reports`~~ | ~~inline `DEPTS`; the report builder produces nothing real~~ — real reports since 2026-10-08 |
 | ~~`/management/findings`~~ | ~~↪️ auditor's page → `SEED.findings`~~ — redirect to `/control-exceptions` since 2026-10-29 |
 
@@ -688,7 +691,7 @@ approximation, not a silent one.
 | Compare departments | ✅ same |
 | Trends over time | ✅ same; forecast/backlog projection still client-side arithmetic on the two aggregated series (unchanged behavior, just no longer walking raw records to build them) |
 | Performance overview | ✅ same; org SLA is now summed from `useTaskStats`'s own buckets rather than a second full task walk |
-| Compliance posture | 🟨 sensitive-activity panel real, findings chart still mock |
+| Compliance overview | 🟨 all real since 2026-11-13 (audit findings and the audit trail); not yet verified live |
 | Findings review | 🟥 re-export of a mock page |
 | Export CSV | ✅ |
 | Scheduled report by email | ⛔ |
@@ -878,7 +881,7 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 | `/auditor` | 132 | `findings`, `audit`, `users` | **none** | 🟥 Mock · Quick access card (pinned / recent / saved searches, browser-only) added 2026-10-08 |
 | `/auditor/trail` | 294 | `auditAction` (finding-raise only) | `useAuditEntries`, `useExportAuditCsv` ✅ · `UserSearchCombobox` (`GET /users?search=`) 🟨 | ✅ Live — migrated 2026-09-18. **2026-10-08 (confirmed by the product owner's testing 2026-10-09):** same record-type/action dropdowns as `/admin/audit` (`AuditTypeActionFilters`), fixing the same free-text 400. **2026-10-13:** the actor filter is the same searchable `UserPicker`; since 2026-10-16 the same `UserSearchCombobox` as `/admin/audit`. Not verified as the auditor: `internal_auditor` gets 403 on `GET /users` (seed gap), so the picker shows "Couldn't load people." until the backend grants `user:view`. **2026-10-20 (verified live as `auditor`):** the Actor column reads each entry's `actor` (edms-backend PR #53). It used to look actors up in `GET /users`, the same 403, so the auditor saw UUIDs. **2026-11-11 (ticket 15, verified live in Edge):** the action filter and the Action column read as words (`auditActionLabel`: "Document version viewed"; raw key on hover), and the vocabulary is re-copied from the backend: +17 actions (MFA incl. method switching and email codes, `document.version_viewed`, `workflow.version_created`, `control_exception.*`, `access_rule.*`) and two record types (IP & country rules, Control exceptions). Filtering on `document.version_viewed` lists the live entry |
 | `/auditor/findings` | 16 | — | — | ↪️ Redirect to `/control-exceptions` since 2026-10-29. It was a 367-line 🟥 mock on `SEED.findings` |
-| `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟨 Hybrid — inherits the now-real sensitive-activity panel |
+| `/auditor/compliance` | 7 | — | ↪️ re-exports `/management/compliance` | 🟨 API-only, not yet verified live — the Compliance overview (2026-11-13), see `/management/compliance` |
 
 *The auditor also uses the shared `/staff/cabinets` (✅ live) and `/search` (✅ rebuilt 2026-09-30, confirmed 2026-10-09).*
 
@@ -950,7 +953,7 @@ claims above were re-checked against live API behavior 2026-09-18, not by re-rea
 | Raise a finding | 🟥 localStorage |
 | Assign an owner and due date | 🟥 localStorage |
 | Track a finding to closure | 🟥 localStorage |
-| Review compliance posture | 🟨 re-export of `/management/compliance` — its sensitive-activity panel is real now too |
+| Review the compliance overview | 🟨 re-export of `/management/compliance`, all real since 2026-11-13; not yet verified live |
 | See who can access a cabinet | ⛔ on auditor screens — the endpoint exists and the admin Access card uses it |
 | Export evidence for a regulator | ✅ confirmed live 2026-09-18 — `internal_auditor` holds `audit:export:global` and a real export succeeds. *(`client_admin` holds it too in today's seed — the "unlike `client_admin`" note was stale, re-checked 2026-10-15.)* |
 
@@ -964,7 +967,9 @@ claims above were re-checked against live API behavior 2026-09-18, not by re-rea
    Findings item now opens control exceptions (product decision, 2026-10-29). A `Finding`
    model is only needed if owners and due dates are wanted later.
 5. **Add a cabinet-access viewer** so `cabinet_access:view` becomes usable.
-6. **Give `/auditor/compliance` its own view** rather than re-exporting management's.
+6. **Give `/auditor/compliance` its own view** rather than re-exporting management's. *(2026-11-13: the
+   shared page now shows real audit findings and activity, which suits both roles; a separate view is
+   only needed if auditors want something management shouldn't see.)*
 7. **Add monthly partitioning** as the schema comments specify.
 8. ~~**Implement SoD detection**, which the older docs already claim exists.~~ **Dropped
    from scope 2026-10-21** (PM decision), with redaction.

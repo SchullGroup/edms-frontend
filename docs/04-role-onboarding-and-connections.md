@@ -569,7 +569,7 @@ being the approval bottleneck, this is the most consequential missing screen in 
 
 > **Persona:** Eniola · executive, divisional or C-suite
 > **Landing page:** `/management` · **Sidebar:** Management Portal
-> **Overall status:** ✅ **Server-aggregated since 2026-09-21** (DRIFT-07) — findings and the compliance chart are still `SEED` *(was 🟨 "Works today, will not scale")*
+> **Overall status:** ✅ **Server-aggregated since 2026-09-21** (DRIFT-07) — no `SEED` left: the compliance overview reads audit findings since 2026-11-13 *(was 🟨 "Works today, will not scale")*
 
 ### Identity and rights
 
@@ -610,7 +610,7 @@ assigned to it, route its own documents, delegate, and publish circulars. The se
 | 1 | Log in, land on Organization Overview | `/management` | ✅ server-aggregated (DRIFT-07) |
 | 2 | Compare departments | `/management/departments` | ✅ same |
 | 3 | Review trends | `/management/trends` | ✅ same |
-| 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED`; the sensitive-activity panel needs `audit:view`, which `management` doesn't hold, so it says so (2026-10-13) |
+| 4 | Check the compliance overview | `/management/compliance` | 🟨 API-only since 2026-11-13, not yet verified live: audit findings by status, latest findings, and recent sensitive activity (that panel needs `audit:view`, which `management` doesn't hold, so it says so). The sidebar item now shows with `control_exception:view` too |
 | 5 | Review performance | `/management/performance` | ✅ `useTaskStats`, server-aggregated (85 lines) |
 | 6 | Review control exceptions reported to them; acknowledge and resolve | `/control-exceptions` (`/management/findings` redirects) | ✅ live 2026-11-12 (acknowledge and resolve as `management_ops`). Was 🟥, a re-export of the fixture `/auditor/findings` |
 | 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
@@ -724,7 +724,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
 | 4 | Search for evidence | `/search` | ✅ index built on backend; page rebuilt 2026-09-30 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | 5 | Raise an audit finding, then report it to management | `/control-exceptions/new` (a page), then the exception's page | ✅ live 2026-11-12 (raise, edit, report as `tjoel+auditor`). Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
-| 6 | Review compliance posture | `/auditor/compliance` | 🟥 re-export of `/management/compliance` |
+| 6 | Review the compliance overview | `/auditor/compliance` | 🟨 re-export of `/management/compliance`, all API since 2026-11-13; not yet verified live |
 
 ### First week — what they would try to do
 
@@ -774,7 +774,7 @@ this role's own screens reading it — a frontend migration, not a backend build
    backend exists).
 2. 🔴 **No `Finding` model** — 367 lines of UI over localStorage
 3. ✅ ~~No `/audit` endpoint despite the permission being granted~~ — **exists now**
-4. 🟥 **`/auditor/compliance` re-exports the management page** — partly `SEED`-backed
+4. 🟨 **`/auditor/compliance` re-exports the management page** — all API since 2026-11-13 (was partly `SEED`)
 5. ~~⛔ **Search is empty**~~ — search works (confirmed 2026-10-09; indexed at create since PR #51)
 6. ~~⛔ **No SoD enforcement** despite it being claimed in the older docs~~ — SoD and
    redaction dropped from scope (PM, 2026-10-21)
