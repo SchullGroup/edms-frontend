@@ -124,7 +124,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
     ┌────────┘                       └──────────────────────────┐
     │ (a) axios → same-origin                                   │ (b) axios → cross-origin
     │     `/api/auth/*`                                         │     apiClient, baseURL
-    │     ONLY 4 routes                                         │     `${NEXT_PUBLIC_API_URL}/api/v1`
+    │     ONLY 5 routes                                         │     `${NEXT_PUBLIC_API_URL}/api/v1`
     ▼                                                           ▼
 ┌───────────────────────────────┐              ┌────────────────────────────────────────┐
 │ NEXT.JS ROUTE HANDLERS (BFF)  │              │  EXPRESS 5 BACKEND (edms-backend)      │
@@ -134,6 +134,8 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
 │  POST /api/auth/mfa/verify    │              │  POST /api/v1/auth/mfa/verify ✅        │
+│  POST /api/auth/mfa/setup/    │              │  POST /api/v1/auth/mfa/setup/confirm ✅ │
+│       confirm                 │              │                                        │
 │  Sole responsibility:         │              │  171 routes over 17 modules (11-09)    │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
@@ -176,7 +178,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 
 Two distinct paths exist. Knowing which one you are on determines where to debug.
 
-### Path A — authentication (4 routes only)
+### Path A — authentication (5 routes only)
 
 ```
 Browser
@@ -220,6 +222,19 @@ the returned `challengeId` with the code. The code goes
 `axios.post('/api/auth/mfa/verify')` → `src/app/api/auth/mfa/verify/route.ts` →
 `POST /api/v1/auth/mfa/verify`, whose body is the same as a password login's; from there the
 path above continues unchanged (both handlers share `src/apis/server/tokenResponse.ts`).
+
+**With two-step sign-in required but not set up (since 2026-11-13, `backend-dev-2026-11-12/02`).**
+Since PR #71 an administrator sets `mfaRequired` per user, and set-up at sign-in is the only way
+MFA gets turned on. For `mfaRequired && !mfaEnabled`, login returns
+`{ mfaSetupRequired: true, mfaSetupToken }` (10 minutes, no tokens, not audited as a login).
+`/` then shows `MfaSetupStep` (`src/components/auth/MfaSetupStep.tsx`): choose the authenticator
+app or email, then the public `POST /api/v1/auth/mfa/setup/start { mfaSetupToken, method }`
+(straight to the backend) returns the app key (QR plus typed key) or emails a code. The code goes
+`axios.post('/api/auth/mfa/setup/confirm')` → `src/app/api/auth/mfa/setup/confirm/route.ts` →
+`POST /api/v1/auth/mfa/setup/confirm`, whose body is a login body plus `recoveryCodes`. The
+handler sets the refresh cookie as for a login; `/` shows the recovery codes and enters the app
+only after "I've saved these codes". An expired or no-longer-valid set-up token (401
+`MFA_SETUP_TOKEN_INVALID` / `MFA_SETUP_SESSION_INVALID`) shows "Sign-in timed out".
 
 ### Path B — everything else (132 routes, re-counted 2026-10-15; was 66)
 
@@ -274,9 +289,9 @@ Browser — response interceptor
   │         • otherwise: Cookies.remove + window.location.href = '/'
 ```
 
-**Note the asymmetry.** Only 4 routes go through the Next.js server (login, refresh,
+**Note the asymmetry.** Only 5 routes go through the Next.js server (login, refresh,
 logout — the backend has no logout route, DRIFT-01 — and, since 2026-11-10, the MFA second
-step, which also returns a refresh token). The other 132 backend routes are
+step and, since 2026-11-13, required MFA set-up, which also return a refresh token). The other 132 backend routes are
 plain browser→Express cross-origin calls *(re-counted 2026-10-15; was "the other 71")*. There is no SSR data fetching anywhere in the
 app: every page is `'use client'`.
 
@@ -288,9 +303,10 @@ app: every page is `'use client'`.
 
 | Token | Where it lives | HttpOnly | Lifetime | Set by | Read by |
 |---|---|---|---|---|---|
-| `accessToken` | browser cookie via `js-cookie` | **No** | `expires: 1` day (cookie) but JWT expires in **15m** | `authService.login/verifyMfa/refresh` | axios request interceptor |
-| `refreshToken` | browser cookie | **Yes** | 7 days | Next.js route handlers (`login`, `mfa/verify`) | Next.js route handler only |
+| `accessToken` | browser cookie via `js-cookie` | **No** | `expires: 1` day (cookie) but JWT expires in **15m** | `authService.login/verifyMfa/confirmMfaSetup/refresh` | axios request interceptor |
+| `refreshToken` | browser cookie | **Yes** | 7 days | Next.js route handlers (`login`, `mfa/verify`, `mfa/setup/confirm`) | Next.js route handler only |
 | `mfaToken` | React state on `/` only | n/a | 5 minutes | `POST /auth/login` (MFA on) | `POST /api/auth/mfa/verify` |
+| `mfaSetupToken` | React state on `/` only | n/a | 10 minutes | `POST /auth/login` (MFA required, not set up) | `POST /auth/mfa/setup/start`, `POST /api/auth/mfa/setup/confirm` |
 
 **The design intent is sound** — the long-lived credential is unreachable from JS, and only
 the short-lived one is exposed. Two things weaken it in practice:
@@ -323,6 +339,9 @@ correct here:
 `INVALID_CREDENTIALS`. The interceptor skips refresh-and-retry for those two codes; before,
 it refreshed and re-sent the request, so each wrong code counted twice towards the backend's
 5-try lockout. Checked live: one request per wrong attempt, no `/api/auth/refresh` call.
+Since 2026-11-13 the set-up token's 401s (`MFA_SETUP_TOKEN_INVALID`,
+`MFA_SETUP_SESSION_INVALID`) are skipped too: `/setup/start` goes through `apiClient` before
+there is any session to refresh.
 
 ### 🔴 DRIFT-01 — `POST /api/v1/auth/logout` does not exist
 
@@ -1175,16 +1194,18 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists — since PR #51 (live 2026-10-14) the login response's `user` also carries `departmentId`. **PR #67 (`bca7a10`, live 2026-11-09):** for an account with MFA on it returns `{ mfaRequired: true, mfaToken }` (valid 5 min) and **no tokens**; `user.login` is audited only when the second step succeeds | ✅ — the login page stores the whole `user`, so `useMyDepartmentId` is answered from the login itself; AppShell refreshes it from `/auth/me`. **MFA challenge handled 2026-11-10 (ticket 10, verified live):** the BFF passes a body without `refreshToken` through unchanged (shared `respondWithTokens`), `authService.login` sets no cookie for it, and `/` shows the second step |
+| `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists — since PR #51 (live 2026-10-14) the login response's `user` also carries `departmentId`. **PR #67 (`bca7a10`, live 2026-11-09):** for an account with MFA on it returns `{ mfaRequired: true, mfaToken }` (valid 5 min) and **no tokens**; `user.login` is audited only when the second step succeeds | ✅ — the login page stores the whole `user`, so `useMyDepartmentId` is answered from the login itself; AppShell refreshes it from `/auth/me`. **MFA challenge handled 2026-11-10 (ticket 10, verified live):** the BFF passes a body without `refreshToken` through unchanged (shared `respondWithTokens`), `authService.login` sets no cookie for it, and `/` shows the second step. **PR #71 (`142be0b`, live 2026-11-12):** a third shape, `{ mfaSetupRequired: true, mfaSetupToken }`, for `mfaRequired && !mfaEnabled` — it crashed `/` (`data.user` undefined) until **2026-11-13**, when `/` started showing the set-up step (§3, `backend-dev-2026-11-12/02`, verified live) |
 | `POST /api/auth/refresh` → `/api/v1/auth/refresh` | ✅ exists | ✅ |
 | `POST /api/auth/logout` → `/api/v1/auth/logout` | ❌ **not registered** | 🟨 **DRIFT-01** — frontend now *calls* it (Sidebar sign-out → `authService.logout()`, with the bearer token, 2026-09-10); backend route still missing so revocation is still a no-op |
 | `GET /auth/me` | ✅ exists — since PR #50 (live 2026-10-13) also `departmentId` (null when none); login carries it too since PR #51 (live 2026-10-14) | ✅ (`permissions` now included — DRIFT-03 resolved). **`departmentId` adopted 2026-10-13, verified live:** AppShell copies it into the store; `useMyDepartmentId` replaces the `GET /users/:id` lookups in `useConfidentialityClearance`, `useDepartmentColleagues` and `/admin/cabinets`, and the first-page lookup on `/doc/[id]` |
 | `POST /auth/forgot-password` | ✅ exists | ✅ |
 | `POST /auth/reset-password` | ✅ exists | ✅ **DRIFT-15 resolved (frontend, 2026-09-18)** — was sending `newPassword`/`confirmPassword`; backend wants `password`. Fixed both sides of the shared invitation/reset-link landing page |
 | — | `POST /auth/mfa/verify` `{ mfaToken, code \| recoveryCode }` — PR #67 (`bca7a10`, live): the second login step; public, returns the normal login response. `code` is a 6-digit TOTP; exactly one of the two is required; 5 wrong codes in a row lock the second step for 15 minutes (429 `MFA_LOCKED`) | ✅ **Wired 2026-11-10 (ticket 10, verified live)** via a new BFF route `POST /api/auth/mfa/verify`, which moves `refreshToken` into the httpOnly cookie exactly as login does (`respondWithTokens`). `authService.verifyMfa` then sets `accessToken`. An expired challenge answers 401 `MFA_CHALLENGE_INVALID` |
-| — | `POST /auth/mfa/setup`, `/enable` `{ code }`, `/disable` `{ password?, code \| recoveryCode }` — PR #67 (live): authenticated, for your own account. Setup returns `{ secret, otpauthUri }` (render the URI as a QR code); enable returns `{ recoveryCodes }`, shown once; disable needs the password unless the account is SSO-only. Audited `user.mfa_enabled` / `user.mfa_disabled`. `GET /auth/me` carries `mfaEnabled` | ✅ **Wired 2026-11-10 (ticket 09, verified live)** on `/account/security` (`useSetupMfa`, `useEnableMfa`, `useDisableMfa`, `useMe`). A wrong code or password is a **401** (`INVALID_MFA_CODE`, `INVALID_CREDENTIALS`): `api-client.ts` doesn't treat those two codes as a dead session (§3) |
-| — | PR #69 (`914e28b`, live 2026-11-10): `GET /auth/mfa/settings` (`mfaEnabled`, `currentMethod`, `emailMasked`, `methodOptions[{method, available}]`); email method `POST /email/setup` → `{ challengeId }`, `POST /email/enable { challengeId, code }` → `{ recoveryCodes }`; public `POST /otp/request { mfaToken }` → `{ challengeId }` (60 s cooldown `MFA_OTP_COOLDOWN`, 5 an hour `MFA_OTP_RATE_LIMITED`); `/verify` takes `challengeId` for email codes; switching `POST /method-change/current-otp`, `/method-change/start`, `/method-change/:changeId/new-otp`, `/method-change/confirm`, `DELETE /method-change/:changeId`. `sms` exists but always 503 `MFA_SMS_NOT_CONFIGURED` | ✅ **Wired 2026-11-11 (ticket 17)**: `/account/security` reads `/settings`, sets up email, switches method; `/` sends and resends email codes. App paths verified live as `management_ops`; 🟨 the email code paths are built but not verified end to end (no fixture inbox we can read). `MFA_CHALLENGE_INVALID` joined the 401 codes that don't trigger a refresh (§3). `POST /auth/mfa/disable` is **no longer called**: only an admin removes MFA (product decision 2026-11-11; the API still allows it, **BE-24**) |
-| — | `DELETE /auth/mfa/users/:userId` — PR #67 (live): an admin turns another user's MFA off (`user:edit`); audited `user.mfa_reset` | ✅ **Wired 2026-11-10 (ticket 10, verified live):** **Reset two-step** on `/admin/users` (`useResetUserMfa`). ⚠️ `GET /users` doesn't return `mfaEnabled`, so the button shows for every signed-up user, not only those with MFA on; resetting someone without it is a harmless no-op |
+| — | ~~`POST /auth/mfa/setup`, `/enable` `{ code }`, `/disable` `{ password?, code \| recoveryCode }`~~ — PR #67 (live 2026-11-09): self-service set-up and turn-off. PR #71 made them 403 `MFA_ADMIN_MANAGED`; **PR #72 (`9497fae`, live 2026-11-13) removed them: 404** (checked live 2026-11-13). Audit `user.mfa_enabled` is now written by required set-up | ⛔ **No longer called (2026-11-13, `backend-dev-2026-11-12/01`).** Was wired 2026-11-10 (ticket 09) on `/account/security`; `setupMfa`/`enableMfa` and their hooks are deleted, and the page is read-only. A wrong code is still a **401** `INVALID_MFA_CODE`, which `api-client.ts` doesn't treat as a dead session (§3) |
+| — | `POST /auth/mfa/setup/start { mfaSetupToken, method }` and `POST /auth/mfa/setup/confirm { mfaSetupToken, method, code, challengeId? }` — PR #71 (`142be0b`, live 2026-11-12): public, the only way to turn MFA on. Start returns `{ method, secret, otpauthUri }` (app) or `{ method, challengeId, expiresAt }` (email, code sent; again to resend); confirm returns the login body plus `recoveryCodes`. Bad token 401 `MFA_SETUP_TOKEN_INVALID`; user no longer required or already set up 401 `MFA_SETUP_SESSION_INVALID`. `method: 'sms'` since PR #72 | ✅ **Wired 2026-11-13 (`backend-dev-2026-11-12/02`, verified live as `staff_hr`)**: `startMfaSetup` direct, `confirmMfaSetup` via the new BFF route `POST /api/auth/mfa/setup/confirm` (`respondWithTokens`). App path: wrong code keeps the step (401), right code → 10 recovery codes → `/staff`; the next sign-in asked for the normal code. `MFA_SETUP_SESSION_INVALID` → "Sign-in timed out" (verified by clearing `mfaRequired` mid-set-up). 🟨 Email path built, not verified (no fixture inbox we can read). `sms` not offered |
+| — | `POST /auth/mfa/phone/resend/setup { mfaSetupToken }`, `POST /auth/mfa/phone/resend`, `POST /auth/mfa/phone/confirm { code }`, `POST /users/:id/phone-verification/resend` (global `user:edit`) — PR #72 (live 2026-11-13): an admin registers `phoneNumber` on `POST/PATCH /users` (global scope only, `PHONE_ADMIN_ONLY`); the user confirms it by SMS; SMS MFA uses it | ⛔ not wired. Live `GET /auth/mfa/settings` → `sms.available: false` for users without a phone |
+| — | PR #69 (`914e28b`, live 2026-11-10): `GET /auth/mfa/settings` (`mfaEnabled`, `currentMethod`, `emailMasked`, `methodOptions[{method, available}]`); email method `POST /email/setup` → `{ challengeId }`, `POST /email/enable { challengeId, code }` → `{ recoveryCodes }`; public `POST /otp/request { mfaToken }` → `{ challengeId }` (60 s cooldown `MFA_OTP_COOLDOWN`, 5 an hour `MFA_OTP_RATE_LIMITED`); `/verify` takes `challengeId` for email codes; switching `POST /method-change/current-otp`, `/method-change/start`, `/method-change/:changeId/new-otp`, `/method-change/confirm`, `DELETE /method-change/:changeId`. `sms` exists but always 503 `MFA_SMS_NOT_CONFIGURED` | ✅ **Wired 2026-11-11 (ticket 17)**: `/account/security` reads `/settings`, sets up email, switches method; `/` sends and resends email codes. App paths verified live as `management_ops`; 🟨 the email code paths are built but not verified end to end (no fixture inbox we can read). `MFA_CHALLENGE_INVALID` joined the 401 codes that don't trigger a refresh (§3). `POST /auth/mfa/disable` is **no longer called**: only an admin removes MFA (product decision 2026-11-11; the API still allows it, **BE-24**). **2026-11-13:** PR #72 (`9497fae`) removed `/email/setup`, `/email/enable` and **all five `/method-change/*` routes (404 live)**; the services remain in `mfa.service.ts` but nothing routes to them. `/account/security` no longer sets up or switches (`backend-dev-2026-11-12/01`); `/settings` (now with `mfaRequired`) and `/otp/request` are still used |
+| — | `DELETE /auth/mfa/users/:userId` — PR #67 (live): an admin turns another user's MFA off (`user:edit`); audited `user.mfa_reset`. Since PR #71 needs **global** `user:edit` (403 `MFA_RESET_ADMIN_ONLY`) | ✅ **Wired 2026-11-10 (ticket 10, verified live):** **Reset two-step** on `/admin/users` (`useResetUserMfa`). **2026-11-13 (verified live):** shown only for users with `mfaEnabled` and only to a global `user:edit` holder; the confirm says a still-required user sets it up again at their next sign-in |
 | — | `GET /auth/sso/status`, `GET /auth/sso/login`, `GET /auth/sso/callback`, `POST /auth/sso/exchange` — PR #67 (`692c530`, live): Active Directory (Entra ID) over OIDC. `login` redirects to the provider; the callback sends the browser to `SSO_FRONTEND_URL?code=…`, which `exchange` turns into tokens. On only when all five `SSO_*` variables are set (§9) | ⛔ not wired — ticket 14. Live `GET /auth/sso/status` → `{ "enabled": false }` (2026-11-09) |
 
 ### Documents
@@ -1267,7 +1288,7 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `GET/POST /users`, `GET/PATCH/DELETE /users/:id` | ✅ — since PR #49 (live 2026-10-13) a user is `pending` from an emailed invitation until they set a password (then `active`); `invitedAt` records the first invitation; `?status=pending` filters. Existing invited users without a password were migrated to `pending`. **PR #62 (live 2026-11-03):** `managerId` on create and update (`null` clears it), returned on every user; the manager must be active, a cycle or yourself is a 409, and an `own`-scope editor can't change it (403) | ✅ — `/admin/users` shows Pending with the invitation date, filters by it, offers Resend invite and no Activate for them; "Invite user" toasts "Invitation sent to …". Verified live 2026-10-13. **Reports to (2026-11-03, ✅ clicked through by the product owner 2026-11-03):** the invite/edit modal has a **Reports to** picker (active users, never the user themself, "No manager" clears), sent on create and only when changed on edit; a **Reports to** column names each manager (`GET /users/:id`, cached). Checked against live on `staff_finance`: set (200), self (409), cleared again (200) |
+| `GET/POST /users`, `GET/PATCH/DELETE /users/:id` | ✅ — since PR #49 (live 2026-10-13) a user is `pending` from an emailed invitation until they set a password (then `active`); `invitedAt` records the first invitation; `?status=pending` filters. Existing invited users without a password were migrated to `pending`. **PR #62 (live 2026-11-03):** `managerId` on create and update (`null` clears it), returned on every user; the manager must be active, a cycle or yourself is a 409, and an `own`-scope editor can't change it (403) | ✅ — `/admin/users` shows Pending with the invitation date, filters by it, offers Resend invite and no Activate for them; "Invite user" toasts "Invitation sent to …". Verified live 2026-10-13. **Reports to (2026-11-03, ✅ clicked through by the product owner 2026-11-03):** the invite/edit modal has a **Reports to** picker (active users, never the user themself, "No manager" clears), sent on create and only when changed on edit; a **Reports to** column names each manager (`GET /users/:id`, cached). Checked against live on `staff_finance`: set (200), self (409), cleared again (200). **Two-step (2026-11-13, `backend-dev-2026-11-12/03`, verified live):** PR #71 added `mfaRequired` + `mfaEnabled` to every user row and `mfaRequired` to `POST /users` and `PATCH /users/:id` (refused at `own` scope, 403 `MFA_REQUIREMENT_ADMIN_ONLY`; audited `user.mfa_required` / `user.mfa_requirement_removed`); PR #72 added `mfaMethod` and `phoneNumber`. `/admin/users` has a **Two-step** column (On · method / Not set up / Off, plus Required), **Require two-step** / **Stop requiring two-step** with a confirm (not on your own row), and a **Require two-step sign-in** box on the invite form. `phoneNumber` is ⛔ not wired |
 | `GET /users?search=` (name or email, case-insensitive; backend PR #48) | ✅ | ✅ wired 2026-10-13: `/admin/users` search box, and `UserPicker` (Delegations "Delegate to" until 2026-10-29, when it moved to `GET /delegations/eligible-users`). The actor filter on `/admin/audit` and `/auditor/trail` is `UserSearchCombobox` since 2026-10-16: a search box that queries from the third character. **Since 2026-11-05 every user picker searches:** cabinet and folder grant forms, circular audience (`UserMultiPicker`), workflow designer, and the supervisor reassign dialogs (`departmentId` + `status=active`). `useAllUsers` / `usersService.getAllPages` (walked every page) were deleted. Results stay inside the caller's `user:view` scope |
 | `POST /users/:id/roles`, `DELETE /users/:id/roles/:roleId` | ✅ | ✅ |
 | `POST /users/:id/invitation` | ✅ — since PR #49 accepts `pending` or `active` users (409 otherwise) | ✅ wired 2026-09-18 — "Resend invite" button, shown for pending users and for active users with no `lastLoginAt` (since 2026-10-13; before, only the latter, so a pending user couldn't be re-invited) |
@@ -1672,7 +1693,7 @@ Same URLs, new behaviour. Each is harmless to the current frontend unless noted.
 | Change | Where | Frontend impact |
 |---|---|---|
 | Login can answer with `{ mfaRequired: true, mfaToken }` and no tokens | `POST /auth/login` | ✅ Handled since 2026-11-10 (ticket 10): `/` shows the second step |
-| `mfaEnabled` on the user | `GET /auth/me` | Read by `/account/security` from 2026-11-10 (ticket 09) until 2026-11-11, which now reads `GET /auth/mfa/settings` (ticket 17). Not on `GET /users` (BE-24) |
+| `mfaEnabled` on the user | `GET /auth/me` | Read by `/account/security` from 2026-11-10 (ticket 09) until 2026-11-11, which now reads `GET /auth/mfa/settings` (ticket 17). On `GET /users` since PR #71 (§8.7) |
 | `workstream` on every document (nullable enum) and as a filter | documents create, `PATCH`, list, search | ✅ Set on `/upload`, changed on `/doc/[id]`, filtered on `/search` since 2026-11-10 |
 | `from` / `to` created-date filter | `GET /documents`, `/documents/search` | ✅ Sent by `/search` since 2026-11-09, as local midnights (§8.5) |
 | `changeNote` (≤ 500) on file payloads, returned on versions | `POST /documents`, `POST /documents/:id/versions`, `GET …/versions` | ✅ Sent with new versions and shown in the versions list and History since 2026-11-10 (not sent on a first upload) |
@@ -1682,6 +1703,18 @@ Same URLs, new behaviour. Each is harmless to the current frontend unless noted.
 | JPEG, PNG and TIFF are watermarked on `preview` / `download`, not only PDF | `GET /files/:token` | ✅ Images preview and download watermarked since 2026-11-11 (ticket 12) |
 | Any call can be refused with 403 `ACCESS_RESTRICTED` | everything under `/api/v1` | ✅ A toast says the network or location is blocked (2026-11-11, ticket 13) |
 | `document.edited` and `document.metadata_updated` audit entries carry a field-level before/after | audit trail | ✅ Shown in the `/doc/[id]` History card since 2026-11-10 (ticket 05); the audit viewers show only the first two metadata fields, so a before/after reads `[object Object]` (full JSON on hover; not in any ticket) |
+
+### 8.7 PR #71 / #72 contract changes (backend `142be0b`, `9497fae`; live 2026-11-12 / 13)
+
+Admin-managed MFA. Checked live 2026-11-13.
+
+| Change | Where | Frontend impact |
+|---|---|---|
+| Login's third shape, `{ mfaSetupRequired: true, mfaSetupToken }`, no tokens | `POST /auth/login` | ✅ `/` shows the set-up step since 2026-11-13; before, it crashed |
+| `mfaRequired` on the user and on the settings | `GET /auth/me`, `GET /auth/mfa/settings` | ✅ `/account/security` shows "Required by your administrator" since 2026-11-13 |
+| `mfaRequired`, `mfaEnabled`, `mfaMethod`, `phoneNumber` on every user | `GET /users`, `GET /users/:id` | ✅ `/admin/users` Two-step column since 2026-11-13; `phoneNumber` unused |
+| Self-service set-up, turn-off and method switch are gone (404) | `/auth/mfa/setup`, `/enable`, `/disable`, `/email/*`, `/method-change/*` | ✅ Nothing calls them since 2026-11-13 |
+| Tokens carry `mfaState`; a changed `mfaEnabledAt` ends every session, and `mfaRequired && !mfaEnabled` makes every call 403 | every authenticated call, `POST /auth/refresh` | ⛔ Not handled: the user sees a generic "session expired", or pages that fail with 403 (`backend-dev-2026-11-12/04`) |
 
 ---
 
