@@ -27,6 +27,8 @@ export interface CreateUserInput {
   /** Must be an active user (edms-backend PR #62). */
   managerId?: string;
   roleIds?: string[];
+  /** They set up two-step sign-in at their first sign-in (PR #71). */
+  mfaRequired?: boolean;
 }
 
 export const usersService = {

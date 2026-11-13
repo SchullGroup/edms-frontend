@@ -46,6 +46,8 @@ export interface AuthUser {
   departmentId?: string | null;
   /** Two-step sign-in is on. Sent by `GET /auth/me` only, not by login (PR #67). */
   mfaEnabled?: boolean;
+  /** An admin requires two-step sign-in (PR #71). `GET /auth/me` only. */
+  mfaRequired?: boolean;
 }
 
 /** `POST /auth/login` for an account with MFA on: no tokens until `/auth/mfa/verify`. */
@@ -57,12 +59,26 @@ export interface MfaChallenge {
   mfaMethod?: MfaMethod;
 }
 
-/** `sms` exists on the backend but is never available yet (`MFA_SMS_NOT_CONFIGURED`). */
+/** `POST /auth/login` when MFA is required but not set up: set-up comes first (PR #71). */
+export interface MfaSetupChallenge {
+  mfaSetupRequired: true;
+  /** Valid for 10 minutes; for `/auth/mfa/setup/start` and `/setup/confirm`. */
+  mfaSetupToken: string;
+}
+
+/** `POST /auth/mfa/setup/start`: a key for the app, or an emailed code. */
+export type MfaSetupStart =
+  | { method: 'authenticator'; secret: string; otpauthUri: string }
+  | { method: 'email' | 'sms'; challengeId: string; expiresAt: string };
+
+/** `sms` needs an admin-registered phone and an SMS provider (PR #72); not offered here yet. */
 export type MfaMethod = 'authenticator' | 'email' | 'sms';
 
 /** `GET /auth/mfa/settings`. */
 export interface MfaSettings {
   mfaEnabled: boolean;
+  /** An admin requires it; set-up happens at sign-in (PR #71). */
+  mfaRequired: boolean;
   currentMethod: MfaMethod | null;
   emailMasked: string;
   phoneNumberMasked: string | null;
@@ -94,6 +110,11 @@ export interface User {
   permissions?: PermissionType[];
   preferences?: Record<string, any> | null;
   lastLoginAt?: string | null;
+  /** Admin-set: they must set up two-step sign-in at their next sign-in (PR #71). */
+  mfaRequired?: boolean;
+  mfaEnabled?: boolean;
+  /** The method in use; null while MFA is off (PR #72). */
+  mfaMethod?: MfaMethod | null;
   createdAt: string;
   updatedAt: string | null;
 }

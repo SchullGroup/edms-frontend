@@ -633,9 +633,14 @@ seed grants `workflow:view` to no other role, so staff and supervisors can't rou
 returns `{ mfaRequired: true, mfaToken }`, with no tokens and no cookie. `/` asks for the
 6-digit code (or a single-use recovery code) and sends it through the BFF's
 `POST /api/auth/mfa/verify`; its response is the one in step 4, and steps 5–7 follow. The
-challenge lasts 5 minutes, then "Start again" goes back to the password. Nobody has it on
-until they turn it on themselves (account menu → **Security**); there is no tenant-wide
-"require it" switch.
+challenge lasts 5 minutes, then "Back to sign in" goes back to the password.
+
+**With two-step sign-in required but not set up** (since 2026-11-13): an admin requires it per
+user (`mfaRequired`, backend PR #71), and step 4 returns `{ mfaSetupRequired: true,
+mfaSetupToken }` instead. `/` asks the user to choose an authenticator app or email codes,
+confirm a code, and save 10 recovery codes; the BFF's `POST /api/auth/mfa/setup/confirm` then
+returns the step 4 response, and steps 5–7 follow. Set-up must finish within 10 minutes. This
+is the only way MFA gets turned on; there is still no tenant-wide "require it" switch.
 
 ### Landing pages
 
@@ -990,7 +995,7 @@ npm run dev                # Web   :3000
 | 7 | Design and publish workflows | `/admin/workflows` | Only `client_admin`/`schulltech_admin` can publish or archive (DRIFT-05, fixed 09-04). **On a freshly seeded tenant only they can list them, too** — staff and supervisors can't route until DRIFT-14's seed rows are added. The live tenant's roles hold the grant (re-tested 2026-10-16). |
 | 8 | Set branding | `/admin/branding` | 🟥 **Saved in this browser only** — survives a reload since 2026-10-12, but other users and the login page don't see it. |
 | 9 | ~~Set retention policy~~ | ⛔ | Mock. No enforcement job exists. |
-| 10 | Turn on two-step sign-in for your own account, and ask users to do the same | Account menu → **Security** (`/account/security`) | Optional per user: nothing can require it yet (BE-24 asks for admins to require it per user, including on invite). Each user picks an authenticator app or email codes; only an admin can turn it off. Recovery codes are shown once. Someone who loses phone and codes needs **Reset two-step** on `/admin/users`, after which a password alone signs them in. The authenticator app shows the backend's `MFA_ISSUER` (default `SchullTech EDMS`) |
+| 10 | Require two-step sign-in for the users who need it | **Require two-step sign-in** on the invite form, or **Require two-step** on `/admin/users` (since 2026-11-13) | Per user; there is no tenant-wide switch. Each required user sets it up at their next sign-in (a new user at their first), choosing an authenticator app or email codes, and saves recovery codes shown once; nobody can set it up, switch method or turn it off themselves (backend PRs #71/#72). The **Two-step** column shows who has it on and who hasn't set it up yet. Someone who loses device and codes needs **Reset two-step** (global `user:edit`); a still-required user then sets it up again. The button isn't offered on your own row. The authenticator app shows the backend's `MFA_ISSUER` (default `SchullTech EDMS`) |
 
 **Then hand over to staff — with these caveats stated up front:**
 

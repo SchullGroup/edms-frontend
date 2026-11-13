@@ -23,6 +23,9 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { fmtDate, fmtDateTime } from '@/utils/helpers';
+import { METHOD_LABEL } from '@/components/security/mfaParts';
+import { RowActionsMenu, type RowAction } from '@/components/ui/RowActionsMenu';
+import { Mail, RotateCcw, ShieldCheck, ShieldOff, UserCheck, UserX } from 'lucide-react';
 
 const USERS_PAGE_SIZE = 10;
 
@@ -42,9 +45,13 @@ const STATUS_BADGE: Record<string, string> = {
 export default function UsersPage() {
   const { currentUser } = useStore();
   const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
-  const { can } = usePermissions();
+  const { can, scopeFor } = usePermissions();
   const canCreateUser = can('user', 'create');
   const canEditUser = can('user', 'edit');
+  // The backend refuses `mfaRequired` at `own` scope and an MFA reset below `global`.
+  const editScope = scopeFor('user', 'edit');
+  const canRequireMfa = canEditUser && editScope !== null && editScope !== 'own';
+  const canResetMfa = canEditUser && editScope === 'global';
 
   const [page, setPage] = useState(1);
   const [departmentFilter, setDepartmentFilter] = useState('');
@@ -117,6 +124,7 @@ export default function UsersPage() {
       roleIds: existingRoleIds,
       departmentId: user?.departmentId || departmentList[0]?.id || '',
       managerId: user?.managerId || '',
+      mfaRequired: false,
     };
     // Modal actions aren't real <form> submits, so `required`/`type="email"`
     // alone won't pop the browser's native validation UI — this ref lets the
@@ -187,6 +195,22 @@ export default function UsersPage() {
               portals from the top bar.
             </div>
           </div>
+          {isNew && (
+            <div className="field col-span-2">
+              <label className="flex items-center gap-2" style={{ cursor: 'pointer', margin: 0 }}>
+                <input
+                  type="checkbox"
+                  defaultChecked={false}
+                  onChange={(e) => (u.mfaRequired = e.target.checked)}
+                />
+                Require two-step sign-in
+              </label>
+              <div className="help">
+                They set it up the first time they sign in, with an authenticator app or a code by
+                email.
+              </div>
+            </div>
+          )}
         </div>
       ),
       actions: [
@@ -214,6 +238,7 @@ export default function UsersPage() {
                   departmentId: u.departmentId || undefined,
                   managerId: u.managerId || undefined,
                   roleIds: u.roleIds.length ? u.roleIds : undefined,
+                  ...(u.mfaRequired ? { mfaRequired: true } : {}),
                 })
                 .then(() => {})
                 .catch(() => false);
@@ -291,17 +316,41 @@ export default function UsersPage() {
     resendInvitation.mutate(u.id);
   };
 
-  // `GET /users` doesn't say who has it on, so this is offered for every signed-up user.
+  // Offered only to users who have it on (`mfaEnabled` on `GET /users` since PR #71).
   const handleResetMfa = (u: any) => {
     openConfirm({
       title: `Reset two-step sign-in for ${u.name}?`,
-      message:
-        'Use this when they have lost their phone and their recovery codes. Their next sign-in needs only their password, and they can set it up again under Security. If they don’t use it, nothing changes.',
+      message: u.mfaRequired
+        ? 'Use this when they have lost their device and recovery codes, or want their code another way. Their recovery codes stop working, and they set two-step sign-in up again at their next sign-in.'
+        : 'Use this when they have lost their device and recovery codes. Their recovery codes stop working, and their next sign-in needs only their password.',
       confirmLabel: 'Reset two-step sign-in',
       danger: true,
       onConfirm: () =>
         resetUserMfa
-          .mutateAsync({ id: u.id, name: u.name })
+          .mutateAsync({ id: u.id, name: u.name, mfaRequired: u.mfaRequired })
+          .then(() => {})
+          .catch(() => false),
+    });
+  };
+
+  const handleRequireMfa = (u: any) => {
+    const requiring = !u.mfaRequired;
+    openConfirm({
+      title: requiring
+        ? `Require two-step sign-in for ${u.name}?`
+        : `Stop requiring two-step sign-in for ${u.name}?`,
+      message: requiring
+        ? u.mfaEnabled
+          ? 'They already use it, so nothing changes for them now. After a reset, they set it up again at their next sign-in.'
+          : 'They set it up at their next sign-in, with an authenticator app or a code by email. If they are signed in now, they need to sign in again before they can carry on.'
+        : u.mfaEnabled
+          ? 'Their two-step sign-in stays on. To turn it off, reset it as well.'
+          : 'They sign in with their password only.',
+      confirmLabel: requiring ? 'Require two-step sign-in' : 'Stop requiring',
+      danger: requiring && !u.mfaEnabled,
+      onConfirm: () =>
+        updateUser
+          .mutateAsync({ id: u.id, updates: { mfaRequired: requiring } })
           .then(() => {})
           .catch(() => false),
     });
@@ -329,6 +378,26 @@ export default function UsersPage() {
       label: 'Reports to',
       render: (u) =>
         u.managerId ? <ManagerName id={u.managerId} /> : <span className="caption">—</span>,
+    },
+    {
+      key: 'mfa',
+      label: 'Two-step',
+      render: (u) => (
+        <span className="flex flex-col items-start gap-1" style={{ whiteSpace: 'nowrap' }}>
+          {u.mfaEnabled ? (
+            <span className="badge b-status-closed">
+              On{u.mfaMethod ? ` · ${METHOD_LABEL[u.mfaMethod as keyof typeof METHOD_LABEL]}` : ''}
+            </span>
+          ) : u.mfaRequired ? (
+            <span className="badge b-status-pending" title="They set it up at their next sign-in">
+              Not set up
+            </span>
+          ) : (
+            <span className="caption">Off</span>
+          )}
+          {u.mfaRequired && <span className="caption">Required</span>}
+        </span>
+      ),
     },
     {
       key: 'lastLogin',
@@ -387,52 +456,61 @@ export default function UsersPage() {
           >
             Edit
           </button>
-          {/* A pending user becomes active by accepting the invitation, not
-              from here: activating them would leave an account with no password. */}
-          {u.status !== 'Pending' && (
-            <button
-              className="btn btn-secondary btn-sm"
-              disabled={!canEditUser}
-              title={!canEditUser ? "You don't have permission to edit users" : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleToggleStatus(u);
-              }}
-            >
-              {u.status === 'Active' ? 'Suspend' : 'Activate'}
-            </button>
-          )}
-          {(u.status === 'Pending' || (u.status === 'Active' && !u.lastLoginAt)) && (
-            <button
-              className="btn btn-secondary btn-sm"
-              disabled={resendInvitation.isPending || !canCreateUser}
-              title={!canCreateUser ? "You don't have permission to invite users" : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleResendInvitation(u);
-              }}
-            >
-              Resend invite
-            </button>
-          )}
-          {/* Your own goes through Security, which asks for your password and a code. */}
-          {canEditUser && u.status !== 'Pending' && u.id !== currentUser?.id && (
-            <button
-              className="btn btn-secondary btn-sm"
-              style={{ whiteSpace: 'nowrap' }}
-              title="For someone who lost their phone and recovery codes"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleResetMfa(u);
-              }}
-            >
-              Reset two-step
-            </button>
-          )}
+          <RowActionsMenu label={`More actions for ${u.name}`} actions={rowActions(u)} />
         </div>
       ),
     },
   ];
+
+  /** Everything but Edit, for the row's ⋮ menu. */
+  function rowActions(u: any): RowAction[] {
+    const isSelf = u.id === currentUser?.id;
+    const actions: RowAction[] = [];
+    if (u.status === 'Pending' || (u.status === 'Active' && !u.lastLoginAt)) {
+      actions.push({
+        key: 'resend',
+        label: 'Resend invite',
+        icon: <Mail size={15} />,
+        disabled: resendInvitation.isPending || !canCreateUser,
+        title: !canCreateUser ? "You don't have permission to invite users" : undefined,
+        onSelect: () => handleResendInvitation(u),
+      });
+    }
+    // Not on your own row: requiring it without MFA would stop your session mid-way.
+    if (canRequireMfa && !isSelf) {
+      actions.push({
+        key: 'require',
+        label: u.mfaRequired ? 'Stop requiring two-step sign-in' : 'Require two-step sign-in',
+        icon: u.mfaRequired ? <ShieldOff size={15} /> : <ShieldCheck size={15} />,
+        disabled: updateUser.isPending,
+        onSelect: () => handleRequireMfa(u),
+      });
+    }
+    if (canResetMfa && u.mfaEnabled && !isSelf) {
+      actions.push({
+        key: 'reset',
+        label: 'Reset two-step sign-in',
+        icon: <RotateCcw size={15} />,
+        title: 'For someone who lost their device and recovery codes',
+        onSelect: () => handleResetMfa(u),
+      });
+    }
+    // A pending user becomes active by accepting the invitation, not from here.
+    if (u.status !== 'Pending') {
+      const suspending = u.status === 'Active';
+      actions.push({
+        key: 'status',
+        label: suspending ? 'Suspend user' : 'Activate user',
+        icon: suspending ? <UserX size={15} /> : <UserCheck size={15} />,
+        danger: suspending,
+        separatorBefore: actions.length > 0,
+        disabled: !canEditUser,
+        title: !canEditUser ? "You don't have permission to edit users" : undefined,
+        onSelect: () => handleToggleStatus(u),
+      });
+    }
+    return actions;
+  }
 
   return (
     <div>
@@ -510,7 +588,7 @@ export default function UsersPage() {
         </div>
         {isLoading ? (
           <SkeletonTable
-            columns={['Name', 'Roles', 'Department', 'Reports to', 'Last login', 'Created', 'Status', '']}
+            columns={['Name', 'Roles', 'Department', 'Reports to', 'Two-step', 'Last login', 'Created', 'Status', '']}
             rows={8}
           />
         ) : (

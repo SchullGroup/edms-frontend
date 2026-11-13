@@ -6,9 +6,17 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { authService, type LoginResponseData } from '@/apis/services/auth.service';
-import type { MfaChallenge } from '@/types/models';
+import type { MfaChallenge, MfaSetupChallenge } from '@/types/models';
 import { mfaErrorText, useResendCountdown } from '@/components/security/mfaParts';
 import { CodeBoxes } from '@/components/auth/CodeBoxes';
+import { MfaSetupStep } from '@/components/auth/MfaSetupStep';
+import {
+  BackToSignIn,
+  STEP_ICON,
+  TimedOutCard,
+  formatSeconds,
+  maskEmail,
+} from '@/components/auth/signInParts';
 import { useMutation } from '@tanstack/react-query';
 import Cookies from 'js-cookie';
 import { AuthShell } from '@/components/auth/AuthShell';
@@ -63,6 +71,8 @@ export default function LoginPage() {
 
   // Set when the password was right but the account has two-step sign-in on.
   const [mfa, setMfa] = useState<MfaChallenge | null>(null);
+  // Set when an admin requires two-step sign-in and it isn't set up yet.
+  const [mfaSetup, setMfaSetup] = useState<MfaSetupChallenge | null>(null);
 
   const finishSignIn = (data: LoginResponseData) => {
     setCurrentUser(data.user);
@@ -78,6 +88,10 @@ export default function LoginPage() {
         setMfa(data);
         return;
       }
+      if ('mfaSetupRequired' in data) {
+        setMfaSetup(data);
+        return;
+      }
       finishSignIn(data);
     },
     onError: (err: any) => {
@@ -87,6 +101,7 @@ export default function LoginPage() {
 
   const startAgain = () => {
     setMfa(null);
+    setMfaSetup(null);
     setPassword('');
   };
 
@@ -110,6 +125,20 @@ export default function LoginPage() {
   const { loginTestAccounts } = getBrandPreset().features;
 
   if (currentUser) return null;
+
+  if (mfaSetup) {
+    return (
+      <AuthShell>
+        <MfaSetupStep
+          key={mfaSetup.mfaSetupToken}
+          mfaSetupToken={mfaSetup.mfaSetupToken}
+          email={email}
+          onSignedIn={finishSignIn}
+          onStartAgain={startAgain}
+        />
+      </AuthShell>
+    );
+  }
 
   if (mfa) {
     return (
@@ -237,69 +266,6 @@ export default function LoginPage() {
 /** How long the backend's challenge token lasts (`mfa-challenge.ts`, 5m). */
 const CHALLENGE_MS = 5 * 60 * 1000;
 
-/** `t***@domain`, like the backend's `emailMasked`. */
-const maskEmail = (email: string) => {
-  const [name, domain] = email.trim().split('@');
-  return domain ? `${name.slice(0, 1)}***@${domain}` : email;
-};
-
-const formatSeconds = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-
-const svgProps = {
-  width: 26,
-  height: 26,
-  viewBox: '0 0 24 24',
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 1.8,
-  strokeLinecap: 'round' as const,
-  strokeLinejoin: 'round' as const,
-  'aria-hidden': true,
-};
-
-const STEP_ICON = {
-  email: (
-    <svg {...svgProps}>
-      <rect x="3" y="5" width="18" height="14" rx="2.5" />
-      <path d="M3.5 6.5l8.5 6.5 8.5-6.5" />
-    </svg>
-  ),
-  authenticator: (
-    <svg {...svgProps}>
-      <path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z" />
-      <path d="M9 12l2 2 4-4" />
-    </svg>
-  ),
-  recovery: (
-    <svg {...svgProps}>
-      <circle cx="8" cy="15" r="4" />
-      <path d="M11 12l9-9" />
-      <path d="M17 6l3 3" />
-    </svg>
-  ),
-  expired: (
-    <svg {...svgProps}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </svg>
-  ),
-};
-
-function BackToSignIn({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-btn mb-5 inline-flex items-center gap-1.5 self-start text-[13px] font-medium text-(--side-ink) hover:text-(--ink)"
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M15 18l-6-6 6-6" />
-      </svg>
-      Back to sign in
-    </button>
-  );
-}
-
 /** The second sign-in step. A full code submits itself; an expired challenge needs the password again. */
 function MfaStep({
   mfaToken,
@@ -401,18 +367,10 @@ function MfaStep({
 
   if (expired) {
     return (
-      <div className="flex flex-col">
-        <div className="mfa-card">
-          <div className="mfa-icon">{STEP_ICON.expired}</div>
-          <h2 className="mt-4 text-[24px] font-bold tracking-[-0.01em]">Sign-in timed out</h2>
-          <p className="mt-2 text-sm text-muted">
-            For your security, the code must be entered within 5 minutes of your password.
-          </p>
-          <button className="btn btn-primary mt-6 h-12 w-full justify-center" onClick={onStartAgain}>
-            Back to sign in
-          </button>
-        </div>
-      </div>
+      <TimedOutCard
+        message="For your security, the code must be entered within 5 minutes of your password."
+        onStartAgain={onStartAgain}
+      />
     );
   }
 

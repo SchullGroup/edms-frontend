@@ -1730,12 +1730,15 @@ error paths and workers).
 - [ ] No request body size limit on `express.json()`
 - [ ] Access-token cookie TTL (1 day) disagrees with the JWT TTL (15 min)
 - [x] Two-factor sign-in with an authenticator app (GBB 1.2) — *wired 2026-11-10, verified
-      live (tickets 09, 10):* **Security** in the account menu (`/account/security`) sets it up
-      (QR code or key, a confirming code, 10 recovery codes to copy or download). Since
-      2026-11-11 (ticket 17) the code can come by email instead, users can switch method, and
-      only an admin can turn it off (🟨 admins can't *require* it yet: BE-24). Sign-in then asks for the 6-digit code, or a
-      single-use recovery code, within 5 minutes of the password. An admin with `user:edit`
-      resets it for someone who lost their phone (**Reset two-step** on `/admin/users`)
+      live (tickets 09, 10).* **Admin-managed since 2026-11-13** (backend PRs #71/#72;
+      `backend-dev-2026-11-12/01`–`03`, verified live): an admin ticks **Require two-step
+      sign-in** on the invite form or uses **Require two-step** on `/admin/users`, and the user
+      sets it up at their next sign-in (app QR code and key, or an emailed code; 10 recovery codes
+      to copy or download before entering). Users can no longer set it up, switch method or turn it
+      off themselves; `/account/security` shows the status. Sign-in then asks for the 6-digit
+      code, or a single-use recovery code, within 5 minutes of the password. An admin with global
+      `user:edit` resets it for someone who lost their device (**Reset two-step**, shown only for
+      users who have it on). 🟨 Email set-up not verified end to end; ⛔ SMS (PR #72) not wired
 - [ ] Sign in with Active Directory (GBB 1.3) — *backend done, no UI:* `/auth/sso/*` over
       OIDC (PR #67). Not configured on live (`enabled: false`). Ticket 14
 - [x] Block or allow access by IP range and country (GBB 1.6) — `/admin/access-rules` (2026-11-11,
