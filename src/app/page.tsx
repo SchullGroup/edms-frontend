@@ -23,6 +23,12 @@ import { AuthShell } from '@/components/auth/AuthShell';
 import { PasswordInput } from '@/components/auth/PasswordInput';
 import { getBrandPreset } from '@/lib/brand';
 import {
+  SESSION_END_COPY,
+  SIGNED_OUT_PARAM,
+  isSessionEndReason,
+  type SessionEndReason,
+} from '@/lib/sessionEnd';
+import {
   PORTAL_BY_KEY,
   fallbackPermissionsForRoles,
   normalizePermission,
@@ -68,6 +74,15 @@ export default function LoginPage() {
     // Only on sign-in, not when the switcher later changes `prefs`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, router]);
+
+  // The proxy's `?signedOut=` reason, read once and dropped from the URL so a reload doesn't repeat it.
+  const [signedOut, setSignedOut] = useState<SessionEndReason | null>(null);
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get(SIGNED_OUT_PARAM);
+    if (!isSessionEndReason(reason)) return;
+    if (reason !== 'expired') setSignedOut(reason);
+    window.history.replaceState(null, '', window.location.pathname);
+  }, []);
 
   // Set when the password was right but the account has two-step sign-in on.
   const [mfa, setMfa] = useState<MfaChallenge | null>(null);
@@ -159,6 +174,14 @@ export default function LoginPage() {
     <AuthShell>
       <div className="page-title mb-1">Sign in</div>
       <p className="text-sm text-muted">Enter your credentials to access your secure portal.</p>
+
+      {signedOut && (
+        <div className="banner info" role="status">
+          <span>
+            <strong>{SESSION_END_COPY[signedOut].title}.</strong> {SESSION_END_COPY[signedOut].body}
+          </span>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>

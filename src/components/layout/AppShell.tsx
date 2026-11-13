@@ -8,6 +8,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useUIStore } from '@/store/useUIStore';
 import { authService } from '@/apis/services/auth.service';
+import { sessionEndReason } from '@/lib/api-client';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SessionExpiredModal } from '@/components/common/SessionExpiredModal';
 import { ServiceUnavailableOverlay } from '@/components/common/ServiceUnavailableOverlay';
@@ -146,7 +147,7 @@ export const AppShell = ({ children }: AppShellProps) => {
         // if it keeps happening across other queries.
         const status = err?.response?.status;
         if (status === 401 || status === 403) {
-          useUIStore.getState().setSessionExpired(true);
+          useUIStore.getState().setSessionExpired(true, sessionEndReason(err) ?? undefined);
         }
       });
 
