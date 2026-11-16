@@ -4,6 +4,7 @@ import {
   AuthUser,
   ApiResponse,
   MfaChallenge,
+  MfaMethod,
   MfaOtpChallenge,
   MfaSettings,
   MfaSetupChallenge,
@@ -69,7 +70,7 @@ export const authService = {
     return data;
   },
 
-  /** Emails a sign-in code (public; 60 s between requests, 5 an hour). */
+  /** Emails or texts a sign-in code, by the user's method (public; 60 s apart, 5 an hour). */
   requestLoginOtp: async (mfaToken: string): Promise<MfaOtpChallenge> => {
     const response = await apiClient.post<ApiResponse<MfaOtpChallenge>>('/auth/mfa/otp/request', {
       mfaToken,
@@ -82,10 +83,10 @@ export const authService = {
     return response.data.data;
   },
 
-  /** Required set-up, step 1 (public): an app key, or an emailed code. Again to resend. */
+  /** Required set-up, step 1 (public): an app key, or an emailed or texted code. Again to resend. */
   startMfaSetup: async (body: {
     mfaSetupToken: string;
-    method: 'authenticator' | 'email';
+    method: MfaMethod;
   }): Promise<MfaSetupStart> => {
     const response = await apiClient.post<ApiResponse<MfaSetupStart>>('/auth/mfa/setup/start', body);
     return response.data.data;
@@ -94,7 +95,7 @@ export const authService = {
   /** Required set-up, step 2 (via the BFF for the refresh cookie): a session plus recovery codes. */
   confirmMfaSetup: async (body: {
     mfaSetupToken: string;
-    method: 'authenticator' | 'email';
+    method: MfaMethod;
     code: string;
     challengeId?: string;
   }): Promise<LoginResponseData & { recoveryCodes: string[] }> => {
@@ -105,6 +106,16 @@ export const authService = {
     const data = response.data.data;
     if (response.data?.success !== false && data?.accessToken) startSession(data.accessToken);
     return data;
+  },
+
+  /** Texts a code to confirm the phone number an admin registered for you (PR #72). */
+  resendOwnPhoneVerification: async (): Promise<void> => {
+    await apiClient.post('/auth/mfa/phone/resend');
+  },
+
+  /** Confirms the registered phone with the texted code; a wrong code is a 401. */
+  confirmOwnPhone: async (code: string): Promise<void> => {
+    await apiClient.post('/auth/mfa/phone/confirm', { code });
   },
 
   // No self set-up, turn-off or method switch since PR #71/#72: an admin requires MFA, and set-up

@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/api-client';
-import { User, PaginatedResponse, ApiResponse } from '@/types/models';
+import { User, PaginatedResponse, ApiResponse, PhoneVerificationStatus } from '@/types/models';
 
 export interface UserFilters {
   departmentId?: string;
@@ -29,7 +29,12 @@ export interface CreateUserInput {
   roleIds?: string[];
   /** They set up two-step sign-in at their first sign-in (PR #71). */
   mfaRequired?: boolean;
+  /** E.164, global `user:edit` only (PR #72); texted a code once they're active. */
+  phoneNumber?: string;
 }
+
+/** Create and update say whether a verification text went out when the phone was saved. */
+export type SavedUser = User & { phoneVerification?: { status: PhoneVerificationStatus } };
 
 export const usersService = {
   getAll: async (params?: UserFilters): Promise<PaginatedResponse<User>> => {
@@ -42,13 +47,13 @@ export const usersService = {
     return response.data.data;
   },
 
-  create: async (data: CreateUserInput): Promise<User> => {
-    const response = await apiClient.post<ApiResponse<User>>('/users', data);
+  create: async (data: CreateUserInput): Promise<SavedUser> => {
+    const response = await apiClient.post<ApiResponse<SavedUser>>('/users', data);
     return response.data.data;
   },
 
-  update: async (id: string, updates: Partial<User>): Promise<User> => {
-    const response = await apiClient.patch<ApiResponse<User>>(`/users/${id}`, updates);
+  update: async (id: string, updates: Partial<User>): Promise<SavedUser> => {
+    const response = await apiClient.patch<ApiResponse<SavedUser>>(`/users/${id}`, updates);
     return response.data.data;
   },
 
@@ -77,5 +82,10 @@ export const usersService = {
       `/users/${id}/invitation`,
     );
     return response.data.data;
+  },
+
+  /** Texts the user a new code for their registered phone (global `user:edit`, PR #72). */
+  resendPhoneVerification: async (id: string): Promise<void> => {
+    await apiClient.post(`/users/${id}/phone-verification/resend`);
   },
 };

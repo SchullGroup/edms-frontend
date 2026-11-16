@@ -66,12 +66,12 @@ export interface MfaSetupChallenge {
   mfaSetupToken: string;
 }
 
-/** `POST /auth/mfa/setup/start`: a key for the app, or an emailed code. */
+/** `POST /auth/mfa/setup/start`: a key for the app, or an emailed or texted code. */
 export type MfaSetupStart =
   | { method: 'authenticator'; secret: string; otpauthUri: string }
   | { method: 'email' | 'sms'; challengeId: string; expiresAt: string };
 
-/** `sms` needs an admin-registered phone and an SMS provider (PR #72); not offered here yet. */
+/** `sms` needs an admin-registered phone and an SMS provider (PR #72). */
 export type MfaMethod = 'authenticator' | 'email' | 'sms';
 
 /** `GET /auth/mfa/settings`. */
@@ -85,6 +85,14 @@ export interface MfaSettings {
   /** `email` is available only when the server can send codes. */
   methodOptions: { method: MfaMethod; available: boolean }[];
 }
+
+/** What happened to the verification text after an admin saved a phone number (PR #72). */
+export type PhoneVerificationStatus =
+  | 'not_requested'
+  | 'requested'
+  | 'pending_account_activation'
+  | 'delivery_failed'
+  | 'removed';
 
 /** An email code that was sent; the code itself never comes back. */
 export interface MfaOtpChallenge {
@@ -115,6 +123,8 @@ export interface User {
   mfaEnabled?: boolean;
   /** The method in use; null while MFA is off (PR #72). */
   mfaMethod?: MfaMethod | null;
+  /** Admin-registered, E.164 (PR #72). Rows don't say whether the user has confirmed it. */
+  phoneNumber?: string | null;
   createdAt: string;
   updatedAt: string | null;
 }

@@ -5,9 +5,10 @@ import {
   useQueryClient,
   keepPreviousData,
 } from '@tanstack/react-query';
-import { usersService, UserFilters } from '@/apis/services/users.service';
+import { usersService, UserFilters, type SavedUser } from '@/apis/services/users.service';
 import { User } from '@/types/models';
 import { useUIStore } from '@/store/useUIStore';
+import { mfaErrorText } from '@/lib/mfaText';
 
 // Pickers search `GET /users?search=` (UserPicker, UserSearchCombobox); nothing
 // here walks every page of users.
@@ -73,6 +74,26 @@ export function useUser(id: string) {
   });
 }
 
+/** A second sentence for the save toast when a phone number was saved, and its tone. */
+function phoneNote(user: SavedUser): { text: string; warn: boolean } | null {
+  switch (user?.phoneVerification?.status) {
+    case 'requested':
+      return { text: 'We texted them a code to confirm their phone number.', warn: false };
+    case 'pending_account_activation':
+      return {
+        text: 'They’ll get a text to confirm their phone number once they accept the invitation.',
+        warn: false,
+      };
+    case 'delivery_failed':
+      return {
+        text: 'The text to confirm their phone number couldn’t be sent. Use Resend phone code to try again.',
+        warn: true,
+      };
+    default:
+      return null;
+  }
+}
+
 export function useCreateUser() {
   const queryClient = useQueryClient();
   const { addToast } = useUIStore.getState();
@@ -81,11 +102,14 @@ export function useCreateUser() {
     mutationFn: (data: any) => usersService.create(data),
     // `invited`: the backend emailed a set-password link and the user is
     // `pending` until they use it.
-    onSuccess: (user: User & { invited?: boolean }) => {
+    onSuccess: (user: SavedUser & { invited?: boolean }) => {
       queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      const note = phoneNote(user);
       addToast(
-        user?.invited ? `Invitation sent to ${user.email}` : 'User created successfully',
-        'success',
+        [user?.invited ? `Invitation sent to ${user.email}.` : 'User created.', note?.text]
+          .filter(Boolean)
+          .join(' '),
+        note?.warn ? 'warning' : 'success',
       );
     },
     onError: (err: any) => {
@@ -104,7 +128,11 @@ export function useUpdateUser() {
     onSuccess: (data, { id }) => {
       queryClient.invalidateQueries({ queryKey: userKeys.detail(id) });
       queryClient.invalidateQueries({ queryKey: userKeys.lists() });
-      addToast('User updated successfully', 'success');
+      const note = phoneNote(data);
+      addToast(
+        note ? `User updated. ${note.text}` : 'User updated successfully',
+        note?.warn ? 'warning' : 'success',
+      );
     },
     onError: (err: any) => {
       addToast(err.response?.data?.message || 'Failed to update user', 'error');
@@ -178,6 +206,24 @@ export function useResendInvitation() {
     },
     onError: (err: any) => {
       addToast(err.response?.data?.message || 'Failed to resend invitation', 'error');
+    },
+  });
+}
+
+/** `POST /users/:id/phone-verification/resend` (global `user:edit`): texts a new code. */
+export function useResendPhoneVerification() {
+  const { addToast } = useUIStore.getState();
+
+  return useMutation({
+    mutationFn: (user: { id: string; name: string }) => usersService.resendPhoneVerification(user.id),
+    onSuccess: (_data, user) => {
+      addToast(`Texted ${user.name} a new code to confirm their phone number`, 'success');
+    },
+    onError: (err: any) => {
+      addToast(
+        mfaErrorText(err, 'Couldn’t send the text. Try again in a moment.'),
+        'error',
+      );
     },
   });
 }
