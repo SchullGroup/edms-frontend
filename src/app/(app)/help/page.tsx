@@ -108,7 +108,7 @@ const TOPICS: Topic[] = [
   {
     id: 'upload',
     title: 'Upload and file documents',
-    keywords: 'add new file batch pdf image tiff jpg png scan size type metadata',
+    keywords: 'add new file batch pdf image jpg png scan size type metadata',
     body: (
       <>
         <p>
@@ -117,10 +117,9 @@ const TOPICS: Topic[] = [
           asks for. You can add several files at once and file them all together.
         </p>
         <p>
-          Accepted files: PDF and TIFF up to 100 MB, JPG and PNG up to 10 MB. Every file is read
-          by OCR so its text can be searched and summarised. PDFs and JPG/PNG images open in the
-          viewer; TIFF images can be downloaded. To upload a Word or Excel file, save it as PDF
-          first.
+          Accepted files: PDF up to 100 MB, JPG and PNG up to 10 MB. Every file is read by OCR so
+          its text can be searched and summarised, and opens in the viewer. To upload a Word or
+          Excel file, or a TIFF scan, save it as PDF first.
         </p>
       </>
     ),

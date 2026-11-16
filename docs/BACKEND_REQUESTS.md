@@ -4,7 +4,7 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-11-16 (BE-24 and BE-26 done; BE-29 and two questions added)
+**Raised:** 2026-08-29 · **Updated:** 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29, BE-30 and two questions added)
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `origin/dev` (`e033b58`, re-checked 2026-11-16)
 
@@ -19,8 +19,11 @@
 > in `9bdb9a6` (PR #73, a longer routing transaction timeout); confirmed on live by the product
 > owner the same day. Its write-up is in git history.
 
-> **2026-11-13: BE-27 shipped** in PR #72 (`9497fae`, merged as `bf24f1a`), live the same day.
-> It stays listed until the live check in its section is run.
+> **2026-11-16: BE-27 done and removed.** Shipped in PR #72 (`9497fae`, merged as `bf24f1a`),
+> live 2026-11-13. Verified live 2026-11-16 as `staff_finance`: an action on a task whose document
+> they can't open returns 403 `TASK_DOCUMENT_VIEW_FORBIDDEN`, and `GET /tasks/:id` reports
+> `canRoute: false` there, as `GET /workflow-instances/:id` does. DRIFT-25 is closed. Its write-up
+> is in git history.
 
 > **2026-11-11: re-checked against `4da2980`.** Done and removed: BE-19 (500 at a parallel
 > fork), fixed in `ae08ef5` (PR #58, 2026-10-23) and confirmed working by the product owner.
@@ -40,7 +43,7 @@
 Each item states what the frontend does today, what it needs, and why.
 
 **Take BE-2, BE-4 and BE-21 first**:
-they are security items rather than features. BE-27 needs only its live re-check (ours). BE-22 is a product decision (no automatic AI
+they are security items rather than features. BE-22 is a product decision (no automatic AI
 summaries) and costs a Gemini call per upload until it ships.
 
 ---
@@ -57,72 +60,14 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
 | **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
-| **BE-27** | Acting on a document requires being able to open it         | Security fix    | 🟨 Shipped | No — shipped in PR #72 (live 2026-11-13); live re-check pending |
 | **BE-29** | Own error codes for the mid-session MFA responses           | Small fix       | 🟡 Low   | No — the frontend matches message text     |
+| **BE-30** | Document count on paged folder rows                         | Small fix       | 🟡 Low   | No — folder cards show no count meanwhile  |
 
 **Questions, not asks:** Q-1 (was removing MFA method change intended?) and Q-2 (storage bucket
 versioning and who owns unique keys), after BE-29.
 
 **Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
 them until the PM confirms the AI features are in scope.
-
----
-
-## 🟨 BE-27 · Acting on a document requires being able to open it — **shipped 2026-11-13, live re-check pending**
-
-**Shipped in PR #72** (`9497fae`, `tasks.service.ts`), live 2026-11-13. Checked in the code, not yet
-on live:
-
-- Ask 1: `POST /tasks/:id/action` first checks that the actor can view every selected document
-  (folder visibility, then the same policy as `GET /documents/:id`), else **403
-  `TASK_DOCUMENT_VIEW_FORBIDDEN`**. The tier and grant checks still run after it.
-- Ask 2: `GET /tasks/:id` sets `canRoute` only when `canView`, matching `GET /workflow-instances/:id`.
-- Ask 3: `canRequestRoute` also requires `canView`.
-
-Run **How to verify** below on live, then remove this item and mark DRIFT-25 fixed.
-
-Checked against `edms-backend` `dev` at `c95b9fb` and on live. **Product decision (2026-11-12):
-nobody may approve, review, reject or otherwise act on a document they aren't allowed to open.**
-
-### What happens today
-
-A `staff` user who can't open an `internal` document (another department's cabinet, no grant)
-can still act on it at a stage assigned to their role. On 2026-11-11 such a user **rejected** a
-workflow and closed it with no access granted.
-
-- `isConfidentialityActionAllowed` (`src/shared/constants/access-control.constants.ts:107`) skips
-  the tier check for `public` and `internal`, and `route` has no entry in `ACTION_PERMISSION`
-  (line 53), so it returns `true`. `POST /tasks/:id/action` relies on it
-  (`assertTaskRouteConfidentiality`, `tasks.service.ts`), and so does `canRoute` in
-  `GET /tasks/:id`. Viewing uses the stricter check (department, cabinet access, grants).
-- The two endpoints report different flags for the same document and user. Seen on live as
-  `staff_finance` on instance `8a218839-f1ef-4421-974e-f46158166c95`:
-  - `GET /workflow-instances/:id` → `{ canView: false, canRoute: false, canRequestView: true }`
-    (hard-coded for locked documents, `workflow-document-access.ts`)
-  - `GET /tasks/:id` → `{ canView: false, canRoute: true, canRequestView: true, canRequestRoute: false }`
-
-The frontend now treats a document as actionable only when `canView && canRoute` (2026-11-12), so
-the page no longer offers the actions. The API still accepts them.
-
-### What we need
-
-1. **Route clearance includes view.** A document is routable by a user only if they can also
-   view it (the same department / cabinet / grant check `GET /documents/:id` uses). An approved
-   `view` grant counts. `POST /tasks/:id/action` returns 403 for any document that fails it,
-   like it does for a tier the user isn't cleared for.
-2. **One answer for `canRoute`.** `GET /tasks/:id` and `GET /workflow-instances/:id` report the
-   same `canRoute` for the same user and document, and `canRoute` is never `true` while
-   `canView` is `false`.
-3. **Request flags follow from it.** For a document the user can't open, `canRequestView: true`;
-   `canRequestRoute` only when a `route` grant would still be needed once they can view it.
-
-### How to verify
-
-As `staff_finance` on a task whose document sits in another department's cabinet (e.g. instance
-`8a218839…`, task `b36072de-1f47-43ca-b743-3c597ac6ecab`, document "test 48mb"): both endpoints
-report `canRoute: false`, and `POST /tasks/:id/action { action: 'reject' }` returns 403. Approve a
-`view` access request for them: both report `canView: true, canRoute: true`, and the action
-succeeds.
 
 ---
 
@@ -430,6 +375,21 @@ accessing this account", `src/lib/sessionEnd.ts`). Rewording that message breaks
 
 **Ask:** send the refresh path's codes from the middleware too: 403 `MFA_SETUP_REQUIRED` and 401
 `SESSION_SECURITY_CHANGED`. The frontend then drops the message match.
+
+---
+
+## 🟡 BE-30 · Document count on paged folder rows — **new, 2026-11-16**
+
+Checked against `edms-backend` `dev` at `bf6bf46`. `GET /cabinets/:cabinetId/folders` without
+query params returns at most 500 folders (`findByCabinet`, `DEFAULT_TAKE`), each with
+`_count.documents`. With `limit`, `cursor` or `parentId` it pages as `{ folders, nextCursor }`
+(`findPageByCabinet`), but those rows select no `_count`.
+
+Since 2026-11-16 the frontend always pages, so a cabinet with more than 500 folders lists them
+all. The cost: the cabinet browser no longer shows how many documents each folder holds.
+
+**Ask:** add `_count: { documents }` to the paged rows, the same count the unpaged list returns.
+The frontend then shows it on folder cards again.
 
 ---
 

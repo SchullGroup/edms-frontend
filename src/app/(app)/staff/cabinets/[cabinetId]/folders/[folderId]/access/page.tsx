@@ -60,7 +60,7 @@ export default function FolderAccessPage({
     isError: foldersError,
     refetch,
   } = useCabinetFolders(cabinetId);
-  const folders = foldersData?.data || [];
+  const folders = foldersData || [];
   const folder = folders.find((f) => f.id === folderId);
 
   const roleAllows = can('folder', 'edit');

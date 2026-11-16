@@ -267,7 +267,7 @@ function UploadNewDocument({
   const { data: cabinetsData } = useCabinets();
   const cabinets = cabinetsData?.data || [];
   const { data: foldersData } = useCabinetFolders(cabinetId || undefined);
-  const folders = foldersData?.data || [];
+  const folders = foldersData || [];
 
   const pickFile = (f: File | null) => {
     setFile(f);

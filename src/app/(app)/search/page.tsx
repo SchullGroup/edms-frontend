@@ -219,7 +219,7 @@ export default function SearchPage() {
   // Folders of the picked cabinet, each with its path ("Finance / Invoices").
   const foldersQuery = useCabinetFolders(filters.cabinetId);
   const folderOptions = useMemo(
-    () => foldersAsPaths(foldersQuery.data?.data ?? []),
+    () => foldersAsPaths(foldersQuery.data ?? []),
     [foldersQuery.data],
   );
 

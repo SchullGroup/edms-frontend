@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { UPLOAD_ACCEPT, UPLOAD_TYPES_LABEL, resolveUploadMimeType } from '@/constants/uploadTypes';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useUIStore } from '@/store/useUIStore';
 import { Icon } from '@/components/ui/Icons';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
@@ -347,7 +347,7 @@ function BatchBar({
   const cabinets = cabinetsData?.data || [];
   const [cabinetId, setCabinetId] = useState('');
   const { data: folData, isLoading: foldersLoading } = useCabinetFolders(cabinetId || undefined);
-  const folders = folData?.data || [];
+  const folders = folData || [];
   const [folderId, setFolderId] = useState('');
   const [confidentiality, setConfidentiality] = useState('');
   const [urgency, setUrgency] = useState('');
@@ -496,10 +496,12 @@ function IDUCard({
 
   const [title, setTitle] = useState(file.name.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]/g, ' '));
   const [type, setType] = useState('');
-  const [selCab, setSelCab] = useState('');
+  // "Upload here" in the Cabinet Browser links with `?cab=` and `?folder=` as the starting place.
+  const searchParams = useSearchParams();
+  const [selCab, setSelCab] = useState(searchParams?.get('cab') ?? '');
   const { data: folData, isLoading: foldersLoading } = useCabinetFolders(selCab);
-  const folders = folData?.data || [];
-  const [selFol, setSelFol] = useState('');
+  const folders = folData || [];
+  const [selFol, setSelFol] = useState(searchParams?.get('folder') ?? '');
 
   // Update selCab to valid initial value if cabinets data loads
   useEffect(() => {
