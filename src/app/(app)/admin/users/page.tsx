@@ -11,6 +11,7 @@ import {
   useAssignUserRoles,
   useRemoveUserRole,
   useResendInvitation,
+  useResendPhoneVerification,
 } from '@/apis/hooks/useUsers';
 import { useRoles } from '@/apis/hooks/useRoles';
 import { useResetUserMfa } from '@/apis/hooks/useAuth';
@@ -25,9 +26,12 @@ import { SkeletonTable } from '@/components/common/Skeleton';
 import { fmtDate, fmtDateTime } from '@/utils/helpers';
 import { METHOD_LABEL } from '@/components/security/mfaParts';
 import { RowActionsMenu, type RowAction } from '@/components/ui/RowActionsMenu';
-import { Mail, RotateCcw, ShieldCheck, ShieldOff, UserCheck, UserX } from 'lucide-react';
+import { Mail, RotateCcw, ShieldCheck, ShieldOff, Smartphone, UserCheck, UserX } from 'lucide-react';
 
 const USERS_PAGE_SIZE = 10;
+
+/** The backend's E.164 rule for `phoneNumber` (PR #72). */
+const E164 = /^\+[1-9]\d{1,14}$/;
 
 // `pending` = invited, no password set yet; accepting the invitation makes
 // them active (edms-backend PR #49).
@@ -52,6 +56,9 @@ export default function UsersPage() {
   const editScope = scopeFor('user', 'edit');
   const canRequireMfa = canEditUser && editScope !== null && editScope !== 'own';
   const canResetMfa = canEditUser && editScope === 'global';
+  // Phone numbers need global scope on the route's own permission (403 `PHONE_ADMIN_ONLY`).
+  const canSetPhoneOnInvite = canCreateUser && scopeFor('user', 'create') === 'global';
+  const canSetPhone = canEditUser && editScope === 'global';
 
   const [page, setPage] = useState(1);
   const [departmentFilter, setDepartmentFilter] = useState('');
@@ -85,6 +92,7 @@ export default function UsersPage() {
   const removeUserRole = useRemoveUserRole();
   const resendInvitation = useResendInvitation();
   const resetUserMfa = useResetUserMfa();
+  const resendPhoneVerification = useResendPhoneVerification();
 
   const { data: departmentsData } = useDepartments();
   const departmentIndex = useMemo(
@@ -125,7 +133,11 @@ export default function UsersPage() {
       departmentId: user?.departmentId || departmentList[0]?.id || '',
       managerId: user?.managerId || '',
       mfaRequired: false,
+      phoneNumber: user?.phoneNumber || '',
     };
+    const phoneEditable = isNew ? canSetPhoneOnInvite : canSetPhone;
+    // The number they sign in with can't change until an admin resets their two-step sign-in.
+    const phoneLocked = !isNew && user?.mfaEnabled && user?.mfaMethod === 'sms';
     // Modal actions aren't real <form> submits, so `required`/`type="email"`
     // alone won't pop the browser's native validation UI — this ref lets the
     // Save/Send invite handler trigger it explicitly via reportValidity().
@@ -187,6 +199,26 @@ export default function UsersPage() {
             />
             <div className="help">Gets stages assigned to the submitter&apos;s manager.</div>
           </div>
+          {phoneEditable && (
+            <div className="field col-span-2">
+              <label>Mobile number</label>
+              <input
+                className="input"
+                type="tel"
+                inputMode="tel"
+                autoComplete="off"
+                defaultValue={u.phoneNumber}
+                placeholder="+2348012345678"
+                disabled={phoneLocked}
+                onChange={(e) => (u.phoneNumber = e.target.value)}
+              />
+              <div className="help">
+                {phoneLocked
+                  ? 'They get their sign-in codes by text at this number. Reset their two-step sign-in before changing it.'
+                  : 'For two-step sign-in codes by text. International format, starting with +. We text them a code to confirm it. A number can be changed later, not removed.'}
+              </div>
+            </div>
+          )}
           <div className="field col-span-2">
             <label>Roles</label>
             <RolePicker initialRoleIds={u.roleIds} onChange={(roleIds) => (u.roleIds = roleIds)} />
@@ -206,8 +238,8 @@ export default function UsersPage() {
                 Require two-step sign-in
               </label>
               <div className="help">
-                They set it up the first time they sign in, with an authenticator app or a code by
-                email.
+                They set it up the first time they sign in, with an authenticator app, or a code by
+                email or text message.
               </div>
             </div>
           )}
@@ -227,6 +259,16 @@ export default function UsersPage() {
               addToast('Name and email are required', 'error');
               return false;
             }
+            const phone = u.phoneNumber.replace(/[\s()-]/g, '');
+            const phoneChanged = phoneEditable && !phoneLocked && phone !== (user?.phoneNumber || '');
+            if (phoneChanged && !phone) {
+              addToast('A mobile number can be changed but not removed', 'error');
+              return false;
+            }
+            if (phoneChanged && !E164.test(phone)) {
+              addToast('Enter the mobile number in international format, e.g. +2348012345678', 'error');
+              return false;
+            }
             if (isNew) {
               // No `password` — the backend now accepts creation without one
               // and sends a real invite email (`invited: true` in the
@@ -239,6 +281,7 @@ export default function UsersPage() {
                   managerId: u.managerId || undefined,
                   roleIds: u.roleIds.length ? u.roleIds : undefined,
                   ...(u.mfaRequired ? { mfaRequired: true } : {}),
+                  ...(phoneChanged ? { phoneNumber: phone } : {}),
                 })
                 .then(() => {})
                 .catch(() => false);
@@ -259,6 +302,7 @@ export default function UsersPage() {
                     ...(u.managerId !== (user?.managerId || '')
                       ? { managerId: u.managerId || null }
                       : {}),
+                    ...(phoneChanged ? { phoneNumber: phone } : {}),
                   } as any,
                 })
                 .then(() => {}),
@@ -493,6 +537,17 @@ export default function UsersPage() {
         icon: <RotateCcw size={15} />,
         title: 'For someone who lost their device and recovery codes',
         onSelect: () => handleResetMfa(u),
+      });
+    }
+    // Pending users are texted when they accept the invitation; the backend sends to active ones.
+    if (canSetPhone && u.phoneNumber && u.status === 'Active') {
+      actions.push({
+        key: 'phone',
+        label: 'Resend phone code',
+        icon: <Smartphone size={15} />,
+        title: 'Texts them a new code to confirm their mobile number',
+        disabled: resendPhoneVerification.isPending,
+        onSelect: () => resendPhoneVerification.mutate({ id: u.id, name: u.name }),
       });
     }
     // A pending user becomes active by accepting the invitation, not from here.

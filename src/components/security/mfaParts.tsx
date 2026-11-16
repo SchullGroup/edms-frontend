@@ -3,30 +3,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { useUIStore } from '@/store/useUIStore';
-import type { MfaMethod } from '@/types/models';
 
 /** Backend `MFA_OTP_RESEND_COOLDOWN_SECONDS`. */
 export const OTP_RESEND_SECONDS = 60;
 
-export const METHOD_LABEL: Record<MfaMethod, string> = {
-  authenticator: 'Authenticator app',
-  email: 'Email',
-  sms: 'Text message',
-};
-
-const OTP_ERROR_TEXT: Record<string, string> = {
-  MFA_OTP_COOLDOWN: 'A code was sent less than a minute ago. Wait a moment, then send a new one.',
-  MFA_OTP_RATE_LIMITED: 'Too many codes requested. Try again in an hour, or use a recovery code.',
-  MFA_OTP_DELIVERY_FAILED: 'We couldn’t send the email. Try again in a moment.',
-  MFA_OTP_NOT_CONFIGURED: 'Email codes aren’t set up on this server yet.',
-  MFA_LOCKED: 'Too many wrong codes. Wait a few minutes, then try again.',
-};
-
-/** The backend's message, reworded for the email-code errors. */
-export const mfaErrorText = (err: any, fallback: string): string => {
-  const data = err?.response?.data;
-  return OTP_ERROR_TEXT[data?.code] || data?.message || fallback;
-};
+export { METHOD_LABEL, mfaErrorText } from '@/lib/mfaText';
 
 /** Seconds until another code may be sent; `restart` after each send. */
 export function useResendCountdown() {
