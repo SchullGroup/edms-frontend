@@ -5,14 +5,18 @@ import { Combobox, ComboboxOption } from '@/components/ui/Combobox';
 import { useDocumentSearch } from '@/apis/hooks/useDocuments';
 
 const SEARCH_DEBOUNCE_MS = 300;
+const PAGE_SIZE = 20;
 
 interface DocumentPickerProps {
   value: string;
-  onChange: (documentId: string) => void;
+  onChange: (documentId: string, document?: { id: string; title: string }) => void;
   /** Label for a value set from outside, e.g. the document already linked. */
   initialOption?: ComboboxOption | null;
+  /** Never offered, e.g. documents already attached. */
+  excludeIds?: string[];
   placeholder?: string;
   ariaLabel?: string;
+  disabled?: boolean;
 }
 
 /** Single-select document picker over `GET /documents/search`; the reference shows as a hint
@@ -21,8 +25,10 @@ export function DocumentPicker({
   value,
   onChange,
   initialOption,
+  excludeIds,
   placeholder = 'Search for a document…',
   ariaLabel,
+  disabled,
 }: DocumentPickerProps) {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -32,21 +38,19 @@ export function DocumentPicker({
     return () => window.clearTimeout(t);
   }, [query]);
 
-  const { data, isLoading, isError } = useDocumentSearch(debounced, { limit: 20 });
+  const { data, isLoading, isError } = useDocumentSearch(debounced, { limit: PAGE_SIZE });
   const [picked, setPicked] = useState<ComboboxOption | null>(null);
   const pending = !!debounced && (query.trim() !== debounced || isLoading);
+  const found = data?.data ?? [];
+  const total = data?.pagination?.total ?? 0;
 
-  const options = useMemo<ComboboxOption[]>(
-    () =>
-      pending || !debounced
-        ? []
-        : (data?.data ?? []).map((d) => ({
-            value: d.id,
-            label: d.title,
-            hint: d.referenceNumber ?? undefined,
-          })),
-    [pending, debounced, data],
-  );
+  const options = useMemo<ComboboxOption[]>(() => {
+    if (pending || !debounced) return [];
+    const excluded = new Set(excludeIds);
+    return (data?.data ?? [])
+      .filter((d) => !excluded.has(d.id))
+      .map((d) => ({ value: d.id, label: d.title, hint: d.referenceNumber ?? undefined }));
+  }, [pending, debounced, data, excludeIds]);
 
   const knownOptions = [picked, initialOption].filter(Boolean) as ComboboxOption[];
 
@@ -56,12 +60,19 @@ export function DocumentPicker({
       value={value}
       onChange={(v) => {
         const id = v as string;
-        setPicked(options.find((o) => o.value === id) ?? null);
-        onChange(id);
+        const option = options.find((o) => o.value === id) ?? null;
+        setPicked(option);
+        onChange(id, option ? { id, title: option.label } : undefined);
       }}
       onQueryChange={setQuery}
       loading={pending}
       knownOptions={knownOptions}
+      disabled={disabled}
+      footer={
+        !pending && debounced && total > found.length
+          ? `Showing ${found.length} of ${total}. Keep typing to narrow it down.`
+          : null
+      }
       placeholder={placeholder}
       searchPlaceholder="Title or text…"
       emptyText={

@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useMemo, useRef, useState } from 'react';
-import { Combobox } from '@/components/ui/Combobox';
 import { DateTimeField } from '@/components/ui/DatePicker';
 import { Icon } from '@/components/ui/Icons';
-import { useDocuments } from '@/apis/hooks/useDocuments';
+import { DocumentPicker } from '@/components/documents/DocumentPicker';
 import { useMultipartUploader } from '@/apis/hooks/useMultipartUploader';
 import { calculateChecksum } from '@/apis/services/s3.service';
 import { UPLOAD_ACCEPT, resolveUploadMimeType } from '@/constants/uploadTypes';
@@ -122,13 +121,9 @@ export function CircularForm({ initial, submitLabel, onSubmit, onCancel }: Circu
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { startUpload, uploadProgress } = useMultipartUploader();
-  const { data: docsData } = useDocuments({ limit: 100 }, { enabled: canLinkDocuments });
-  const documentOptions = useMemo(
-    () =>
-      (docsData?.data ?? [])
-        .filter((d) => !attachments.some((a) => a.kind === 'document' && a.documentId === d.id))
-        .map((d) => ({ value: d.id, label: d.title, hint: d.referenceNumber ?? undefined })),
-    [docsData, attachments],
+  const linkedDocumentIds = useMemo(
+    () => attachments.flatMap((a) => (a.kind === 'document' ? [a.documentId] : [])),
+    [attachments],
   );
 
   const changeAttachments = (next: DraftAttachment[]) => {
@@ -344,14 +339,13 @@ export function CircularForm({ initial, submitLabel, onSubmit, onCancel }: Circu
               </button>
               {canLinkDocuments && (
                 <div style={{ flex: '1 1 220px' }}>
-                  <Combobox
-                    options={documentOptions}
+                  <DocumentPicker
                     value=""
+                    excludeIds={linkedDocumentIds}
                     disabled={attachments.length >= 20}
                     placeholder="Link an existing document…"
-                    searchPlaceholder="Search documents…"
-                    onChange={(id) => {
-                      const doc = docsData?.data.find((d) => d.id === id);
+                    ariaLabel="Link an existing document"
+                    onChange={(_, doc) => {
                       if (doc) {
                         changeAttachments([
                           ...attachments,
