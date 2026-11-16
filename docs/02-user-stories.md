@@ -348,6 +348,8 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
 - [x] **Narrowed 2026-10-21 (PM decision):** PDF and images only, because every upload is
       OCR'd — PDF and TIFF up to 100 MB, JPEG and PNG up to 10 MB (Textract's async image
       limit). DOCX/XLSX are no longer accepted; ones already uploaded still open.
+- [x] **Narrowed 2026-11-16 (product decision):** TIFF dropped too, so PDF up to 100 MB,
+      JPEG and PNG up to 10 MB. The backend still allows TIFF; the frontend refuses it.
 
 **Known drift:** DRIFT-06 — the file lands in a third-party bucket the backend cannot read.
 

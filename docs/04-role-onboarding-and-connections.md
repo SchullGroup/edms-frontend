@@ -427,7 +427,7 @@ last is why the routing picker couldn't list workflows for a freshly seeded staf
 ```
 morning   → /staff        check dashboard   ✅ the bell shows new assignments
           → /staff/tasks  work the queue    ✅
-during    → /upload       file arrivals     ✅  (PDF/TIFF ≤100 MB, JPEG/PNG ≤10 MB)
+during    → /upload       file arrivals     ✅  (PDF ≤100 MB, JPEG/PNG ≤10 MB)
           → /doc/[id]     add context       ✅ comment on the workflow action (DRIFT-08)
           → route         send for approval ✅ live · 🟠 fresh seed (DRIFT-14)
           → /search       find something    ✅ confirmed 2026-10-09
