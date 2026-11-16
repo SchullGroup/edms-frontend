@@ -60,7 +60,7 @@ export function DocumentHistoryPanel({ documentId, cabinetId, canViewVersions }:
   const { data: foldersData } = useCabinetFolders(cabinetId);
 
   const cabinets = cabinetsData?.data || [];
-  const folders = foldersData?.data || [];
+  const folders = foldersData || [];
   const versionById = new Map<string, DocumentVersion>((versions || []).map((v) => [v.id, v]));
 
   const show = (field: string, value: unknown, isDocumentField: boolean): string => {

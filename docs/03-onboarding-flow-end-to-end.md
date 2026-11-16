@@ -1013,8 +1013,8 @@ npm run dev                # Web   :3000
 - ✅ The audit trail is real and hash-chained (DRIFT-11). ~~**No audit trail.**~~ Findings,
   retention are still not built — don't oversell compliance. Separation of duties and
   redaction are out of scope (PM, 2026-10-21) — don't promise them either.
-- ⚠️ Accepted types: **PDF and images only** (PM, 2026-10-21) — PDF and TIFF up to 100 MB,
-  JPEG and PNG up to 10 MB, since every upload is OCR'd and Textract's async API caps images
-  at 10 MB (`src/constants/uploadTypes.ts`). Tell users to save Word/Excel files as PDF.
+- ⚠️ Accepted types: **PDF, JPEG and PNG** (PM, 2026-10-21; TIFF dropped 2026-11-16) — PDF up to
+  100 MB, JPEG and PNG up to 10 MB, since every upload is OCR'd and Textract's async API caps images
+  at 10 MB (`src/constants/uploadTypes.ts`). Tell users to save Word/Excel files and TIFF scans as PDF.
   Uploads are chunked. *(Was PDF, DOCX, XLSX, TIFF, JPEG, PNG at 100 MB each.)*
 - ⚠️ A checked-out document can only be force-released once it is **overdue** — set an expected return date when checking out, or nobody but the holder can release it.

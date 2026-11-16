@@ -1,11 +1,10 @@
 const MB = 1024 * 1024;
 
-/** The one upload allowlist, matching the backend's (`ALLOWED_DOCUMENT_MIME_TYPES`). PDF and
- *  images only, since every upload is OCR'd; images cap at 10 MB because Textract's async API does. */
+/** The one upload allowlist: the backend's (`ALLOWED_DOCUMENT_MIME_TYPES`) minus TIFF, which
+ *  isn't uploaded (product decision 2026-11-16). Images cap at 10 MB, as Textract's async API does. */
 
 export const UPLOAD_TYPES = [
   { mime: 'application/pdf', extensions: ['pdf'], maxBytes: 100 * MB },
-  { mime: 'image/tiff', extensions: ['tif', 'tiff'], maxBytes: 100 * MB },
   { mime: 'image/jpeg', extensions: ['jpg', 'jpeg'], maxBytes: 10 * MB },
   { mime: 'image/png', extensions: ['png'], maxBytes: 10 * MB },
 ] as const;
@@ -27,7 +26,7 @@ export function fileKindLabel(mime: string): string {
 
 export const MAX_UPLOAD_BYTES = 100 * MB;
 
-export const UPLOAD_TYPES_LABEL = 'PDF or TIFF up to 100 MB, JPG or PNG up to 10 MB';
+export const UPLOAD_TYPES_LABEL = 'PDF up to 100 MB, JPG or PNG up to 10 MB';
 
 /** For `<input type="file" accept>` — MIME types plus extensions, since some
  *  systems report no MIME type for a file. */

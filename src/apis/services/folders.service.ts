@@ -9,15 +9,48 @@ import {
   UpdateFolderRequest,
 } from '@/types/models';
 
+/** One page of `GET /cabinets/{id}/folders`; `nextCursor` is null on the last page. */
+export interface FolderPage {
+  folders: Folder[];
+  nextCursor: string | null;
+}
+
+export interface FolderPageQuery {
+  /** `null` = top-level folders; omitted = every level. */
+  parentId?: string | null;
+  cursor?: string;
+  limit?: number;
+}
+
+const FOLDER_PAGE_LIMIT = 100; // the API's maximum
+const MAX_FOLDER_PAGES = 200; // a safety stop: 20,000 folders
+
 export const foldersService = {
   // --- Cabinet folders ---
 
-  // `GET /cabinets/{id}/folders` returns `{ success, data: Folder[] }` — not paginated.
-  // Returns the wrapper (callers read `.data`) to stay consistent with the other
-  // list services (`cabinetsService.getAll`, `departmentsService.getAll`).
-  listByCabinet: async (cabinetId: string): Promise<ApiResponse<Folder[]>> => {
-    const res = await apiClient.get<ApiResponse<Folder[]>>(`/cabinets/${cabinetId}/folders`);
-    return res.data;
+  // Paged rows carry no `children` or `_count`. A page can come back short, even empty,
+  // with a cursor: the API scans 500 rows per call and drops folders the caller can't see.
+  listPage: async (cabinetId: string, query: FolderPageQuery = {}): Promise<FolderPage> => {
+    const params: Record<string, string | number> = { limit: query.limit ?? FOLDER_PAGE_LIMIT };
+    if (query.cursor) params.cursor = query.cursor;
+    if (query.parentId !== undefined) params.parentId = query.parentId ?? 'root';
+    const res = await apiClient.get<ApiResponse<FolderPage>>(`/cabinets/${cabinetId}/folders`, {
+      params,
+    });
+    return res.data.data;
+  },
+
+  /** Every folder in the cabinet the caller can see, flat, following the cursor to the end. */
+  listAllByCabinet: async (cabinetId: string): Promise<Folder[]> => {
+    const all: Folder[] = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < MAX_FOLDER_PAGES; i++) {
+      const page = await foldersService.listPage(cabinetId, { cursor });
+      all.push(...page.folders);
+      if (!page.nextCursor || page.nextCursor === cursor) break;
+      cursor = page.nextCursor;
+    }
+    return all;
   },
 
   create: async (cabinetId: string, data: CreateFolderRequest): Promise<Folder> => {

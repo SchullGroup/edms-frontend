@@ -427,7 +427,7 @@ last is why the routing picker couldn't list workflows for a freshly seeded staf
 ```
 morning   → /staff        check dashboard   ✅ the bell shows new assignments
           → /staff/tasks  work the queue    ✅
-during    → /upload       file arrivals     ✅  (PDF/TIFF ≤100 MB, JPEG/PNG ≤10 MB)
+during    → /upload       file arrivals     ✅  (PDF ≤100 MB, JPEG/PNG ≤10 MB)
           → /doc/[id]     add context       ✅ comment on the workflow action (DRIFT-08)
           → route         send for approval ✅ live · 🟠 fresh seed (DRIFT-14)
           → /search       find something    ✅ confirmed 2026-10-09
@@ -517,7 +517,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 | Follow a notification to its item | 🟨 | Task and workflow links (`/tasks/:id`, `/workflow-instances/:id`) open the workflow page; `/documents/:id` opens the document page (DRIFT-17); previously 404'd |
 | Spot ageing work | ✅ | `/supervisor/bottlenecks` reads server-side ageing and breach counts; the staff dashboard reads `GET /sla/breaches`. *(Was 🟨: "breach count is permanently zero … `effStatus()` …" — `effStatus()` was deleted 2026-09-21, DRIFT-13.)* |
 | Rebalance workload | ✅ | |
-| Delegate while on leave | 🟨 | `/delegations` (create, list, end) since 2026-09-04; not re-verified end to end. *(Was ⛔ "No UI".)* |
+| Delegate while on leave | ✅ | `/delegations` (create, list, end) since 2026-09-04; confirmed by the product owner's testing, 2026-11-16. *(Was ⛔ "No UI", then 🟨 not re-verified.)* |
 | Get warned before a breach | 🟨 | `sla.breach` is sent to the supervisor role, `sla.warning` to the assignee (DRIFT-10); not clicked through. *(Was ⛔ "tells nobody".)* |
 | Export team stats | ✅ | `exportCsv` |
 | Index a batch of scanned invoices | ✅ | *(2026-11-10, ticket 08, verified live as `supervisor_finance`)* Select them on `/search` → **Index selected** → `/search/mass-index`: one table per cabinet, "Apply" fills a column, **Save all** sends `PUT /documents/metadata/batch`. Needs `document_metadata:edit` (seeded at department scope) and Edit on the cabinet |
