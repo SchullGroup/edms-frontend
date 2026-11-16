@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { authService, type LoginResponseData } from '@/apis/services/auth.service';
-import type { MfaChallenge, MfaSetupChallenge } from '@/types/models';
+import type { MfaChallenge, MfaMethod, MfaSetupChallenge } from '@/types/models';
 import { mfaErrorText, useResendCountdown } from '@/components/security/mfaParts';
 import { CodeBoxes } from '@/components/auth/CodeBoxes';
 import { MfaSetupStep } from '@/components/auth/MfaSetupStep';
@@ -161,7 +161,7 @@ export default function LoginPage() {
         <MfaStep
           key={mfa.mfaToken}
           mfaToken={mfa.mfaToken}
-          byEmail={mfa.mfaMethod === 'email'}
+          method={mfa.mfaMethod ?? 'authenticator'}
           email={email}
           onSignedIn={finishSignIn}
           onStartAgain={startAgain}
@@ -292,19 +292,20 @@ const CHALLENGE_MS = 5 * 60 * 1000;
 /** The second sign-in step. A full code submits itself; an expired challenge needs the password again. */
 function MfaStep({
   mfaToken,
-  byEmail,
+  method,
   email,
   onSignedIn,
   onStartAgain,
 }: {
   mfaToken: string;
-  /** Email users get a code sent here; app users read it off their phone. */
-  byEmail: boolean;
+  /** Email and SMS users get a code sent on arrival; app users read it off their app. */
+  method: MfaMethod;
   email: string;
   onSignedIn: (data: LoginResponseData) => void;
   onStartAgain: () => void;
 }) {
   const { appName } = getBrandPreset();
+  const sendsCode = method !== 'authenticator';
   const [useRecovery, setUseRecovery] = useState(false);
   const [code, setCode] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
@@ -337,17 +338,17 @@ function MfaStep({
   const sent = React.useRef(false);
   const { mutate: send } = sendCode;
   useEffect(() => {
-    if (!byEmail || sent.current) return;
+    if (!sendsCode || sent.current) return;
     sent.current = true;
     send();
-  }, [byEmail, send]);
+  }, [sendsCode, send]);
 
   const verify = useMutation({
     mutationFn: (proof: { code: string } | { recoveryCode: string }) =>
       authService.verifyMfa(
         'recoveryCode' in proof
           ? { mfaToken, recoveryCode: proof.recoveryCode }
-          : { mfaToken, code: proof.code, ...(byEmail ? { challengeId } : {}) },
+          : { mfaToken, code: proof.code, ...(sendsCode ? { challengeId } : {}) },
       ),
     onSuccess: onSignedIn,
     onError: (err: any) => {
@@ -364,13 +365,13 @@ function MfaStep({
     },
   });
 
-  const canSubmitCode = code.length === 6 && (!byEmail || !!challengeId);
+  const canSubmitCode = code.length === 6 && (!sendsCode || !!challengeId);
 
   const onCodeChange = (next: string) => {
     setCode(next);
     setWrongCode(false);
     setError('');
-    if (next.length === 6 && (!byEmail || challengeId) && !verify.isPending) verify.mutate({ code: next });
+    if (next.length === 6 && (!sendsCode || challengeId) && !verify.isPending) verify.mutate({ code: next });
   };
 
   const submit = (e: React.FormEvent) => {
@@ -397,12 +398,14 @@ function MfaStep({
     );
   }
 
-  const icon = useRecovery ? STEP_ICON.recovery : byEmail ? STEP_ICON.email : STEP_ICON.authenticator;
+  const icon = useRecovery ? STEP_ICON.recovery : STEP_ICON[method];
   const heading = useRecovery
     ? 'Use a recovery code'
-    : byEmail
+    : method === 'email'
       ? 'Check your inbox'
-      : 'Enter your verification code';
+      : method === 'sms'
+        ? 'Check your phone'
+        : 'Enter your verification code';
 
   return (
     <div className="flex flex-col">
@@ -413,11 +416,13 @@ function MfaStep({
         <p className="mt-2 text-sm leading-relaxed text-muted" style={{ textWrap: 'balance' }}>
           {useRecovery ? (
             'Enter one of the recovery codes you saved. Each works once.'
-          ) : byEmail ? (
+          ) : method === 'email' ? (
             <>
               Enter the 6-digit code we sent to{' '}
               <strong className="font-semibold text-(--ink)">{maskEmail(email)}</strong>
             </>
+          ) : method === 'sms' ? (
+            'Enter the 6-digit code we texted to your registered phone number.'
           ) : (
             `Open your authenticator app and enter the 6-digit code for ${appName}.`
           )}
@@ -446,7 +451,7 @@ function MfaStep({
               value={code}
               onChange={onCodeChange}
               invalid={wrongCode}
-              disabled={verify.isPending || (byEmail && !challengeId)}
+              disabled={verify.isPending || (sendsCode && !challengeId)}
               describedBy={error ? 'mfa-error' : undefined}
             />
           )}
@@ -471,7 +476,7 @@ function MfaStep({
           )}
         </button>
 
-        {byEmail && !useRecovery && (
+        {sendsCode && !useRecovery && (
           <p className="mt-4 text-[13px] text-muted" aria-live="polite">
             Didn’t get a code?{' '}
             {sendCode.isPending ? (
@@ -500,9 +505,11 @@ function MfaStep({
             onClick={switchMode}
           >
             {useRecovery
-              ? byEmail
+              ? method === 'email'
                 ? 'Use an emailed code instead'
-                : 'Use a code from my app instead'
+                : method === 'sms'
+                  ? 'Use a texted code instead'
+                  : 'Use a code from my app instead'
               : 'Use a recovery code'}
           </button>
         </div>

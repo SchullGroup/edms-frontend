@@ -30,6 +30,12 @@ export const STEP_ICON = {
       <path d="M3.5 6.5l8.5 6.5 8.5-6.5" />
     </svg>
   ),
+  sms: (
+    <svg {...svgProps}>
+      <rect x="6" y="2.5" width="12" height="19" rx="2.5" />
+      <path d="M10.5 18.5h3" />
+    </svg>
+  ),
   authenticator: (
     <svg {...svgProps}>
       <path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z" />

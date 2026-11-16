@@ -39,3 +39,17 @@ export function useResetUserMfa() {
     },
   });
 }
+
+/** `POST /auth/mfa/phone/resend`: texts a code to confirm the phone an admin registered. */
+export function useResendOwnPhoneVerification() {
+  return useMutation({ mutationFn: authService.resendOwnPhoneVerification });
+}
+
+/** `POST /auth/mfa/phone/confirm`; on success the settings show the confirmed number. */
+export function useConfirmOwnPhone() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: authService.confirmOwnPhone,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: authKeys.mfaSettings }),
+  });
+}

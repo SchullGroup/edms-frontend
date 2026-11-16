@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { authService, type LoginResponseData } from '@/apis/services/auth.service';
-import type { MfaSetupStart } from '@/types/models';
+import type { MfaMethod, MfaSetupStart } from '@/types/models';
 import { CodeBoxes } from '@/components/auth/CodeBoxes';
 import { AuthenticatorKey, mfaErrorText, useResendCountdown } from '@/components/security/mfaParts';
 import { RecoveryCodes } from '@/components/security/RecoveryCodes';
@@ -22,7 +22,14 @@ const SETUP_MS = 10 * 60 * 1000;
 /** The set-up token ran out, or the account changed under it: the password is needed again. */
 const EXPIRED_CODES = new Set(['MFA_SETUP_TOKEN_INVALID', 'MFA_SETUP_SESSION_INVALID']);
 
-type Method = 'authenticator' | 'email';
+/** Start errors that mean the method can't be used here, so its option is switched off. */
+const UNAVAILABLE_CODES: Record<string, MfaMethod> = {
+  MFA_OTP_NOT_CONFIGURED: 'email',
+  MFA_SMS_NOT_CONFIGURED: 'sms',
+  MFA_PHONE_NOT_REGISTERED: 'sms',
+};
+
+type Method = MfaMethod;
 type AppKey = Extract<MfaSetupStart, { method: 'authenticator' }>;
 type SetUp = LoginResponseData & { recoveryCodes: string[] };
 
@@ -42,7 +49,8 @@ export function MfaSetupStep({
   const [method, setMethod] = useState<Method | null>(null);
   const [appKey, setAppKey] = useState<AppKey | null>(null);
   const [challengeId, setChallengeId] = useState('');
-  const [emailUnavailable, setEmailUnavailable] = useState('');
+  const [sentBy, setSentBy] = useState<Method | null>(null);
+  const [unavailable, setUnavailable] = useState<Partial<Record<Method, string>>>({});
   const [startError, setStartError] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
@@ -65,6 +73,7 @@ export function MfaSetupStep({
         return;
       }
       setChallengeId(r.challengeId);
+      setSentBy(r.method);
       setCode('');
       setWrongCode(false);
       restart();
@@ -73,8 +82,8 @@ export function MfaSetupStep({
       const errCode = err.response?.data?.code;
       if (EXPIRED_CODES.has(errCode)) {
         setExpired(true);
-      } else if (m === 'email' && errCode === 'MFA_OTP_NOT_CONFIGURED') {
-        setEmailUnavailable(mfaErrorText(err, ''));
+      } else if (UNAVAILABLE_CODES[errCode] === m) {
+        setUnavailable((u) => ({ ...u, [m]: mfaErrorText(err, '') }));
         setMethod(null);
       } else {
         setStartError(mfaErrorText(err, 'Couldn’t start set-up. Try again.'));
@@ -88,7 +97,7 @@ export function MfaSetupStep({
         mfaSetupToken,
         method: method ?? 'authenticator',
         code: c,
-        ...(method === 'email' ? { challengeId } : {}),
+        ...(method === 'email' || method === 'sms' ? { challengeId } : {}),
       }),
     onSuccess: setSetUp,
     onError: (err: any) => {
@@ -108,11 +117,12 @@ export function MfaSetupStep({
     setError('');
     setCode('');
     setWrongCode(false);
-    // Reuse what was issued: a new key would void one already scanned, and email has a 60 s cooldown.
-    if (m === 'authenticator' ? !appKey : !challengeId) start.mutate(m);
+    // Reuse what was issued: a new key voids a scanned one, and sent codes have a 60 s cooldown.
+    // A code sent one way can't be used for the other, so switching email ↔ text sends afresh.
+    if (m === 'authenticator' ? !appKey : !challengeId || sentBy !== m) start.mutate(m);
   };
 
-  const ready = method === 'authenticator' ? !!appKey : !!challengeId;
+  const ready = method === 'authenticator' ? !!appKey : !!challengeId && sentBy === method;
   const canSubmit = code.length === 6 && ready && !confirm.isPending;
 
   const onCodeChange = (next: string) => {
@@ -171,9 +181,18 @@ export function MfaSetupStep({
             />
             <MethodButton
               title="Email"
-              description={emailUnavailable || `A code sent to ${maskEmail(email)} each time you sign in.`}
-              disabled={!!emailUnavailable}
+              description={unavailable.email || `A code sent to ${maskEmail(email)} each time you sign in.`}
+              disabled={!!unavailable.email}
               onClick={() => choose('email')}
+            />
+            <MethodButton
+              title="Text message"
+              description={
+                unavailable.sms ||
+                'A code texted to the phone number your administrator registered for you.'
+              }
+              disabled={!!unavailable.sms}
+              onClick={() => choose('sms')}
             />
           </div>
         </div>
@@ -182,6 +201,8 @@ export function MfaSetupStep({
   }
 
   const byEmail = method === 'email';
+  const bySms = method === 'sms';
+  const sendsCode = byEmail || bySms;
 
   return (
     <div className="flex flex-col">
@@ -194,9 +215,9 @@ export function MfaSetupStep({
           if (canSubmit) confirm.mutate(code);
         }}
       >
-        <div className="mfa-icon">{byEmail ? STEP_ICON.email : STEP_ICON.authenticator}</div>
+        <div className="mfa-icon">{STEP_ICON[method]}</div>
         <h2 className="mt-4 text-[24px] font-bold tracking-[-0.01em]">
-          {byEmail ? 'Check your inbox' : 'Add it to your app'}
+          {byEmail ? 'Check your inbox' : bySms ? 'Check your phone' : 'Add it to your app'}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-muted" style={{ textWrap: 'balance' }}>
           {byEmail ? (
@@ -208,12 +229,18 @@ export function MfaSetupStep({
                 <strong className="font-semibold text-(--ink)">{maskEmail(email)}</strong>
               </>
             )
+          ) : bySms ? (
+            start.isPending ? (
+              'Texting a code to your registered phone number…'
+            ) : (
+              'Enter the 6-digit code we texted to the phone number your administrator registered.'
+            )
           ) : (
             `Scan the QR code with your authenticator app, then enter the 6-digit code it shows for ${appName}.`
           )}
         </p>
 
-        {!byEmail && (
+        {!sendsCode && (
           <div className="mt-5 w-full">
             {appKey ? (
               <AuthenticatorKey secret={appKey.secret} otpauthUri={appKey.otpauthUri} />
@@ -258,7 +285,7 @@ export function MfaSetupStep({
           )}
         </button>
 
-        {byEmail && (
+        {sendsCode && (
           <p className="mt-4 text-[13px] text-muted" aria-live="polite">
             Didn’t get a code?{' '}
             {start.isPending ? (
@@ -272,7 +299,7 @@ export function MfaSetupStep({
                 onClick={() => {
                   setStartError('');
                   setError('');
-                  start.mutate('email');
+                  start.mutate(method);
                 }}
               >
                 Send a new one

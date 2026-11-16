@@ -1743,7 +1743,7 @@ error paths and workers).
       off themselves; `/account/security` shows the status. Sign-in then asks for the 6-digit
       code, or a single-use recovery code, within 5 minutes of the password. An admin with global
       `user:edit` resets it for someone who lost their device (**Reset two-step**, shown only for
-      users who have it on). 🟨 Email set-up not verified end to end; ⛔ SMS (PR #72) not wired
+      users who have it on). ✅ Email codes confirmed by the product owner's testing (2026-11-16). 🟨 SMS (PR #72) wired 2026-11-16, not verified: an admin adds a mobile number, users choose **Text message** at set-up
 - [ ] Sign in with Active Directory (GBB 1.3) — *backend done, no UI:* `/auth/sso/*` over
       OIDC (PR #67). Not configured on live (`enabled: false`). Ticket 14
 - [x] Block or allow access by IP range and country (GBB 1.6) — `/admin/access-rules` (2026-11-11,
