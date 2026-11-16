@@ -78,9 +78,17 @@ setting up an environment.
 
 ## The short version
 
-**69 frontend pages · 171 backend routes · 6 roles · 0 tests.**
+**69 frontend pages · 176 backend routes · 6 roles · 0 tests.**
 *(Pages re-derived 2026-11-10: +1, `/search/mass-index` (ticket 08); then +1,
-`/account/security` (ticket 09).)*
+`/account/security` (ticket 09). Unchanged at 69 on 2026-11-16.)*
+*(Routes re-derived 2026-11-16, backend @ `dev` `e033b58` (PR #73): 171 → 176. PR #69 (`4da2980`)
+made it 180, which these docs missed (see the 2026-11-16 correction below). PR #71 (`142be0b`) added
+`/auth/mfa/setup/start` and `/setup/confirm`: 182. PR #72 (`9497fae`) removed 10 (the five
+self-service `/auth/mfa` stubs and the five `/auth/mfa/method-change/*` routes) and added 4
+(`/auth/mfa/phone/resend/setup`, `/phone/resend`, `/phone/confirm`,
+`POST /users/:id/phone-verification/resend`). PR #73 changed no routes. Router files unchanged at
+17. Seed unchanged at 227 grants; PR #70 (`4c02c7a`) moved `staff` `cabinet:view` / `folder:view`
+from `global` to `department`.)*
 *(Routes re-derived 2026-11-09, backend @ `dev` `42ed468` (PR #67): 154 → 171 — `/access-rules`
 (3), `/document-views` (3), `/auth/mfa` (5), `/auth/sso` (4), `PUT /documents/metadata/batch` and
 `GET /documents/:id/history`. Router files 13 → 17. Seed: 79 → 82 permissions, 219 → 227
@@ -118,7 +126,7 @@ The DOCUMENT half is real
 
 The GOVERNANCE half is now half real
   ✅ audit trail · circulars · SLA settings · notifications (clicked through 2026-11-11)
-  🟨 control exceptions (built; live seeded 2026-11-11, not yet walked through)
+     · control exceptions (walked through on live 2026-11-12)
   🟥 retention · branding · platform operations
                                                     🟥 9 of 69 pages
 ```
@@ -207,6 +215,8 @@ above was found; and the three "7-line stub" pages are **re-exports**, one of wh
 **Corrected 2026-11-10:** doc 05's page table gave `/upload` 926 lines and `/doc/[id]` 707; on `dev` (`4a267e1`) they were 818 and 693. Re-counted with `wc -l` after the workstream change (856 and 694). Found while recording ticket 04.
 
 **Corrected 2026-11-03:** doc 05's backlog item 20a still said the backend accepts any upload `mimeType`. edms-backend `82c4707` (on `dev` 2026-10-29) enforces PDF, JPEG, PNG and TIFF, which doc 01 §7 already recorded. Found while syncing the docs with backend PR #62.
+
+**Corrected 2026-11-16:** the route count stayed at 171 (2026-11-09, `42ed468`) in doc 01, this file and `AGENTS.md` through three backend merges. PR #69 (`4da2980`, 2026-11-10) added 9 routes (the email method, `/otp/request`, `/settings` and the five `/method-change/*` routes) and nobody re-counted, so it was already 180 when PR #71 made it 182. Re-derived at each commit with `git grep` over `src/modules/*.router.ts`: 180, 182, then 176 at `e033b58`. Doc 02's staff persona also still had the 2026-10-15 scope split (4 `global`); since PR #70 it is 16 `own`, 11 `department`, 2 `global`. Found while recording PRs #70–#73 (ticket `backend-dev-2026-11-12/06`).
 
 **Correction (2026-09-10).** Doc 05 stated `/admin/users` "writes the role matrix to
 `SEED`" and listed `useRole`/`useUpdateRole`/`useDeleteRole` etc. as dead — both were

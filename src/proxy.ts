@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authServer } from '@/apis/server/auth.server';
 import { evaluateRouteAccess } from '@/lib/routeAccess';
 import { normalizePermission } from '@/lib/permissions';
+import { SIGNED_OUT_PARAM, sessionEndReasonFrom, type SessionEndReason } from '@/lib/sessionEnd';
 import type { AuthUser } from '@/types/models';
 
 /**
@@ -59,7 +60,7 @@ const REFRESH_COOKIE_OPTS = {
 
 type AuthOutcome<T> =
   | { kind: 'ok'; data: T }
-  | { kind: 'unauthorized' } // a responding backend confirmed the token is dead
+  | { kind: 'unauthorized'; reason: SessionEndReason | null } // a responding backend confirmed the token is dead
   | { kind: 'unreachable' }; // network error, timeout, or a 5xx — infra, not auth
 
 /**
@@ -73,8 +74,9 @@ async function callAuth<T>(fn: () => Promise<T>): Promise<AuthOutcome<T>> {
   try {
     return { kind: 'ok', data: await fn() };
   } catch (err) {
-    const status = (err as { status?: number } | undefined)?.status;
-    if (status === 401 || status === 403) return { kind: 'unauthorized' };
+    const { status, data } = (err ?? {}) as { status?: number; data?: unknown };
+    if (status === 401 || status === 403)
+      return { kind: 'unauthorized', reason: sessionEndReasonFrom(status, data) };
     return { kind: 'unreachable' }; // no status (network exception) or >=500
   }
 }
@@ -96,11 +98,13 @@ export async function proxy(req: NextRequest) {
   let unreachable = false;
   let rotatedAccessToken: string | undefined;
   let rotatedRefreshToken: string | undefined;
+  let endReason: SessionEndReason | null = null;
 
   if (accessToken) {
     const me = await callAuth(() => authServer.meWithBackend(accessToken));
     if (me.kind === 'ok') user = extractUser(me.data);
     else if (me.kind === 'unreachable') unreachable = true;
+    else endReason = me.reason;
     // 'unauthorized' falls through to the refresh attempt below.
   }
 
@@ -122,6 +126,8 @@ export async function proxy(req: NextRequest) {
       }
     } else if (refreshed.kind === 'unreachable') {
       unreachable = true;
+    } else {
+      endReason = refreshed.reason ?? endReason;
     }
     // refreshed.kind === 'unauthorized' -> refresh token itself is genuinely
     // expired/revoked. user stays null, unreachable stays false: fails
@@ -141,7 +147,9 @@ export async function proxy(req: NextRequest) {
     // `currentUser` is still a session — a stale pair bounced the user between the
     // portal and `/` with nothing rendered at all. Deleting them makes the client
     // see the same truth this request just established.
-    const redirect = NextResponse.redirect(new URL('/', req.url));
+    const to = new URL('/', req.url);
+    if (endReason) to.searchParams.set(SIGNED_OUT_PARAM, endReason);
+    const redirect = NextResponse.redirect(to);
     redirect.cookies.delete('accessToken');
     redirect.cookies.delete('refreshToken');
     return redirect;

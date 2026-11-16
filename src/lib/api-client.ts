@@ -1,6 +1,7 @@
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import Cookies from 'js-cookie';
 import { useUIStore } from '@/store/useUIStore';
+import { sessionEndReasonFrom, type SessionEndReason } from '@/lib/sessionEnd';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -106,7 +107,13 @@ const WRONG_SECRET_CODES = new Set([
   'INVALID_CREDENTIALS',
   'INVALID_MFA_CODE',
   'MFA_CHALLENGE_INVALID',
+  'MFA_SETUP_TOKEN_INVALID',
+  'MFA_SETUP_SESSION_INVALID',
 ]);
+
+/** Why the backend ended this session, when it's a security change rather than plain expiry. */
+export const sessionEndReason = (error: any): SessionEndReason | null =>
+  sessionEndReasonFrom(error?.response?.status, error?.response?.data);
 
 let accessRestrictedShownAt = 0;
 
@@ -220,7 +227,9 @@ apiClient.interceptors.response.use(
           // explanation mid-task. The modal owns the actual teardown
           // (`performLogout`) once they act on it or dismiss it.
           if (typeof window !== 'undefined') {
-            useUIStore.getState().setSessionExpired(true);
+            useUIStore
+              .getState()
+              .setSessionExpired(true, sessionEndReason(refreshError) ?? 'expired');
           }
         }
         // Network error / timeout / 5xx reaching the refresh endpoint falls
@@ -244,6 +253,10 @@ apiClient.interceptors.response.use(
 
     if (error.response?.status === 403 && error.response.data?.code === 'ACCESS_RESTRICTED') {
       notifyAccessRestricted();
+    }
+    // Every call 403s until they set MFA up, which only happens at sign-in.
+    if (sessionEndReason(error) === 'mfa-setup' && typeof window !== 'undefined') {
+      useUIStore.getState().setSessionExpired(true, 'mfa-setup');
     }
     return Promise.reject(error);
   },

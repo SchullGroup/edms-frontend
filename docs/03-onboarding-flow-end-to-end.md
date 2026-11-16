@@ -251,7 +251,8 @@ seed:system` is re-run. The live tenant didn't have them on 2026-10-29.*
 *PR #67's `access_rule:*` and `document:download_original` grants are in the same position:
 on 2026-11-09 no live role held any of them (`GET /roles`), and `GET /access-rules` as
 `client_admin` was a 403. **Live was re-seeded on 2026-11-11**: all of them, and the control-exception
-grants, are there now; `staff` kept `department` scope on `cabinet:view` / `folder:view`.*
+grants, are there now. `staff` has `department` scope on `cabinet:view` / `folder:view`, on
+live and, since PR #70 (`4c02c7a`, 2026-11-11), in the seed too (it was `global` there).*
 
 **227 role-permission grants** (219 before PR #67), each carrying a scope of `global | department | own`.
 
@@ -633,9 +634,14 @@ seed grants `workflow:view` to no other role, so staff and supervisors can't rou
 returns `{ mfaRequired: true, mfaToken }`, with no tokens and no cookie. `/` asks for the
 6-digit code (or a single-use recovery code) and sends it through the BFF's
 `POST /api/auth/mfa/verify`; its response is the one in step 4, and steps 5–7 follow. The
-challenge lasts 5 minutes, then "Start again" goes back to the password. Nobody has it on
-until they turn it on themselves (account menu → **Security**); there is no tenant-wide
-"require it" switch.
+challenge lasts 5 minutes, then "Back to sign in" goes back to the password.
+
+**With two-step sign-in required but not set up** (since 2026-11-13): an admin requires it per
+user (`mfaRequired`, backend PR #71), and step 4 returns `{ mfaSetupRequired: true,
+mfaSetupToken }` instead. `/` asks the user to choose an authenticator app or email codes,
+confirm a code, and save 10 recovery codes; the BFF's `POST /api/auth/mfa/setup/confirm` then
+returns the step 4 response, and steps 5–7 follow. Set-up must finish within 10 minutes. This
+is the only way MFA gets turned on; there is still no tenant-wide "require it" switch.
 
 ### Landing pages
 
@@ -883,7 +889,7 @@ the product.
 |---|---|
 | "Show me everything Chika did last month" | ✅ `audit_entries` is real and auto-written (DRIFT-11, confirmed live 2026-09-18), and `/auditor/trail` reads it (`GET /audit`, filter by actor/action/object) — ✅ Live in doc 05, confirmed in the product owner's testing 2026-10-08. *Was 🟨: "/auditor/trail still renders `SEED.audit`".* |
 | "Prove this trail hasn't been altered" | 🟨 `GET /audit/verify` exists, works, and confirmed the hash chain intact live — but no auditor-facing screen calls it (`/admin/audit`'s "Verify integrity" does). |
-| "Track this finding to closure" | 🟨 As a **control exception** (2026-10-29): raised and reported by the auditor, acknowledged and resolved by management, on `/control-exceptions`. Verified against mocked responses only; the live tenant needs `seed:system` first. There's still no `Finding` model with an owner and due date; `/auditor/findings` redirects to control exceptions. |
+| "Track this finding to closure" | 🟨 As a **control exception** (2026-10-29): raised and reported by the auditor, acknowledged and resolved by management, on `/control-exceptions`. Walked through end to end on live 2026-11-12. There's still no `Finding` model with an owner and due date; `/auditor/findings` redirects to control exceptions. |
 | "Which documents are past retention?" | ⛔ `RetentionPolicy` exists in the schema and a cabinet can reference one (`retentionPolicyId`), but no endpoint manages policies, no UI shows them and no job applies them. |
 | "Department SLA compliance this quarter" | 🟨 Server-side now — `/management` reads per-department on-time/total buckets from `GET /tasks/stats` (DRIFT-07). The figure is all-time, not per quarter. *Was: "Computed in the browser from paginated lists".* |
 | "Who can see the Contracts cabinet?" | 🟨 `GET /cabinets/:id/access` exists (gated on `cabinet_access:view`, which `internal_auditor` holds), and the admin cabinet screen uses it. No auditor screen does. *Was: "There is no endpoint to use it".* |
@@ -990,7 +996,7 @@ npm run dev                # Web   :3000
 | 7 | Design and publish workflows | `/admin/workflows` | Only `client_admin`/`schulltech_admin` can publish or archive (DRIFT-05, fixed 09-04). **On a freshly seeded tenant only they can list them, too** — staff and supervisors can't route until DRIFT-14's seed rows are added. The live tenant's roles hold the grant (re-tested 2026-10-16). |
 | 8 | Set branding | `/admin/branding` | 🟥 **Saved in this browser only** — survives a reload since 2026-10-12, but other users and the login page don't see it. |
 | 9 | ~~Set retention policy~~ | ⛔ | Mock. No enforcement job exists. |
-| 10 | Turn on two-step sign-in for your own account, and ask users to do the same | Account menu → **Security** (`/account/security`) | Optional per user: nothing can require it yet (BE-24 asks for admins to require it per user, including on invite). Each user picks an authenticator app or email codes; only an admin can turn it off. Recovery codes are shown once. Someone who loses phone and codes needs **Reset two-step** on `/admin/users`, after which a password alone signs them in. The authenticator app shows the backend's `MFA_ISSUER` (default `SchullTech EDMS`) |
+| 10 | Require two-step sign-in for the users who need it | **Require two-step sign-in** on the invite form, or **Require two-step** on `/admin/users` (since 2026-11-13) | Per user; there is no tenant-wide switch. Each required user sets it up at their next sign-in (a new user at their first), choosing an authenticator app or email codes, and saves recovery codes shown once; nobody can set it up, switch method or turn it off themselves (backend PRs #71/#72). The **Two-step** column shows who has it on and who hasn't set it up yet. Someone who loses device and codes needs **Reset two-step** (global `user:edit`); a still-required user then sets it up again. The button isn't offered on your own row. The authenticator app shows the backend's `MFA_ISSUER` (default `SchullTech EDMS`) |
 
 **Then hand over to staff — with these caveats stated up front:**
 

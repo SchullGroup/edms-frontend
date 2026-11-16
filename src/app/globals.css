@@ -540,6 +540,7 @@ input[type="checkbox"] { accent-color: var(--focus); }
 .crumbs a { color: var(--muted); } .crumbs a:hover { color: var(--focus); }
 .crumbs .sep { opacity: .5; }
 .crumbs .cur { color: var(--ink); font-weight: 600; }
+.crumbs .back { display: inline-flex; align-items: center; gap: 4px; }
 
 /* ---------- Document detail 3-panel ---------- */
 .doc-layout { display: grid; grid-template-columns: 52fr 24fr 24fr; gap: 16px; align-items: start; }

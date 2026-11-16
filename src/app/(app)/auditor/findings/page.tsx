@@ -12,5 +12,5 @@ export default function AuditorFindingsRedirect() {
     router.replace('/control-exceptions');
   }, [router]);
 
-  return <SkeletonPage columns={['Exception', 'Severity', 'Status', 'Department']} rows={6} />;
+  return <SkeletonPage columns={['Finding', 'Severity', 'Status', 'Department']} rows={6} />;
 }

@@ -14,7 +14,7 @@ import {
 } from '@/apis/hooks/useDocuments';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
-import { AccessRequest, DocumentAccessKind } from '@/types/models';
+import { AccessRequest, AccessRequestStatus, DocumentAccessKind } from '@/types/models';
 import { ACCESS_KIND_LABEL } from '@/constants/documentLevels';
 import { fmtDateTime } from '@/utils/helpers';
 
@@ -24,6 +24,21 @@ const PAGE_SIZE = 20;
  *  for viewing. */
 const accessKind = (r: AccessRequest): DocumentAccessKind => r.permission ?? 'view';
 
+const STATUS_BADGE: Record<AccessRequestStatus, string> = {
+  pending: 'b-status-pending',
+  approved: 'b-status-closed',
+  denied: 'b-status-overdue',
+  revoked: 'b-status-not-started',
+};
+
+/** Who decided and when. A revoke records neither, so a revoked row names its approval. */
+const reviewCaption = (r: AccessRequest) => {
+  const who = [r.status === 'revoked' ? 'Approved' : '', r.reviewer ? `by ${r.reviewer.name}` : '']
+    .filter(Boolean)
+    .join(' ');
+  return [who, r.reviewedAt ? fmtDateTime(r.reviewedAt) : ''].filter(Boolean).join(' · ');
+};
+
 export default function AccessRequestsInboxPage() {
   const router = useRouter();
   const { setPageTitle, openConfirm } = useUIStore();
@@ -32,7 +47,7 @@ export default function AccessRequestsInboxPage() {
   const canRevoke = can('document_access_request', 'revoke');
 
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState<'' | 'pending' | 'approved' | 'denied'>('pending');
+  const [status, setStatus] = useState<'' | AccessRequestStatus>('pending');
 
   const {
     data,
@@ -75,15 +90,15 @@ export default function AccessRequestsInboxPage() {
     });
   };
 
-  // No grant list exists, so the request stays "approved" after a revoke.
+  // The backend marks the request `revoked`; grants revoked before `142be0b` 404 here instead.
   const handleRevoke = (r: AccessRequest) => {
     const kind = accessKind(r);
     openConfirm({
       title: 'Revoke access?',
       message:
         kind === 'route'
-          ? `${r.requester.name} will no longer be able to act on "${r.document?.title}" in workflows, unless their role allows it. This request will still show as approved.`
-          : `${r.requester.name} will no longer be able to open "${r.document?.title}", unless their role or department allows it. This request will still show as approved.`,
+          ? `${r.requester.name} will no longer be able to act on "${r.document?.title}" in workflows, unless their role allows it. They can ask for access again.`
+          : `${r.requester.name} will no longer be able to open "${r.document?.title}", unless their role or department allows it. They can ask for access again.`,
       confirmLabel: 'Revoke access',
       danger: true,
       onConfirm: () =>
@@ -151,7 +166,7 @@ export default function AccessRequestsInboxPage() {
       label: 'Status',
       render: (r) => (
         <span
-          className={`badge ${r.status === 'approved' ? 'b-status-closed' : r.status === 'denied' ? 'b-status-overdue' : 'b-status-pending'}`}
+          className={`badge ${STATUS_BADGE[r.status] ?? 'b-status-pending'}`}
         >
           {r.status}
         </span>
@@ -192,10 +207,7 @@ export default function AccessRequestsInboxPage() {
           </div>
         ) : (
           <div className="flex gap-2" style={{ alignItems: 'center' }}>
-            <span className="caption">
-              {r.reviewer ? `by ${r.reviewer.name}` : ''}
-              {r.reviewedAt ? ` · ${fmtDateTime(r.reviewedAt)}` : ''}
-            </span>
+            <span className="caption">{reviewCaption(r)}</span>
             {r.status === 'approved' && canRevoke && (
               <button
                 className="btn btn-secondary btn-sm"
@@ -238,6 +250,7 @@ export default function AccessRequestsInboxPage() {
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="denied">Denied</option>
+            <option value="revoked">Revoked</option>
             <option value="">All</option>
           </select>
         </div>

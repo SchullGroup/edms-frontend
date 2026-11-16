@@ -24,7 +24,7 @@ import {
 } from '@/components/controlExceptions/controlExceptionLabels';
 import { exportCsv } from '@/utils/exportCsv';
 
-/** Counts by status, category, severity and department: what the unit gives the permanent secretary. */
+/** Counts by status, category, severity and department: what the unit gives management. */
 export default function ControlExceptionReportPage() {
   const router = useRouter();
   const { setPageTitle } = useUIStore();
@@ -46,7 +46,7 @@ export default function ControlExceptionReportPage() {
   });
 
   useEffect(() => {
-    setPageTitle('Control exceptions report');
+    setPageTitle('Audit findings report');
   }, [setPageTitle]);
 
   const byStatus = report?.byStatus ?? {};
@@ -90,21 +90,23 @@ export default function ControlExceptionReportPage() {
         })),
       ),
     ];
-    exportCsv('control-exceptions-report.csv', rows, [
+    exportCsv('audit-findings-report.csv', rows, [
       { key: 'group', label: 'Grouping' },
       { key: 'item', label: 'Value' },
-      { key: 'count', label: 'Exceptions' },
+      { key: 'count', label: 'Findings' },
     ]);
   };
 
   return (
     <div>
+      <div className="crumbs">
+        <Link href="/control-exceptions" className="back">
+          <Icon name="chevL" size={13} /> Audit findings
+        </Link>
+      </div>
       <div className="page-head">
         <div>
-          <div className="caption mb-1">
-            <Link href="/control-exceptions">Control exceptions</Link>
-          </div>
-          <div className="page-title">Control exceptions report</div>
+          <div className="page-title">Audit findings report</div>
           <div className="page-sub">Counts by status, category, severity and department.</div>
         </div>
         <div className="actions">
@@ -173,7 +175,7 @@ export default function ControlExceptionReportPage() {
             <div className="tile t-overdue">
               <div className="cnt">{awaiting}</div>
               <div className="lbl">
-                <Icon name="clock" size={13} /> With the permanent secretary
+                <Icon name="clock" size={13} /> With management
               </div>
             </div>
             <div

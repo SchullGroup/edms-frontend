@@ -17,12 +17,16 @@ export const AUDIT_ACTIONS = [
   'user.mfa_reset',
   'user.mfa_otp_requested',
   'user.mfa_otp_request_failed',
+  'user.phone_verification_requested',
+  'user.phone_verified',
 
   // MFA method switching
   'user.mfa_method_change_started',
   'user.mfa_method_change_completed',
   'user.mfa_method_change_cancelled',
   'user.mfa_method_change_failed',
+  'user.mfa_required',
+  'user.mfa_requirement_removed',
 
   // Identity & configuration
   'user.created',
@@ -193,7 +197,7 @@ export const ACTIVITY_RECORD_TYPES: AuditRecordType[] = [
   { value: 'circular', label: 'Circulars', actions: byPrefix('circular.') },
   {
     value: 'control_exception',
-    label: 'Control exceptions',
+    label: 'Audit findings',
     actions: byPrefix('control_exception.'),
   },
   { value: 'search', label: 'Searches', actions: byPrefix('search.') },
@@ -215,3 +219,15 @@ export function auditActionLabel(action: string): string {
   const text = words.join(' ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/** Access and privilege changes shown as "sensitive activity" on the audit and compliance dashboards. */
+export const SENSITIVE_AUDIT_ACTIONS: readonly string[] = [
+  'document.access_requested',
+  'document.access_granted',
+  'document.access_denied',
+  'role.permissions_updated',
+  'role.created',
+  'role.deleted',
+  'user.deactivated',
+  'user.password_reset',
+];

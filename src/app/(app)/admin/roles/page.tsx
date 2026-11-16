@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import {
   useRoles,
@@ -77,6 +76,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   document_access_request: 'Document access requests',
   cabinet_metadata_field: 'Cabinet metadata fields',
   cabinet_access: 'Cabinet access grants',
+  control_exception: 'Audit findings',
 };
 const resourceLabel = (r: string) => RESOURCE_LABELS[r] ?? titleize(r);
 
@@ -97,7 +97,6 @@ const keyScopeMap = (perms: RolePermission[] | undefined): Map<string, RolePermi
   new Map((perms ?? []).map((p) => [permKey(p), p.scope ?? DEFAULT_SCOPE]));
 
 export default function RolesPermissionsPage() {
-  const { auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
   const { can } = usePermissions();
   const canCreateRole = can('role', 'create');
@@ -298,7 +297,6 @@ export default function RolesPermissionsPage() {
         onSuccess: (updated) => {
           setBaseline(keyScopeMap(updated.permissions));
           setSavingModule(null);
-          auditAction('ROLE_EDIT', selectedRole.name, `Updated ${mod.label} permissions`);
           addToast(`${mod.label} permissions saved`, 'success');
         },
         onError: () => setSavingModule(null),
@@ -357,7 +355,6 @@ export default function RolesPermissionsPage() {
             return createRole
               .mutateAsync({ name, description: form.description.trim() || undefined })
               .then((created) => {
-                auditAction('ROLE_CREATE', created.name, `Created role ${name}`);
                 setSelectedId(created.id);
                 closeModal();
               })
@@ -414,7 +411,6 @@ export default function RolesPermissionsPage() {
                 updates: { name, description: form.description.trim() || undefined },
               })
               .then(() => {
-                auditAction('ROLE_EDIT', role.name, `Renamed/updated → ${name}`);
                 closeModal();
               })
               .catch(() => false);
@@ -437,7 +433,6 @@ export default function RolesPermissionsPage() {
       danger: true,
       onConfirm: () =>
         deleteRole.mutateAsync(role.id).then(() => {
-          auditAction('ROLE_DELETE', role.name, `Deleted role ${role.name}`);
           setSelectedId(null);
         }),
     });

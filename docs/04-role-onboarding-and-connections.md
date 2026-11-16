@@ -154,7 +154,7 @@ tenant-wide, and can also act on their own tasks, route their own documents and 
 
 1. ~~**Every arrow into the auditor is broken.**~~ H7 works now: audit entries are written
    automatically and `/auditor/trail` reads them (DRIFT-11). The auditor's *dashboard* is
-   still fixture data; *findings* gave way to control exceptions on 2026-10-29 (🟨, not live).
+   still fixture data; *findings* gave way to control exceptions on 2026-10-29 (✅ live 2026-11-12).
 2. **`client_admin` is still close to a single point of failure.** Five of the seven
    handoffs originate with them. Since 2026-10-06 a cabinet can be *delegated*: a user
    granted `delete` on it manages its folders, metadata schema and access grants from
@@ -223,7 +223,7 @@ records, that is a serious and correct architectural decision.
 | Enable a feature for one tenant | ⛔ No flag model, no evaluation logic in either codebase. |
 | Investigate a customer's issue | ⛔ Correctly cannot — no document access. Would need the impersonation flow that doesn't exist yet. |
 | Check queue depth / worker health | ⛔ `GET /health` returns `{status:'ok', timestamp}`. No DB probe, no Redis probe, no queue metrics. |
-| Turn on two-step sign-in | ✅ *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`). App or email codes (2026-11-11, ticket 17); turning it off is admin-only. Unlike the rest of this portal it's real: the same backend MFA every role uses |
+| Two-step sign-in | ✅ *(2026-11-10, tickets 09–10, verified live)* Set up at sign-in when an admin requires it, since 2026-11-13 (app or email codes); account menu → **Security** (`/account/security`) shows the status. Unlike the rest of this portal it's real: the same backend MFA every role uses |
 
 ### Why this is Phase 2 work, not neglect
 
@@ -332,7 +332,7 @@ once the Access card shipped.
 | Configure branding | ❌ | 🟥 |
 | Publish circulars | ✅ `circular:*` at `global` scope | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | View the audit trail | ✅ | ✅ wired 2026-09-18 |
-| Two-step sign-in: their own, and a reset for someone who lost their phone | ✅ | ✅ *(2026-11-10, tickets 09–10, verified live)* Their own under account menu → **Security**. For others, **Reset two-step** on `/admin/users` (`user:edit`): the next sign-in needs only the password. `GET /users` doesn't say who has it on, so the button shows for every signed-up user except yourself |
+| Two-step sign-in: require it per user, and reset it for someone who lost their device | ✅ | ✅ *(2026-11-13, `backend-dev-2026-11-12/03`, verified live)* `/admin/users`: a **Two-step** column (On · method / Not set up / Off, and Required); **Require two-step** / **Stop requiring two-step** (department or global `user:edit`, not on your own row); **Require two-step sign-in** on the invite form. The user sets it up at their next sign-in. **Reset two-step** (global `user:edit`) only for users who have it on: a still-required user sets it up again, otherwise the password alone signs them in. Their own status is under account menu → **Security** |
 
 ### Where it breaks, ranked
 
@@ -365,7 +365,9 @@ once the Access card shipped.
 ### Identity and rights
 
 **29 grants, and the scopes are the important part** *(re-counted 2026-10-15 from
-`prisma/seed-system.ts`; the previous 14-grant list predates the 2026-09-16 RBAC refactor)*:
+`prisma/seed-system.ts`; the previous 14-grant list predates the 2026-09-16 RBAC refactor.
+Re-checked 2026-11-16 at `e033b58`: still 29; PR #70 narrowed cabinet and folder view to
+`department`)*:
 
 ```
 document:          view, search, download, export, print (department) · create (own)
@@ -374,7 +376,7 @@ document_lock:     create, delete (own)
 document_metadata: view (department)
 document_comment / document_signature: view (department) · create (own)
 document_access_request: create
-cabinet:view · folder:view · folder:create/edit (own) · department:view
+cabinet:view, folder:view (department) · folder:create/edit (own) · department:view
 workflow_instance: view, create, route (own)
 task:              view, action (own)
 delegation:        view, create, end (own)
@@ -448,7 +450,7 @@ end       → /staff/tasks  clear the queue   ✅
 | Act on assigned tasks | ✅ | |
 | Delete a document | ❌ | Not granted — correct |
 | Publish a workflow definition | ❌ | Correct — `workflow:publish` is admin-only. *(Was "⚠️ YES … no authorization on the endpoint" — DRIFT-05, fixed 2026-09-04.)* |
-| Turn on two-step sign-in | ✅ | *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`): an authenticator app or, since 2026-11-11 (ticket 17), email codes; only an admin can turn it off. scan a QR code, confirm a code, save 10 recovery codes. Sign-in then asks for the code. Someone who loses both phone and codes needs an admin reset |
+| Two-step sign-in | ✅ | *(2026-11-13, verified live)* Set up at sign-in once an admin requires it: an authenticator app (scan a QR code, confirm a code) or email codes, then save 10 recovery codes. Sign-in then asks for the code. Account menu → **Security** shows the status; changing method or losing both device and codes needs an admin reset |
 
 ### Where it breaks, ranked
 
@@ -519,7 +521,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 | Get warned before a breach | 🟨 | `sla.breach` is sent to the supervisor role, `sla.warning` to the assignee (DRIFT-10); not clicked through. *(Was ⛔ "tells nobody".)* |
 | Export team stats | ✅ | `exportCsv` |
 | Index a batch of scanned invoices | ✅ | *(2026-11-10, ticket 08, verified live as `supervisor_finance`)* Select them on `/search` → **Index selected** → `/search/mass-index`: one table per cabinet, "Apply" fills a column, **Save all** sends `PUT /documents/metadata/batch`. Needs `document_metadata:edit` (seeded at department scope) and Edit on the cabinet |
-| Turn on two-step sign-in | ✅ | *(2026-11-10, tickets 09–10, verified live)* Account menu → **Security** (`/account/security`): an authenticator app or, since 2026-11-11 (ticket 17), email codes; only an admin can turn it off. scan a QR code, confirm a code, save 10 recovery codes. Sign-in then asks for the code. Someone who loses both phone and codes needs an admin reset |
+| Two-step sign-in | ✅ | *(2026-11-13, verified live)* Set up at sign-in once an admin requires it: an authenticator app (scan a QR code, confirm a code) or email codes, then save 10 recovery codes. Sign-in then asks for the code. Account menu → **Security** shows the status; changing method or losing both device and codes needs an admin reset |
 
 ### Steady state
 
@@ -569,7 +571,7 @@ being the approval bottleneck, this is the most consequential missing screen in 
 
 > **Persona:** Eniola · executive, divisional or C-suite
 > **Landing page:** `/management` · **Sidebar:** Management Portal
-> **Overall status:** ✅ **Server-aggregated since 2026-09-21** (DRIFT-07) — findings and the compliance chart are still `SEED` *(was 🟨 "Works today, will not scale")*
+> **Overall status:** ✅ **Server-aggregated since 2026-09-21** (DRIFT-07) — no `SEED` left: the compliance overview reads audit findings since 2026-11-13 *(was 🟨 "Works today, will not scale")*
 
 ### Identity and rights
 
@@ -588,9 +590,9 @@ write:          workflow_instance create/route (own) · task action (own)
                 control_exception respond (global): acknowledge, resolve
 ```
 
-Management is the permanent secretary the internal control unit reports to: reported
-control exceptions notify every active management user. Since 2026-10-29 the sidebar's
-Control Exceptions item (formerly Findings) lists them, and the detail page offers
+Management is who the internal control unit reports to: reported audit findings
+(`control-exceptions` in the API) notify every active management user. The sidebar's
+Audit Findings item (Findings until 2026-10-29, then Control Exceptions until 2026-11-13) lists them, and the detail page offers
 Acknowledge and Resolve. 🟨 Verified against mocked responses only: the live tenant isn't
 seeded with the grants (doc 01, Internal control).
 
@@ -610,9 +612,9 @@ assigned to it, route its own documents, delegate, and publish circulars. The se
 | 1 | Log in, land on Organization Overview | `/management` | ✅ server-aggregated (DRIFT-07) |
 | 2 | Compare departments | `/management/departments` | ✅ same |
 | 3 | Review trends | `/management/trends` | ✅ same |
-| 4 | Check compliance posture | `/management/compliance` | 🟨 partly `SEED`; the sensitive-activity panel needs `audit:view`, which `management` doesn't hold, so it says so (2026-10-13) |
+| 4 | Check the compliance overview | `/management/compliance` | ✅ API-only since 2026-11-13 (confirmed by the product owner's testing, 2026-11-13): audit findings by status, latest findings, and recent sensitive activity (that panel needs `audit:view`, which `management` doesn't hold, so it says so). The sidebar item now shows with `control_exception:view` too |
 | 5 | Review performance | `/management/performance` | ✅ `useTaskStats`, server-aggregated (85 lines) |
-| 6 | Review control exceptions reported to them; acknowledge and resolve | `/control-exceptions` (`/management/findings` redirects) | 🟨 built 2026-10-29; mocked responses only, live not seeded. Was 🟥, a re-export of the fixture `/auditor/findings` |
+| 6 | Review control exceptions reported to them; acknowledge and resolve | `/control-exceptions` (`/management/findings` redirects) | ✅ live 2026-11-12 (acknowledge and resolve as `management_ops`). Was 🟥, a re-export of the fixture `/auditor/findings` |
 | 7 | Export a report | `/management/reports` | ✅ CSV *(confirmed by the product owner’s testing, 2026-10-09)* |
 
 ### First week
@@ -626,7 +628,7 @@ assigned to it, route its own documents, delegate, and publish circulars. The se
 | "Show me open audit findings" | 🟥 Re-exports the auditor's findings screen, which runs on `SEED.findings`. **No `Finding` model exists.** |
 | "Export this for the board" | ✅ CSV |
 | "Email me this weekly" | ⛔ No report scheduling. A mail transport exists now (`src/config/mailer.ts`) |
-| "Can I protect my account with my phone?" | ✅ *(2026-11-10, tickets 09–10)* Two-step sign-in under account menu → **Security**; verified live as `management_ops` |
+| "Can I protect my account with my phone?" | ✅ *(2026-11-10, tickets 09–10)* Yes, once an admin requires two-step sign-in for them (since 2026-11-13): it's set up at the next sign-in. Account menu → **Security** shows the status |
 
 ### ~~The scaling problem, quantified~~ — resolved 2026-09-21 (DRIFT-07)
 
@@ -699,10 +701,9 @@ write:          workflow_instance create/route (own) · task action (own)
                 control_exception create, edit, report (global)
 ```
 
-The auditor is the internal control unit: it raises control exceptions and reports them to
-management (the permanent secretary), from the Control Exceptions item that replaced
-Findings on 2026-10-29. 🟨 Verified against mocked responses only: the live tenant lacks the
-grants (doc 01, Internal control).
+The auditor is the internal control unit: it raises audit findings and reports them to
+management, from the Audit Findings item (Findings until 2026-10-29, then Control Exceptions
+until 2026-11-13). ✅ Walked through on live 2026-11-12.
 
 `document:view_confidential:global` lets them read `confidential`-tier documents (a
 permission since `edms-backend` `0dab81a`; it was a role list before). They cannot change
@@ -720,12 +721,12 @@ One of these grants now has a real screen behind it, and one still doesn't:
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in, land on Audit Dashboard | `/auditor` | 🟥 `SEED.findings`, `SEED.audit` |
+| 1 | Log in, land on the Audit dashboard | `/auditor` | ✅ real data since 2026-11-13 (findings to report, sensitive activity, sampling shortcuts); confirmed by the product owner's testing, 2026-11-13 |
 | 2 | Open the audit trail | `/auditor/trail` | ✅ migrated 2026-09-18 — real trail (`GET /audit`), paginated, actor/action/date filters, CSV export |
 | 3 | Sample documents | `/staff/cabinets` | ✅ real (shared with staff) |
 | 4 | Search for evidence | `/search` | ✅ index built on backend; page rebuilt 2026-09-30 *(confirmed by the product owner’s testing, 2026-10-09)* |
-| 5 | Raise a control exception, then report it to the permanent secretary | `/control-exceptions/new` (a page), then the exception's page | 🟨 built 2026-10-29; mocked responses only, live not seeded. Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
-| 6 | Review compliance posture | `/auditor/compliance` | 🟥 re-export of `/management/compliance` |
+| 5 | Raise an audit finding, then report it to management | `/control-exceptions/new` (a page), then the exception's page | ✅ live 2026-11-12 (raise, edit, report as `tjoel+auditor`). Was "Raise a finding" on the 🟥 fixture `/auditor/findings`, which now redirects |
+| 6 | Review the compliance overview | `/auditor/compliance` | ✅ re-export of `/management/compliance`, all API since 2026-11-13; confirmed by the product owner's testing, 2026-11-13 |
 
 ### First week — what they would try to do
 
@@ -738,7 +739,7 @@ One of these grants now has a real screen behind it, and one still doesn't:
 | "Who can see the Contracts cabinet?" | ⛔ `cabinet_access:view` granted and `GET /cabinets/:id/access` exists; no auditor screen calls it. |
 | "Track this finding to closure" | 🟥 No `Finding` model in Prisma. Everything is lost on cache clear. |
 | "Export evidence for the regulator" | ✅ `/auditor/trail` exports the real trail as CSV (`GET /audit/export`). Findings would still export fixture data. *(Was ⛔ "Would export fixture data".)* |
-| "Who turned off two-step sign-in?" | ✅ *(2026-11-10, seen live)* Turning it on, off and admin resets are audited (`user.mfa_enabled`, `user.mfa_disabled`, `user.mfa_reset`), and a code sign-in is `user.login` with `step: 'mfa'`. Since 2026-11-11 (ticket 15) the trail filters and labels them, method switching and email codes included. Their own two-step sign-in is under account menu → **Security** |
+| "Who turned off two-step sign-in?" | ✅ *(2026-11-10, seen live)* Turning it on, off and admin resets are audited (`user.mfa_enabled`, `user.mfa_disabled`, `user.mfa_reset`; since 2026-11-13 also `user.mfa_required` and `user.mfa_requirement_removed`, filterable on the trail), and a code sign-in is `user.login` with `step: 'mfa'`. Since 2026-11-11 (ticket 15) the trail filters and labels them, method switching and email codes included. Their own two-step sign-in is under account menu → **Security** |
 
 ### The gap between design and reality (historical — see correction above)
 
@@ -775,7 +776,7 @@ this role's own screens reading it — a frontend migration, not a backend build
    backend exists).
 2. 🔴 **No `Finding` model** — 367 lines of UI over localStorage
 3. ✅ ~~No `/audit` endpoint despite the permission being granted~~ — **exists now**
-4. 🟥 **`/auditor/compliance` re-exports the management page** — partly `SEED`-backed
+4. ✅ ~~**`/auditor/compliance` re-exports the management page** — partly `SEED`~~ — all API since 2026-11-13 and confirmed working; it still shares management's view
 5. ~~⛔ **Search is empty**~~ — search works (confirmed 2026-10-09; indexed at create since PR #51)
 6. ~~⛔ **No SoD enforcement** despite it being claimed in the older docs~~ — SoD and
    redaction dropped from scope (PM, 2026-10-21)
@@ -1014,7 +1015,7 @@ acted yet.
 | Approval decisions | `supervisor` | Documents never close; management sees permanent backlog |
 | Task activity | `staff` + `supervisor` | Management dashboards are empty |
 | Audit entries | ✅ backend, auto-written | Real, and `/auditor/trail` reads them (H7) |
-| Control exceptions *(were Findings)* | `internal_auditor` (🟨, not live) | Management has nothing to acknowledge or resolve. Both roles share `/control-exceptions`; the old Findings pages redirect there (2026-10-29) |
+| Control exceptions *(were Findings)* | `internal_auditor` (✅ live 2026-11-12) | Management has nothing to acknowledge or resolve. Both roles share `/control-exceptions`; the old Findings pages redirect there (2026-10-29) |
 
 **Read the table bottom-up and the shape of the product becomes clear:** the operational
 layer (staff → supervisor → management) is wired (DRIFT-14 only affects a freshly seeded tenant — re-tested 2026-10-16). The governance layer

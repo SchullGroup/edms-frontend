@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import {
   useDepartments,
@@ -191,7 +190,6 @@ function RowMenu({
 }
 
 export default function DepartmentsAdminPage() {
-  const { auditAction } = useStore();
   const { setPageTitle, openModal, closeModal, openConfirm, addToast } = useUIStore();
   const { can } = usePermissions();
   const canCreateDepartment = can('department', 'create');
@@ -313,7 +311,6 @@ export default function DepartmentsAdminPage() {
               return createDepartment
                 .mutateAsync({ name, parentId: form.parentId || undefined })
                 .then((created) => {
-                  auditAction('DEPARTMENT_CREATE', created.id, `Created department ${name}`);
                   // Reveal the new child under its (now non-empty) parent.
                   if (presetParent) {
                     setExpanded((prev) => new Set(prev).add(presetParent.id));
@@ -328,7 +325,6 @@ export default function DepartmentsAdminPage() {
                 updates: { name, parentId: form.parentId || null },
               })
               .then(() => {
-                auditAction('DEPARTMENT_EDIT', dept!.id, `Updated department ${name}`);
                 closeModal();
               })
               .catch(() => false);
@@ -352,9 +348,7 @@ export default function DepartmentsAdminPage() {
       onConfirm: () =>
         deleteDepartment
           .mutateAsync(row.id)
-          .then(() => {
-            auditAction('DEPARTMENT_DELETE', row.id, `Deleted department ${row.name}`);
-          })
+          .then(() => {})
           .catch(() => {
             /* hook surfaces the 409 / error toast */
           }),

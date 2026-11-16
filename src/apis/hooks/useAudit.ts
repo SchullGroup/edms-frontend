@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { auditService, AuditFilters } from '@/apis/services/audit.service';
 import { useUIStore } from '@/store/useUIStore';
 
@@ -50,6 +50,29 @@ export function useAuditEntries(filters: AuditFilters = {}, options?: { enabled?
     queryKey: realAuditKeys.list(filters),
     queryFn: () => auditService.search(filters),
     enabled: options?.enabled ?? true,
+  });
+}
+
+/** Total entries for several actions since `from`: one `limit=1` call each, since `GET /audit` filters one action. */
+export function useAuditActionTotal(
+  actions: readonly string[],
+  from: string,
+  options?: { enabled?: boolean },
+) {
+  return useQueries({
+    queries: actions.map((action) => {
+      const filters: AuditFilters = { action, from, page: 1, limit: 1 };
+      return {
+        queryKey: realAuditKeys.list(filters),
+        queryFn: () => auditService.search(filters),
+        enabled: options?.enabled ?? true,
+      };
+    }),
+    combine: (results) => ({
+      total: results.reduce((sum, r) => sum + (r.data?.pagination?.total ?? 0), 0),
+      isLoading: results.some((r) => r.isLoading),
+      isError: results.some((r) => r.isError),
+    }),
   });
 }
 

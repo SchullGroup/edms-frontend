@@ -52,7 +52,7 @@ export default function CabinetBrowserPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { setPageTitle, openModal, openConfirm, addToast } = useUIStore();
-  const { auditAction, currentUser } = useStore();
+  const { currentUser } = useStore();
   const { can } = usePermissions();
 
   const [activeCab, setActiveCab] = useState<string | null>(searchParams?.get('cab') || null);
@@ -165,9 +165,7 @@ export default function CabinetBrowserPage() {
                 cabinetId: activeCabinet.id,
                 data: { name: name.trim(), ...(parent ? { parentId: parent.id } : {}) },
               })
-              .then(() => {
-                auditAction('FOLDER_CREATE', activeCabinet.id, 'Added folder ' + name.trim());
-              })
+              .then(() => {})
               .catch(() => false);
           },
         },
@@ -199,9 +197,7 @@ export default function CabinetBrowserPage() {
             if (!name.trim() || name.trim() === f.name) return;
             return updateFolder
               .mutateAsync({ id: f.id, updates: { name: name.trim() } })
-              .then(() => {
-                auditAction('FOLDER_EDIT', f.cabinetId, `Renamed folder → ${name.trim()}`);
-              })
+              .then(() => {})
               .catch(() => false);
           },
         },
@@ -228,7 +224,6 @@ export default function CabinetBrowserPage() {
         deleteFolder
           .mutateAsync({ id: f.id, cabinetId: f.cabinetId })
           .then(() => {
-            auditAction('FOLDER_DELETE', f.cabinetId, 'Deleted ' + f.name);
             setActiveFolder(f.parentId ?? null);
             setSelected([]);
           })
@@ -271,7 +266,6 @@ export default function CabinetBrowserPage() {
               docs.map((d) => documentsService.update(d.id, { folderId: destFolderId })),
             )
               .then(() => {
-                docs.forEach((d) => auditAction('DOCUMENT_MOVE', d.id, `Moved “${d.title}”`));
                 addToast(
                   docs.length > 1 ? `${docs.length} documents moved` : 'Document moved',
                   'success',

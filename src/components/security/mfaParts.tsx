@@ -14,14 +14,12 @@ export const METHOD_LABEL: Record<MfaMethod, string> = {
   sms: 'Text message',
 };
 
-/** Six digits only, as the backend's `^\d{6}$` expects. */
-export const digitsOnly = (value: string) => value.replace(/\D/g, '').slice(0, 6);
-
 const OTP_ERROR_TEXT: Record<string, string> = {
   MFA_OTP_COOLDOWN: 'A code was sent less than a minute ago. Wait a moment, then send a new one.',
   MFA_OTP_RATE_LIMITED: 'Too many codes requested. Try again in an hour, or use a recovery code.',
   MFA_OTP_DELIVERY_FAILED: 'We couldn’t send the email. Try again in a moment.',
   MFA_OTP_NOT_CONFIGURED: 'Email codes aren’t set up on this server yet.',
+  MFA_LOCKED: 'Too many wrong codes. Wait a few minutes, then try again.',
 };
 
 /** The backend's message, reworded for the email-code errors. */
@@ -50,7 +48,7 @@ export function useResendCountdown() {
   return { secondsLeft: Math.max(0, Math.ceil((until - now) / 1000)), restart };
 }
 
-/** QR code plus the key typed by hand, for adding the account to an authenticator app. */
+/** QR code with the key typed by hand underneath, for adding the account to an authenticator app. */
 export function AuthenticatorKey({ secret, otpauthUri }: { secret: string; otpauthUri: string }) {
   const { addToast } = useUIStore();
   const [qrSrc, setQrSrc] = useState('');
@@ -62,24 +60,21 @@ export function AuthenticatorKey({ secret, otpauthUri }: { secret: string; otpau
   }, [otpauthUri]);
 
   return (
-    <div className="flex flex-wrap items-start gap-6">
+    <div className="flex flex-col items-center gap-3">
       <div style={{ background: '#fff', padding: 8, borderRadius: 8, border: '1px solid var(--border)' }}>
         {qrSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={qrSrc} width={200} height={200} alt="QR code for your authenticator app" />
+          <img src={qrSrc} width={168} height={168} alt="QR code for your authenticator app" />
         ) : (
-          <div style={{ width: 200, height: 200 }} />
+          <div style={{ width: 168, height: 168 }} />
         )}
       </div>
-      <div className="field" style={{ flex: '1 1 240px', minWidth: 0 }}>
-        <label>Key for manual entry</label>
-        <div className="flex items-center gap-2">
-          <code className="kbd" style={{ fontSize: 13, wordBreak: 'break-all' }}>
-            {secret.replace(/(.{4})/g, '$1 ').trim()}
-          </code>
+      <div className="flex w-full flex-col items-center gap-1.5">
+        <div className="caption">
+          Can&apos;t scan it? Type this key instead.{' '}
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
+            className="text-btn font-semibold text-(--focus) hover:underline"
             onClick={() =>
               navigator.clipboard
                 .writeText(secret)
@@ -87,76 +82,13 @@ export function AuthenticatorKey({ secret, otpauthUri }: { secret: string; otpau
                 .catch(() => addToast('Couldn’t copy. Select the key and copy it.', 'error'))
             }
           >
-            Copy
+            Copy key
           </button>
         </div>
-        <div className="help">Time-based, 6 digits, every 30 seconds.</div>
+        <code className="kbd" style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>
+          {secret.replace(/(.{4})/g, '$1 ').trim()}
+        </code>
       </div>
     </div>
-  );
-}
-
-/** A 6-digit code input with its inline error. */
-export function CodeField({
-  id,
-  label,
-  value,
-  onChange,
-  error,
-  autoFocus,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (code: string) => void;
-  error?: string;
-  autoFocus?: boolean;
-}) {
-  return (
-    <div className="field">
-      <label htmlFor={id}>
-        {label} <span className="req">*</span>
-      </label>
-      <input
-        id={id}
-        className="input"
-        style={{ width: 160, letterSpacing: '0.2em' }}
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        placeholder="123456"
-        value={value}
-        onChange={(e) => onChange(digitsOnly(e.target.value))}
-        aria-invalid={!!error}
-        aria-describedby={error ? `${id}-error` : undefined}
-        autoFocus={autoFocus}
-      />
-      {error && (
-        <div id={`${id}-error`} className="err" role="alert">
-          {error}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** "Send a new code", disabled while the cooldown runs. */
-export function ResendButton({
-  secondsLeft,
-  pending,
-  onClick,
-}: {
-  secondsLeft: number;
-  pending: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="text-btn text-[12.5px] font-medium text-(--focus) hover:underline disabled:cursor-default disabled:text-(--text-soft) disabled:no-underline"
-      disabled={secondsLeft > 0 || pending}
-      onClick={onClick}
-    >
-      {pending ? 'Sending…' : secondsLeft > 0 ? `Send a new code in ${secondsLeft}s` : 'Send a new code'}
-    </button>
   );
 }

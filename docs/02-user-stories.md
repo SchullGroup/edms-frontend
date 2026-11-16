@@ -130,12 +130,14 @@ their desk.
 **What they fear:** losing a document; being blamed for a delay that was actually sitting
 in a supervisor's queue; having to re-key metadata a machine could have read.
 
-**Backend rights (29 grants — 16 `own`, 9 `department`, 4 `global`; re-counted
-2026-10-15 from `prisma/seed-system.ts`):** document view/search/download/export/print at
+**Backend rights (29 grants — 16 `own`, 11 `department`, 2 `global`; re-counted
+2026-11-16 from `prisma/seed-system.ts` at `e033b58`. Was 9 `department` / 4 `global` until
+PR #70 (`4c02c7a`) moved `cabinet:view` and `folder:view` to `department`, as live already
+had them):** document view/search/download/export/print at
 `department`, `document:create:own`; versions (view `department`, create `own`); locks
 `own`; metadata, comments and signatures (view `department`, create `own`);
-`document_access_request:create`; `cabinet:view`, `department:view`; folders (view, create
-and edit `own`); `workflow_instance:view/create/route:own`; `task:view/action:own`;
+`document_access_request:create` and `department:view` (`global`); `cabinet:view` and
+`folder:view` (`department`); folder create and edit (`own`); `workflow_instance:view/create/route:own`; `task:view/action:own`;
 `delegation:view/create/end:own`. **No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)*
 *(Was "14 grants … `workflow:view`, `workflow:route`" — the pre-2026-09-16 seed.)*
 Note the scopes — staff see their **department's** documents, not the whole tenant.
@@ -320,6 +322,8 @@ If filing is slow or ambiguous, people keep using shared drives and the system f
 **Acceptance criteria**
 - [x] Multiple files can be queued and filed independently
 - [x] A SHA-256 checksum is computed client-side and stored with the version
+- [x] Each upload gets its own storage key, so two files with the same name can't overwrite
+      each other's bytes: 2026-11-13, verified live (doc 01 §5, problem i)
 - [x] Cabinet and folder dropdowns are populated from the live API (`useCabinets`, `useCabinetFolders`)
 - [x] Folder options refresh when the cabinet changes
 - [x] Backend generates a unique reference (`DOC-YYYYMMDD-HHmmss`)
@@ -854,7 +858,9 @@ lifecycle.
       backend accepted and rejected the same definitions as the frontend in a live API check
       (2026-10-17), and the designer was clicked through in a browser on 2026-10-18 (TEST_PLAN
       TP-Q2, Q15–Q18). Running one failed with a 500 at the fork (2026-10-18, BE-19) until
-      backend `ae08ef5` (PR #58, 2026-10-23); confirmed working by the product owner 2026-11-11
+      backend `ae08ef5` (PR #58, 2026-10-23); confirmed working by the product owner 2026-11-11.
+      The 500 came back on 2026-11-12 (BE-28: half the time with one document, always with
+      two); fixed in backend `9bdb9a6` (PR #73) and confirmed on live by the product owner 2026-11-13
 - [x] Conditional branches — backend conditional routing merged 2026-10-06
       (`definitions.validation.ts` condition rules, `matchesWorkflowCondition` in
       `tasks.service.ts`), and the designer has a branch editor since 2026-09-29
@@ -966,7 +972,8 @@ and search. The design is sound.
       disables uncleared tiers using the backend's rule. *(This item used to say the
       doc-detail edit form offered Top Secret from `SEED.policies`; no such form existed.)*
 - [x] A one-off grant to a document (an approved access request, View or Action) can be
-      revoked again: **Revoke** on `/admin/access-requests` (2026-11-11, verified live in Edge)
+      revoked again: **Revoke** on `/admin/access-requests` (2026-11-11, verified live in Edge); since 2026-11-13 the request then reads
+      **Revoked**, and the person can ask again (verified live)
 
 ---
 
@@ -1056,7 +1063,8 @@ role takes effect in the UI without a code change.
 - [x] The UI matrix editor calls the API instead of the local store
 - [x] Create / rename / delete roles, assign / remove roles on a user
 - [ ] Guard rails preventing an admin from removing their own admin rights
-- [ ] `role.permissions_updated` audit entry (frontend writes a local `auditAction` only)
+- [x] `role.permissions_updated` audit entry: written by the backend (`roles.router.ts`), seen in
+      the live trail 2026-09-18. The frontend's duplicate local `auditAction` call was removed 2026-11-13
 
 ---
 
@@ -1370,29 +1378,30 @@ gone, so H2 is ⬜: nothing tracks owners or due dates until a `Finding` model e
 
 ---
 
-### H4 — Report control exceptions to the permanent secretary · 🟨 **Partial** *(new 2026-10-29)*
+### H4 — Report audit findings to management · 🟨 **Partial** *(new 2026-10-29)*
 
 > **As** Femi, in the internal control unit,
-> **I want to** record an issue I found in a transaction or department and report it to the
-> permanent secretary,
+> **I want to** record an issue I found in a transaction or department and report it to
+> management,
 > **so that** someone with authority acknowledges it and records how it was resolved.
 
 **Current state:** `edms-backend` `51e9d85` adds `control_exceptions` and 8 routes. The
 frontend built the same day: a shared register at `/control-exceptions`, a raise page and an
 edit page (pages, not modals, by product decision), a detail page with the lifecycle actions,
-and a report. The auditor's and management's Findings menu items open it. It is 🟨 because
-it was verified only against a local mock: the live tenant has neither the table nor the
-grants until `prisma migrate deploy` and `seed:system` run (doc 01, Internal control).
+and a report. The auditor's and management's Findings menu items open it. The UI calls them
+**audit findings** (renamed 2026-11-13); the API and module keep `control-exceptions`. Live was re-seeded
+2026-11-11 and the whole lifecycle walked through on live 2026-11-12. It stays 🟨 for the two
+open criteria below: the history's unnamed actors and the missing workflow link.
 
 **Acceptance criteria**
 - [x] Backend: exception with category, severity, status and optional department, document and
       workflow links; open → reported → acknowledged → resolved (`51e9d85`)
 - [x] Raise and edit (while open) on their own pages; required title, description, category
-- [x] Report to the permanent secretary; every active `management` user is notified
+- [x] Report to management; every active `management` user is notified
 - [x] Management acknowledges, then resolves with a required note
 - [x] Register filtered by status, category, severity, department and date; counts report
       with CSV export
-- [ ] Verified end to end on the live tenant (needs the migration and `seed:system`)
+- [x] Verified end to end on the live tenant (2026-11-12, after the 2026-11-11 re-seed)
 - [ ] History names who reported, acknowledged and resolved (the API returns ids only)
 - [ ] Link a workflow from the form (the API accepts one; the form offers department and
       document only)
@@ -1726,12 +1735,15 @@ error paths and workers).
 - [ ] No request body size limit on `express.json()`
 - [ ] Access-token cookie TTL (1 day) disagrees with the JWT TTL (15 min)
 - [x] Two-factor sign-in with an authenticator app (GBB 1.2) — *wired 2026-11-10, verified
-      live (tickets 09, 10):* **Security** in the account menu (`/account/security`) sets it up
-      (QR code or key, a confirming code, 10 recovery codes to copy or download). Since
-      2026-11-11 (ticket 17) the code can come by email instead, users can switch method, and
-      only an admin can turn it off (🟨 admins can't *require* it yet: BE-24). Sign-in then asks for the 6-digit code, or a
-      single-use recovery code, within 5 minutes of the password. An admin with `user:edit`
-      resets it for someone who lost their phone (**Reset two-step** on `/admin/users`)
+      live (tickets 09, 10).* **Admin-managed since 2026-11-13** (backend PRs #71/#72;
+      `backend-dev-2026-11-12/01`–`03`, verified live): an admin ticks **Require two-step
+      sign-in** on the invite form or uses **Require two-step** on `/admin/users`, and the user
+      sets it up at their next sign-in (app QR code and key, or an emailed code; 10 recovery codes
+      to copy or download before entering). Users can no longer set it up, switch method or turn it
+      off themselves; `/account/security` shows the status. Sign-in then asks for the 6-digit
+      code, or a single-use recovery code, within 5 minutes of the password. An admin with global
+      `user:edit` resets it for someone who lost their device (**Reset two-step**, shown only for
+      users who have it on). 🟨 Email set-up not verified end to end; ⛔ SMS (PR #72) not wired
 - [ ] Sign in with Active Directory (GBB 1.3) — *backend done, no UI:* `/auth/sso/*` over
       OIDC (PR #67). Not configured on live (`enabled: false`). Ticket 14
 - [x] Block or allow access by IP range and country (GBB 1.6) — `/admin/access-rules` (2026-11-11,
@@ -1751,7 +1763,7 @@ error paths and workers).
 | E — Access Control | 2 | 3 | 0 | 0 | Well designed; under-enforced on reads; folder-level restriction live (E5, 2026-11-04) |
 | F — Oversight & SLA | 3 | 1 | 0 | 0 | Workload, ageing and the instance monitor all on real read models; SLA warnings and breaches notify (in code, DRIFT-10) |
 | G — Executive Reporting | 0 | 3 | 0 | 0 | On server aggregation endpoints (DRIFT-07); no PDF export or forecasting |
-| H — Audit & Compliance | 0 | 2 | 0 | 1 | Audit trail real (H1 🟨, 2026-10-15); control exceptions built, not live (H4 🟨); findings not built (H2 ⬜); SoD dropped from scope (2026-10-21) |
+| H — Audit & Compliance | 0 | 2 | 0 | 1 | Audit trail real (H1 🟨, 2026-10-15); control exceptions live, two gaps (H4 🟨); findings not built (H2 ⬜); SoD dropped from scope (2026-10-21) |
 | I — Tenant Admin | 1 | 1 | 2 | 0 | Structure real; policy/branding mock |
 | J — Circulars & Notifications | 2 | 1 | 0 | 0 | Circulars live (confirmed 2026-10-09); notifications emitted from real events (in code, DRIFT-10), not yet clicked through |
 | K — Platform Ops | 0 | 0 | 5 | 0 | **Entirely mock** by design (Phase 2) |

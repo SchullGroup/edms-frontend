@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
 import { useAuditEntries, useExportAuditCsv } from '@/apis/hooks/useAudit';
 import { UserSearchCombobox } from '@/components/common/UserSearchCombobox';
@@ -19,11 +18,7 @@ const PAGE_SIZE = 20;
 
 export default function AuditorTrailPage() {
   const router = useRouter();
-  // `auditAction` here is the separate, local, SEED-backed pseudo-log used
-  // for "raise a finding" (findings has no real backend at all yet) — not
-  // the same thing as the real trail this page now reads.
-  const { auditAction } = useStore();
-  const { setPageTitle, openModal, closeModal, addToast } = useUIStore();
+  const { setPageTitle } = useUIStore();
 
   const [page, setPage] = useState(1);
   const [actorId, setActorId] = useState('');
@@ -60,6 +55,7 @@ export default function AuditorTrailPage() {
   const exportCsv = useExportAuditCsv();
   const { can } = usePermissions();
   const canExport = can('audit', 'export');
+  const canRaise = can('control_exception', 'create');
 
   useEffect(() => {
     setPageTitle('Audit Trail');
@@ -74,66 +70,6 @@ export default function AuditorTrailPage() {
       action: filters.action,
       objectType: filters.objectType,
       from,
-    });
-  };
-
-  const handleRaiseFinding = (a: AuditEntry) => {
-    let title = '';
-    let detail = `Observed in audit trail: ${a.action}${a.objectType ? ` on ${a.objectType}` : ''}`;
-    let sev = 'Medium';
-
-    openModal({
-      title: 'Raise finding from event',
-      body: (
-        <div>
-          <div className="field">
-            <label>
-              Title <span className="req">*</span>
-            </label>
-            <input
-              className="input"
-              placeholder="Short finding title"
-              onChange={(e) => (title = e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label>
-              Detail &amp; evidence <span className="req">*</span>
-            </label>
-            <textarea
-              className="input"
-              style={{ minHeight: '90px' }}
-              defaultValue={detail}
-              onChange={(e) => (detail = e.target.value)}
-            ></textarea>
-          </div>
-          <div className="field">
-            <label>Severity</label>
-            <select className="input" defaultValue={sev} onChange={(e) => (sev = e.target.value)}>
-              <option>High</option>
-              <option>Medium</option>
-              <option>Low</option>
-            </select>
-          </div>
-        </div>
-      ),
-      actions: [
-        { label: 'Cancel' },
-        {
-          label: 'Raise finding',
-          kind: 'btn-primary',
-          onClick: () => {
-            if (!title.trim() || !detail.trim()) {
-              addToast('Title and detail are required', 'error');
-              return false;
-            }
-            // Real implementation would add to findings state — see
-            // docs/05 §5: no `Finding` model exists on the backend yet.
-            auditAction('FINDING_RAISE', 'FND-NEW', 'Raised: ' + title);
-            addToast('Finding raised', 'success');
-          },
-        },
-      ],
     });
   };
 
@@ -192,22 +128,26 @@ export default function AuditorTrailPage() {
           <span className="caption">—</span>
         ),
     },
-    {
-      key: 'id',
-      label: '',
-      render: (a) => (
-        <button
-          className="btn btn-ghost btn-sm"
-          title="Raise a finding from this event"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleRaiseFinding(a);
-          }}
-        >
-          Raise finding
-        </button>
-      ),
-    },
+    ...(canRaise
+      ? [
+          {
+            key: 'id' as const,
+            label: '',
+            render: (a: AuditEntry) => (
+              <button
+                className="btn btn-ghost btn-sm"
+                title="Raise a finding from this event"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  router.push(`/control-exceptions/new?fromAudit=${a.id}`);
+                }}
+              >
+                Raise finding
+              </button>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -216,7 +156,7 @@ export default function AuditorTrailPage() {
         <div>
           <div className="page-title">Audit Trail</div>
           <div className="page-sub">
-            Filter events by actor, action and period; raise findings directly from evidence.
+            Filter events by actor, action and period, and raise a finding from any event.
           </div>
         </div>
         <div className="actions">

@@ -40,7 +40,7 @@ const SEVERITY_CLASS: Record<ControlExceptionSeverity, string> = {
   critical: 'b-urg-critical',
 };
 
-// Grey = still with the auditor, amber = waiting on the permanent secretary, green = closed.
+// Grey = still with the auditor, amber = waiting on management, green = closed.
 const STATUS_CLASS: Record<ControlExceptionStatus, string> = {
   open: 'b-status-not-started',
   reported: 'b-status-pending',

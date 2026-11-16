@@ -69,6 +69,14 @@ export const useNavigation = () => {
     anyPermissions: ['access_rule:view'],
   };
 
+  // Auditor and management act on control exceptions; client_admin reads the register.
+  const controlExceptionsItem = {
+    route: '/control-exceptions',
+    label: 'Audit Findings',
+    icon: 'finding',
+    anyPermissions: ['control_exception:view'],
+  };
+
   const NAV: Record<string, any> = {
     staff: {
       surface: 'Staff Workspace',
@@ -299,9 +307,9 @@ export const useNavigation = () => {
           items: [
             {
               route: '/management/compliance',
-              label: 'Compliance Posture',
+              label: 'Compliance Overview',
               icon: 'shield',
-              anyPermissions: ['audit:view'],
+              anyPermissions: ['audit:view', 'control_exception:view'],
             },
             {
               route: '/management/performance',
@@ -309,12 +317,7 @@ export const useNavigation = () => {
               icon: 'gauge',
               anyPermissions: ['task:view', 'workflow_instance:view'],
             },
-            {
-              route: '/control-exceptions',
-              label: 'Control Exceptions',
-              icon: 'finding',
-              anyPermissions: ['control_exception:view'],
-            },
+            controlExceptionsItem,
             accessRequestsItem,
           ],
         },
@@ -499,6 +502,7 @@ export const useNavigation = () => {
               icon: 'list',
               anyPermissions: ['audit:view'],
             },
+            controlExceptionsItem,
             accessRequestsItem,
             accessRulesItem,
           ],
@@ -570,20 +574,15 @@ export const useNavigation = () => {
         {
           label: 'Findings',
           items: [
-            {
-              route: '/control-exceptions',
-              label: 'Control Exceptions',
-              icon: 'finding',
-              anyPermissions: ['control_exception:view'],
-            },
+            controlExceptionsItem,
           ],
         },
         {
-          label: 'Posture',
+          label: 'Compliance',
           items: [
             {
               route: '/auditor/compliance',
-              label: 'Compliance Posture',
+              label: 'Compliance Overview',
               icon: 'shield',
               anyPermissions: ['audit:view'],
             },

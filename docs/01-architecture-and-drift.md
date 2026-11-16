@@ -55,6 +55,10 @@ regression that this scan's earlier passes never tested for:
 | **DRIFT-06 — retracted.** Live-verified 2026-09-21 against the deployed backend: OCR works. The "third-party gateway writes to a bucket Textract can't read" claim was never checked against a real document and was wrong — every real upload's `fileUrl` resolves to `env.S3_BUCKET`. One document out of eight was stuck at `ocrStatus: 'pending'` for 3 days — a real, narrower reliability gap, not the systemic break this doc previously asserted. | 🟡 **Re-diagnosed**, no backend fix built (the planned one would have solved a non-problem) | [§5](#5-the-document-storage-path-and-why-ocr-cannot-work) |
 | **Upload mechanism — the whole "what the code does" step 1 was describing dead code.** The chunked multipart uploader (`uploader.ts`/`useMultipartUploader.ts`) replaced the single-shot base64 flow on **2026-08-31** — two days after this doc's original 2026-08-29 write-up. Every revision since (both 2026-09-04 scans, 2026-09-18, 2026-09-21) kept describing the pre-08-31 mechanism; `s3.service.ts#uploadFile()` has had zero real callers this entire time. Found while checking whether the upload progress bar reflects real percentages (it does — real `XMLHttpRequest` byte progress per 5 MB part, not simulated) | ✅ **Corrected (frontend, 2026-09-21)** — no behavior changed, only the documentation | [§5](#5-the-document-storage-path-and-why-ocr-cannot-work) |
 
+> **Backend baseline 2026-11-16: `edms-backend` `origin/dev` `e033b58` (PR #73).** The route
+> count (§1) and the §7 drift matrix are current to it. Other sections keep their own re-check
+> dates, and the 2026-10-16 note below is kept as written.
+
 > **Re-checked 2026-10-16** against `edms-backend` `origin/dev` (`a88f279`) and the live API,
 > signed in as the seeded `tjoel+…` test accounts. Three statements below were wrong:
 >
@@ -124,7 +128,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
     ┌────────┘                       └──────────────────────────┐
     │ (a) axios → same-origin                                   │ (b) axios → cross-origin
     │     `/api/auth/*`                                         │     apiClient, baseURL
-    │     ONLY 4 routes                                         │     `${NEXT_PUBLIC_API_URL}/api/v1`
+    │     ONLY 5 routes                                         │     `${NEXT_PUBLIC_API_URL}/api/v1`
     ▼                                                           ▼
 ┌───────────────────────────────┐              ┌────────────────────────────────────────┐
 │ NEXT.JS ROUTE HANDLERS (BFF)  │              │  EXPRESS 5 BACKEND (edms-backend)      │
@@ -134,7 +138,9 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 │  POST /api/auth/refresh       │              │  POST /api/v1/auth/refresh  ✅          │
 │  POST /api/auth/logout        │              │  POST /api/v1/auth/logout   ❌ 404      │
 │  POST /api/auth/mfa/verify    │              │  POST /api/v1/auth/mfa/verify ✅        │
-│  Sole responsibility:         │              │  171 routes over 17 modules (11-09)    │
+│  POST /api/auth/mfa/setup/    │              │  POST /api/v1/auth/mfa/setup/confirm ✅ │
+│       confirm                 │              │                                        │
+│  Sole responsibility:         │              │  176 routes over 17 modules (11-16)    │
 │  hold `refreshToken` in an    │              │  ┌──────────────────────────────────┐  │
 │  HttpOnly cookie so JS never  │              │  │ Router → Controller → Service →  │  │
 │  sees it.                     │              │  │ Repository → PrismaClient        │  │
@@ -166,7 +172,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 | Deployable | Path | Runtime | Port (dev) | Notes |
 |---|---|---|---|---|
 | Web app | `EDMS-FRONTEND` | Next.js 16.2.10 / Node | 3000 | App Router, `(app)` route group, 64 pages (60 authed + 4 public: `/`, `/forgot-password`, `/set-password`, `/user-stories`) — re-counted 2026-10-29 (+5: the `/control-exceptions` pages); 59 on 2026-10-20, 58 on 2026-10-15, 46 before |
-| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 171 routes over 17 router files — re-counted 2026-11-09 (154 on 2026-11-04, 149 on 2026-10-29, 140 on 2026-10-26, 134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
+| API | `edms-backend` | Express 5.2 / Node | 3001 (`PORT` in `.env`) | 176 routes over 17 router files — re-counted 2026-11-16 at `e033b58` (182 at `c95b9fb` on 2026-11-12, 180 at `4da2980` on 2026-11-10, 171 on 2026-11-09, 154 on 2026-11-04, 149 on 2026-10-29, 140 on 2026-10-26, 134 on 2026-10-15, 90 before). Swagger at `/api-docs` |
 | Worker | `edms-backend` | `node dist/worker.js` | — | Separate process; OCR + search + SLA + out-of-office delegation (since `436ea83`, 2026-10-29) |
 | Design reference | `EDMS-HTML` | static | 8080 | Original HTML/JS prototype; source of the CSS design system. Not deployed. |
 
@@ -176,7 +182,7 @@ severity. Nothing here is aspirational — every claim is anchored to a file and
 
 Two distinct paths exist. Knowing which one you are on determines where to debug.
 
-### Path A — authentication (4 routes only)
+### Path A — authentication (5 routes only)
 
 ```
 Browser
@@ -220,6 +226,19 @@ the returned `challengeId` with the code. The code goes
 `axios.post('/api/auth/mfa/verify')` → `src/app/api/auth/mfa/verify/route.ts` →
 `POST /api/v1/auth/mfa/verify`, whose body is the same as a password login's; from there the
 path above continues unchanged (both handlers share `src/apis/server/tokenResponse.ts`).
+
+**With two-step sign-in required but not set up (since 2026-11-13, `backend-dev-2026-11-12/02`).**
+Since PR #71 an administrator sets `mfaRequired` per user, and set-up at sign-in is the only way
+MFA gets turned on. For `mfaRequired && !mfaEnabled`, login returns
+`{ mfaSetupRequired: true, mfaSetupToken }` (10 minutes, no tokens, not audited as a login).
+`/` then shows `MfaSetupStep` (`src/components/auth/MfaSetupStep.tsx`): choose the authenticator
+app or email, then the public `POST /api/v1/auth/mfa/setup/start { mfaSetupToken, method }`
+(straight to the backend) returns the app key (QR plus typed key) or emails a code. The code goes
+`axios.post('/api/auth/mfa/setup/confirm')` → `src/app/api/auth/mfa/setup/confirm/route.ts` →
+`POST /api/v1/auth/mfa/setup/confirm`, whose body is a login body plus `recoveryCodes`. The
+handler sets the refresh cookie as for a login; `/` shows the recovery codes and enters the app
+only after "I've saved these codes". An expired or no-longer-valid set-up token (401
+`MFA_SETUP_TOKEN_INVALID` / `MFA_SETUP_SESSION_INVALID`) shows "Sign-in timed out".
 
 ### Path B — everything else (132 routes, re-counted 2026-10-15; was 66)
 
@@ -274,10 +293,11 @@ Browser — response interceptor
   │         • otherwise: Cookies.remove + window.location.href = '/'
 ```
 
-**Note the asymmetry.** Only 4 routes go through the Next.js server (login, refresh,
+**Note the asymmetry.** Only 5 routes go through the Next.js server (login, refresh,
 logout — the backend has no logout route, DRIFT-01 — and, since 2026-11-10, the MFA second
-step, which also returns a refresh token). The other 132 backend routes are
-plain browser→Express cross-origin calls *(re-counted 2026-10-15; was "the other 71")*. There is no SSR data fetching anywhere in the
+step and, since 2026-11-13, required MFA set-up, which also return a refresh token). The other 172 backend routes are
+plain browser→Express cross-origin calls *(re-counted 2026-11-16: 176 less the 4 the BFF
+proxies; 132 on 2026-10-15, "the other 71" before that)*. There is no SSR data fetching anywhere in the
 app: every page is `'use client'`.
 
 ---
@@ -288,9 +308,10 @@ app: every page is `'use client'`.
 
 | Token | Where it lives | HttpOnly | Lifetime | Set by | Read by |
 |---|---|---|---|---|---|
-| `accessToken` | browser cookie via `js-cookie` | **No** | `expires: 1` day (cookie) but JWT expires in **15m** | `authService.login/verifyMfa/refresh` | axios request interceptor |
-| `refreshToken` | browser cookie | **Yes** | 7 days | Next.js route handlers (`login`, `mfa/verify`) | Next.js route handler only |
+| `accessToken` | browser cookie via `js-cookie` | **No** | `expires: 1` day (cookie) but JWT expires in **15m** | `authService.login/verifyMfa/confirmMfaSetup/refresh` | axios request interceptor |
+| `refreshToken` | browser cookie | **Yes** | 7 days | Next.js route handlers (`login`, `mfa/verify`, `mfa/setup/confirm`) | Next.js route handler only |
 | `mfaToken` | React state on `/` only | n/a | 5 minutes | `POST /auth/login` (MFA on) | `POST /api/auth/mfa/verify` |
+| `mfaSetupToken` | React state on `/` only | n/a | 10 minutes | `POST /auth/login` (MFA required, not set up) | `POST /auth/mfa/setup/start`, `POST /api/auth/mfa/setup/confirm` |
 
 **The design intent is sound** — the long-lived credential is unreachable from JS, and only
 the short-lived one is exposed. Two things weaken it in practice:
@@ -323,6 +344,35 @@ correct here:
 `INVALID_CREDENTIALS`. The interceptor skips refresh-and-retry for those two codes; before,
 it refreshed and re-sent the request, so each wrong code counted twice towards the backend's
 5-try lockout. Checked live: one request per wrong attempt, no `/api/auth/refresh` call.
+Since 2026-11-13 the set-up token's 401s (`MFA_SETUP_TOKEN_INVALID`,
+`MFA_SETUP_SESSION_INVALID`) are skipped too: `/setup/start` goes through `apiClient` before
+there is any session to refresh.
+
+**Sessions ended by a security change (2026-11-13, `backend-dev-2026-11-12/04`, verified
+live as `staff_hr`).** Since backend PR #71 a session can end for two security reasons, and
+both now say so instead of a generic "session ended":
+
+| Cause | What the backend sends | What the user sees |
+|---|---|---|
+| An admin requires MFA for a signed-in user who hasn't set it up | every call: 403 `FORBIDDEN`, message "MFA setup is required…"; refresh: 403 `MFA_SETUP_REQUIRED` | **Two-step sign-in required** → sign in → the set-up step |
+| MFA was enrolled (or re-enrolled) after this session's tokens were issued | every call: 401 → refresh: 401 `SESSION_SECURITY_CHANGED` | **Signed out**: "Your two-step sign-in settings changed" |
+
+`sessionEndReasonFrom()` (`src/lib/sessionEnd.ts`) reads the reason from status and body. It
+matches the 403's message text because the middleware sends no code of its own (backend ask
+in the 11-12 spec); that match lives only there. Two places use it:
+- **`api-client.ts`**: a refresh failing with either code, or the 403 on any call, sets
+  `sessionExpired` with a `sessionEndReason`; `SessionExpiredModal` words itself from it. A
+  later plain "expired" (e.g. `AppShell`'s own `/auth/me` 403) can't overwrite a specific
+  reason.
+- **`proxy.ts`**: a navigation is checked server-side first, so it usually sees the refusal
+  before any client call does. It redirects to `/?signedOut=<reason>` (cookies deleted, as
+  before), and the sign-in page shows the same wording in a banner, then drops the parameter.
+
+Verified live 2026-11-13: navigating after the requirement → banner → sign-in → set-up step;
+staying on `/staff` → the next notifications poll (403) → the modal after ~60 s → "Sign in to
+set it up" → `/`; a second session open while the user enrolled elsewhere → "Signed out".
+Fixture restored (`mfaRequired: false`, MFA reset). Every user with MFA on was signed out
+once when PR #71 deployed (old tokens have no `mfaState`); that already happened.
 
 ### 🔴 DRIFT-01 — `POST /api/v1/auth/logout` does not exist
 
@@ -862,7 +912,8 @@ being grouped under "Workflow" — cosmetic, not incorrect.
    └─ useMultipartUploader().startUpload({file, fileName, folderName:'edmsDocuments'})
         └─ Uploader  (src/apis/services/uploader.ts) — chunked multipart, 5 MB/part
              ├─ POST {gatewayBaseURL}/initialize      { name, contentType, folderName }
-             │    → { fileId, fileKey }
+             │    name = uniqueStorageName(fileName): "scan.pdf" → "scan-3f2a9c1b7d4e.pdf" (2026-11-13)
+             │    → { fileId, fileKey }                fileKey = "edmsdocuments/<name>"
              ├─ POST {gatewayBaseURL}/presigned-url   { uploadId, filePath, parts }
              │    → one presigned PUT url per part
              ├─ N × PUT <part bytes> → part.signedUrl   (5 concurrent, retry ≤6× w/
@@ -1004,6 +1055,7 @@ revision checked this against:
 | f | ~~**Most non-image/PDF types silently rejected**~~ — **now the intended policy**: PDF and images only (PM, 2026-10-21), stated up front in the dropzone text | Same behavior, new gatekeeper: `validateUpload()` in `useMultipartUploader.ts` only allows 6 image MIME types and `application/pdf`; anything else — Word, Excel, plain text — throws `"Unsupported file type"` before any network call. The dead `uploadFile()`'s equivalent check is no longer where this actually happens; the rejection itself hasn't gone anywhere. |
 | g | **Stale index on edit** | Unchanged — `updateDocument` (title), `updateDocumentMetadata`, and `restoreVersion` never re-enqueue indexing. `search_vector` drifts from the row. Entirely backend-side, independent of the uploader. |
 | h | ~~**New — the dropzone advertises capabilities the validator doesn't have**~~ — **resolved 2026-10-02**: one list (`src/constants/uploadTypes.ts`) feeds the validator, every `accept` and the dropzone text | `upload/page.tsx`'s dropzone text reads *"PDF, DOCX, XLSX, TIFF, JPG up to 100 MB."* `validateUpload()` accepts none of DOCX/XLSX/TIFF (not in either allowlist — TIFF isn't even in the image one) and caps out at 50 MB for PDF / 10 MB for images, both well under the advertised 100 MB. A user follows the on-screen instructions, picks a 60 MB PDF or any `.docx`, and gets rejected with no indication beforehand that the dropzone's own text was wrong. |
+| i | ~~**Files with the same name shared one storage object**~~ — **resolved 2026-11-13** (`upload-storage-keys/01`, verified live) | The gateway stores an upload at `edmsdocuments/<name>` and adds nothing unique, and every caller sent the file's own name. A second `scan.pdf` replaced the first document's file in S3 (overwrite by key) while that document kept its old checksum. On 2026-11-11, 26 live documents used 19 keys; the shared ones were re-uploads of the same bytes, so no file had been lost yet. Now `Uploader` sends `uniqueStorageName()`: the sanitised name plus `-` and 12 random hex digits before the extension. That covers all five callers (upload, new version, workflow picker, signatures, circular attachments). The id goes after the name because the backend names downloads after the key's last segment (`storage.ts`, `fileKey.split('/').pop()`), so a download arrives as `scan-3f2a9c1b7d4e.pdf`. Verified live: two different files both named `same-name.pdf` got two keys, and each document's original download matched its own file. Still worth asking the backend: is bucket versioning on, and should the gateway or backend own key uniqueness? |
 
 ### Viewing a file (2026-10-08)
 
@@ -1175,16 +1227,18 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists — since PR #51 (live 2026-10-14) the login response's `user` also carries `departmentId`. **PR #67 (`bca7a10`, live 2026-11-09):** for an account with MFA on it returns `{ mfaRequired: true, mfaToken }` (valid 5 min) and **no tokens**; `user.login` is audited only when the second step succeeds | ✅ — the login page stores the whole `user`, so `useMyDepartmentId` is answered from the login itself; AppShell refreshes it from `/auth/me`. **MFA challenge handled 2026-11-10 (ticket 10, verified live):** the BFF passes a body without `refreshToken` through unchanged (shared `respondWithTokens`), `authService.login` sets no cookie for it, and `/` shows the second step |
+| `POST /api/auth/login` → `/api/v1/auth/login` | ✅ exists — since PR #51 (live 2026-10-14) the login response's `user` also carries `departmentId`. **PR #67 (`bca7a10`, live 2026-11-09):** for an account with MFA on it returns `{ mfaRequired: true, mfaToken }` (valid 5 min) and **no tokens**; `user.login` is audited only when the second step succeeds | ✅ — the login page stores the whole `user`, so `useMyDepartmentId` is answered from the login itself; AppShell refreshes it from `/auth/me`. **MFA challenge handled 2026-11-10 (ticket 10, verified live):** the BFF passes a body without `refreshToken` through unchanged (shared `respondWithTokens`), `authService.login` sets no cookie for it, and `/` shows the second step. **PR #71 (`142be0b`, live 2026-11-12):** a third shape, `{ mfaSetupRequired: true, mfaSetupToken }`, for `mfaRequired && !mfaEnabled` — it crashed `/` (`data.user` undefined) until **2026-11-13**, when `/` started showing the set-up step (§3, `backend-dev-2026-11-12/02`, verified live) |
 | `POST /api/auth/refresh` → `/api/v1/auth/refresh` | ✅ exists | ✅ |
 | `POST /api/auth/logout` → `/api/v1/auth/logout` | ❌ **not registered** | 🟨 **DRIFT-01** — frontend now *calls* it (Sidebar sign-out → `authService.logout()`, with the bearer token, 2026-09-10); backend route still missing so revocation is still a no-op |
 | `GET /auth/me` | ✅ exists — since PR #50 (live 2026-10-13) also `departmentId` (null when none); login carries it too since PR #51 (live 2026-10-14) | ✅ (`permissions` now included — DRIFT-03 resolved). **`departmentId` adopted 2026-10-13, verified live:** AppShell copies it into the store; `useMyDepartmentId` replaces the `GET /users/:id` lookups in `useConfidentialityClearance`, `useDepartmentColleagues` and `/admin/cabinets`, and the first-page lookup on `/doc/[id]` |
 | `POST /auth/forgot-password` | ✅ exists | ✅ |
-| `POST /auth/reset-password` | ✅ exists | ✅ **DRIFT-15 resolved (frontend, 2026-09-18)** — was sending `newPassword`/`confirmPassword`; backend wants `password`. Fixed both sides of the shared invitation/reset-link landing page |
+| `POST /auth/reset-password` | ✅ exists. **PR #72 (`9497fae`, live 2026-11-13):** an invitation token used on an account that is already active returns 409 `INVITATION_NO_LONGER_VALID` | ✅ **DRIFT-15 resolved (frontend, 2026-09-18)** — was sending `newPassword`/`confirmPassword`; backend wants `password`. Fixed both sides of the shared invitation/reset-link landing page. `/set-password` shows the backend's message for the 409 ("This invitation is no longer valid for this account"); no code-specific handling |
 | — | `POST /auth/mfa/verify` `{ mfaToken, code \| recoveryCode }` — PR #67 (`bca7a10`, live): the second login step; public, returns the normal login response. `code` is a 6-digit TOTP; exactly one of the two is required; 5 wrong codes in a row lock the second step for 15 minutes (429 `MFA_LOCKED`) | ✅ **Wired 2026-11-10 (ticket 10, verified live)** via a new BFF route `POST /api/auth/mfa/verify`, which moves `refreshToken` into the httpOnly cookie exactly as login does (`respondWithTokens`). `authService.verifyMfa` then sets `accessToken`. An expired challenge answers 401 `MFA_CHALLENGE_INVALID` |
-| — | `POST /auth/mfa/setup`, `/enable` `{ code }`, `/disable` `{ password?, code \| recoveryCode }` — PR #67 (live): authenticated, for your own account. Setup returns `{ secret, otpauthUri }` (render the URI as a QR code); enable returns `{ recoveryCodes }`, shown once; disable needs the password unless the account is SSO-only. Audited `user.mfa_enabled` / `user.mfa_disabled`. `GET /auth/me` carries `mfaEnabled` | ✅ **Wired 2026-11-10 (ticket 09, verified live)** on `/account/security` (`useSetupMfa`, `useEnableMfa`, `useDisableMfa`, `useMe`). A wrong code or password is a **401** (`INVALID_MFA_CODE`, `INVALID_CREDENTIALS`): `api-client.ts` doesn't treat those two codes as a dead session (§3) |
-| — | PR #69 (`914e28b`, live 2026-11-10): `GET /auth/mfa/settings` (`mfaEnabled`, `currentMethod`, `emailMasked`, `methodOptions[{method, available}]`); email method `POST /email/setup` → `{ challengeId }`, `POST /email/enable { challengeId, code }` → `{ recoveryCodes }`; public `POST /otp/request { mfaToken }` → `{ challengeId }` (60 s cooldown `MFA_OTP_COOLDOWN`, 5 an hour `MFA_OTP_RATE_LIMITED`); `/verify` takes `challengeId` for email codes; switching `POST /method-change/current-otp`, `/method-change/start`, `/method-change/:changeId/new-otp`, `/method-change/confirm`, `DELETE /method-change/:changeId`. `sms` exists but always 503 `MFA_SMS_NOT_CONFIGURED` | ✅ **Wired 2026-11-11 (ticket 17)**: `/account/security` reads `/settings`, sets up email, switches method; `/` sends and resends email codes. App paths verified live as `management_ops`; 🟨 the email code paths are built but not verified end to end (no fixture inbox we can read). `MFA_CHALLENGE_INVALID` joined the 401 codes that don't trigger a refresh (§3). `POST /auth/mfa/disable` is **no longer called**: only an admin removes MFA (product decision 2026-11-11; the API still allows it, **BE-24**) |
-| — | `DELETE /auth/mfa/users/:userId` — PR #67 (live): an admin turns another user's MFA off (`user:edit`); audited `user.mfa_reset` | ✅ **Wired 2026-11-10 (ticket 10, verified live):** **Reset two-step** on `/admin/users` (`useResetUserMfa`). ⚠️ `GET /users` doesn't return `mfaEnabled`, so the button shows for every signed-up user, not only those with MFA on; resetting someone without it is a harmless no-op |
+| — | ~~`POST /auth/mfa/setup`, `/enable` `{ code }`, `/disable` `{ password?, code \| recoveryCode }`~~ — PR #67 (live 2026-11-09): self-service set-up and turn-off. PR #71 made them 403 `MFA_ADMIN_MANAGED`; **PR #72 (`9497fae`, live 2026-11-13) removed them: 404** (checked live 2026-11-13). Audit `user.mfa_enabled` is now written by required set-up | ⛔ **No longer called (2026-11-13, `backend-dev-2026-11-12/01`).** Was wired 2026-11-10 (ticket 09) on `/account/security`; `setupMfa`/`enableMfa` and their hooks are deleted, and the page is read-only. A wrong code is still a **401** `INVALID_MFA_CODE`, which `api-client.ts` doesn't treat as a dead session (§3) |
+| — | `POST /auth/mfa/setup/start { mfaSetupToken, method }` and `POST /auth/mfa/setup/confirm { mfaSetupToken, method, code, challengeId? }` — PR #71 (`142be0b`, live 2026-11-12): public, the only way to turn MFA on. Start returns `{ method, secret, otpauthUri }` (app) or `{ method, challengeId, expiresAt }` (email, code sent; again to resend); confirm returns the login body plus `recoveryCodes`. Bad token 401 `MFA_SETUP_TOKEN_INVALID`; user no longer required or already set up 401 `MFA_SETUP_SESSION_INVALID`. `method: 'sms'` since PR #72 | ✅ **Wired 2026-11-13 (`backend-dev-2026-11-12/02`, verified live as `staff_hr`)**: `startMfaSetup` direct, `confirmMfaSetup` via the new BFF route `POST /api/auth/mfa/setup/confirm` (`respondWithTokens`). App path: wrong code keeps the step (401), right code → 10 recovery codes → `/staff`; the next sign-in asked for the normal code. `MFA_SETUP_SESSION_INVALID` → "Sign-in timed out" (verified by clearing `mfaRequired` mid-set-up). 🟨 Email path built, not verified (no fixture inbox we can read). `sms` not offered |
+| — | `POST /auth/mfa/phone/resend/setup { mfaSetupToken }`, `POST /auth/mfa/phone/resend`, `POST /auth/mfa/phone/confirm { code }`, `POST /users/:id/phone-verification/resend` (global `user:edit`) — PR #72 (live 2026-11-13): an admin registers `phoneNumber` on `POST/PATCH /users` (global scope only, `PHONE_ADMIN_ONLY`); the user confirms it by SMS; SMS MFA uses it | ⛔ not wired. Live `GET /auth/mfa/settings` → `sms.available: false` for users without a phone |
+| — | PR #69 (`914e28b`, live 2026-11-10): `GET /auth/mfa/settings` (`mfaEnabled`, `currentMethod`, `emailMasked`, `methodOptions[{method, available}]`); email method `POST /email/setup` → `{ challengeId }`, `POST /email/enable { challengeId, code }` → `{ recoveryCodes }`; public `POST /otp/request { mfaToken }` → `{ challengeId }` (60 s cooldown `MFA_OTP_COOLDOWN`, 5 an hour `MFA_OTP_RATE_LIMITED`); `/verify` takes `challengeId` for email codes; switching `POST /method-change/current-otp`, `/method-change/start`, `/method-change/:changeId/new-otp`, `/method-change/confirm`, `DELETE /method-change/:changeId`. `sms` exists but always 503 `MFA_SMS_NOT_CONFIGURED` | ✅ **Wired 2026-11-11 (ticket 17)**: `/account/security` reads `/settings`, sets up email, switches method; `/` sends and resends email codes. App paths verified live as `management_ops`; 🟨 the email code paths are built but not verified end to end (no fixture inbox we can read). `MFA_CHALLENGE_INVALID` joined the 401 codes that don't trigger a refresh (§3). `POST /auth/mfa/disable` is **no longer called**: only an admin removes MFA (product decision 2026-11-11; **BE-24**, enforced by the backend since PR #71). **2026-11-13:** PR #72 (`9497fae`) removed `/email/setup`, `/email/enable` and **all five `/method-change/*` routes (404 live)**; the services remain in `mfa.service.ts` but nothing routes to them. `/account/security` no longer sets up or switches (`backend-dev-2026-11-12/01`); `/settings` (now with `mfaRequired`) and `/otp/request` are still used |
+| — | `DELETE /auth/mfa/users/:userId` — PR #67 (live): an admin turns another user's MFA off (`user:edit`); audited `user.mfa_reset`. Since PR #71 needs **global** `user:edit` (403 `MFA_RESET_ADMIN_ONLY`) | ✅ **Wired 2026-11-10 (ticket 10, verified live):** **Reset two-step** on `/admin/users` (`useResetUserMfa`). **2026-11-13 (verified live):** shown only for users with `mfaEnabled` and only to a global `user:edit` holder; the confirm says a still-required user sets it up again at their next sign-in |
 | — | `GET /auth/sso/status`, `GET /auth/sso/login`, `GET /auth/sso/callback`, `POST /auth/sso/exchange` — PR #67 (`692c530`, live): Active Directory (Entra ID) over OIDC. `login` redirects to the provider; the callback sends the browser to `SSO_FRONTEND_URL?code=…`, which `exchange` turns into tokens. On only when all five `SSO_*` variables are set (§9) | ⛔ not wired — ticket 14. Live `GET /auth/sso/status` → `{ "enabled": false }` (2026-11-09) |
 
 ### Documents
@@ -1213,7 +1267,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | `GET /documents/:id/export`, `GET /documents/:id/print` | ✅ new in `0dab81a` — `document:export` / `document:print` plus clearance; audited as `document.exported` / `document.printed`; return the document like `GET /documents/:id` | ✅ `/print` — wired 2026-10-08 (`usePrintDocument`): the PDF viewer's Print calls it first and only prints if it succeeds; verified in a browser against the live API · ✅ `/export` — wired 2026-10-08 (`useExportDocument`), `/doc/[id]`'s Export button; **clicked through 2026-10-09**: the call returned 200 and the new tab went to the signed S3 URL |
 | `GET/POST /documents/:id/comments`, `/signatures` | ✅ both exist, real endpoints | 🟥 **deliberately unused (reverted 2026-09-18, same day)** — briefly wired as `DocumentCommentsPanel`/`DocumentSignaturesPanel` earlier the same day, then removed: product decision to keep every comment/signature scoped to the workflow trail (`POST /tasks/:id/action`'s `comment`/`approve`'s `signature`) rather than split across a second, task-independent thread. See DRIFT-08's note below and BE-16/BE-17 in `BACKEND_REQUESTS.md` |
 | `GET/POST /documents/:id/access-requests`, `/grant`, `/deny`, admin inbox `GET /documents/access-requests` | ✅ — since `3014b89` (PR #47, live by 2026-10-12) the POST body **requires** `permission: 'view' \| 'route'`, and a grant is per permission (unique on document + user + permission). A `route` grant lets the user act on the document in a workflow despite its tier; it never allows download/export/print | ✅ **DRIFT-20 fixed 2026-10-12, verified live.** Wired 2026-09-18; from `3014b89` until the fix the frontend posted only `{ reason }` and every request was refused (422 `VALIDATION_ERROR`). `/doc/[id]` asks for View access (`permission: 'view'`); the workflow page's Restricted document card offers "Open the document" and "Act on this document" tick boxes (both pre-ticked for the task's holder) and sends one request per kind, one toast each, a 409 reading "Already pending". `/admin/access-requests` shows the kind (Open / Act) and a kind-specific grant confirmation |
-| — | `DELETE /documents/:id/access-grants/:userId?permission=view\|route` (query required since `3014b89`) | ✅ **Wired 2026-11-11 (ticket 11, verified live in Edge):** **Revoke** on approved rows of `/admin/access-requests` (`document_access_request:revoke`, held by `client_admin`), with a confirm. Gate: `requirePermission('document_access_request', 'revoke')` only, no confidentiality or cabinet check. Deletes the grant; the request stays `approved` (no grant list exists), and a second revoke is 404 "Access grant not found", shown as "already revoked". Checked: `staff_finance` 200 after grant, 403 after revoke |
+| — | `DELETE /documents/:id/access-grants/:userId?permission=view\|route` (query required since `3014b89`) | ✅ **Wired 2026-11-11 (ticket 11, verified live in Edge):** **Revoke** on approved rows of `/admin/access-requests` (`document_access_request:revoke`, held by `client_admin`), with a confirm. Gate: `requirePermission('document_access_request', 'revoke')` only, no confidentiality or cabinet check. Deletes the grant. **Since backend `142be0b` (PR #71, live 2026-11-12)** it also sets the matching approved requests to `revoked` in the same transaction, so request `status` is `pending \| approved \| denied \| revoked` and both request lists accept `status=revoked`; grants revoked before that deploy keep `approved` (no backfill), and revoking one is 404 "Access grant not found", shown as "already revoked". **Frontend 2026-11-13 (`backend-dev-2026-11-12/05`, verified live):** a revoked row reads Revoked (grey badge, "Approved · <time>", no button) and the status filter offers Revoked. Checked: `staff_finance` 200 after grant, 403 after revoke, then a new request from `/doc/[id]` (201): only a pending request blocks another |
 | `DELETE /documents/:id` (archive) | ✅ | ✅ wired — "Archive document" in `/doc/[id]`'s overflow menu (`useArchiveDocument`) |
 | `POST /documents/:id/versions/:versionId/restore` | ✅ | ✅ wired — "Restore" in `DocumentVersionsPanel` (`useRestoreDocumentVersion`). Both rows were stale here — caught in passing 2026-09-18, not otherwise part of that day's work |
 
@@ -1230,7 +1284,7 @@ Legend: ✅ works · ⚠️ exists on one side only · 🔴 called but missing/w
 | ~~`POST /workflow-instances/start`~~ | now the two-call `POST /workflow-instances` **then** `POST /:instanceId/start`; since `919d0ef` the create body is `{ workflowDefinitionId, documents: [{ documentId, comment? }] }`. **PR #62 (live 2026-11-03):** each document may carry `submitterId`, required when any stage uses `submitter_manager` (422 `WORKFLOW_SUBMITTER_REQUIRED`). `own` scope may name only themselves, `department` someone in their department, `global` anyone (403 `WORKFLOW_SUBMITTER_FORBIDDEN`). ⚠️ The manager is resolved only at `start`, so a submitter with no manager leaves a `pending` instance behind; it blocks routing that document to that workflow again (409 `WORKFLOW_INSTANCE_ALREADY_EXISTS`), `close` refuses `pending`, and an `own`-scope caller can't list it (no task yet) — backend ask | ✅ **DRIFT-09 resolved**; body updated 2026-10-07 — documents routed together go into one workflow (DRIFT-19). **Who may route what (2026-10-16, verified live):** create checks each document against the caller's `workflow_instance:create` scope: any document at `global` (client_admin), only documents they uploaded at `own` (staff, management, internal_auditor), and at `department` one whose cabinet is in their department; otherwise 403 `WORKFLOW_INSTANCE_CREATE_FORBIDDEN`. `useRouteToWorkflow` now applies the `own` rule (`mayRouteDocument`): the document page disables "Route to workflow" on someone else's document, and a Search/Cabinets selection leaves those out with a note. `department` is left to the backend. Before, staff got the 403 after picking a workflow. **Submitter (2026-11-03, ✅ clicked through by the product owner 2026-11-03):** when the chosen workflow has a `submitter_manager` stage, the modal shows **Submitted for**: the router themself at `own` scope, a `UserPicker` (department-filtered at `department` scope) for callers with `user:view`. Every document is sent with that `submitterId`. Callers with `user:view` get a `GET /users/:id` check first, refusing a submitter with no manager before the pending instance can be created; a `WORKFLOW_ASSIGNEE_INVALID` from `start` is reworded to say who has no manager |
 | `POST /workflow-instances/:id/hold` `/resume` `/close` | ✅ | ✅ |
 | `GET /tasks`, `GET /tasks/:id` | ✅ — since `919d0ef` no `Task.dueAt`; documents come through `documents[].workflowDocumentExecution`, and only `/:id` carries their stage and deadline (DRIFT-19). Since `3014b89`: tasks carry `assignedDepartmentId`; `/:id` returns **every** document, each with `access: { canView, canRoute, canRequestView, canRequestRoute }`, and a document the caller can't view comes back as "Restricted document" with null confidentiality, cabinet and version (before, it was left out). Acting on a document above your tier needs a `route` grant | ✅ reshaped 2026-10-07, not verified live. ✅ **DRIFT-21, fixed 2026-10-12** — the workflow page reads `access`, shows Restricted documents as lock tabs with the request card and never fetches them; `ConfBadge`/`UrgBadge` render nothing for a null level. Verified live (staff: no `GET /documents/:id` for the restricted one, no error; client admin: unchanged). Stage actions cover only documents with Action access (`canRoute`) and name them explicitly whenever any is held back; close and delegate (whole-task) are disabled meanwhile. Verified live: approving the viewable document of a two-document task returned 200, the restricted one stayed at the stage in a new task for the same user (before PR #52). **PR #52 (live 2026-10-15):** a partial action keeps the same task open with the rest; `/:id` still lists the actioned documents, with `actionedAt` and `canRoute`/`canRequestRoute` false (the lists drop them). **2026-10-16:** the workflow page treats those as done ("· Done" tab; out of the actions, the held-back count and the deadline) instead of as needing Action access, which also disabled Delegate and Close. A Restricted document has no `actionedAt`, so it counts as done once its execution has left the task's stage (backend ask T2). Verified in the browser on task `27f8a97d…` with `GET /tasks/:id` edited to mark one document actioned (no live partial action made); the unfixed page showed "One document needs Action access". ✅ **Backend ask T3 fixed** (edms-backend `3832e4b`, PR #54; verified live 2026-10-20): sending an actioned document back to a stage whose task is still open reuses that task and re-opens the document there (`actionedAt: null`, actionable again); before, a 409. Checked on a throwaway two-document workflow: partial review at A, Request changes at B → 200, one open task at A holding both, and the workflow page shows the returned document with its changes-requested marker, not "· Done". **PR #50 (live 2026-10-13):** `GET /tasks` and `/tasks/approvals` return each document's `currentStage`, `status`, `stageDueAt` (W1), accept `sort=createdAt\|dueAt` and `overdue=true\|false`, and redact documents the caller can't view like `/:id` does. Task rows show the deadline (only on open tasks — a closed task's documents have moved to someone else's stage) and "Overdue" past it; verified live. **2026-10-14 (verified live):** `/staff/tasks` sends `overdue=true` for Overdue, `status=pending&overdue=false` for Pending / In Progress / On Hold (split by `taskStatusLabel`), and `sort=dueAt` for "Sort: Due date", so those cover every task rather than the one page fetched. Before, In Progress and On Hold sent `status=in_progress`/`on_hold`, which aren't task statuses — a 400 `VALIDATION_ERROR`, shown as "Failed to load tasks" |
-| `POST /tasks/:id/action` | ✅ | ✅ — `request_changes` sends `documents: [{documentId}]` from the workflow page's document picker since 2026-10-02 (**DRIFT-18** fixed; the field became required in `edms-backend` `5144fc7`). Not yet verified e2e |
+| `POST /tasks/:id/action` | ✅ — **PR #72 (`9497fae`, live 2026-11-13, BE-27):** the actor must be able to view every selected document, else 403 `TASK_DOCUMENT_VIEW_FORBIDDEN`; the tier and grant checks still run after it. PR #73 (`9bdb9a6`) gave parallel routing a longer transaction timeout (BE-28) | ✅ — the workflow page offers actions only when `canView && canRoute` (DRIFT-25), so the 403 shouldn't be reachable from the UI; live re-check of BE-27 pending. `request_changes` sends `documents: [{documentId}]` from the workflow page's document picker since 2026-10-02 (**DRIFT-18** fixed; the field became required in `edms-backend` `5144fc7`). Not yet verified e2e |
 | — | `POST /workflow-instances/:id/documents` `{documentId, submitterId?, comment?}` (`5144fc7`; `submitterId` PR #62, same rules as create) | ✅ wired — "Mark reviewed" attaches the reviewer's documents through it (`useWorkflowTaskActions`); optional since 2026-10-16 (the `review` action never required any). *This row said "no UI yet"; stale, corrected 2026-10-07*. **2026-11-03 (✅ clicked through by the product owner 2026-11-03):** on a workflow with a `submitter_manager` stage it sends the submitter of the task's documents (`GET /tasks/:id` returns `submitterId` since PR #62) |
 | `PATCH /tasks/:id/reassign` | ✅ | ✅ |
 | `GET /tasks/approvals` | ✅ — refused (403 `TASK_APPROVAL_QUEUE_FORBIDDEN`) to anyone whose `task:view` is `own` | ✅ — `/supervisor/approvals` (`sort=dueAt` since 2026-10-20; it was oldest first), and the sidebar badge. **2026-10-13:** the badge and the nav item require `task:action` *and* `task:view` at department or wider; before, the badge fired for anyone with `task:action`, so staff got a hidden 403 on every page. Verified live: no request for staff, badge still 1 for the Finance supervisor |
@@ -1267,7 +1321,7 @@ consumed at `src/app/(app)/staff/cabinets/page.tsx:53`.
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `GET/POST /users`, `GET/PATCH/DELETE /users/:id` | ✅ — since PR #49 (live 2026-10-13) a user is `pending` from an emailed invitation until they set a password (then `active`); `invitedAt` records the first invitation; `?status=pending` filters. Existing invited users without a password were migrated to `pending`. **PR #62 (live 2026-11-03):** `managerId` on create and update (`null` clears it), returned on every user; the manager must be active, a cycle or yourself is a 409, and an `own`-scope editor can't change it (403) | ✅ — `/admin/users` shows Pending with the invitation date, filters by it, offers Resend invite and no Activate for them; "Invite user" toasts "Invitation sent to …". Verified live 2026-10-13. **Reports to (2026-11-03, ✅ clicked through by the product owner 2026-11-03):** the invite/edit modal has a **Reports to** picker (active users, never the user themself, "No manager" clears), sent on create and only when changed on edit; a **Reports to** column names each manager (`GET /users/:id`, cached). Checked against live on `staff_finance`: set (200), self (409), cleared again (200) |
+| `GET/POST /users`, `GET/PATCH/DELETE /users/:id` | ✅ — since PR #49 (live 2026-10-13) a user is `pending` from an emailed invitation until they set a password (then `active`); `invitedAt` records the first invitation; `?status=pending` filters. Existing invited users without a password were migrated to `pending`. **PR #62 (live 2026-11-03):** `managerId` on create and update (`null` clears it), returned on every user; the manager must be active, a cycle or yourself is a 409, and an `own`-scope editor can't change it (403) | ✅ — `/admin/users` shows Pending with the invitation date, filters by it, offers Resend invite and no Activate for them; "Invite user" toasts "Invitation sent to …". Verified live 2026-10-13. **Reports to (2026-11-03, ✅ clicked through by the product owner 2026-11-03):** the invite/edit modal has a **Reports to** picker (active users, never the user themself, "No manager" clears), sent on create and only when changed on edit; a **Reports to** column names each manager (`GET /users/:id`, cached). Checked against live on `staff_finance`: set (200), self (409), cleared again (200). **Two-step (2026-11-13, `backend-dev-2026-11-12/03`, verified live):** PR #71 added `mfaRequired` + `mfaEnabled` to every user row and `mfaRequired` to `POST /users` and `PATCH /users/:id` (refused at `own` scope, 403 `MFA_REQUIREMENT_ADMIN_ONLY`; audited `user.mfa_required` / `user.mfa_requirement_removed`); PR #72 added `mfaMethod` and `phoneNumber`. `/admin/users` has a **Two-step** column (On · method / Not set up / Off, plus Required), **Require two-step** / **Stop requiring two-step** with a confirm (not on your own row), and a **Require two-step sign-in** box on the invite form. `phoneNumber` is ⛔ not wired |
 | `GET /users?search=` (name or email, case-insensitive; backend PR #48) | ✅ | ✅ wired 2026-10-13: `/admin/users` search box, and `UserPicker` (Delegations "Delegate to" until 2026-10-29, when it moved to `GET /delegations/eligible-users`). The actor filter on `/admin/audit` and `/auditor/trail` is `UserSearchCombobox` since 2026-10-16: a search box that queries from the third character. **Since 2026-11-05 every user picker searches:** cabinet and folder grant forms, circular audience (`UserMultiPicker`), workflow designer, and the supervisor reassign dialogs (`departmentId` + `status=active`). `useAllUsers` / `usersService.getAllPages` (walked every page) were deleted. Results stay inside the caller's `user:view` scope |
 | `POST /users/:id/roles`, `DELETE /users/:id/roles/:roleId` | ✅ | ✅ |
 | `POST /users/:id/invitation` | ✅ — since PR #49 accepts `pending` or `active` users (409 otherwise) | ✅ wired 2026-09-18 — "Resend invite" button, shown for pending users and for active users with no `lastLoginAt` (since 2026-10-13; before, only the latter, so a pending user couldn't be re-invited) |
@@ -1335,31 +1389,32 @@ supervisors and management lack, so their audience editor offers department grou
 named people but not role groups. Circular notifications carry `actionUrl: /circulars/:id`
 (published, reminder) or `/circulars` (withdrawn) — both are real routes here.
 
-### Internal control *(backend on `dev` 2026-10-29; UI built the same day, not live)*
+### Internal control *(backend on `dev` 2026-10-29; UI built the same day; live since 2026-11-12)*
 
 `edms-backend` `51e9d85` adds `control_exceptions` (migration
 `20261029090000_add_control_exceptions`). An exception is open → reported → acknowledged →
 resolved. The `internal_auditor` raises, edits (while open) and reports it; reporting notifies
 every active `management` user (`control_exception.reported`); `management` acknowledges and
 resolves it, with a required note. `client_admin` can read. Each action is audited as
-`control_exception.*`. **Not usable on live yet:** on 2026-10-29 the live `auditor` login
-held no `control_exception:*` permission (so `seed:system` hasn't run there), and the list
-route timed out twice. Live deployment is unverified.
+`control_exception.*`. ~~**Not usable on live yet:** on 2026-10-29 the live `auditor` login
+held no `control_exception:*` permission.~~ Live was re-seeded 2026-11-11 and the whole
+lifecycle was walked through on live 2026-11-12 (`POST …/report` takes ~4 s there).
 
 **Frontend (2026-10-29):** `controlExceptions.service.ts` / `useControlExceptions.ts` and five
 shared pages under `/control-exceptions` (doc 05, Shared pages); the auditor's and
-management's Findings menu items open them. 🟨 everywhere below: verified only against a
-local mock of these routes (with the grants added to `/auth/me`), never against live.
+management's Findings menu items open them, and client admin's Governance section since
+2026-11-12. ✅ everywhere below: first built against a local mock, then verified on live
+2026-11-12 as auditor, management, client admin and staff.
 
 | Frontend call | Backend route | Status |
 |---|---|---|
-| `getAll` | `GET /control-exceptions` (`view`; `status`, `category`, `severity`, `departmentId`, `from`/`to`, `page`/`limit` ≤ 100) | 🟨 the register. `to` is compared with `lte` on a timestamp, so the page sends the end of the chosen day |
-| `getReport` | `GET /control-exceptions/report` (`view`; same filters): counts by status, category, severity, department | 🟨 `/control-exceptions/report` |
-| `getById` | `GET /control-exceptions/:id` (`view`) | 🟨 detail page; also the notification's `actionUrl` |
-| `create` | `POST /control-exceptions` (`create`): `title`, `description`, `category`, `severity?`, optional `departmentId`/`documentId`/`workflowInstanceId` | 🟨 `/control-exceptions/new`. The form links a department and a document, not a workflow |
-| `update` | `PATCH /control-exceptions/:id` (`edit`, while `open`) | 🟨 `/[id]/edit`; sends `null` to unlink |
-| `report` | `POST /control-exceptions/:id/report` (`report`) | 🟨 "Report to permanent secretary", after a confirm |
-| `acknowledge`, `resolve` | `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` `{resolutionNote}` (`respond`) | 🟨 detail page; Resolve opens an inline note |
+| `getAll` | `GET /control-exceptions` (`view`; `status`, `category`, `severity`, `departmentId`, `from`/`to`, `page`/`limit` ≤ 100) | ✅ the register. `to` is compared with `lte` on a timestamp, so the page sends the end of the chosen day |
+| `getReport` | `GET /control-exceptions/report` (`view`; same filters): counts by status, category, severity, department | ✅ `/control-exceptions/report` |
+| `getById` | `GET /control-exceptions/:id` (`view`) | ✅ detail page; also the notification's `actionUrl` |
+| `create` | `POST /control-exceptions` (`create`): `title`, `description`, `category`, `severity?`, optional `departmentId`/`documentId`/`workflowInstanceId` | ✅ `/control-exceptions/new`. The form links a department and a document, not a workflow |
+| `update` | `PATCH /control-exceptions/:id` (`edit`, while `open`) | ✅ `/[id]/edit`; sends `null` to unlink |
+| `report` | `POST /control-exceptions/:id/report` (`report`) | ✅ "Report findings", after a confirm ("Report findings?" → Submit) |
+| `acknowledge`, `resolve` | `POST /control-exceptions/:id/acknowledge`, `POST /control-exceptions/:id/resolve` `{resolutionNote}` (`respond`) | ✅ detail page; Resolve opens an inline note |
 
 Gap: the responses embed `raiser` but give only ids for the reporter, acknowledger and
 resolver, so the history can't name them (management can't read `GET /users`).
@@ -1672,7 +1727,7 @@ Same URLs, new behaviour. Each is harmless to the current frontend unless noted.
 | Change | Where | Frontend impact |
 |---|---|---|
 | Login can answer with `{ mfaRequired: true, mfaToken }` and no tokens | `POST /auth/login` | ✅ Handled since 2026-11-10 (ticket 10): `/` shows the second step |
-| `mfaEnabled` on the user | `GET /auth/me` | Read by `/account/security` from 2026-11-10 (ticket 09) until 2026-11-11, which now reads `GET /auth/mfa/settings` (ticket 17). Not on `GET /users` (BE-24) |
+| `mfaEnabled` on the user | `GET /auth/me` | Read by `/account/security` from 2026-11-10 (ticket 09) until 2026-11-11, which now reads `GET /auth/mfa/settings` (ticket 17). On `GET /users` since PR #71 (§8.7) |
 | `workstream` on every document (nullable enum) and as a filter | documents create, `PATCH`, list, search | ✅ Set on `/upload`, changed on `/doc/[id]`, filtered on `/search` since 2026-11-10 |
 | `from` / `to` created-date filter | `GET /documents`, `/documents/search` | ✅ Sent by `/search` since 2026-11-09, as local midnights (§8.5) |
 | `changeNote` (≤ 500) on file payloads, returned on versions | `POST /documents`, `POST /documents/:id/versions`, `GET …/versions` | ✅ Sent with new versions and shown in the versions list and History since 2026-11-10 (not sent on a first upload) |
@@ -1682,6 +1737,18 @@ Same URLs, new behaviour. Each is harmless to the current frontend unless noted.
 | JPEG, PNG and TIFF are watermarked on `preview` / `download`, not only PDF | `GET /files/:token` | ✅ Images preview and download watermarked since 2026-11-11 (ticket 12) |
 | Any call can be refused with 403 `ACCESS_RESTRICTED` | everything under `/api/v1` | ✅ A toast says the network or location is blocked (2026-11-11, ticket 13) |
 | `document.edited` and `document.metadata_updated` audit entries carry a field-level before/after | audit trail | ✅ Shown in the `/doc/[id]` History card since 2026-11-10 (ticket 05); the audit viewers show only the first two metadata fields, so a before/after reads `[object Object]` (full JSON on hover; not in any ticket) |
+
+### 8.7 PR #71 / #72 contract changes (backend `142be0b`, `9497fae`; live 2026-11-12 / 13)
+
+Admin-managed MFA. Checked live 2026-11-13.
+
+| Change | Where | Frontend impact |
+|---|---|---|
+| Login's third shape, `{ mfaSetupRequired: true, mfaSetupToken }`, no tokens | `POST /auth/login` | ✅ `/` shows the set-up step since 2026-11-13; before, it crashed |
+| `mfaRequired` on the user and on the settings | `GET /auth/me`, `GET /auth/mfa/settings` | ✅ `/account/security` shows "Required by your administrator" since 2026-11-13 |
+| `mfaRequired`, `mfaEnabled`, `mfaMethod`, `phoneNumber` on every user | `GET /users`, `GET /users/:id` | ✅ `/admin/users` Two-step column since 2026-11-13; `phoneNumber` unused |
+| Self-service set-up, turn-off and method switch are gone (404) | `/auth/mfa/setup`, `/enable`, `/disable`, `/email/*`, `/method-change/*` | ✅ Nothing calls them since 2026-11-13 |
+| Tokens carry `mfaState`; a changed `mfaEnabledAt` ends every session, and `mfaRequired && !mfaEnabled` makes every call 403 | every authenticated call, `POST /auth/refresh` | ✅ Since 2026-11-13 (`backend-dev-2026-11-12/04`, verified live): "Two-step sign-in required" or "Signed out", as a modal in the app or a banner on `/` after a navigation (§3). Before, a generic "session expired", or pages failing with 403 |
 
 ---
 
@@ -1865,6 +1932,7 @@ suspiciously few documents.
 | ~~DRIFT-20~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `POST /documents/:id/access-requests` requires `permission: 'view' \| 'route'` since `edms-backend` `3014b89`; `documentsService.requestAccess` sent only `{ reason }` | Frontend | Was: **Request access refused for everyone (422)**, on `/doc/[id]` and the workflow page. Fix: send `view` from the document page; on the workflow page, ask for whichever of `view`/`route` the document's `access` lacks. Show the permission in `/admin/access-requests` |
 | ~~DRIFT-21~~ | ✅ **Resolved (frontend, 2026-10-12)**, verified live | `GET /tasks/:id` and `GET /workflow-instances/:id` now return documents the caller can't see, redacted ("Restricted document", `confidentiality: null`, no version) with an `access` object | Frontend | **The workflow page throws** for anyone whose task holds such a document: the access overlay renders `ConfBadge` with `null`, and `titleCase(null)` calls `.replace` on null. Fix: drive the overlay from `access`/`isLocked`, guard null fields, and keep locked documents out of the action pickers unless `canRoute`. Workflow history also blanks comments, notes and signatures in workflows holding such a document (by design) |
 | **DRIFT-22** | 🟠 Med (found 2026-10-12; **intended**, per the backend developer the same day) | At `own` scope, workflow visibility (`buildInstanceAccessFilter`, `canActorAccessInstance`) follows task assignment only; `3014b89` dropped the "created one of its documents" clause | Backend (decision) | A `staff` user who routes a document to a supervisor stage can't see or open that workflow; `/doc/[id]`'s Workflows card goes empty and offers "Route to workflow" again. Confirmed intended; the frontend follow-up is explaining the empty state (doc 05 backlog 14b) |
+| **DRIFT-25** | 🔴 High (found 2026-11-11, verified live 2026-11-12) — **frontend mitigated 2026-11-12; backend fix shipped 2026-11-13 (PR #72), live re-check pending** | Route clearance ignores view access: `isConfidentialityActionAllowed` (`access-control.constants.ts`) skips the tier check for `public`/`internal` and `route` has no `ACTION_PERMISSION` entry, so `POST /tasks/:id/action` accepts an action on a document the actor can't open. `GET /tasks/:id` reports `canRoute: true` there; `GET /workflow-instances/:id` hard-codes `false` | Backend (BE-27) | A user with no access rejected and closed a workflow (2026-11-11). The workflow page now requires `canView && canRoute` (product decision 2026-11-12: acting needs opening). PR #72 (`9497fae`) makes the API agree: 403 `TASK_DOCUMENT_VIEW_FORBIDDEN`, and `canRoute` needs `canView`. Checked in the code, not yet on live |
 | ~~DRIFT-23~~ | ✅ **Resolved (frontend, 2026-10-14)**, verified live incl. the counterfactual | `sessionExpired` was cleared only by `performLogout`, but a session can also end via `proxy.ts`'s redirect to `/` (a dead token on a navigation) — not a logout | Frontend | Was: the "your session ended" modal covered the app immediately after a *successful* re-login, because the flag set during the dead session outlived it (`useUIStore` isn't persisted, so it persisted for the tab's lifetime). Fix: clear it on login success and on a live `GET /auth/me` — see §3 |
 | ~~DRIFT-24~~ | ✅ **Resolved (frontend, 2026-10-14)**, verified live | The login page trusted the store's persisted `currentUser` as proof of a session, and `proxy.ts` left dead cookies in place on its redirect | Frontend | Was: **with a dead session `/` rendered nothing at all and stayed that way across reloads** — the persisted user made the page return `null` while its portal push was bounced back by the proxy, so signing in was impossible without clearing site data. Fix: the proxy deletes the dead cookies, and the login page drops a persisted user with no `accessToken` behind it — see §3 |
 | ~~DRIFT-18~~ | ✅ **Resolved (frontend, 2026-10-02)** | `request_changes` required a `documents` array the frontend didn't send (`5144fc7`, multi-document workflows) | Frontend | Was: "Send back" failed validation for every user. Fixed as part of the doc/workflow page split — the new `/workflow-instances/[id]` asks which of the task's documents need changes. Not yet verified e2e |
