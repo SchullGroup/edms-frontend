@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { foldersService } from '@/apis/services/folders.service';
 import { cabinetKeys } from '@/apis/hooks/useCabinets';
 import { documentKeys } from '@/apis/hooks/useDocuments';
@@ -28,13 +28,62 @@ function invalidateCabinetCounts(queryClient: ReturnType<typeof useQueryClient>)
   queryClient.invalidateQueries({ queryKey: cabinetKeys.all });
 }
 
+/** Query options for every folder in a cabinet; shared so a handler can `fetchQuery` it. */
+export const cabinetFoldersQuery = (cabinetId: string) => ({
+  queryKey: [...folderKeys.byCabinet(cabinetId), 'all'],
+  queryFn: () => foldersService.listAllByCabinet(cabinetId),
+});
+
 /** Every visible folder in the cabinet, flat (nest by `parentId`), for pickers and paths.
  *  No `_count` or `children`: the paged endpoint doesn't return them. */
 export function useCabinetFolders(cabinetId?: string) {
   return useQuery({
-    queryKey: cabinetId ? [...folderKeys.byCabinet(cabinetId), 'all'] : [],
-    queryFn: () => foldersService.listAllByCabinet(cabinetId!),
+    ...cabinetFoldersQuery(cabinetId ?? ''),
+    queryKey: cabinetId ? cabinetFoldersQuery(cabinetId).queryKey : [],
     enabled: !!cabinetId,
+  });
+}
+
+const FOLDER_BATCH = 50;
+
+/** One level of a cabinet's folders, a batch at a time ("Show more"); `null` = top level. */
+export function useFolderLevel(
+  cabinetId: string | undefined,
+  parentId: string | null,
+  options?: { enabled?: boolean },
+) {
+  return useInfiniteQuery({
+    queryKey: [...folderKeys.byCabinet(cabinetId ?? ''), 'level', parentId ?? 'root'],
+    queryFn: async ({ pageParam }) => {
+      // A batch the visibility filter emptied still has a cursor; skip it so "Show more" adds rows.
+      let cursor = pageParam;
+      for (;;) {
+        const page = await foldersService.listPage(cabinetId!, { parentId, cursor, limit: FOLDER_BATCH });
+        if (page.folders.length > 0 || !page.nextCursor || page.nextCursor === cursor) return page;
+        cursor = page.nextCursor;
+      }
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: !!cabinetId && (options?.enabled ?? true),
+  });
+}
+
+/** The folder and its ancestors, outermost first, walked up through `GET /folders/:id`. */
+export function useFolderAncestry(cabinetId?: string, folderId?: string) {
+  return useQuery({
+    queryKey: [...folderKeys.byCabinet(cabinetId ?? ''), 'ancestry', folderId ?? ''],
+    queryFn: async () => {
+      const chain: Folder[] = [];
+      let id: string | null | undefined = folderId;
+      while (id && chain.length < 64 && !chain.some((f) => f.id === id)) {
+        const folder: Folder = await foldersService.getById(id);
+        chain.unshift(folder);
+        id = folder.parentId;
+      }
+      return chain;
+    },
+    enabled: !!cabinetId && !!folderId,
   });
 }
 
