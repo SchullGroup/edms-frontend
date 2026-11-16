@@ -597,7 +597,7 @@ still worth knowing — but don't file "missing permission gate" as a new bug fo
 | ~~`/admin/audit`~~ | ~~Verify integrity, Export~~ — **gated (2026-10-08):** Export on `audit:export`, Verify on `audit:view`, matching the backend routes |
 | `/admin/branding` | Publish branding — page is client_admin-only; no branding backend or permission exists to gate the action on |
 | `/admin/policies` | Confidentiality / urgency / control toggles — page gate only; no policy backend or permission exists |
-| `/supervisor/exceptions` | Acknowledge — page gate (`workflow:edit`) only; the row list is still mock data |
+| ~~`/supervisor/exceptions`~~ | ~~Acknowledge~~ — **page removed 2026-11-16** |
 | ~~`/staff/cabinets`~~ | ~~Move / Route bulk actions~~ — **gated** (checked 2026-10-08): Move needs `document:edit` + Edit on the cabinet; Route needs `workflow_instance:create` + `:route` |
 
 *(2026-10-08: the three remaining rows are mock pages. Their action gates wait for the

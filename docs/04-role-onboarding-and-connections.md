@@ -474,7 +474,7 @@ end       → /staff/tasks  clear the queue   ✅
 
 > **Persona:** David · operations team lead · 6–12 direct reports
 > **Landing page:** `/supervisor` · **Sidebar:** Supervisor Console
-> **Overall status:** 🟨 **Approval works well; oversight is half-real**
+> **Overall status:** 🟨 **Approval and oversight are real; only the dashboard's no-op audit hook keeps it 🟨** *(was "oversight is half-real" until the mock Exceptions page was removed 2026-11-16)*
 
 ### Identity and rights
 
@@ -504,7 +504,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 | 5 | Check what's ageing | `/supervisor/bottlenecks` | ✅ server-side `GET /workflow-instances/bottlenecks-ageing`, including the breach count. *(Was 🟨 "Overdue is always 0 (DRIFT-13); ignores `SlaBreach`" — DRIFT-13 resolved 2026-09-21.)* |
 | 6 | Check team workload | `/supervisor/workload` | ✅ `GET /tasks/workload` (`useTaskWorkload`). *(Was 🟨 "walks all pages client-side".)* |
 | 7 | Reassign an overloaded person's task | `PATCH /tasks/:id/reassign` | ✅ |
-| 8 | Review exceptions | `/supervisor/exceptions` | 🟥 inline fixture rows (doc 05) |
+| 8 | ~~Review exceptions~~ | ~~`/supervisor/exceptions`~~ | Removed 2026-11-16 (product decision): the page showed invented rows. Supervisors can't see audit findings; their SLA breaches are in step 5 |
 | 9 | Review team performance | `/supervisor/performance` | ✅ real since 2026-10-13: on-time %, closures and turnaround per member over 30 days, from SLA outcomes and the team's tasks |
 
 ### First week
@@ -563,7 +563,7 @@ being the approval bottleneck, this is the most consequential missing screen in 
 8. 🟠 **Can't list workflow definitions on a freshly seeded tenant** (DRIFT-14), so a
    supervisor there can't route a document either. The live tenant's supervisors can
    (re-tested 2026-10-16)
-9. 🟥 **`/supervisor/exceptions` is fixture data**
+9. ~~🟥 **`/supervisor/exceptions` is fixture data**~~ — page removed 2026-11-16
 
 ---
 

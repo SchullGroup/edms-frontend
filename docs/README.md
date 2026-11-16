@@ -78,9 +78,9 @@ setting up an environment.
 
 ## The short version
 
-**69 frontend pages · 176 backend routes · 6 roles · 0 tests.**
+**68 frontend pages · 176 backend routes · 6 roles · 0 tests.**
 *(Pages re-derived 2026-11-10: +1, `/search/mass-index` (ticket 08); then +1,
-`/account/security` (ticket 09). Unchanged at 69 on 2026-11-16.)*
+`/account/security` (ticket 09). 69 until 2026-11-16, when the mock `/supervisor/exceptions` was removed: 68.)*
 *(Routes re-derived 2026-11-16, backend @ `dev` `e033b58` (PR #73): 171 → 176. PR #69 (`4da2980`)
 made it 180, which these docs missed (see the 2026-11-16 correction below). PR #71 (`142be0b`) added
 `/auth/mfa/setup/start` and `/setup/confirm`: 182. PR #72 (`9497fae`) removed 10 (the five
@@ -128,9 +128,9 @@ The GOVERNANCE half is now half real
   ✅ audit trail · circulars · SLA settings · notifications (clicked through 2026-11-11)
      · control exceptions (walked through on live 2026-11-12)
   🟥 retention · branding · platform operations
-                                                    🟥 9 of 69 pages
+                                                    🟥 8 of 68 pages
 ```
-*(Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
+*(2026-11-16: 8 of 68, after `/supervisor/exceptions` was removed. Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
 59 pages"; 2026-10-15 it was "notifications · policies … 🟥 13 of 58 pages".)*
 
 ### The four defects that matter most
@@ -215,6 +215,8 @@ above was found; and the three "7-line stub" pages are **re-exports**, one of wh
 **Corrected 2026-11-10:** doc 05's page table gave `/upload` 926 lines and `/doc/[id]` 707; on `dev` (`4a267e1`) they were 818 and 693. Re-counted with `wc -l` after the workstream change (856 and 694). Found while recording ticket 04.
 
 **Corrected 2026-11-03:** doc 05's backlog item 20a still said the backend accepts any upload `mimeType`. edms-backend `82c4707` (on `dev` 2026-10-29) enforces PDF, JPEG, PNG and TIFF, which doc 01 §7 already recorded. Found while syncing the docs with backend PR #62.
+
+**Corrected 2026-11-16 (2):** doc 05's "By data source" bars read 55 API-only and 9 fixture-only pages, 71 in all, while the footnote under them had 54 + 8 + 1 + 6 = 69. The bars weren't redrawn when the footnote was updated on 2026-11-13. They now match the footnote, after the removal of `/supervisor/exceptions`: 54 + 7 + 1 + 6 = 68. Found while recording that removal.
 
 **Corrected 2026-11-16:** the route count stayed at 171 (2026-11-09, `42ed468`) in doc 01, this file and `AGENTS.md` through three backend merges. PR #69 (`4da2980`, 2026-11-10) added 9 routes (the email method, `/otp/request`, `/settings` and the five `/method-change/*` routes) and nobody re-counted, so it was already 180 when PR #71 made it 182. Re-derived at each commit with `git grep` over `src/modules/*.router.ts`: 180, 182, then 176 at `e033b58`. Doc 02's staff persona also still had the 2026-10-15 scope split (4 `global`); since PR #70 it is 16 `own`, 11 `department`, 2 `global`. Found while recording PRs #70–#73 (ticket `backend-dev-2026-11-12/06`).
 

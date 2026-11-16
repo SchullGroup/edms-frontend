@@ -138,7 +138,8 @@ For each of the six role dashboards this document lists:
 
 ## Portfolio summary
 
-**69 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
+**68 pages across 6 role dashboards** (`find src/app -name 'page.tsx' | wc -l`, re-derived
+2026-11-16 — −1: `/supervisor/exceptions` removed, under Supervisor Console; 69 on
 2026-11-11 — +2: `/admin/access-rules` and `/new`, under Client Administration; 67 on
 2026-11-10 — +1: `/account/security`, under Shared pages; 66 earlier on 2026-11-10 — +1:
 `/search/mass-index`, under Shared pages; 65 on 2026-11-04 — +1:
@@ -169,13 +170,13 @@ Every classification below was verified by inspecting what each page destructure
 | Dashboard | Pages | ✅ Live | 🟨 Partial / Hybrid | 🟥 Mock | ↪️ / static | Verdict |
 |---|---:|---:|---:|---:|---:|---|
 | Staff Workspace | 5 | 5 | — | — | — | **Strongest.** Real data throughout. |
-| Supervisor Console | 7 | 5 | 1 | 1 | — | Approvals, ageing and the Workflow Monitor real; exceptions/performance fixture. |
+| Supervisor Console | 6 | 5 | 1 | — | — | Approvals, ageing, team performance and the Workflow Monitor real; the dashboard Hybrid (no-op audit hook). The mock Exceptions page was removed 2026-11-16. |
 | Management Portal | 7 | 6 | — | — | 1 | The only fully API-driven pages — and the ones that don't scale. `/management/findings` redirects to control exceptions. |
 | Client Administration | 15 | 10 | 2 | 1 | 2 | Structure real; branding mock, policies Hybrid (SLA tab real). `/admin/circulars` and `/admin/workflows/instances` are redirect/re-export. |
 | Audit & Compliance | 4 | 3 | — | — | 1 | Trail, dashboard and compliance overview all live (the last two rebuilt 2026-11-13); `/auditor/findings` redirects to audit findings. |
 | Platform Admin | 6 | — | — | 6 | — | Mock by design (Phase 2). |
 | Shared | 25 | 17 | 4 | — | 4 | Login (with two-step sign-in), account security, upload, search, circulars, notifications, the workflow page and the 5 control-exceptions pages live; delegations and the password pages 🟨 not re-verified; `/doc/[id]` Hybrid. |
-| **Total** | **69** | **46** | **7** | **8** | **8** | |
+| **Total** | **68** | **46** | **7** | **7** | **8** | |
 
 *(Re-tallied 2026-10-08 from each page's row in this doc: all 57 `page.tsx` files. Later the
 same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → 🟨, and `/help`
@@ -191,7 +192,8 @@ same day `/admin/policies` (SLA tab) and `/management/reports` moved 🟥 → �
 management, client admin and staff (live re-seeded 2026-11-11), making 43 ✅ and 9 🟨.
 2026-11-13: `/auditor` 🟥 → 🟨, rebuilt on audit findings and the audit trail, not yet verified
 live, making 10 🟨 and 8 🟥. Then `/auditor`, `/auditor/compliance` and `/management/compliance`
-🟨 → ✅ (confirmed by the product owner's testing, 2026-11-13), making 46 ✅ and 7 🟨.)*
+🟨 → ✅ (confirmed by the product owner's testing, 2026-11-13), making 46 ✅ and 7 🟨.
+2026-11-16: the mock `/supervisor/exceptions` removed (product decision), making 68 and 7 🟥.)*
 
 *Confirmed by the product owner's own testing, 2026-10-08:* the admin setup checklist, the SLA
 settings, sub-folders, batch upload ("File all") and multi-document workflows. Page markers
@@ -219,8 +221,8 @@ after the user tested cabinet management end to end.)*
 ### By data source
 
 ```
-Renders live API data      ████████████████████████████████░░░░░░░░  55 pages (80%)
-Renders fixture data       █████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   9 pages (13%)
+Renders live API data      ████████████████████████████████░░░░░░░░  54 pages (79%)
+Renders fixture data       ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   7 pages (10%)
 Both, on the same page     █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   1 page (1%)
 Neither (redirect/static)  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   6 pages (9%)
 ```
@@ -232,10 +234,10 @@ from the 42-page pass). Method: the AGENTS.md per-page commands, then three adju
 renders `/management/compliance` (both); `/management/findings` renders
 `/auditor/findings` (fixture). (2) "Fixture data" is `SEED` domain keys destructured from
 `useStore` (`findings`, `audit`, `users`, `tenants`, `plans`, `featureFlags`), a mock
-service (`useBranding`, `usePolicies`) or an inline array (`/supervisor/exceptions`,
-`/platform/sysconfig`). Session state (`currentUser`, `prefs`) and the `auditAction`
-pseudo-log (since 2026-11-13 only on Platform, `/admin/branding` and `/admin/policies`) don't count, per the classification rule above. (3) `/admin/branding` and
-`/supervisor/exceptions` import from `@/apis/hooks` but only reach mocks, so they count as
+service (`useBranding`, `usePolicies`) or an inline array (`/platform/sysconfig`;
+`/supervisor/exceptions` until 2026-11-16). Session state (`currentUser`, `prefs`) and the `auditAction`
+pseudo-log (since 2026-11-13 only on Platform, `/admin/branding` and `/admin/policies`) don't count, per the classification rule above. (3) `/admin/branding` (and
+`/supervisor/exceptions` until 2026-11-16) import from `@/apis/hooks` but only reach mocks, so they count as
 fixture-only. Both: `/management/compliance`, `/auditor/compliance`, `/admin/policies`.
 Neither: `/admin/circulars` (redirect), `/help`, `/user-stories`, `/unauthorized`.
 Check: 40 API-only + 11 fixture-only + 3 both + 4 neither = 58, and the 11 fixture-only
@@ -246,12 +248,14 @@ folder permissions page is API-only, so 47 + 9 + 3 + 6 = 65. 2026-11-10: the mas
 page is API-only, so 48 + 9 + 3 + 6 = 66; `/account/security` too, so 49 + 9 + 3 + 6 = 67. 2026-11-11: both IP and country
 rules pages are API-only, so 51 + 9 + 3 + 6 = 69. 2026-11-13: `/management/compliance` and
 `/auditor/compliance` dropped `SEED.findings`, so 53 + 9 + 1 + 6 = 69 (`/admin/policies` is the
-one page left on both). Then `/auditor` dropped `SEED`, so 54 + 8 + 1 + 6 = 69.*
+one page left on both). Then `/auditor` dropped `SEED`, so 54 + 8 + 1 + 6 = 69. 2026-11-16:
+`/supervisor/exceptions` removed, so 54 + 7 + 1 + 6 = 68.*
 
-The split is clean: most pages are decisively one thing or the other. The **8 mock pages
-cluster in two places** — Platform (6/6, by design) and two Client Admin/Supervisor screens
-(`/admin/branding`, `/supervisor/exceptions`). *(The auditor's dashboard was a third until
-2026-11-13; the auditor's findings and management's re-export of it were two more until 2026-10-29.)* *(Was "20 mock pages … Auditor (4/4),
+The split is clean: most pages are decisively one thing or the other. The **7 mock pages
+cluster in two places** — Platform (6/6, by design) and one Client Admin screen
+(`/admin/branding`). *(`/supervisor/exceptions` was another until it was removed 2026-11-16; the
+auditor's dashboard until 2026-11-13; the auditor's findings and management's re-export of it
+until 2026-10-29.)* *(Was "20 mock pages … Auditor (4/4),
 Platform (6/6), and the governance half of Client Admin (4/8)".)*
 
 ### The ~~four~~ three mock service modules
@@ -266,8 +270,9 @@ Some pages appear "wired" because they call a hook, but the hook resolves a fixt
 | `useBranding`, `useUpdateBranding` | `branding.service.ts` | `SEED.branding` |
 
 `useCreateAuditLog()` in particular *(re-counted 2026-10-15)* is called directly from
-**six** pages (`/doc/[id]`, `/supervisor`, `/supervisor/approvals`,
-`/supervisor/bottlenecks`, `/supervisor/exceptions`, `/supervisor/workload`), and also
+**five** pages (`/doc/[id]`, `/supervisor`, `/supervisor/approvals`,
+`/supervisor/bottlenecks`, `/supervisor/workload`; `/supervisor/exceptions` was a sixth until
+it was removed 2026-11-16), and also
 from `useRouteToWorkflow` and `useWorkflowTaskActions`, so every page that routes a
 document or acts on a task reaches it too. It resolves successfully every time without
 doing anything, so those actions show a success toast for a log entry that was never
@@ -320,14 +325,15 @@ Fixtures declared directly inside a component, invisible to any `SEED` audit:
 | Page | Constant | What it fakes |
 |---|---|---|
 | ~~`upload/page.tsx`~~ | ~~`IDU_GUESSES`~~ | **Removed 2026-10-14** — presented a fabricated document type, cabinet, folder, confidence badge and "extracted metadata" chips in the product's most prominent flow, with nothing signalling it was fixed data |
-| `supervisor/exceptions/page.tsx` | `useState([...])` (3 rows) | Control failures, SLA breaches, access anomalies *(SoD row removed 2026-10-21 — out of scope)* |
+| ~~`supervisor/exceptions/page.tsx`~~ | ~~`useState([...])` (3 rows)~~ | **Page removed 2026-11-16** — invented control failures, SLA breaches and access anomalies. A supervisor can see none of the three except SLA breaches, which `/supervisor/bottlenecks` already covers |
 | ~~`management/reports/page.tsx`~~ | ~~`DEPTS`~~ | **Removed 2026-10-08** — departments come from `useDepartments` |
 
 **Why it's the sneakiest kind:** the fixtures in this table present fabricated output that
 looks computed. `IDU_GUESSES` gave every queued file a made-up classification and a
 confidence percentage, in the flow the whole product hinges on — nothing in the UI said so.
 It was removed rather than relabelled on 2026-10-14 exactly for that reason, and the upload
-card now starts blank; `supervisor/exceptions` is the only entry left here.
+card now starts blank. `supervisor/exceptions`, the last entry, went the same way on
+2026-11-16, so no inline fixtures are left in this table.
 
 ---
 
@@ -461,7 +467,8 @@ destination (request doc item 7).
 ## 2. Supervisor Console (`supervisor`)
 
 **Landing:** `/supervisor` · **Sidebar:** Oversight / Quality / Documents
-**Overall: 🟨 Approvals are real; oversight is half-fixture.**
+**Overall: 🟨 Approvals and oversight are real; only the dashboard's no-op audit hook keeps it 🟨.**
+*(Was "oversight is half-fixture", true before performance was rebuilt 2026-10-13 and exceptions removed 2026-11-16.)*
 
 ### Page inventory
 
@@ -471,7 +478,7 @@ destination (request doc item 7).
 | `/supervisor/approvals` | 201 | — | `useApprovalTasks` (`GET /tasks/approvals?sort=dueAt`), `ReassignAssigneePicker`, `useReassignTask` ✅ · `useCreateAuditLog` 🟥 *(re-read 2026-10-15; was `useTasks`, `useDocuments`)* | ✅ Live — **2026-10-20 (verified live in a browser):** sends `sort=dueAt`, so the queue is nearest deadline first. *Was:* oldest first, while the code comment and empty state claimed "urgency then due date", an order the backend doesn't have · **2026-10-02:** the per-row "Approve" button was removed (approving from a list meant signing without reading the documents); rows keep Reassign and Open, and Open goes to the workflow page |
 | `/supervisor/bottlenecks` | 259 | `currentUser` | `useBottlenecksAgeing` (`GET /workflow-instances/bottlenecks-ageing`), `ReassignAssigneePicker`, `useReassignTask` ✅ · `useCreateAuditLog` 🟥 | ✅ Live — server-side ageing buckets, stuck items and an active-SLA-breach banner. *Corrected 2026-10-12: this row still described the old client-side version over `useDocuments`, whose "Overdue" was always 0* |
 | `/supervisor/workload` | 245 | — | `useTaskWorkload` (`GET /tasks/workload`), `useTasks`, `ReassignAssigneePicker`, `useReassignTask` ✅ · `useCreateAuditLog` 🟥 | ✅ Live *(hooks re-read 2026-10-15; was `useDocuments`, `useUsers`)*. **2026-11-05 (verified live in Edge):** the four supervisor pages load no user list; the reassign dialog searches active people in the supervisor's department (shared `ReassignAssigneePicker`, which replaced `useDepartmentColleagues`) |
-| `/supervisor/exceptions` | 73 | — | **inline `useState` array** | 🟥 Mock |
+| ~~`/supervisor/exceptions`~~ | — | — | — | **Removed 2026-11-16** (product decision). Was 🟥 Mock: 3 invented rows in `useState` and an Acknowledge that called the no-op `useCreateAuditLog`. Its sidebar item (Quality) and route guard went with it; the URL now 404s |
 | `/supervisor/performance` | 324 | — | `useSlaOutcomeSummary` (`groupBy=user`, this and the previous 30 days), `useTaskWorkload` (roster), `GET /tasks?scope=all` walked with `fetchAllPages` ✅ | ✅ Live — **rebuilt 2026-10-13, verified live** (was static markup with invented people). KPIs: team SLA % (on-time stage results), items closed and average turnaround (raised → completed) over 30 days, each against the 30 days before; weekly closures vs new tasks over 6 weeks; a member table (SLA % with on-time/total, closed, turnaround, 6-week sparkline) credited by `completedBy`; Export CSV. Finance supervisor: team 79% (11/14), Finance Staff 88% (7/8, 11 closed), the supervisor 67% (4/6, 9 closed). Walks every task in scope: fine for a department, slow for a large tenant at global scope |
 | `/supervisor/instances` | 15 | — | `WorkflowInstanceMonitor` → `useWorkflowInstances`, `useWorkflows`, `useWorkflowInstanceLifecycle` ✅ | ✅ Live — the Workflow Monitor (hold / resume / close). **2026-10-13, verified live:** Current stage and Next due fill from the executions `GET /workflow-instances` returns since PR #50, with an "N of the M shown have passed the stage SLA" banner; it now sends `scope=all`, without which a client admin saw no workflows and a supervisor only their own. *Was 🟨 Partial* · **2026-10-14, verified live:** a Department picker (path-labelled) for viewers with `global` `workflow_instance:view`, pre-set from `?dept=` by the management dashboards' Workflows links; department-scoped viewers get no picker and a foreign `?dept=` is ignored |
 
@@ -515,8 +522,8 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 
 | Where | Fixture | Consequence |
 |---|---|---|
-| `/supervisor/exceptions` | 3 hardcoded rows in `useState` | Control failures, SLA breaches and access anomalies are entirely invented *(the SoD row went 2026-10-21)* |
-| `useCreateAuditLog` (6 pages + 2 shared hooks; re-counted 2026-10-15) | `audit.service.ts#logAction` stub | Every "action logged" toast is false — though the backend audits the underlying action itself (DRIFT-11) |
+| ~~`/supervisor/exceptions`~~ | ~~3 hardcoded rows in `useState`~~ | **Page removed 2026-11-16** |
+| `useCreateAuditLog` (5 pages + 2 shared hooks; re-counted 2026-11-16) | `audit.service.ts#logAction` stub | Every "action logged" toast is false — though the backend audits the underlying action itself (DRIFT-11) |
 
 ### ✅ ~~The overdue bug — `/supervisor/bottlenecks`~~ *(resolved; kept for history)*
 
@@ -557,13 +564,13 @@ already holds warning and escalation rows written by the SLA worker.
 | See ageing / bottlenecks | ✅ | Server-side ageing and breach count (corrected 2026-10-12; was "overdue permanently 0") |
 | Get warned before an SLA breach | 🟨 | The SLA worker notifies (DRIFT-10 resolved 2026-09-21); arrives in the bell. Not clicked through end to end |
 | Delegate while on leave | ✅ | `/delegations` exists and is wired — was stale here; not re-verified end-to-end |
-| Review exceptions | 🟥 | Hardcoded |
+| ~~Review exceptions~~ | — | **Dropped 2026-11-16** (product decision): the page was hard-coded. Supervisors can't see control exceptions or the audit log; their SLA breaches are on `/supervisor/bottlenecks` |
 | Export team stats | ✅ | CSV |
 
 > ✅ **Re-audited 2026-10-15.** This note used to warn that the bottlenecks math, workload
 > paging and exceptions/performance status had not been re-checked since 2026-09-18. They
-> have now: bottlenecks and workload are server-side, performance is live, exceptions is
-> still mock. The page table's hook lists were re-read from the code.
+> have now: bottlenecks and workload are server-side, performance is live, exceptions was
+> still mock (removed 2026-11-16). The page table's hook lists were re-read from the code.
 
 ### What's left, in order
 
@@ -575,7 +582,7 @@ already holds warning and escalation rows written by the SLA worker.
    (server-side `bottlenecks-ageing`); ticked 2026-10-12.
 4. ~~**Build notifications** so SLA warnings actually arrive.~~ **Done** (DRIFT-10); ticked
    2026-10-12.
-5. **Replace `/supervisor/exceptions`** with real control-failure detection, or remove it. *(SoD dropped from scope 2026-10-21.)*
+5. ~~**Replace `/supervisor/exceptions`** with real control-failure detection, or remove it.~~ **Removed 2026-11-16** (product decision). *(SoD dropped from scope 2026-10-21.)*
 6. ~~**Give `/supervisor/performance` a data source.**~~ **Done 2026-10-13** (SLA outcomes + team tasks).
 7. ~~**Add a team-aggregation endpoint**~~ — `GET /tasks/workload` and the team-status
    matrix exist and are wired. What's left: move `/supervisor/performance` off
@@ -1319,10 +1326,10 @@ resolved in SQL, confidentiality filtered in the query rather than after it.
 
 **Most of the governance half is real now too** *(re-written 2026-10-15)*. The audit trail,
 notifications, circulars and the SLA settings all run on the backend. What is still a UI
-over fixture data is **9 of the 69 pages** (8 entirely, 1 in part — "By data source"
-above): Platform (6/6, by design), branding, `/supervisor/exceptions`, and the
+over fixture data is **8 of the 68 pages** (7 entirely, 1 in part — "By data source"
+above): Platform (6/6, by design), branding, and the
 retention/confidentiality tabs of `/admin/policies` *(2026-11-13: the auditor's dashboard and
-both compliance pages left the list)*. The
+both compliance pages left the list; 2026-11-16: `/supervisor/exceptions` was removed)*. The
 fixture findings tracker gave way to control exceptions on 2026-10-29.
 
 **DRIFT-14 is a provisioning gap, not an outage** *(re-tested 2026-10-16)*. On the live
