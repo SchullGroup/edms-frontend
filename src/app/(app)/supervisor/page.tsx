@@ -10,7 +10,6 @@ import {
   useOpenItemsByCabinet,
 } from '@/apis/hooks/useWorkflowInstances';
 import { ReassignAssigneePicker } from '@/components/common/ReassignAssigneePicker';
-import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonPage, SkeletonTaskRows } from '@/components/common/Skeleton';
 import { Icon } from '@/components/ui/Icons';
@@ -20,7 +19,7 @@ import { HBarChart } from '@/components/ui/Charts';
 import { StatusBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
 import { Task, WorkflowTeamStatusMember } from '@/types/models';
-import { taskPrimaryDocument, taskTitle } from '@/utils/workflowDocuments';
+import { taskTitle } from '@/utils/workflowDocuments';
 import { isOverdue, taskHolderLabel } from '@/utils/supervisor';
 import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
 
@@ -37,7 +36,6 @@ export default function SupervisorDashboard() {
   const byCabinet = byCabinetData?.cabinets || [];
 
   const reassignTask = useReassignTask();
-  const createAuditLog = useCreateAuditLog();
 
   useEffect(() => {
     setPageTitle('Team Overview');
@@ -123,16 +121,9 @@ export default function SupervisorDashboard() {
               addToast('Please select a new assignee', 'error');
               return false;
             }
-            const prevName = taskHolderLabel(t, departmentName, 'previous assignee');
-
             return reassignTask
               .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
               .then(() => {
-                createAuditLog.mutate({
-                  action: 'REASSIGN',
-                  target: taskPrimaryDocument(t)?.id || t.id,
-                  detail: `Reassigned from ${prevName} to ${newName}${note ? ` (Note: ${note})` : ''}`,
-                });
                 addToast(`Reassigned to ${newName}`, 'success');
                 if (onDone) onDone();
               })

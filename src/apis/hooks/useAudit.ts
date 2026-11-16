@@ -1,40 +1,8 @@
-import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useMutation } from '@tanstack/react-query';
 import { auditService, AuditFilters } from '@/apis/services/audit.service';
 import { useUIStore } from '@/store/useUIStore';
 
-export const auditKeys = {
-  all: ['audit'] as const,
-  lists: () => [...auditKeys.all, 'list'] as const,
-  list: () => [...auditKeys.lists()] as const,
-};
-
-/** @deprecated `SEED`-backed mock — see `auditService.getAll()`. Kept for
- *  `admin/audit`, `auditor/trail`, `platform/audit` and
- *  `management/compliance`, which read the app's own action taxonomy
- *  (`REDACT_RELEASE`, `SIGN`, …) that the real backend doesn't have. Use
- *  `useAuditEntries()` for the real, hash-chained trail. */
-export function useAuditLogs() {
-  return useQuery({
-    queryKey: auditKeys.list(),
-    queryFn: () => auditService.getAll(),
-  });
-}
-
-/** @deprecated no-op mock. The real backend has no write endpoint — entries
- *  are recorded server-side as a side effect of other actions — so this
- *  can't be pointed at a real call. Left as-is; used by 9 other call sites. */
-export function useCreateAuditLog() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ action, target, detail }: { action: string; target: string; detail: string }) =>
-      auditService.logAction(action, target, detail),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: auditKeys.all });
-    },
-  });
-}
-
-// --- Real backend (`GET /audit`) ---
+// The trail is read-only here: the backend writes every entry as a side effect of the action.
 
 export const realAuditKeys = {
   all: ['audit', 'real'] as const,

@@ -6,7 +6,6 @@ import { taskHolderLabel } from '@/utils/supervisor';
 import { useUIStore } from '@/store/useUIStore';
 import { useApprovalTasks, useReassignTask } from '@/apis/hooks/useTasks';
 import { ReassignAssigneePicker } from '@/components/common/ReassignAssigneePicker';
-import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
@@ -14,7 +13,7 @@ import { TaskRow } from '@/components/ui/TaskRow';
 import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
 import { Task } from '@/types/models';
-import { taskPrimaryDocument, taskTitle } from '@/utils/workflowDocuments';
+import { taskTitle } from '@/utils/workflowDocuments';
 
 const PAGE_SIZE = 20;
 
@@ -35,7 +34,6 @@ export default function ApprovalsQueuePage() {
   const pagination = tasksData?.pagination;
 
   const reassignTask = useReassignTask();
-  const createAuditLog = useCreateAuditLog();
 
   const { setPageTitle, openModal, addToast } = useUIStore();
   const { can } = usePermissions();
@@ -93,15 +91,9 @@ export default function ApprovalsQueuePage() {
               addToast('Please select a new assignee', 'error');
               return false;
             }
-            const prevName = taskHolderLabel(t, departmentName, 'previous assignee');
             return reassignTask
               .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
               .then(() => {
-                createAuditLog.mutate({
-                  action: 'REASSIGN',
-                  target: taskPrimaryDocument(t)?.id || t.id,
-                  detail: `Reassigned from ${prevName} to ${newName}`,
-                });
                 addToast(`Reassigned to ${newName}`, 'success');
               })
               .catch(() => false);

@@ -7,7 +7,6 @@ import { UserPicker } from '@/components/common/UserPicker';
 import { useMyDepartmentId } from '@/hooks/useMyDepartmentId';
 import type { WorkflowDefinition, WorkflowDefinitionJson } from '@/types/models';
 import { useStartWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
-import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useStore } from '@/store/useStore';
@@ -63,7 +62,6 @@ export function useRouteToWorkflow() {
   // Ask for published ones: the first default page mixes in archived and drafts.
   const { data, isLoading } = useWorkflows({ status: 'published', limit: 100 });
   const { mutateAsync: startWorkflow } = useStartWorkflowInstance();
-  const createAuditLog = useCreateAuditLog();
   const { openModal, addToast } = useUIStore();
 
   const publishedWorkflows = data?.data || [];
@@ -177,13 +175,6 @@ export function useRouteToWorkflow() {
                 documentIds: docs.map((d) => d.id),
                 submitterId,
               });
-              docs.forEach((d) =>
-                createAuditLog.mutate({
-                  action: 'WORKFLOW_START',
-                  target: d.id,
-                  detail: `Routed to “${wfName}”`,
-                }),
-              );
               addToast(
                 docs.length > 1
                   ? `${docs.length} documents routed to ${wfName} as one workflow`

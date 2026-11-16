@@ -22,7 +22,6 @@ import {
   usePrintDocument,
 } from '@/apis/hooks/useDocuments';
 import { useCabinetFolders } from '@/apis/hooks/useFolders';
-import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useWorkflowInstances } from '@/apis/hooks/useWorkflowInstances';
 import { useRouteToWorkflow } from '@/hooks/useRouteToWorkflow';
 import { Icon } from '@/components/ui/Icons';
@@ -70,7 +69,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
 
   const { can, scopeFor } = usePermissions();
   const archiveDocument = useArchiveDocument();
-  const createAuditLog = useCreateAuditLog();
   const { allows } = useConfidentialityClearance();
   const downloadVersion = useDownloadDocumentVersion();
   const exportDocument = useExportDocument();
@@ -302,14 +300,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
                 id: doc.id,
                 expectedReturnAt: returnAt ? new Date(returnAt).toISOString() : undefined,
               })
-              .then(() => {
-                createAuditLog.mutate({
-                  action: 'CHECKOUT',
-                  target: doc.id,
-                  detail: 'Checked out for editing',
-                });
-                closeModal();
-              })
+              .then(() => closeModal())
               .catch(() => false),
         },
       ],
@@ -325,9 +316,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       onConfirm: () =>
         checkinDocument
           .mutateAsync(doc.id)
-          .then(() => {
-            createAuditLog.mutate({ action: 'CHECKIN', target: doc.id, detail: 'Checked in' });
-          })
           .catch(() => {
             /* hook surfaces the error toast */
           }),
@@ -343,13 +331,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       onConfirm: () =>
         checkinDocument
           .mutateAsync(doc.id)
-          .then(() => {
-            createAuditLog.mutate({
-              action: 'CHECKIN',
-              target: doc.id,
-              detail: `Force checked in (overdue lock held by ${lockHolderName})`,
-            });
-          })
           .catch(() => {
             /* hook surfaces the error toast */
           }),
@@ -366,10 +347,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
       onConfirm: () =>
         archiveDocument
           .mutateAsync(doc.id)
-          .then(() => {
-            createAuditLog.mutate({ action: 'ARCHIVE', target: doc.id, detail: doc.title });
-            router.push('/staff/cabinets');
-          })
+          .then(() => router.push('/staff/cabinets'))
           .catch(() => false),
     });
 
