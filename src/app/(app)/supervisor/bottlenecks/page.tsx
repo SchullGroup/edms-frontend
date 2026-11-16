@@ -6,7 +6,6 @@ import { useUIStore } from '@/store/useUIStore';
 import { useBottlenecksAgeing } from '@/apis/hooks/useWorkflowInstances';
 import { useReassignTask } from '@/apis/hooks/useTasks';
 import { ReassignAssigneePicker } from '@/components/common/ReassignAssigneePicker';
-import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { usePermissions } from '@/hooks/usePermissions';
 import { SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
@@ -33,7 +32,6 @@ export default function BottlenecksPage() {
   const { data, isLoading, isError, refetch } = useBottlenecksAgeing({ page, limit: PAGE_SIZE });
 
   const reassignTask = useReassignTask();
-  const createAuditLog = useCreateAuditLog();
   const { setPageTitle, openModal, addToast } = useUIStore();
   const { can } = usePermissions();
   const canReassign = can('task', 'reassign');
@@ -114,11 +112,6 @@ export default function BottlenecksPage() {
             return reassignTask
               .mutateAsync({ id: currentTaskId, assigneeId: newAssignee, note: note || undefined })
               .then(() => {
-                createAuditLog.mutate({
-                  action: 'REASSIGN',
-                  target: item.documentId,
-                  detail: `Reassigned from ${item.assigneeName} to ${newName}`,
-                });
                 addToast(`Reassigned to ${newName}`, 'success');
                 refetch();
               })

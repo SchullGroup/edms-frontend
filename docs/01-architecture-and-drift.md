@@ -1536,8 +1536,8 @@ multi-tenant API anywhere in this backend at all — every other `/platform/*` p
 (tenants, provisioning, billing, flags) is equally fixture-only. Migrating audit alone
 wouldn't be meaningful without the rest of the platform module having something real to
 query first; that's a separate, materially bigger backend ask than "point this hook at
-an endpoint." `useCreateAuditLog()` is still a no-op mock for the reason already given
-above: there is no write endpoint to point it at, by design.
+an endpoint." `useCreateAuditLog()`, a no-op mock with no write endpoint to point it at (by
+design), was deleted 2026-11-16 with its 9 call sites; the backend audits each of those actions.
 
 ### 🟡 Backend capabilities with no UI
 
