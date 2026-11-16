@@ -4,9 +4,16 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-11-13 (BE-27 shipped, BE-28 done)
+**Raised:** 2026-08-29 · **Updated:** 2026-11-16 (BE-24 and BE-26 done; BE-29 and two questions added)
 **Frontend:** `edms-frontend` @ `dev`
-**Backend checked against:** `edms-backend` @ `origin/dev` (`e033b58`, 2026-11-13)
+**Backend checked against:** `edms-backend` @ `origin/dev` (`e033b58`, re-checked 2026-11-16)
+
+> **2026-11-16: BE-24 and BE-26 done and removed.** Both shipped in PR #71 (`142be0b`), live
+> 2026-11-12, and the frontend uses both since 2026-11-13. BE-24: admins set `mfaRequired` per
+> user and set-up happens at sign-in. Its open question is answered: users can't turn MFA on
+> (or off) themselves. Its item 6 (self-service method switching) didn't survive: PR #72
+> removed `/auth/mfa/method-change/*` (Q-1). BE-26: revoking a grant marks its approved requests
+> `revoked`. Raised: BE-29 and questions Q-1, Q-2. Write-ups of the done items are in git history.
 
 > **2026-11-13: BE-28 done and removed** (intermittent 500 when a parallel fork splits). Fixed
 > in `9bdb9a6` (PR #73, a longer routing transaction timeout); confirmed on live by the product
@@ -32,8 +39,8 @@
 
 Each item states what the frontend does today, what it needs, and why.
 
-**Take BE-2, BE-4, BE-21 and BE-24 first**:
-they are security items rather than features. BE-22 is a product decision (no automatic AI
+**Take BE-2, BE-4 and BE-21 first**:
+they are security items rather than features. BE-27 needs only its live re-check (ours). BE-22 is a product decision (no automatic AI
 summaries) and costs a Gemini call per upload until it ships.
 
 ---
@@ -49,80 +56,15 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-18** | Recovery sweep for OCR jobs stuck at `ocrStatus: 'pending'` | Reliability fix | 🟠 Med   | No — 1 of 8 documents affected when raised |
 | **BE-12** | Seed `workflow:view` for the roles that route documents     | Seed fix        | 🟡 Low   | Only on a freshly seeded tenant            |
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
-| **BE-24** | Admins require MFA per user; users can't turn it off        | Security change | 🔴 High  | No — today every user turns MFA on/off     |
 | **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
-| **BE-26** | Mark a request `revoked` when its grant is revoked          | Small fix       | 🟡 Low   | No                                         |
 | **BE-27** | Acting on a document requires being able to open it         | Security fix    | 🟨 Shipped | No — shipped in PR #72 (live 2026-11-13); live re-check pending |
+| **BE-29** | Own error codes for the mid-session MFA responses           | Small fix       | 🟡 Low   | No — the frontend matches message text     |
+
+**Questions, not asks:** Q-1 (was removing MFA method change intended?) and Q-2 (storage bucket
+versioning and who owns unique keys), after BE-29.
 
 **Parked, not for sending yet:** AI-1…AI-6 (the last section, before the appendix). Hold
 them until the PM confirms the AI features are in scope.
-
----
-
-## 🔴 BE-24 · Admins require MFA per user; users can't turn it off — **new, 2026-11-11**
-
-Checked against `edms-backend` `dev` at `4da2980` (PR #69, multiple MFA methods).
-
-### What happens today
-
-MFA is entirely self-service. Every route in `src/modules/mfa/mfa.router.ts` needs only
-`authenticate`, except the admin reset (`DELETE /auth/mfa/users/:userId`, `user:edit`). So:
-
-- any user can turn MFA **off** for themselves (`POST /auth/mfa/disable`, password + code);
-- an admin can't **require** it: nothing on `User`, `Role` or the tenant says it's required,
-  and `auth.service.ts` asks for a second factor only when `mfaEnabled` is already true;
-- `GET /users` and `GET /users/:id` don't return `mfaEnabled`, so the admin page can't tell
-  who has MFA on (our **Reset two-step** button shows for everyone).
-
-### What the product wants
-
-An admin (`user:edit`) decides who must use MFA. The user chooses the method (authenticator
-app or email) and sets it up themselves, because that needs their phone or inbox. Only an
-admin can remove it. The frontend has already hidden the user's own **Turn off** (2026-11-11),
-but that's cosmetic until the API refuses it.
-
-### What we need
-
-Shape suggestions only; the backend team owns the design.
-
-1. **`User.mfaRequired`** (boolean, default `false`).
-2. **Admin sets it:** `PATCH /users/:id` accepts `mfaRequired`, or a dedicated
-   `PUT /auth/mfa/users/:userId/requirement { required }`. Gate on `user:edit`, audit it
-   (`user.mfa_required`, `user.mfa_requirement_removed`).
-   **On invite too:** `POST /users` (`user:create`) accepts `mfaRequired`, so the admin can tick
-   "Require two-step sign-in" when inviting.
-3. **List it:** `mfaRequired` and `mfaEnabled` on each `GET /users` row and on `GET /users/:id`.
-4. **Sign-in forces set-up:** when `mfaRequired && !mfaEnabled`, `POST /auth/login` returns no
-   tokens, e.g. `{ mfaSetupRequired: true, mfaToken }`. The client then sets up a method with
-   that token: authenticator (`secret`, `otpauthUri`, then a code) or email (send code, then
-   code). A successful confirm returns the usual login body (tokens + user) **plus**
-   `recoveryCodes`. Today `/setup`, `/enable`, `/email/setup` and `/email/enable` all need an
-   access token, which this user doesn't have yet.
-   **New users:** an invited user sets a password on `/reset-password` (invite token), then signs
-   in; that first sign-in hits this step, so they set up MFA before their first session. The
-   invite link already proves the inbox, so email is the easy choice for them.
-5. **Users can't turn it off:** `POST /auth/mfa/disable` returns 403 (e.g.
-   `MFA_DISABLE_ADMIN_ONLY`) for everyone, or at least while `mfaRequired` is true. Admins keep
-   `DELETE /auth/mfa/users/:userId`. If `mfaRequired` is still true after a reset, the user sets
-   MFA up again at their next sign-in. That's the lost-phone flow.
-6. **Method switching stays self-service** (`/method-change/*`): the user picks how they get
-   their code.
-
-Side effect: this closes a PR #69 gap. `POST /disable` checks `code` only against the
-authenticator secret, and `activateOtpMethod` clears that secret for email users, so an email
-user can turn MFA off only with a recovery code.
-
-**Open question for the product owner:** may users still turn MFA **on** voluntarily when an
-admin hasn't required it? The frontend allows it for now (it only adds security). If not,
-`/setup`, `/enable`, `/email/setup` and `/email/enable` should refuse unless `mfaRequired`.
-
-### How to verify
-
-As `client_admin`: require MFA for `management_ops` → their next password sign-in returns
-`mfaSetupRequired` and no tokens → set up email or app → signed in with recovery codes.
-`POST /auth/mfa/disable` as `management_ops` → 403. Admin reset → next sign-in asks for set-up
-again. `GET /users` shows both flags. Invite a user with `mfaRequired: true` → accept the
-invite, set a password → first sign-in goes straight to set-up.
 
 ---
 
@@ -474,12 +416,45 @@ title at all five sites (checked on `origin/dev` `4da2980`):
 
 ---
 
-## 🟡 BE-26 · Mark a request `revoked` when its grant is revoked — **new, 2026-11-11**
+## 🟡 BE-29 · Own error codes for the mid-session MFA responses — **new, 2026-11-16**
 
-`DELETE /documents/:id/access-grants/:userId` deletes the `DocumentAccessGrant` row and leaves the
-`DocumentAccessRequest` `approved`. There is no grant list, so `/admin/access-requests` (where Revoke
-now lives) keeps showing revoked access as approved, and a second Revoke 404s. A `revoked` status (or
-`GET /documents/:id/access-grants`) would fix it.
+Checked against `edms-backend` `dev` at `e033b58`. `auth.middleware.ts` answers
+`mfaRequired && !mfaEnabled` with `ApiResponse.forbidden` (403 `FORBIDDEN`) and a token whose
+`mfaState` no longer matches with `ApiResponse.unauthorized` (401 `UNAUTHORIZED`). The refresh
+path in `auth.service.ts` already uses `MFA_SETUP_REQUIRED` (403) and `SESSION_SECURITY_CHANGED`
+(401) for the same two cases.
+
+The frontend tells a user why their session ended (since 2026-11-13). For the 401 it calls refresh
+and reads the code; for the 403 it compares the message text ("MFA setup is required before
+accessing this account", `src/lib/sessionEnd.ts`). Rewording that message breaks it silently.
+
+**Ask:** send the refresh path's codes from the middleware too: 403 `MFA_SETUP_REQUIRED` and 401
+`SESSION_SECURITY_CHANGED`. The frontend then drops the message match.
+
+---
+
+## ❓ Q-1 · Was removing MFA method change intended? — **new, 2026-11-16**
+
+PR #72 (`9497fae`) removed all five `/auth/mfa/method-change/*` routes (404 on live since
+2026-11-13). The service methods are still in `mfa.service.ts`, unrouted. BE-24 asked for
+switching to stay self-service. If the removal is intended, a user changes method only through an
+admin reset (`DELETE /auth/mfa/users/:userId`) and set-up at the next sign-in, which is what
+`/account/security` now says. If not, which routes come back? And should a switch then return
+fresh tokens? Before PR #72 a switch set `mfaEnabledAt`, which ended the session that made it.
+
+---
+
+## ❓ Q-2 · Storage bucket versioning, and who owns unique keys — **new, 2026-11-16**
+
+The upload gateway stores a file at `edmsdocuments/<name>` and adds nothing unique, so two
+uploads with the same name used to share one S3 object (the second replaced the first). The
+frontend fixed it on 2026-11-13: every upload now sends `<name>-<12 hex digits>.<ext>` (doc 01
+§5, item i). Two questions:
+
+1. Is versioning on for the bucket? If yes, overwritten files from before 2026-11-13 can be
+   recovered; on 2026-11-11, 26 live documents shared 19 keys.
+2. Should the gateway or the backend make keys unique, rather than every client? Today any other
+   client that uploads through the gateway can still overwrite a file.
 
 ---
 

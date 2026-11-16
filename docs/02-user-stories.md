@@ -130,12 +130,14 @@ their desk.
 **What they fear:** losing a document; being blamed for a delay that was actually sitting
 in a supervisor's queue; having to re-key metadata a machine could have read.
 
-**Backend rights (29 grants — 16 `own`, 9 `department`, 4 `global`; re-counted
-2026-10-15 from `prisma/seed-system.ts`):** document view/search/download/export/print at
+**Backend rights (29 grants — 16 `own`, 11 `department`, 2 `global`; re-counted
+2026-11-16 from `prisma/seed-system.ts` at `e033b58`. Was 9 `department` / 4 `global` until
+PR #70 (`4c02c7a`) moved `cabinet:view` and `folder:view` to `department`, as live already
+had them):** document view/search/download/export/print at
 `department`, `document:create:own`; versions (view `department`, create `own`); locks
 `own`; metadata, comments and signatures (view `department`, create `own`);
-`document_access_request:create`; `cabinet:view`, `department:view`; folders (view, create
-and edit `own`); `workflow_instance:view/create/route:own`; `task:view/action:own`;
+`document_access_request:create` and `department:view` (`global`); `cabinet:view` and
+`folder:view` (`department`); folder create and edit (`own`); `workflow_instance:view/create/route:own`; `task:view/action:own`;
 `delegation:view/create/end:own`. **No `workflow:view` in the seed** — see DRIFT-14. *(2026-10-16: the live tenant's role does hold `workflow:view:global` — a row the seed no longer creates.)*
 *(Was "14 grants … `workflow:view`, `workflow:route`" — the pre-2026-09-16 seed.)*
 Note the scopes — staff see their **department's** documents, not the whole tenant.
