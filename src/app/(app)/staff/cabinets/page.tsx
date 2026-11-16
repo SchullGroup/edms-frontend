@@ -132,7 +132,7 @@ export default function CabinetBrowserPage() {
   const { data: activeCabFoldersData, isLoading: isLoadingFolders } = useCabinetFolders(
     activeCab || undefined,
   );
-  const activeCabFolders = activeCabFoldersData?.data || [];
+  const activeCabFolders = activeCabFoldersData || [];
   const activeCabinet = activeCab ? cabById(cabinets, activeCab) : undefined;
   // Client admins list only their own department's cabinets; Cabinet Designer covers the rest.
   // A `?cab=` link to another cabinet still opens it (Designer's delete guard, doc breadcrumbs).
@@ -241,8 +241,9 @@ export default function CabinetBrowserPage() {
     });
   };
 
+  // Offered only on the open folder, so its document total is already loaded; the API 409s too.
   const handleDeleteFolder = (f: any) => {
-    if ((f._count?.documents ?? 0) > 0) {
+    if ((docPagination?.total ?? 0) > 0) {
       addToast('Folder contains documents — move them first', 'error');
       return;
     }
@@ -313,11 +314,9 @@ export default function CabinetBrowserPage() {
                 return false;
               })
               .finally(() => {
-                // Promise.all rejects on the first failure while others may
-                // still have landed, so refetch either way. Folder and cabinet
-                // queries carry the document counts shown on the cards.
+                // Promise.all rejects on the first failure while others may still have
+                // landed, so refetch either way (cabinet queries carry document counts).
                 queryClient.invalidateQueries({ queryKey: ['documents'] });
-                queryClient.invalidateQueries({ queryKey: ['folders'] });
                 queryClient.invalidateQueries({ queryKey: ['cabinets'] });
                 setIsSubmitting(false);
               });
@@ -634,7 +633,6 @@ export default function CabinetBrowserPage() {
                   }}
                 >
                   <Icon name="folder" size={13} /> {f.name}
-                  <span className="caption">{f._count?.documents ?? 0}</span>
                 </button>
               ))}
             </div>
@@ -784,9 +782,6 @@ export default function CabinetBrowserPage() {
                             id={f.id}
                             variant="block"
                           />
-                          <div className="caption" style={{ marginTop: '4px' }}>
-                            {f._count?.documents ?? 0} doc{f._count?.documents === 1 ? '' : 's'}
-                          </div>
                         </div>
                       ))}
                       {unfiledDocs.length > 0 && (

@@ -135,7 +135,7 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
 
   const { data: activeCabFoldersData } = useCabinetFolders(doc?.cabinetId);
   const folderLabel = doc?.folderId
-    ? folderPathLabel(activeCabFoldersData?.data || [], doc.folderId)
+    ? folderPathLabel(activeCabFoldersData || [], doc.folderId)
     : '';
 
   useEffect(() => {

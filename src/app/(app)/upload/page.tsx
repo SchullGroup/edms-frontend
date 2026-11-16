@@ -347,7 +347,7 @@ function BatchBar({
   const cabinets = cabinetsData?.data || [];
   const [cabinetId, setCabinetId] = useState('');
   const { data: folData, isLoading: foldersLoading } = useCabinetFolders(cabinetId || undefined);
-  const folders = folData?.data || [];
+  const folders = folData || [];
   const [folderId, setFolderId] = useState('');
   const [confidentiality, setConfidentiality] = useState('');
   const [urgency, setUrgency] = useState('');
@@ -498,7 +498,7 @@ function IDUCard({
   const [type, setType] = useState('');
   const [selCab, setSelCab] = useState('');
   const { data: folData, isLoading: foldersLoading } = useCabinetFolders(selCab);
-  const folders = folData?.data || [];
+  const folders = folData || [];
   const [selFol, setSelFol] = useState('');
 
   // Update selCab to valid initial value if cabinets data loads

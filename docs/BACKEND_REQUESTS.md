@@ -4,7 +4,7 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29 and two questions added)
+**Raised:** 2026-08-29 · **Updated:** 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29, BE-30 and two questions added)
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `origin/dev` (`e033b58`, re-checked 2026-11-16)
 
@@ -61,6 +61,7 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-10** | JSON 404 handler                                            | Small fix       | 🟡 Low   | No                                         |
 | **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
 | **BE-29** | Own error codes for the mid-session MFA responses           | Small fix       | 🟡 Low   | No — the frontend matches message text     |
+| **BE-30** | Document count on paged folder rows                         | Small fix       | 🟡 Low   | No — folder cards show no count meanwhile  |
 
 **Questions, not asks:** Q-1 (was removing MFA method change intended?) and Q-2 (storage bucket
 versioning and who owns unique keys), after BE-29.
@@ -374,6 +375,21 @@ accessing this account", `src/lib/sessionEnd.ts`). Rewording that message breaks
 
 **Ask:** send the refresh path's codes from the middleware too: 403 `MFA_SETUP_REQUIRED` and 401
 `SESSION_SECURITY_CHANGED`. The frontend then drops the message match.
+
+---
+
+## 🟡 BE-30 · Document count on paged folder rows — **new, 2026-11-16**
+
+Checked against `edms-backend` `dev` at `bf6bf46`. `GET /cabinets/:cabinetId/folders` without
+query params returns at most 500 folders (`findByCabinet`, `DEFAULT_TAKE`), each with
+`_count.documents`. With `limit`, `cursor` or `parentId` it pages as `{ folders, nextCursor }`
+(`findPageByCabinet`), but those rows select no `_count`.
+
+Since 2026-11-16 the frontend always pages, so a cabinet with more than 500 folders lists them
+all. The cost: the cabinet browser no longer shows how many documents each folder holds.
+
+**Ask:** add `_count: { documents }` to the paged rows, the same count the unpaged list returns.
+The frontend then shows it on folder cards again.
 
 ---
 

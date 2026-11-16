@@ -28,10 +28,12 @@ function invalidateCabinetCounts(queryClient: ReturnType<typeof useQueryClient>)
   queryClient.invalidateQueries({ queryKey: cabinetKeys.all });
 }
 
+/** Every visible folder in the cabinet, flat (nest by `parentId`), for pickers and paths.
+ *  No `_count` or `children`: the paged endpoint doesn't return them. */
 export function useCabinetFolders(cabinetId?: string) {
   return useQuery({
-    queryKey: cabinetId ? folderKeys.byCabinet(cabinetId) : [],
-    queryFn: () => foldersService.listByCabinet(cabinetId!),
+    queryKey: cabinetId ? [...folderKeys.byCabinet(cabinetId), 'all'] : [],
+    queryFn: () => foldersService.listAllByCabinet(cabinetId!),
     enabled: !!cabinetId,
   });
 }
