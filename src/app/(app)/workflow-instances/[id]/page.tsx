@@ -257,7 +257,6 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
     heldBackDocuments,
     actionedDocumentIds: documents.filter((d) => d.actioned).map((d) => d.id),
     selectedDocumentId: selected?.actionable ? selected.id : undefined,
-    auditTargetId: selected?.id ?? id,
     instanceId: id,
     canAttachDocuments: can('workflow_instance', 'create'),
     // A document added mid-workflow keeps the submitter of the ones already in it.

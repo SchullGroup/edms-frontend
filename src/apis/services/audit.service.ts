@@ -1,6 +1,5 @@
 import { apiClient } from '@/lib/api-client';
-import { AuditLog, ApiResponse, AuditEntry, PaginatedResponse } from '@/types/models';
-import { SEED } from '@/store/initialData';
+import { ApiResponse, AuditEntry, PaginatedResponse } from '@/types/models';
 
 /** Mirrors the real backend's `GET /audit` search/filter query. */
 export interface AuditFilters {
@@ -24,32 +23,6 @@ export interface AuditChainVerification {
 }
 
 export const auditService = {
-  /**
-   * @deprecated `SEED`-backed mock, unrelated to the real backend's
-   * `GET /audit`. Still backs `useAuditLogs()`, which `admin/audit`,
-   * `auditor/trail`, `platform/audit` and `management/compliance` read for
-   * the app's own action taxonomy (`REDACT_RELEASE`, `SIGN`, …) — the real
-   * backend has no equivalent for that vocabulary. Use `search()` below for
-   * the real, hash-chained trail.
-   */
-  getAll: async (): Promise<PaginatedResponse<AuditLog>> => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-
-    return {
-      success: true,
-      message: 'Fetched audit logs successfully',
-      data: SEED.audit as any,
-      pagination: { page: 1, limit: 10, total: SEED.audit.length, totalPages: 1 },
-    };
-  },
-
-  /** @deprecated no-op mock — see `useCreateAuditLog()` for why this can't
-   *  be pointed at a real endpoint. */
-  logAction: async (action: string, target: string, detail: string): Promise<any> => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    return { success: true, message: 'Audit logged successfully' };
-  },
-
   // --- Real backend (`GET /audit`, hash-chained, `audit:view`/`audit:export`) ---
 
   /** `GET /audit` — requires `audit:view`. Newest first. */

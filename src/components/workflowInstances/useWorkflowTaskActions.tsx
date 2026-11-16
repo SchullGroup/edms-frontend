@@ -9,7 +9,6 @@ import {
   type PickedDocument,
   type UploadDefaults,
 } from './WorkflowDocumentPicker';
-import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useSignAndApprove, useSignatureUpload, type SignatureImage } from '@/hooks/useSignAndApprove';
 import { SignaturePad } from '@/components/documents/SignaturePad';
 import { DelegatePicker } from '@/components/delegations/DelegatePicker';
@@ -31,8 +30,6 @@ export interface WorkflowTaskActionsArgs {
   actionedDocumentIds?: string[];
   /** Pre-ticked in the "Request changes" picker — the one being viewed. */
   selectedDocumentId?: string;
-  /** Audit-log target — the workflow's primary document. */
-  auditTargetId: string;
   /** The workflow instance — documents picked on "Mark reviewed" attach to it. */
   instanceId: string;
   /** Holds `workflow_instance:create`, which `POST /workflow-instances/:id/documents` requires. */
@@ -57,7 +54,6 @@ export function useWorkflowTaskActions({
   heldBackDocuments = [],
   actionedDocumentIds = [],
   selectedDocumentId,
-  auditTargetId,
   instanceId,
   canAttachDocuments,
   submitterId,
@@ -67,21 +63,18 @@ export function useWorkflowTaskActions({
   const { openModal, openConfirm, addToast } = useUIStore();
   const taskAction = useTaskAction();
   const attachDocument = useAttachWorkflowDocument();
-  const createAuditLog = useCreateAuditLog();
   const { promptSignAndApprove } = useSignAndApprove();
   const uploadSignature = useSignatureUpload();
   const heldBack = heldBackDocuments.length;
 
   const runAction = (
     actionReq: TaskActionRequest,
-    audit: { action: string; detail: string },
     toast: { message: string; kind: 'success' | 'warning' | 'error' },
   ) => {
     if (!taskId) return;
     return taskAction
       .mutateAsync({ id: taskId, actionReq })
       .then(() => {
-        createAuditLog.mutate({ action: audit.action, target: auditTargetId, detail: audit.detail });
         addToast(toast.message, toast.kind);
       })
       .catch((err: any) => {
@@ -138,12 +131,6 @@ export function useWorkflowTaskActions({
           signature: uploaded.signature,
           ...(commentText.trim() ? { comment: commentText.trim() } : {}),
           ...(scope ? { documents: scope } : {}),
-        },
-        {
-          action: 'REVIEW',
-          detail: `Reviewed stage “${stageLabel}”${
-            picked.length ? `, attaching ${picked.map((d) => d.title).join(', ')}` : ''
-          }`,
         },
         { message: 'Reviewed — advanced to next stage', kind: 'success' },
       );
@@ -273,12 +260,6 @@ export function useWorkflowTaskActions({
       title: stageLabel,
       documents,
       heldBack,
-      onSuccess: () =>
-        createAuditLog.mutate({
-          action: 'APPROVE',
-          target: auditTargetId,
-          detail: `Signed & approved stage “${stageLabel}”`,
-        }),
     });
   };
 
@@ -348,16 +329,11 @@ export function useWorkflowTaskActions({
               addToast('A reason is required', 'error');
               return false;
             }
-            const titles = documents.filter((d) => chosen.has(d.id)).map((d) => d.title);
             return runAction(
               {
                 action: 'request_changes',
                 comment: reasonText.trim(),
                 documents: [...chosen].map((documentId) => ({ documentId })),
-              },
-              {
-                action: 'REQUEST_CHANGES',
-                detail: `Changes requested on ${titles.join(', ')}: ${reasonText.trim()}`,
               },
               { message: 'Returned to previous stage with reason', kind: 'warning' },
             );
@@ -432,10 +408,6 @@ export function useWorkflowTaskActions({
                 ...(scope ? { documents: scope } : {}),
               },
               {
-                action: 'REJECT',
-                detail: `Rejected${multi ? ` ${titles.join(', ')}` : ''}: ${reasonText.trim()}`,
-              },
-              {
                 message: scope
                   ? `Rejected ${titles.length} of ${documents.length + heldBack} documents`
                   : 'Rejected — workflow ended',
@@ -497,7 +469,6 @@ export function useWorkflowTaskActions({
             const name = delegateName || 'another user';
             return runAction(
               { action: 'delegate', delegateId, ...(note.trim() ? { comment: note.trim() } : {}) },
-              { action: 'DELEGATE', detail: `Delegated “${stageLabel}” to ${name}` },
               { message: `Delegated to ${name}`, kind: 'success' },
             );
           },
@@ -516,7 +487,6 @@ export function useWorkflowTaskActions({
       onConfirm: () =>
         runAction(
           { action: 'close', comment: 'Closed by ' + me.name },
-          { action: 'CLOSE', detail: `Closed workflow at stage “${stageLabel}”` },
           { message: 'Workflow closed', kind: 'success' },
         ),
     });

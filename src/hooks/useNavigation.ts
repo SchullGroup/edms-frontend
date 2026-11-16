@@ -236,17 +236,6 @@ export const useNavigation = () => {
               // latter two refuse anything below department scope.
               anyPermissions: [{ resource: 'task', action: 'view', minScope: 'department' }],
             },
-            {
-              route: '/supervisor/exceptions',
-              label: 'Exceptions',
-              icon: 'alert',
-              // Still a dummy page (local mock state, not wired to a real backend
-              // list — the one real thing it does, "Acknowledge", just writes an
-              // audit log entry), so there's no real resource to gate on yet.
-              // Treated like admin's Policies/Branding/Circulars: gated on the
-              // portal's own entry signal rather than a specific resource.
-              anyPermissions: entryPerms,
-            },
           ],
         },
         {

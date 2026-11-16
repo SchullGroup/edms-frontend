@@ -5,7 +5,6 @@ import {
   useHoldWorkflowInstance,
   useResumeWorkflowInstance,
 } from '@/apis/hooks/useWorkflowInstances';
-import { useCreateAuditLog } from '@/apis/hooks/useAudit';
 import { useUIStore } from '@/store/useUIStore';
 import type { WorkflowInstance } from '@/types/models';
 import { instanceTitle } from '@/utils/workflowDocuments';
@@ -14,19 +13,12 @@ type InstanceLike = Pick<WorkflowInstance, 'id' | 'documents'>;
 
 const titleOf = (i: InstanceLike) => instanceTitle(i);
 
-/**
- * Hold / resume / close for a running instance, with the confirmations and
- * audit entries attached. Shared by the monitor's row buttons and the instance
- * drawer so the two can never drift apart.
- *
- * None of these endpoints take a body — a reason can't be persisted against the
- * instance, so it only ever reaches the (tenant) audit log.
- */
+/** Hold / resume / close for a running instance, with their confirmations. Shared by
+ *  the monitor's rows and the instance drawer; the backend audits each one. */
 export function useWorkflowInstanceLifecycle() {
   const hold = useHoldWorkflowInstance();
   const resume = useResumeWorkflowInstance();
   const close = useCloseWorkflowInstance();
-  const createAuditLog = useCreateAuditLog();
   const { openConfirm, addToast } = useUIStore();
 
   const isPending = hold.isPending || resume.isPending || close.isPending;
@@ -38,11 +30,6 @@ export function useWorkflowInstanceLifecycle() {
       confirmLabel: 'Put on hold',
       onConfirm: async () => {
         await hold.mutateAsync({ id: instance.id });
-        createAuditLog.mutate({
-          action: 'WORKFLOW_HOLD',
-          target: instance.id,
-          detail: 'Workflow put on hold',
-        });
         addToast('Workflow put on hold', 'warning');
       },
     });
@@ -54,11 +41,6 @@ export function useWorkflowInstanceLifecycle() {
       confirmLabel: 'Resume',
       onConfirm: async () => {
         await resume.mutateAsync(instance.id);
-        createAuditLog.mutate({
-          action: 'WORKFLOW_RESUME',
-          target: instance.id,
-          detail: 'Workflow resumed',
-        });
         addToast('Workflow resumed', 'success');
       },
     });
@@ -71,11 +53,6 @@ export function useWorkflowInstanceLifecycle() {
       danger: true,
       onConfirm: async () => {
         await close.mutateAsync(instance.id);
-        createAuditLog.mutate({
-          action: 'WORKFLOW_CLOSE',
-          target: instance.id,
-          detail: 'Workflow force-closed',
-        });
         addToast('Workflow closed', 'success');
       },
     });

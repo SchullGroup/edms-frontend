@@ -249,11 +249,6 @@ export const routeConfig: RouteRule[] = [
     anyPermissions: [{ resource: 'task', action: 'view', minScope: 'department' }],
   },
   {
-    path: '/supervisor/exceptions',
-    matchType: 'prefix',
-    anyPermissions: ['workflow_instance:view'],
-  },
-  {
     path: '/supervisor',
     matchType: 'prefix',
     anyPermissions: ['task:view', 'workflow_instance:view'],

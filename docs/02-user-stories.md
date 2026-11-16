@@ -593,10 +593,10 @@ trail** fed from the live `GET /workflow-history` endpoint (`WorkflowActivityPan
       `ae08ef5` and captured in the modal since 2026-10-23; multi-document workflow instances shipped in the
       backend and were wired 2026-10-07 — DRIFT-19 in doc 01).
 - [ ] 🟨 **The backend audit trail is real now (DRIFT-11 revised, 2026-09-18)** — it
-      auto-writes hash-chained entries server-side and `/admin/audit` reads it live. But
-      this page still calls the old no-op `useCreateAuditLog` (there's no write endpoint
-      to point it at — entries are a side effect of other actions, not client-logged),
-      and doesn't render anything from the real trail. Only the *workflow* history above
+      auto-writes hash-chained entries server-side and `/admin/audit` reads it live. The
+      page's old no-op `useCreateAuditLog` calls were deleted 2026-11-16 (entries are a
+      side effect of other actions, not client-logged). It doesn't render anything from the
+      real trail. Only the *workflow* history above
       is real on this page; whether document views/edits/downloads land in the real
       trail as backend-side actions is unverified.
 - [x] Preview and download: `GET /documents/:id` returns a presigned `fileUrl` the viewer
@@ -1218,7 +1218,10 @@ sitting, and which have stalled.
       `WORKFLOW_INSTANCE_MANAGE_ROLES` gates hold/resume/close. *Previously* any
       authenticated user could hold, resume or close any instance, and this screen made
       that a two-click operation.
-- [ ] ⚠️ Hold/resume/close are not audit-logged (`useCreateAuditLog` is a no-op, DRIFT-11)
+- [x] Hold/resume/close are audit-logged by the backend (`workflow.on_hold`, `workflow.resumed`,
+      `workflow.closed` via the routes' `audit()` middleware; *in code, not checked live*).
+      *(Said "not audit-logged" because the frontend's no-op `useCreateAuditLog` stood in;
+      that hook was deleted 2026-11-16.)*
 - [ ] No error state — a failed instance fetch shows nothing rather than a retry
 - [ ] SLA / ageing indicators per instance (the list shows status, not time-in-stage)
 
@@ -1319,8 +1322,8 @@ alignment), not to count records.
   and doc 05 lists it ✅ Live (confirmed in the product owner's testing, 2026-10-08).
   `/admin/audit` was wired to the real trail 2026-09-18. The status was left at 🟥 Mock
   after both moved; it is 🟨 rather than ✅ because several criteria below are unverified.
-- `useCreateAuditLog()` still resolves after a 400 ms `setTimeout` and does nothing — the
-  "action logged" toasts it drives are not audit entries.
+- ~~`useCreateAuditLog()` resolves after a 400 ms `setTimeout` and does nothing~~ — deleted
+  2026-11-16 with its 9 call sites; the backend writes those entries itself.
 
 **Acceptance criteria**
 - [ ] Every mutating service writes an audit entry *(not audited service by service)*
