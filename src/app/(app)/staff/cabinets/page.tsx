@@ -23,6 +23,7 @@ import { Icon } from '@/components/ui/Icons';
 import { StatusBadge, ConfBadge, UrgBadge } from '@/components/ui/Badges';
 import { exportCsv } from '@/utils/exportCsv';
 import { Table, Column } from '@/components/ui/Table';
+import { Pagination } from '@/components/ui/Pagination';
 import { Skeleton, SkeletonTable, SkeletonTreeRows } from '@/components/common/Skeleton';
 import {
   CABINET_BYPASS_ROLE,
@@ -38,6 +39,9 @@ import { FolderSecurityBadges } from '@/components/cabinets/FolderSecurityBadges
  *  match), so this bucket is walked and filtered client-side, same approach
  *  as `UnfiledDocuments` in `admin/cabinets/page.tsx`. */
 const UNFILED = '__unfiled__';
+
+/** Documents per page in an open folder (the API caps `limit` at 100). */
+const DOC_PAGE_SIZE = 50;
 
 /** high/critical only, per spec — low/normal get no flash. */
 function urgencyRowClass(urgency: string): string {
@@ -73,10 +77,42 @@ export default function CabinetBrowserPage() {
   const showingUnfiled = activeFolder === UNFILED;
   const showingRealFolder = !!activeFolder && !showingUnfiled;
 
-  // Real folder selected: server-side filtered, paginated as normal.
+  // The page belongs to the folder it was chosen in, so opening another folder starts at 1.
+  const [docPage, setDocPage] = useState({ folder: activeFolder, page: 1 });
+  const page = docPage.folder === activeFolder ? docPage.page : 1;
+  const goToDocPage = (next: number) => {
+    setDocPage({ folder: activeFolder, page: next });
+    setSelected([]);
+  };
+
+  // Real folder selected: server-side filtered, one page at a time.
   const { data: documentsData, isLoading: isLoadingDocs } = useDocuments(
-    { cabinetId: activeCab || undefined, folderId: showingRealFolder ? activeFolder! : undefined },
+    {
+      cabinetId: activeCab || undefined,
+      folderId: showingRealFolder ? activeFolder! : undefined,
+      page,
+      limit: DOC_PAGE_SIZE,
+    },
     { enabled: showingRealFolder },
+  );
+  const docPagination = showingRealFolder ? documentsData?.pagination : undefined;
+  const lastDocPage = Math.max(1, docPagination?.totalPages ?? 1);
+
+  // Moving documents out can empty the last page; step back to the new last one.
+  useEffect(() => {
+    if (docPagination && page > lastDocPage) {
+      setDocPage({ folder: activeFolder, page: lastDocPage });
+    }
+  }, [docPagination, page, lastDocPage, activeFolder]);
+
+  const docPager = docPagination && (
+    <Pagination
+      page={docPagination.page}
+      limit={docPagination.limit}
+      total={docPagination.total}
+      totalPages={lastDocPage}
+      onPageChange={goToDocPage}
+    />
   );
 
   // Cabinet selected but no folder yet, or the "Unfiled" bucket is open:
@@ -838,10 +874,12 @@ export default function CabinetBrowserPage() {
                   </div>
                 ))}
               </div>
+              {docPager}
             </div>
           ) : (
             <div className="card">
               <Table
+                key={`${activeFolder}:${page}`}
                 cols={cols}
                 rows={docs}
                 selectable
@@ -849,6 +887,7 @@ export default function CabinetBrowserPage() {
                 onRow={(d) => router.push(`/doc/${d.id}`)}
                 rowClassName={(d) => urgencyRowClass(d.urgency)}
               />
+              {docPager}
             </div>
           )}
         </div>
