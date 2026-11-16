@@ -251,7 +251,8 @@ seed:system` is re-run. The live tenant didn't have them on 2026-10-29.*
 *PR #67's `access_rule:*` and `document:download_original` grants are in the same position:
 on 2026-11-09 no live role held any of them (`GET /roles`), and `GET /access-rules` as
 `client_admin` was a 403. **Live was re-seeded on 2026-11-11**: all of them, and the control-exception
-grants, are there now; `staff` kept `department` scope on `cabinet:view` / `folder:view`.*
+grants, are there now. `staff` has `department` scope on `cabinet:view` / `folder:view`, on
+live and, since PR #70 (`4c02c7a`, 2026-11-11), in the seed too (it was `global` there).*
 
 **227 role-permission grants** (219 before PR #67), each carrying a scope of `global | department | own`.
 

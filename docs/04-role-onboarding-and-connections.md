@@ -365,7 +365,9 @@ once the Access card shipped.
 ### Identity and rights
 
 **29 grants, and the scopes are the important part** *(re-counted 2026-10-15 from
-`prisma/seed-system.ts`; the previous 14-grant list predates the 2026-09-16 RBAC refactor)*:
+`prisma/seed-system.ts`; the previous 14-grant list predates the 2026-09-16 RBAC refactor.
+Re-checked 2026-11-16 at `e033b58`: still 29; PR #70 narrowed cabinet and folder view to
+`department`)*:
 
 ```
 document:          view, search, download, export, print (department) · create (own)
@@ -374,7 +376,7 @@ document_lock:     create, delete (own)
 document_metadata: view (department)
 document_comment / document_signature: view (department) · create (own)
 document_access_request: create
-cabinet:view · folder:view · folder:create/edit (own) · department:view
+cabinet:view, folder:view (department) · folder:create/edit (own) · department:view
 workflow_instance: view, create, route (own)
 task:              view, action (own)
 delegation:        view, create, end (own)

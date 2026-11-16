@@ -5,18 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '@/store/useUIStore';
 import { performLogout } from '@/lib/logout';
+import { SESSION_END_COPY } from '@/lib/sessionEnd';
 
-/**
- * A live backend explicitly rejected the refresh token (see `api-client.ts`'s
- * response interceptor) — the session is confirmed over, not just
- * unreachable. Unlike the app's generic modal (`UIProviders`), there is
- * deliberately no way to dismiss this one without logging out: closing it,
- * pressing Escape, or clicking the backdrop all do the same full teardown as
- * the "Sign in again" button. A session that's actually dead has nothing
- * sensible to fall back to by closing the dialog.
- */
+/** The backend confirmed the session is over (`api-client.ts`). Closing it any way signs out:
+ *  a dead session has nothing to fall back to. */
 export function SessionExpiredModal() {
   const sessionExpired = useUIStore((s) => s.sessionExpired);
+  const copy = SESSION_END_COPY[useUIStore((s) => s.sessionEndReason)];
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -44,22 +39,19 @@ export function SessionExpiredModal() {
         if (e.target === e.currentTarget) handleLogout();
       }}
     >
-      <div className="modal" role="dialog" aria-modal="true" aria-label="Session ended">
+      <div className="modal" role="dialog" aria-modal="true" aria-label={copy.title}>
         <div className="modal-head">
-          <span className="h2">Session ended</span>
+          <span className="h2">{copy.title}</span>
           <button className="modal-close" aria-label="Close and sign out" onClick={handleLogout}>
             ×
           </button>
         </div>
         <div className="modal-body">
-          <p>
-            Your session has ended, most likely from being idle for a while. Sign in again to
-            keep going.
-          </p>
+          <p>{copy.body}</p>
         </div>
         <div className="modal-foot">
           <button className="btn btn-primary" onClick={handleLogout}>
-            Sign in again
+            {copy.action}
           </button>
         </div>
       </div>

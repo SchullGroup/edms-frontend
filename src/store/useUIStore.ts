@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import React from 'react';
 
+import type { SessionEndReason } from '@/lib/sessionEnd';
+
 export interface Toast {
   id: string;
   message: string;
@@ -65,7 +67,9 @@ interface UIStore {
    *  — not merely unreachable. Drives `SessionExpiredModal`; see
    *  `api-client.ts`'s response interceptor for the only place this is set. */
   sessionExpired: boolean;
-  setSessionExpired: (sessionExpired: boolean) => void;
+  /** Why it ended; a specific reason isn't overwritten by a later plain `expired`. */
+  sessionEndReason: SessionEndReason;
+  setSessionExpired: (sessionExpired: boolean, reason?: SessionEndReason) => void;
   /** Repeated network-level/5xx query failures across the app (see
    *  `react-query-provider.tsx`) — the backend appears to be down, as
    *  opposed to a single page's own data being missing. Drives
@@ -109,7 +113,14 @@ export const useUIStore = create<UIStore>((set) => ({
   pageTitle: 'Dashboard',
   setPageTitle: (pageTitle) => set({ pageTitle }),
   sessionExpired: false,
-  setSessionExpired: (sessionExpired) => set({ sessionExpired }),
+  sessionEndReason: 'expired',
+  setSessionExpired: (sessionExpired, reason) =>
+    set((s) => ({
+      sessionExpired,
+      sessionEndReason: !sessionExpired
+        ? 'expired'
+        : (reason ?? (s.sessionExpired ? s.sessionEndReason : 'expired')),
+    })),
   serviceUnavailable: false,
   setServiceUnavailable: (serviceUnavailable) => set({ serviceUnavailable }),
 }));
