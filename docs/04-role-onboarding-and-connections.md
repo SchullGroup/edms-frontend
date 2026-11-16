@@ -474,7 +474,7 @@ end       → /staff/tasks  clear the queue   ✅
 
 > **Persona:** David · operations team lead · 6–12 direct reports
 > **Landing page:** `/supervisor` · **Sidebar:** Supervisor Console
-> **Overall status:** 🟨 **Approval and oversight are real; only the dashboard's no-op audit hook keeps it 🟨** *(was "oversight is half-real" until the mock Exceptions page was removed 2026-11-16)*
+> **Overall status:** ✅ **Every supervisor page is live** *(2026-11-16; was 🟨 "oversight is half-real" until the mock Exceptions page and the no-op audit hook went that day)*
 
 ### Identity and rights
 
@@ -497,7 +497,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in, land on Team Overview | `/supervisor` | 🟨 all data from the API; Hybrid only because its audit hook is a no-op (doc 05) |
+| 1 | Log in, land on Team Overview | `/supervisor` | ✅ all data from the API; loaded live 2026-11-16 (the no-op audit hook that kept it 🟨 was deleted) |
 | 2 | Open the approvals queue | `/supervisor/approvals` | ✅ |
 | 3 | Open a document, review | `/doc/[id]` | ✅ download via signed `fileUrl`, gated and audited; comments go on the workflow action. *(Was "⛔ no download, ⛔ comments 404".)* |
 | 4 | Approve with a note | `POST /tasks/:id/action` | ✅ |
