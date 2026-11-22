@@ -431,6 +431,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
 
   const assigneeSummary = (s: WorkflowStage) => {
     if (s.dynamic_assignee) return "Submitter's manager";
+    if (s.group_id) return 'User group';
     if (s.user_id) {
       return stageUsers.get(s.user_id)?.name ?? 'Assigned person';
     }

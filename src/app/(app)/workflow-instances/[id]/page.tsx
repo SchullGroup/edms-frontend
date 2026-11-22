@@ -9,7 +9,7 @@ import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
-import { useTask } from '@/apis/hooks/useTasks';
+import { useTask, useTasks } from '@/apis/hooks/useTasks';
 import { useDocument } from '@/apis/hooks/useDocuments';
 import { useWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
 import { useWorkflowTaskActions } from '@/components/workflowInstances/useWorkflowTaskActions';
@@ -123,12 +123,17 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
 
   const { data: instance, isLoading, isError, refetch } = useWorkflowInstance(id);
 
-  // Person, role (within the task's department, if it has one), or a
-  // department-only task for someone in that department — the backend's rule.
-  // The department comes from `/auth/me`.
-  const isMineTask = (
-    t: Pick<Task, 'assigneeId' | 'assignedRoleId' | 'assignedRole' | 'assignedDepartmentId'>,
-  ) => !!me && isTaskForUser(t, me);
+  // Group membership isn't exposed: a group task is ours if `GET /tasks` (scope mine) lists it.
+  const hasGroupTask = !!instance?.tasks?.some((t) => t.assignedGroupId);
+  const { data: myInstanceTasks } = useTasks(
+    { workflowInstanceId: id, limit: 100 },
+    { enabled: hasGroupTask },
+  );
+  const myTaskIds = new Set(myInstanceTasks?.data?.map((t) => t.id));
+
+  // Person, role (within the task's department, if it has one), a department-only
+  // task for someone in that department, or a group task listed above.
+  const isMineTask = (t: Task) => !!me && isTaskForUser(t, me, myTaskIds);
   const departmentName = useDepartmentNames();
   // A workflow has no single current stage any more (edms-backend `919d0ef`):
   // its documents move on their own, so several tasks — at different stages, or
@@ -383,9 +388,11 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               ? disabledReason
               : actionableDocuments.length === 0
                 ? accessReason
-                : b.wholeTask && heldBack > 0
-                  ? `${b.label} covers every document in this task, and ${heldBack === 1 ? 'one needs' : `${heldBack} need`} ${needed} first`
-                  : null;
+                : b.action === 'delegate' && focusTask?.assignedGroupId
+                  ? "Group tasks can't be delegated. A supervisor can reassign it to one person."
+                  : b.wholeTask && heldBack > 0
+                    ? `${b.label} covers every document in this task, and ${heldBack === 1 ? 'one needs' : `${heldBack} need`} ${needed} first`
+                    : null;
             return (
               <button
                 key={b.action}
