@@ -78,9 +78,13 @@ setting up an environment.
 
 ## The short version
 
-**68 frontend pages · 176 backend routes · 6 roles · 0 tests.**
+**69 frontend pages · 180 backend routes · 6 roles · 0 tests.**
 *(Pages re-derived 2026-11-10: +1, `/search/mass-index` (ticket 08); then +1,
-`/account/security` (ticket 09). 69 until 2026-11-16, when the mock `/supervisor/exceptions` was removed: 68.)*
+`/account/security` (ticket 09). 69 until 2026-11-16, when the mock `/supervisor/exceptions` was removed: 68. 2026-11-20: +1,
+`/staff/workflows`, the Staff Dashboard tiles' drill-down: 69.)*
+*(Routes re-derived 2026-11-20 at `b9c2d6c` (PR #75): 176 → 180, the four `/user-groups` routes.)*
+*(Routes re-checked 2026-11-20 at `bf6bf46` (PR #74): still 176. PR #74 only reworked workflow
+routing internals and stopped a duplicate task-level history row per routed document.)*
 *(Routes re-derived 2026-11-16, backend @ `dev` `e033b58` (PR #73): 171 → 176. PR #69 (`4da2980`)
 made it 180, which these docs missed (see the 2026-11-16 correction below). PR #71 (`142be0b`) added
 `/auth/mfa/setup/start` and `/setup/confirm`: 182. PR #72 (`9497fae`) removed 10 (the five
@@ -128,9 +132,9 @@ The GOVERNANCE half is now half real
   ✅ audit trail · circulars · SLA settings · notifications (clicked through 2026-11-11)
      · control exceptions (walked through on live 2026-11-12)
   🟥 retention · branding · platform operations
-                                                    🟥 8 of 68 pages
+                                                    🟥 8 of 69 pages
 ```
-*(2026-11-16: 8 of 68, after `/supervisor/exceptions` was removed. Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
+*(2026-11-20: 8 of 69, after `/staff/workflows` was added. 2026-11-16: 8 of 68, after `/supervisor/exceptions` was removed. Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
 59 pages"; 2026-10-15 it was "notifications · policies … 🟥 13 of 58 pages".)*
 
 ### The four defects that matter most

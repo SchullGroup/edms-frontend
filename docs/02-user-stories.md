@@ -833,6 +833,12 @@ lifecycle.
       designer's **Manager** option and routing's **Submitted for**. Request shapes checked
       against live and clicked through by the product owner 2026-11-03. A submitter with no manager leaves a
       stuck `pending` workflow (backend ask, doc 01 §7)
+- [ ] Assign a stage to a user group — edms-backend PR #75 (`b9c2d6c`, live 2026-11-20):
+      `/user-groups` (create, add and remove members; `client_admin`, `schulltech_admin`) and a
+      stage's `group_id`; every active member can act on the task, nobody can delegate it.
+      Frontend since 2026-11-20 (not verified live): group members can act on the workflow page,
+      Delegate is disabled there, and group stages read "User group". No groups page and no
+      designer option yet: the backend has no way to read a group's members (BE-32)
 - [x] Published definitions are immutable; edits require a new version. Since 2026-10-26
       (edms-backend PR #59, verified live) that is a real version: ⋮ → **New version** copies
       the published workflow into draft v+1 of the same family, and publishing it archives
@@ -1160,8 +1166,8 @@ resolved 2026-09-21.)*
       (summary + ageing/stage distributions + paginated detail rows) rather than computing
       ageing from `SEED` documents. `slaStatus` (`healthy | due_soon | breached | paused |
       not_started`) and `workflowStatus` render as two separate badges, per the API guide's
-      explicit "don't merge these" rule. The staff dashboard's Overdue/SLA tile and the
-      bottleneck banner now also draw on the persisted `GET /sla/breaches` event feed, not
+      explicit "don't merge these" rule. The bottleneck banner (and the staff dashboard's
+      Overdue tile until 2026-11-20, when it switched to `GET /tasks?overdue=true`) draws on the persisted `GET /sla/breaches` event feed, not
       ad-hoc `dueAt < now` math — though the guide itself notes the two totals
       (`bottlenecks-ageing.summary.breachedItems` vs `sla/breaches.pagination.total`) aren't
       guaranteed to agree, since one is a live calculation and the other a persisted event log

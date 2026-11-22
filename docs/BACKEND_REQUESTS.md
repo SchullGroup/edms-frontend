@@ -4,7 +4,7 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29, BE-30 and two questions added)
+**Raised:** 2026-08-29 · **Updated:** 2026-11-20 (BE-31 and BE-32 added) · 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29, BE-30 and two questions added)
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `origin/dev` (`e033b58`, re-checked 2026-11-16)
 
@@ -390,6 +390,46 @@ all. The cost: the cabinet browser no longer shows how many documents each folde
 
 **Ask:** add `_count: { documents }` to the paged rows, the same count the unpaged list returns.
 The frontend then shows it on folder cards again.
+
+---
+
+## 🟡 BE-31 · Text search on `GET /tasks` — **new, 2026-11-20**
+
+Checked against `edms-backend` `dev` at `bf6bf46`. `listTasksQuerySchema` is `.strict()` and has
+no `search` (or `q`) parameter, so any text sent is a 422.
+
+Since 2026-11-20 the Staff Dashboard's My Tasks card has a search box. The frontend fetches the
+first 100 tasks for the chosen status (the `limit` cap) and searches those in the browser, by
+document title, workflow name and stage. A user with more than 100 tasks in that status can't
+find the rest; the card says so.
+
+**Ask:** an optional `search` on `GET /tasks`, matching document title, workflow definition
+name and stage, combined with the existing filters and paging. Documents the caller can't open
+should match only as "Restricted document", as the list already shows them. The frontend then
+sends it and drops the 100-task window.
+
+---
+
+## 🟡 BE-32 · Read side for user groups — **new, 2026-11-20**
+
+Checked against `edms-backend` `dev` at `b9c2d6c` (PR #75). `/user-groups` can list and create
+groups and add or remove members, but:
+
+1. **No route returns a group's members.** `GET /user-groups` gives only `_count.members`. A
+   groups page can't show who is in a group, so it can't offer Remove.
+2. **Tasks carry `assignedGroupId` but not the group.** `GET /tasks`, `GET /tasks/:id` and
+   `GET /workflow-instances/:id` include `assignedRole { id, name }` but no `assignedGroup`, so the
+   frontend labels a group task just "User group". `GET /workflow-instances/bottlenecks-ageing`
+   reports a group task as `assignmentType: 'unassigned'`.
+3. **No way to know whether the caller is in a task's group.** The workflow page asks
+   `GET /tasks?workflowInstanceId=` to find out, an extra request per group workflow.
+4. **No rename, deactivate or delete.** `isActive` exists and `user_group.updated` / `.deleted`
+   are audit actions, but no route sets or uses them.
+
+**Ask:** `GET /user-groups/:groupId` with `members: [{ id, name, email, status }]`;
+`assignedGroup: { id, name }` on task payloads; a `canAction` flag (or the caller's group ids
+on `/auth/me`); `PATCH /user-groups/:groupId` (`name`, `description`, `isActive`). The frontend
+then builds the groups page and the designer's group option, and drops the extra request.
 
 ---
 

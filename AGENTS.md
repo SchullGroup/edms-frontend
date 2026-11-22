@@ -19,7 +19,7 @@ estimated.
 | [`docs/02-user-stories.md`](docs/02-user-stories.md) | 6 personas, 11 epics, 44 stories with per-story build status |
 | [`docs/03-onboarding-flow-end-to-end.md`](docs/03-onboarding-flow-end-to-end.md) | Tenant setup as one dependency chain (Phases 0–10), day-one runbook |
 | [`docs/04-role-onboarding-and-connections.md`](docs/04-role-onboarding-and-connections.md) | Per-role journeys and the 7 role-to-role handoffs |
-| [`docs/05-implementation-status-by-role.md`](docs/05-implementation-status-by-role.md) | 68 pages, all individually classified: data source, APIs wired/missing, dummy data, 38-item prioritised backlog |
+| [`docs/05-implementation-status-by-role.md`](docs/05-implementation-status-by-role.md) | 69 pages, all individually classified: data source, APIs wired/missing, dummy data, 38-item prioritised backlog |
 
 `docs/README.md` is the index. Start there.
 
@@ -70,7 +70,7 @@ specific claim your change depends on.
 
 ```bash
 # page count (doc 05 portfolio table)
-find src/app -name 'page.tsx' | wc -l                       # -> 68 (2026-11-16)
+find src/app -name 'page.tsx' | wc -l                       # -> 69 (2026-11-20)
 
 # per-page data source: what each page reads from the store (doc 05 classification)
 find src/app -name 'page.tsx' -exec sh -c \
@@ -84,7 +84,7 @@ grep -nE "apiClient\.(get|post|put|patch|delete)" src/apis/services/*.ts
 
 # backend route inventory (doc 01 §7) — run from ../edms-backend
 find src/modules -name '*.router.ts' -exec grep -hoE \
-  "(\w*[Rr]outer|router)\.(get|post|patch|put|delete)\(" {} + | wc -l      # -> 176 (2026-11-16, e033b58)
+  "(\w*[Rr]outer|router)\.(get|post|patch|put|delete)\(" {} + | wc -l      # -> 180 (2026-11-20, b9c2d6c)
 
 # LOC figures quoted in the docs
 find src -type f \( -name '*.ts' -o -name '*.tsx' \) | xargs wc -l | tail -1  # -> 41345 (2026-10-15)
