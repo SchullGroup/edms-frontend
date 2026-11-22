@@ -60,6 +60,12 @@ export const routeConfig: RouteRule[] = [
     anyPermissions: ['task:view'],
   },
   {
+    // Dashboard tile drill-down: workflows by status, plus overdue tasks.
+    path: '/staff/workflows',
+    matchType: 'prefix',
+    anyPermissions: ['workflow_instance:view', 'task:view'],
+  },
+  {
     path: '/staff/cabinets',
     matchType: 'prefix',
     // Sidebar requires department-or-global scope; route rules aren't scope-aware.

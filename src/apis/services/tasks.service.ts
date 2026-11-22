@@ -31,6 +31,8 @@ export interface TaskFilters {
   /** `dueAt`: earliest document deadline first, tasks without one last.
    *  Omitted (or `createdAt`): oldest first. */
   sort?: 'createdAt' | 'dueAt';
+  /** With `sort=createdAt` only; defaults to `asc` (oldest first). */
+  order?: 'asc' | 'desc';
   /** `true`: active tasks holding a document past its stage deadline;
    *  `false`: everything else. */
   overdue?: boolean;
