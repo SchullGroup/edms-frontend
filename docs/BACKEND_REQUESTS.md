@@ -4,9 +4,16 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-11-23 (BE-33 and BE-34 added) · 2026-11-20 (BE-31 and BE-32 added) · 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29, BE-30 and two questions added)
+**Raised:** 2026-08-29 · **Updated:** 2026-11-23 (BE-31 and BE-32 done; BE-35 added) · 2026-11-23 (BE-33 and BE-34 added) · 2026-11-20 (BE-31 and BE-32 added) · 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29, BE-30 and two questions added)
 **Frontend:** `edms-frontend` @ `dev`
-**Backend checked against:** `edms-backend` @ `origin/dev` (`e033b58`, re-checked 2026-11-16)
+**Backend checked against:** `edms-backend` @ `origin/dev` (`34a98d6`, re-checked 2026-11-23)
+
+> **2026-11-23: BE-31 and BE-32 done and removed.** Both live 2026-11-23 (`34a98d6`). BE-31:
+> `GET /tasks?search=` (PR #77) matches stage, workflow name and document title, Restricted
+> documents only by that label. BE-32 (PR #76): `GET /user-groups/:groupId` with `members`,
+> `PATCH /user-groups/:groupId` (`name`, `description`, `isActive`), `assignedGroup { id, name }`
+> and `canAction` on task payloads, and group items in `bottlenecks-ageing`. There is still no
+> delete, which BE-32 didn't ask for. Raised: BE-35. Write-ups of the done items are in git history.
 
 > **2026-11-16: BE-24 and BE-26 done and removed.** Both shipped in PR #71 (`142be0b`), live
 > 2026-11-12, and the frontend uses both since 2026-11-13. BE-24: admins set `mfaRequired` per
@@ -62,6 +69,9 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
 | **BE-29** | Own error codes for the mid-session MFA responses           | Small fix       | 🟡 Low   | No — the frontend matches message text     |
 | **BE-30** | Document count on paged folder rows                         | Small fix       | 🟡 Low   | No — folder cards show no count meanwhile  |
+| **BE-33** | `team-status-matrix` counts uploads, not work held          | Behaviour fix   | 🟡 Low   | No — Team Overview no longer calls it      |
+| **BE-34** | Stage names, not ids, in stage-grouped SLA and task search  | Small fix       | 🟡 Low   | No                                         |
+| **BE-35** | Semantic search returns nothing on live                     | Ops / data      | 🟡 Low   | Yes — for any semantic-search UI           |
 
 **Questions, not asks:** Q-1 (was removing MFA method change intended?) and Q-2 (storage bucket
 versioning and who owns unique keys), after BE-29.
@@ -393,46 +403,6 @@ The frontend then shows it on folder cards again.
 
 ---
 
-## 🟡 BE-31 · Text search on `GET /tasks` — **new, 2026-11-20**
-
-Checked against `edms-backend` `dev` at `bf6bf46`. `listTasksQuerySchema` is `.strict()` and has
-no `search` (or `q`) parameter, so any text sent is a 422.
-
-Since 2026-11-20 the Staff Dashboard's My Tasks card has a search box. The frontend fetches the
-first 100 tasks for the chosen status (the `limit` cap) and searches those in the browser, by
-document title, workflow name and stage. A user with more than 100 tasks in that status can't
-find the rest; the card says so.
-
-**Ask:** an optional `search` on `GET /tasks`, matching document title, workflow definition
-name and stage, combined with the existing filters and paging. Documents the caller can't open
-should match only as "Restricted document", as the list already shows them. The frontend then
-sends it and drops the 100-task window.
-
----
-
-## 🟡 BE-32 · Read side for user groups — **new, 2026-11-20**
-
-Checked against `edms-backend` `dev` at `b9c2d6c` (PR #75). `/user-groups` can list and create
-groups and add or remove members, but:
-
-1. **No route returns a group's members.** `GET /user-groups` gives only `_count.members`. A
-   groups page can't show who is in a group, so it can't offer Remove.
-2. **Tasks carry `assignedGroupId` but not the group.** `GET /tasks`, `GET /tasks/:id` and
-   `GET /workflow-instances/:id` include `assignedRole { id, name }` but no `assignedGroup`, so the
-   frontend labels a group task just "User group". `GET /workflow-instances/bottlenecks-ageing`
-   reports a group task as `assignmentType: 'unassigned'`.
-3. **No way to know whether the caller is in a task's group.** The workflow page asks
-   `GET /tasks?workflowInstanceId=` to find out, an extra request per group workflow.
-4. **No rename, deactivate or delete.** `isActive` exists and `user_group.updated` / `.deleted`
-   are audit actions, but no route sets or uses them.
-
-**Ask:** `GET /user-groups/:groupId` with `members: [{ id, name, email, status }]`;
-`assignedGroup: { id, name }` on task payloads; a `canAction` flag (or the caller's group ids
-on `/auth/me`); `PATCH /user-groups/:groupId` (`name`, `description`, `isActive`). The frontend
-then builds the groups page and the designer's group option, and drops the extra request.
-
----
-
 ## 🟡 BE-33 · `team-status-matrix` counts uploads, not work held — **new, 2026-11-23**
 
 Checked against `edms-backend` `dev` at `b9c2d6c`. `GET /workflow-instances/team-status-matrix`
@@ -460,6 +430,26 @@ No page groups by stage yet, so nothing shows it today.
 
 **Ask:** return the stage name from the workflow definition as `label` (keeping the id as
 `key`), as `bottlenecks-ageing` does with `stageName`.
+
+**Same root, added 2026-11-23:** `GET /tasks?search=` (PR #77) matches `Task.stage`, which is
+the stage id too, so searching for a stage's name ("Finance review") finds nothing, while
+`stage_` matched 16 tasks on live. Matching the definition's stage names would need the same
+lookup.
+
+---
+
+## 🟡 BE-35 · Semantic search returns nothing on live — **new, 2026-11-23**
+
+Checked on live against `34a98d6` (PR #77), as `client_admin`. `GET /documents/search?q=invoice`
+returns 14 documents with `mode=keyword`, **0** with `mode=semantic` and the same 14 with
+`mode=hybrid`. A meaning-style query ("money owed to a supplier") returns 0 in every mode.
+`semantic` didn't error, so the embedder answers, but no stored chunk matches: documents
+uploaded before PR #77 have no `document_chunks` rows unless `scripts/backfill-embeddings.ts`
+has been run, and `SEMANTIC_SEARCH_MIN_SCORE` (0.6) may also be too strict.
+
+**Ask:** run the backfill on live (and confirm pgvector and `GEMINI_API_KEY` there), then tell us
+a query that should match semantically. The frontend adds a search-mode option on `/search` once
+`semantic` returns results.
 
 ---
 

@@ -486,6 +486,7 @@ fix.
 | # | Action | API | Status |
 |---|---|---|---|
 | 5.1 | Invite the user | `POST /users` `{email, name, departmentId, roleIds}` (no password) | ✅ emails a set-password link; the user is `pending` until they use it, then `active` (PR #49). Department and roles validated; `schulltech_admin` can't be given |
+| 5.1b | Invite many users from a file | `POST /users/import` (CSV or `.xlsx`, `?dryRun=true`), template from `GET /users/import/template` | ⚠️ backend only (PR #77, live 2026-11-23); no upload page yet, so `/admin/users` invites one at a time |
 | 5.2 | Assign additional roles | `POST /users/:id/roles` `{roleIds}` | ✅ |
 | 5.3 | Remove a role | `DELETE /users/:id/roles/:roleId` | ✅ |
 | 5.4 | Deactivate | `PATCH /users/:id` `{status:'inactive'}` | ✅ — login then returns 403 `ACCOUNT_INACTIVE` |

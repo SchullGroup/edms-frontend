@@ -821,7 +821,8 @@ POST  /circulars/:id/reminders     remind outstanding recipients
 | ~~`DELETE /auth/mfa/users/:userId`~~ | ✅ **Wired 2026-11-10** (ticket 10): **Reset two-step** on `/admin/users`, verified live. Since 2026-11-13 only for users with MFA on, and only for global `user:edit` | — |
 | ~~`mfaRequired` on `POST /users`, `PATCH /users/:id`~~ | ✅ **Wired 2026-11-13** (`backend-dev-2026-11-12/03`, verified live): **Require two-step** / **Stop requiring two-step** on `/admin/users`, and a box on the invite form | — |
 | `phoneNumber` on `POST/PATCH /users`, `POST /users/:id/phone-verification/resend` | 🟨 Wired 2026-11-16 (11-12/07), not verified: **Mobile number** on the invite/edit form and ⋮ **Resend phone code** on `/admin/users`, global scope only | `client_admin` |
-| `GET/POST /user-groups`, `POST/DELETE /user-groups/:groupId/members(/:userId)` | ✅ **Built** (PR #75, live 2026-11-20); ⛔ not wired. No route reads a group's members or edits a group (BE-32) | No groups page and no group option in the workflow designer, so `client_admin` can't set up group stages from the UI |
+| `GET/POST /user-groups`, `GET/PATCH /user-groups/:groupId`, `POST/DELETE /user-groups/:groupId/members(/:userId)` | ✅ **Built** (PR #75, live 2026-11-20; `GET`/`PATCH /:groupId` PR #76, live 2026-11-23, BE-32); ⛔ not wired. Members are readable and a group can be renamed or deactivated; no delete | No groups page and no group option in the workflow designer, so `client_admin` can't set up group stages from the UI |
+| `POST /users/import`, `GET /users/import/template` | ✅ **Built** (PR #77, live 2026-11-23: the CSV template downloads as `client_admin`); ⛔ not wired | Users are invited one at a time on `/admin/users`; a bulk-import page (upload, dry run, per-row results) would use these |
 | `DELETE /documents/:id/access-grants/:userId` *(older)* | ✅ **Wired 2026-11-11** — ticket 11, Revoke on `/admin/access-requests` | — |
 | ~~`PUT /documents/metadata/batch`~~ | ✅ **Wired 2026-11-10** (ticket 08) — `/search/mass-index` | — |
 | ~~`GET /document-views/report`~~ | ✅ **Wired 2026-11-10** (ticket 07) — the Viewing time card on `/doc/[id]` (`audit:view`) | — |
@@ -1211,7 +1212,9 @@ Doc 01 §7 has each route; the tickets are in `.scratch/backend-dev-2026-11-09/`
 | ~~Server-built download links~~ ✅ 2026-11-11 | `downloadUrl` / `originalUrl` on versions | download holders; originals `client_admin`, `internal_auditor` | 12 |
 | ~~IP and country rules~~ ✅ 2026-11-11 (country rules need `GEO_COUNTRY_HEADER`, not set on live) | `/access-rules` | `client_admin`, `schulltech_admin` | 13 |
 | Active Directory SSO | `/auth/sso/*` (not configured on live) | everyone | 14 |
-| User groups *(PR #75, live 2026-11-20)* | `GET/POST /user-groups`, `POST /:groupId/members`, `DELETE /:groupId/members/:userId`; stage `group_id` | `client_admin`, `schulltech_admin` | — (BE-32 first) |
+| User groups *(PR #75, live 2026-11-20; PR #76, live 2026-11-23)* | `GET/POST /user-groups`, `GET/PATCH /:groupId`, `POST /:groupId/members`, `DELETE /:groupId/members/:userId`; stage `group_id` | `client_admin`, `schulltech_admin` | — (BE-32 done; groups page and designer option not built) |
+| Bulk user import *(PR #77, live 2026-11-23)* | `POST /users/import` (`?dryRun=true`), `GET /users/import/template` | `client_admin` | — |
+| Semantic search *(PR #77, live 2026-11-23)* | `mode=semantic\|hybrid` on `GET /documents/search` | everyone who can search | — (returns nothing on live yet: documents not embedded) |
 
 **`GET /workflow-history` is the quiet win.** It is the closest thing the backend has to a
 real audit trail — actor, from-stage, to-stage, note, `elapsedSeconds` — and it would

@@ -838,7 +838,9 @@ lifecycle.
       stage's `group_id`; every active member can act on the task, nobody can delegate it.
       Frontend since 2026-11-20 (not verified live): group members can act on the workflow page,
       Delegate is disabled there, and group stages read "User group". No groups page and no
-      designer option yet: the backend has no way to read a group's members (BE-32)
+      designer option yet. Since PR #76 (`34a98d6`, live 2026-11-23, BE-32) the backend
+      returns a group's members, renames and deactivates groups, and names the group and
+      `canAction` on tasks, so both can be built
 - [x] Published definitions are immutable; edits require a new version. Since 2026-10-26
       (edms-backend PR #59, verified live) that is a real version: ⋮ → **New version** copies
       the published workflow into draft v+1 of the same family, and publishing it archives
@@ -1484,6 +1486,9 @@ whole flow." — and the first three "missing" bullets below.
 - [x] First-login password set — `/set-password?token=…`
 - [x] Password reset — `POST /auth/forgot-password` + `POST /auth/reset-password`
 - [ ] Login rate limiting
+- [ ] Invite many at once — edms-backend PR #77 (`34a98d6`, live 2026-11-23): `POST /users/import`
+      takes a CSV or `.xlsx` (dry run, per-row results, same rules as `POST /users`) and
+      `GET /users/import/template` gives the blank file. No upload page yet
 
 ---
 
