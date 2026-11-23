@@ -333,7 +333,7 @@ once the Access card shipped.
 | Configure branding | ❌ | 🟥 |
 | Publish circulars | ✅ `circular:*` at `global` scope | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | View the audit trail | ✅ | ✅ wired 2026-09-18 |
-| Two-step sign-in: require it per user, and reset it for someone who lost their device | ✅ | ✅ *(2026-11-13, `backend-dev-2026-11-12/03`, verified live)* `/admin/users`: a **Two-step** column (On · method / Not set up / Off, and Required); **Require two-step** / **Stop requiring two-step** (department or global `user:edit`, not on your own row); **Require two-step sign-in** on the invite form. The user sets it up at their next sign-in. **Reset two-step** (global `user:edit`) only for users who have it on: a still-required user sets it up again, otherwise the password alone signs them in. Their own status is under account menu → **Security** |
+| Two-step sign-in: require it per user, and reset it for someone who lost their device | ✅ | ✅ *(2026-11-13, `backend-dev-2026-11-12/03`, verified live)* `/admin/users`: a **Two-step** column (On · method / Not set up / Off, and Required; a line under Status since 2026-11-23); **Require two-step** / **Stop requiring two-step** (department or global `user:edit`, not on your own row); **Require two-step sign-in** on the invite form. The user sets it up at their next sign-in. **Reset two-step** (global `user:edit`) only for users who have it on: a still-required user sets it up again, otherwise the password alone signs them in. Their own status is under account menu → **Security** |
 
 ### Where it breaks, ranked
 
