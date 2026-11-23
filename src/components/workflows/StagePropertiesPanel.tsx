@@ -167,9 +167,9 @@ export function StagePropertiesPanel({
 
           <div className="field">
             <label>Assign to</label>
-            <div className="seg" role="group" aria-label="Assign by role, person, department, manager or group" style={{ marginBottom: '8px' }}>
-              <button type="button" className={assigneeMode === 'role' ? 'active' : ''} onClick={() => onAssigneeModeChange('role')}>
-                Role
+            <div className="seg" role="group" aria-label="Assign by group, person, department, manager or role" style={{ marginBottom: '8px' }}>
+              <button type="button" className={assigneeMode === 'group' ? 'active' : ''} onClick={() => onAssigneeModeChange('group')}>
+                Group
               </button>
               <button type="button" className={assigneeMode === 'person' ? 'active' : ''} onClick={() => onAssigneeModeChange('person')}>
                 Person
@@ -180,8 +180,8 @@ export function StagePropertiesPanel({
               <button type="button" className={assigneeMode === 'manager' ? 'active' : ''} onClick={() => onAssigneeModeChange('manager')}>
                 Manager
               </button>
-              <button type="button" className={assigneeMode === 'group' ? 'active' : ''} onClick={() => onAssigneeModeChange('group')}>
-                Group
+              <button type="button" className={assigneeMode === 'role' ? 'active' : ''} onClick={() => onAssigneeModeChange('role')}>
+                Role
               </button>
             </div>
             {assigneeMode === 'group' ? (
