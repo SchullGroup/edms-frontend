@@ -78,10 +78,11 @@ setting up an environment.
 
 ## The short version
 
-**69 frontend pages · 184 backend routes · 6 roles · 0 tests.**
+**73 frontend pages · 184 backend routes · 6 roles · 0 tests.**
 *(Pages re-derived 2026-11-10: +1, `/search/mass-index` (ticket 08); then +1,
 `/account/security` (ticket 09). 69 until 2026-11-16, when the mock `/supervisor/exceptions` was removed: 68. 2026-11-20: +1,
-`/staff/workflows`, the Staff Dashboard tiles' drill-down: 69.)*
+`/staff/workflows`, the Staff Dashboard tiles' drill-down: 69. 2026-11-23: +4, the user-group pages
+(`/admin/user-groups`, `/new`, `/[groupId]`, `/[groupId]/edit`): 73.)*
 *(Routes re-derived 2026-11-23 at `34a98d6` (PRs #76, #77): 180 → 184, `GET`/`PATCH /user-groups/:groupId` and `POST /users/import` + `GET /users/import/template`.)*
 *(Routes re-derived 2026-11-20 at `b9c2d6c` (PR #75): 176 → 180, the four `/user-groups` routes.)*
 *(Routes re-checked 2026-11-20 at `bf6bf46` (PR #74): still 176. PR #74 only reworked workflow
@@ -133,9 +134,9 @@ The GOVERNANCE half is now half real
   ✅ audit trail · circulars · SLA settings · notifications (clicked through 2026-11-11)
      · control exceptions (walked through on live 2026-11-12)
   🟥 retention · branding · platform operations
-                                                    🟥 8 of 69 pages
+                                                    🟥 8 of 73 pages
 ```
-*(2026-11-20: 8 of 69, after `/staff/workflows` was added. 2026-11-16: 8 of 68, after `/supervisor/exceptions` was removed. Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
+*(2026-11-23: 8 of 73, after the four user-group pages were added. 2026-11-20: 8 of 69, after `/staff/workflows` was added. 2026-11-16: 8 of 68, after `/supervisor/exceptions` was removed. Re-drawn 2026-10-29 from doc 05's portfolio table — was "🟥 findings · retention … 11 of
 59 pages"; 2026-10-15 it was "notifications · policies … 🟥 13 of 58 pages".)*
 
 ### The four defects that matter most

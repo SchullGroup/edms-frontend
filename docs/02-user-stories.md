@@ -838,10 +838,11 @@ lifecycle.
       stage's `group_id`; every active member can act on the task, nobody can delegate it.
       Frontend since 2026-11-20 (not verified live): group members can act on the workflow page,
       Delegate is disabled there, and group stages show the group's name (since 2026-11-23,
-      from `assignedGroup`; membership comes from `canAction`). No groups page and no
-      designer option yet. Since PR #76 (`34a98d6`, live 2026-11-23, BE-32) the backend
-      returns a group's members, renames and deactivates groups, and names the group and
-      `canAction` on tasks, so both can be built
+      from `assignedGroup`; membership comes from `canAction`). Since 2026-11-23 (on PR #76):
+      **Admin → User Groups** creates, renames, deactivates and reactivates groups and adds
+      and removes members, and the designer's **Group** tab assigns a stage to one. Not yet
+      exercised on live (no groups exist there and they can't be deleted); checked in the
+      browser against mocked responses
 - [x] Published definitions are immutable; edits require a new version. Since 2026-10-26
       (edms-backend PR #59, verified live) that is a real version: ⋮ → **New version** copies
       the published workflow into draft v+1 of the same family, and publishing it archives

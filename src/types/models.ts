@@ -1798,3 +1798,36 @@ export interface AccessRuleInput {
   /** ≤ 255 characters. */
   description?: string;
 }
+
+// --- User groups (edms-backend PRs #75, #76) ---
+
+/** `GET /user-groups` row: up to 100, newest first. `assignedTasks` counts every task ever. */
+export interface UserGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  _count: { members: number; assignedTasks: number };
+}
+
+export interface UserGroupMember {
+  id: string;
+  name: string;
+  email: string;
+  status: 'pending' | 'active' | 'inactive' | 'suspended';
+}
+
+/** `GET /user-groups/:groupId`: members oldest first. */
+export interface UserGroupDetail extends UserGroup {
+  members: UserGroupMember[];
+}
+
+export interface UserGroupInput {
+  /** 1–120 characters, unique ignoring case. */
+  name: string;
+  /** ≤ 1000 characters; `null` clears it on update. */
+  description?: string | null;
+}

@@ -13,6 +13,7 @@ import {
 import { useRoles } from '@/apis/hooks/useRoles';
 import { useUsersByIds } from '@/apis/hooks/useUsers';
 import { useDepartments } from '@/apis/hooks/useDepartments';
+import { useUserGroups } from '@/apis/hooks/useUserGroups';
 import { departmentOptions, departmentParents } from '@/apis/utils/managementAggregation';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Icon } from '@/components/ui/Icons';
@@ -79,6 +80,8 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
   const [assigneeMode, setAssigneeMode] = useState<AssigneeMode>('role');
   const [roleDraft, setRoleDraft] = useState('');
   const [userDraft, setUserDraft] = useState('');
+  const [groupDraft, setGroupDraft] = useState('');
+  const { data: userGroups } = useUserGroups();
   // A stage's department: a top-level one, plus optionally one of its
   // sub-departments (edms-backend PR #52). '' on a role stage = any department.
   const [departmentDraft, setDepartmentDraft] = useState('');
@@ -117,8 +120,10 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
   const resetStageDrafts = (stage: WorkflowStage | null) => {
     setStageNameDraft(stage?.name || '');
     setAssigneeMode(
-      stage?.dynamic_assignee
-        ? 'manager'
+      stage?.group_id
+        ? 'group'
+        : stage?.dynamic_assignee
+          ? 'manager'
         : stage?.user_id
           ? 'person'
           : !stage?.role && stage?.department_id
@@ -127,6 +132,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
     );
     setRoleDraft(stage?.role || '');
     setUserDraft(stage?.user_id || '');
+    setGroupDraft(stage?.group_id || '');
     const { departmentId, subDepartmentId } = stageDepartment(stage);
     setDepartmentDraft(departmentId);
     setSubDepartmentDraft(subDepartmentId);
@@ -149,7 +155,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
   // kind; the fields of the others are cleared.
   const assignmentDraft = (): Pick<
     WorkflowStage,
-    'role' | 'user_id' | 'department_id' | 'sub_department_id' | 'dynamic_assignee'
+    'role' | 'user_id' | 'department_id' | 'sub_department_id' | 'dynamic_assignee' | 'group_id'
   > => {
     const none = {
       role: undefined,
@@ -157,6 +163,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
       department_id: undefined,
       sub_department_id: undefined,
       dynamic_assignee: undefined,
+      group_id: undefined,
     };
     const department = {
       department_id: departmentDraft || undefined,
@@ -165,6 +172,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
     if (assigneeMode === 'role') return { ...none, role: roleDraft, ...department };
     if (assigneeMode === 'department') return { ...none, ...department };
     if (assigneeMode === 'manager') return { ...none, dynamic_assignee: 'submitter_manager' };
+    if (assigneeMode === 'group') return { ...none, group_id: groupDraft };
     return { ...none, user_id: userDraft };
   };
 
@@ -181,6 +189,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
         (draft.role || '') !== (selectedStage.role || '') ||
         (draft.user_id || '') !== (selectedStage.user_id || '') ||
         (draft.dynamic_assignee || '') !== (selectedStage.dynamic_assignee || '') ||
+        (draft.group_id || '') !== (selectedStage.group_id || '') ||
         (draft.department_id || '') !== saved.departmentId ||
         (draft.sub_department_id || '') !== saved.subDepartmentId
       );
@@ -347,6 +356,8 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
         setDepartmentDraft(departmentTree[0]?.id || '');
         setSubDepartmentDraft('');
       }
+    } else if (mode === 'group' && !groupDraft) {
+      setGroupDraft(userGroups?.find((g) => g.isActive)?.id || '');
     }
   };
 
@@ -368,6 +379,10 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
     }
     if (assigneeMode === 'person' && !userDraft) {
       addToast('Pick a person', 'error');
+      return;
+    }
+    if (assigneeMode === 'group' && !groupDraft) {
+      addToast('Pick a group', 'error');
       return;
     }
     const patch = {
@@ -431,7 +446,7 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
 
   const assigneeSummary = (s: WorkflowStage) => {
     if (s.dynamic_assignee) return "Submitter's manager";
-    if (s.group_id) return 'User group';
+    if (s.group_id) return userGroups?.find((g) => g.id === s.group_id)?.name ?? 'User group';
     if (s.user_id) {
       return stageUsers.get(s.user_id)?.name ?? 'Assigned person';
     }
@@ -537,6 +552,9 @@ export default function WorkflowDesignerPage({ params }: { params: Promise<{ id:
             },
             userDraft,
             onUserChange: setUserDraft,
+            groups: userGroups,
+            groupDraft,
+            onGroupChange: setGroupDraft,
             slaDraft,
             onSlaChange: setSlaDraft,
             onSave: handleSaveStage,

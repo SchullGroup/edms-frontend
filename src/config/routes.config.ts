@@ -176,6 +176,18 @@ export const routeConfig: RouteRule[] = [
     matchType: 'prefix',
     anyPermissions: ['access_rule:view'],
   },
+  // User groups: read with `workflow:view`, created with `workflow:create`. The edit
+  // page checks creator-or-global itself (the path has an id in the middle).
+  {
+    path: '/admin/user-groups/new',
+    matchType: 'prefix',
+    anyPermissions: ['workflow:create'],
+  },
+  {
+    path: '/admin/user-groups',
+    matchType: 'prefix',
+    anyPermissions: ['workflow:view'],
+  },
   // Role-gated, not permission-gated — per an explicit call: stays scoped to the
   // role it was built for (client_admin) rather than opening up to any custom
   // role that happens to hold an admin-qualifying permission. Same exception
