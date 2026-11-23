@@ -13,14 +13,21 @@ import { taskDueAt, taskUrgency } from '@/utils/workflowDocuments';
  * documents' execution deadlines (`taskDueAt`, `@/utils/workflowDocuments`).
  */
 
-/** Who a task is waiting on, the way the backend matches it
- *  (`buildTaskParticipantFilter`): the named person; anyone with the role (in
- *  the task's department, when it has one); or, for a department-only task,
- *  anyone whose department is exactly that one. */
+/** Whether a task is the user's, as `buildTaskParticipantFilter` decides. Group membership
+ *  isn't exposed, so a group task relies on the backend's `canAction`. */
 export function isTaskForUser(
-  task: Pick<Task, 'assigneeId' | 'assignedRoleId' | 'assignedRole' | 'assignedDepartmentId'>,
+  task: Pick<
+    Task,
+    | 'assigneeId'
+    | 'assignedRoleId'
+    | 'assignedRole'
+    | 'assignedDepartmentId'
+    | 'assignedGroupId'
+    | 'canAction'
+  >,
   user: { id: string; roles?: string[]; departmentId?: string | null },
 ): boolean {
+  if (task.assignedGroupId) return !!task.canAction;
   const department = task.assignedDepartmentId ?? null;
   const inDepartment = !department || department === user.departmentId;
   return (
@@ -30,14 +37,18 @@ export function isTaskForUser(
   );
 }
 
-/** What to call whoever holds a task: the person, the role, "Role · Department",
- *  or the department. `departmentName` resolves an id (see `useDepartmentNames`). */
+/** Who holds a task: person, role, "Role · Department", department, or the group's name.
+ *  `departmentName` resolves an id (`useDepartmentNames`). */
 export function taskHolderLabel(
-  task: Pick<Task, 'assignee' | 'assignedRole' | 'assignedDepartmentId'>,
+  task: Pick<
+    Task,
+    'assignee' | 'assignedRole' | 'assignedDepartmentId' | 'assignedGroupId' | 'assignedGroup'
+  >,
   departmentName: (id: string) => string | undefined,
   fallback = 'Unassigned',
 ): string {
   if (task.assignee?.name) return task.assignee.name;
+  if (task.assignedGroupId) return task.assignedGroup?.name || 'User group';
   const department = task.assignedDepartmentId
     ? departmentName(task.assignedDepartmentId) || 'a department'
     : null;

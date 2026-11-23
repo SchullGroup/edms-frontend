@@ -23,7 +23,7 @@ import { Table, Column } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
 import { Icon } from '@/components/ui/Icons';
 import { SkeletonTable } from '@/components/common/Skeleton';
-import { fmtDate, fmtDateTime } from '@/utils/helpers';
+import { fmtDate, fmtDateTime, titleCase } from '@/utils/helpers';
 import { METHOD_LABEL } from '@/components/security/mfaParts';
 import { RowActionsMenu, type RowAction } from '@/components/ui/RowActionsMenu';
 import { Mail, RotateCcw, ShieldCheck, ShieldOff, Smartphone, UserCheck, UserX } from 'lucide-react';
@@ -101,16 +101,19 @@ export default function UsersPage() {
   );
   const departmentList = useMemo(() => Array.from(departmentIndex.values()), [departmentIndex]);
 
+  const roleNames = (u: any): string[] =>
+    (u.userRoles?.map((ur: any) => ur.role?.name).filter(Boolean) ??
+      u.roles?.map((r: any) => r.name)) ||
+    [];
   const roleLabel = (u: any) => {
-    const names =
-      u.userRoles?.map((ur: any) => ur.role?.name).filter(Boolean) ??
-      u.roles?.map((r: any) => r.name);
-    return names?.length ? names.join(', ') : 'Unassigned';
+    const names = roleNames(u);
+    return names.length ? names.join(', ') : 'Unassigned';
   };
 
   const users = rawUsers.map((u) => ({
     ...u,
     roleLabel: roleLabel(u),
+    roleNames: roleNames(u),
     dept: departmentName(u.departmentId, departmentIndex),
     status: STATUS_LABEL[u.status] ?? 'Inactive',
     // '' rather than null so "never signed in" sorts together, before any date.
@@ -415,78 +418,80 @@ export default function UsersPage() {
         </span>
       ),
     },
-    { key: 'roleLabel', label: 'Roles', sortable: true },
-    { key: 'dept', label: 'Department' },
     {
-      key: 'managerId',
-      label: 'Reports to',
-      render: (u) =>
-        u.managerId ? <ManagerName id={u.managerId} /> : <span className="caption">—</span>,
-    },
-    {
-      key: 'mfa',
-      label: 'Two-step',
+      key: 'roleLabel',
+      label: 'Role & department',
+      sortable: true,
       render: (u) => (
-        <span className="flex flex-col items-start gap-1" style={{ whiteSpace: 'nowrap' }}>
-          {u.mfaEnabled ? (
-            <span className="badge b-status-closed">
-              On{u.mfaMethod ? ` · ${METHOD_LABEL[u.mfaMethod as keyof typeof METHOD_LABEL]}` : ''}
-            </span>
-          ) : u.mfaRequired ? (
-            <span className="badge b-status-pending" title="They set it up at their next sign-in">
-              Not set up
-            </span>
-          ) : (
-            <span className="caption">Off</span>
+        <div className="flex flex-col items-start" style={{ gap: 6 }}>
+          <div className="flex flex-wrap gap-1">
+            {u.roleNames.length ? (
+              u.roleNames.map((r: string) => (
+                <span key={r} className="tag">
+                  {titleCase(r)}
+                </span>
+              ))
+            ) : (
+              <span className="caption">No role</span>
+            )}
+          </div>
+          <div style={{ fontSize: 13 }}>{u.dept}</div>
+          {u.managerId && (
+            <div className="caption">
+              Reports to{' '}
+              <span style={{ color: 'var(--ink)', fontWeight: 500 }}>
+                <ManagerName id={u.managerId} />
+              </span>
+            </div>
           )}
-          {u.mfaRequired && <span className="caption">Required</span>}
-        </span>
-      ),
-    },
-    {
-      key: 'lastLogin',
-      label: 'Last login',
-      sortable: true,
-      render: (u) =>
-        u.lastLoginAt ? (
-          <span title={fmtDateTime(u.lastLoginAt)} style={{ whiteSpace: 'nowrap' }}>
-            {fmtDate(u.lastLoginAt)}
-          </span>
-        ) : (
-          <span className="caption">Never</span>
-        ),
-    },
-    {
-      key: 'createdAt',
-      label: 'Created',
-      sortable: true,
-      render: (u) => (
-        <span title={fmtDateTime(u.createdAt)} style={{ whiteSpace: 'nowrap' }}>
-          {fmtDate(u.createdAt)}
-        </span>
+        </div>
       ),
     },
     {
       key: 'status',
       label: 'Status',
       render: (u) => (
-        <span>
+        <span className="flex flex-col items-start gap-1" style={{ whiteSpace: 'nowrap' }}>
           <span className={`badge ${STATUS_BADGE[u.status] ?? 'b-status-overdue'}`}>{u.status}</span>
           {u.status === 'Pending' && u.invitedAt && (
-            <div
-              className="caption mt-1"
-              style={{ whiteSpace: 'nowrap' }}
-              title="Waiting for them to set a password from the email"
-            >
+            <span className="caption" title="Waiting for them to set a password from the email">
               Invited {fmtDate(u.invitedAt)}
-            </div>
+            </span>
+          )}
+          {u.mfaEnabled ? (
+            <span className="caption">
+              Two-step on
+              {u.mfaMethod ? ` · ${METHOD_LABEL[u.mfaMethod as keyof typeof METHOD_LABEL]}` : ''}
+              {u.mfaRequired ? ' · required' : ''}
+            </span>
+          ) : u.mfaRequired ? (
+            <span className="badge b-status-pending" title="They set it up at their next sign-in">
+              Two-step not set up
+            </span>
+          ) : (
+            <span className="caption">Two-step off</span>
           )}
         </span>
       ),
     },
     {
+      key: 'lastLogin',
+      label: 'Activity',
+      sortable: true,
+      render: (u) => (
+        <span style={{ whiteSpace: 'nowrap' }}>
+          <div title={u.lastLoginAt ? fmtDateTime(u.lastLoginAt) : undefined}>
+            {u.lastLoginAt ? `Last login ${fmtDate(u.lastLoginAt)}` : 'Never signed in'}
+          </div>
+          <div className="caption" title={fmtDateTime(u.createdAt)}>
+            Created {fmtDate(u.createdAt)}
+          </div>
+        </span>
+      ),
+    },
+    {
       key: 'act',
-      label: '',
+      label: 'Actions',
       render: (u) => (
         <div className="flex gap-2">
           <button
@@ -643,7 +648,7 @@ export default function UsersPage() {
         </div>
         {isLoading ? (
           <SkeletonTable
-            columns={['Name', 'Roles', 'Department', 'Reports to', 'Two-step', 'Last login', 'Created', 'Status', '']}
+            columns={['User', 'Role & department', 'Status', 'Activity', 'Actions']}
             rows={8}
           />
         ) : (

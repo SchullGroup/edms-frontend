@@ -18,6 +18,14 @@ export function lastDaysRange(days: number): { from: string; to: string } {
   return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
+/** The `days` days just before `lastDaysRange(days)`, for a period-on-period trend. */
+export function priorDaysRange(days: number): { from: string; to: string } {
+  const now = Date.now();
+  const to = new Date(now - days * 86400000);
+  const from = new Date(now - (2 * days - 1) * 86400000);
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
+
 /** On-time vs late stage results over a date range. */
 export const useSlaOutcomeSummary = (
   params: SlaOutcomeSummaryFilters,

@@ -1,184 +1,138 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useDepartmentNames } from '@/apis/hooks/useDepartments';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useStore } from '@/store/useStore';
 import { useUIStore } from '@/store/useUIStore';
-import { useTasks, useReassignTask } from '@/apis/hooks/useTasks';
-import {
-  useTeamStatusMatrix,
-  useOpenItemsByCabinet,
-} from '@/apis/hooks/useWorkflowInstances';
-import { ReassignAssigneePicker } from '@/components/common/ReassignAssigneePicker';
+import { useDepartmentNames } from '@/apis/hooks/useDepartments';
+import { useApprovalTasks, useTasks } from '@/apis/hooks/useTasks';
+import { useAccessRequestsInbox } from '@/apis/hooks/useDocuments';
+import { useBottlenecksAgeing } from '@/apis/hooks/useWorkflowInstances';
+import { lastDaysRange, priorDaysRange, useSlaOutcomeSummary } from '@/apis/hooks/useSla';
 import { usePermissions } from '@/hooks/usePermissions';
-import { SkeletonPage, SkeletonTaskRows } from '@/components/common/Skeleton';
+import { evaluateRouteAccess } from '@/lib/routeAccess';
+import { SkeletonKpis, SkeletonTaskRows } from '@/components/common/Skeleton';
+import { ErrorMessage } from '@/components/common/ErrorMessage';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icons';
-import { Table, Column } from '@/components/ui/Table';
-import { Avatar } from '@/components/ui/Avatar';
-import { HBarChart } from '@/components/ui/Charts';
-import { StatusBadge } from '@/components/ui/Badges';
-import { exportCsv } from '@/utils/exportCsv';
-import { Task, WorkflowTeamStatusMember } from '@/types/models';
-import { taskTitle } from '@/utils/workflowDocuments';
-import { isOverdue, taskHolderLabel } from '@/utils/supervisor';
-import { QuickAccessCard } from '@/components/dashboard/QuickAccessCard';
+import type { WorkflowBottleneckItem } from '@/types/models';
 
+const PERIOD_DAYS = 30;
+const OLDEST_COUNT = 5;
+
+const AGE_BADGE: Record<string, string> = {
+  breached: 'b-status-overdue',
+  due_soon: 'b-status-pending',
+};
+
+/** Who holds an item: a person, a role pool ("Supervisor queue") or nobody. */
+function holderLabel(item: WorkflowBottleneckItem): string {
+  if (item.assignmentType !== 'role') return item.assigneeName || 'Unassigned';
+  // Role names arrive as keys ("client_admin"); show them as words.
+  const role = (item.assignedRoleName ?? item.assigneeName).replace(/_/g, ' ');
+  return `${role.charAt(0).toUpperCase()}${role.slice(1)} queue`;
+}
+
+/**
+ * Team Overview: what's waiting on the supervisor, and where the team is slipping.
+ * Team figures all come from bottlenecks-ageing (workflow items), so they agree with that page.
+ */
 export default function SupervisorDashboard() {
-  const router = useRouter();
-  const { setPageTitle, openModal, openDrawer, closeDrawer, addToast } = useUIStore();
-
-  // Both endpoints omit departmentId — the backend resolves the supervisor's
-  // own department automatically. See the Workflow Module API guide §4.
-  const { data: members, isLoading: isLoadingMatrix } = useTeamStatusMatrix();
-  const { data: byCabinetData, isLoading: isLoadingByCabinet } = useOpenItemsByCabinet();
+  const { setPageTitle } = useUIStore();
+  const currentUser = useStore((s) => s.currentUser);
   const departmentName = useDepartmentNames();
-
-  const byCabinet = byCabinetData?.cabinets || [];
-
-  const reassignTask = useReassignTask();
+  const { can, granted } = usePermissions();
 
   useEffect(() => {
     setPageTitle('Team Overview');
   }, [setPageTitle]);
 
-  if (isLoadingMatrix || isLoadingByCabinet) return <SkeletonPage kpis={4} columns={['Member', 'Open', 'Overdue', 'Due today']} rows={5} />;
+  // Each "Waiting on you" row shows only if its list would open, so no count 403s.
+  const canOpen = (path: string) =>
+    evaluateRouteAccess(path, {
+      roles: currentUser?.roles ?? [],
+      permissions: granted,
+      scopedPermissions: (currentUser?.permissions ?? []).filter(
+        (p): p is string => typeof p === 'string',
+      ),
+    }).allowed;
+  const showApprovals = canOpen('/supervisor/approvals');
+  const showOverdue = can('task', 'view') && canOpen('/staff/workflows');
+  const showAccess = canOpen('/admin/access-requests');
+  const showTeam = can('workflow_instance', 'view');
+  const showOnTime = can('task', 'view');
 
-  const team = members || [];
-
-  const totals = team.reduce(
-    (acc, m) => ({
-      pending: acc.pending + m.pending,
-      inProgress: acc.inProgress + m.inProgress,
-      overdue: acc.overdue + m.overdue,
-      closed: acc.closed + m.closed,
-    }),
-    { pending: 0, inProgress: 0, overdue: 0, closed: 0 },
+  const approvalsQuery = useApprovalTasks(
+    { scope: 'all', status: 'pending', limit: 1 },
+    { enabled: showApprovals },
+  );
+  // Same query as the staff Overdue tile, so the count matches the list it opens.
+  const overdueQuery = useTasks(
+    { scope: 'mine', overdue: true, limit: 1 },
+    { enabled: showOverdue },
+  );
+  const accessQuery = useAccessRequestsInbox(
+    { status: 'pending', limit: 1 },
+    { enabled: showAccess },
   );
 
-  const tiles = [
-    { label: 'Pending', val: totals.pending, cls: 't-pending', ico: 'clock' },
-    { label: 'In Progress', val: totals.inProgress, cls: 't-progress', ico: 'pulse' },
-    { label: 'Closed (30d)', val: totals.closed, cls: 't-closed', ico: 'check' },
-    { label: 'Overdue / SLA', val: totals.overdue, cls: 't-overdue', ico: 'alert' },
-  ];
+  const ageingQuery = useBottlenecksAgeing({ page: 1, limit: OLDEST_COUNT }, { enabled: showTeam });
+  const onTimeQuery = useSlaOutcomeSummary(lastDaysRange(PERIOD_DAYS), { enabled: showOnTime });
+  const onTimeBeforeQuery = useSlaOutcomeSummary(priorDaysRange(PERIOD_DAYS), {
+    enabled: showOnTime,
+  });
 
-  const byCab = byCabinet
-    .filter((c) => c.openItems > 0)
-    .map((c) => ({
-      label: c.cabinetName,
-      value: c.openItems,
-      color: 'var(--brand-primary-light)',
-      onClick: () => router.push(`/staff/cabinets?cabinetId=${c.cabinetId}`),
-    }));
+  const summary = ageingQuery.data?.summary;
+  const oldest = ageingQuery.data?.items ?? [];
 
-  const handleReassignModal = (t: Task, onDone?: () => void) => {
-    let newAssignee = '';
-    let newName = '';
-    let note = '';
-    const title = taskTitle(t);
+  const outcomes = onTimeQuery.data;
+  const before = onTimeBeforeQuery.data;
+  const onTime = outcomes && outcomes.total > 0 ? Math.round(outcomes.onTimeRate * 100) : null;
+  const onTimeBefore = before && before.total > 0 ? Math.round(before.onTimeRate * 100) : null;
 
-    openModal({
-      title: `Reassign — ${title.slice(0, 44)}${title.length > 44 ? '…' : ''}`,
-      body: (
-        <div>
-          <div className="field mb-3">
-            <label>Current Assignee</label>
-            <input
-              className="input"
-              disabled
-              value={taskHolderLabel(t, departmentName, 'Unassigned')}
-            />
-          </div>
-          <div className="field mb-3">
-            <label>
-              New Assignee <span className="req">*</span>
-            </label>
-            <ReassignAssigneePicker
-              excludeId={t.assigneeId}
-              onPick={(u) => {
-                newAssignee = u?.id ?? '';
-                newName = u?.name ?? '';
-              }}
-            />
-          </div>
-          <div className="field">
-            <label>Handover Note</label>
-            <input
-              className="input"
-              placeholder="Optional handover note"
-              onChange={(e) => (note = e.target.value)}
-            />
-          </div>
-        </div>
-      ),
-      actions: [
-        { label: 'Cancel' },
-        {
-          label: 'Reassign',
-          kind: 'btn-primary',
-          onClick: () => {
-            if (!newAssignee) {
-              addToast('Please select a new assignee', 'error');
-              return false;
-            }
-            return reassignTask
-              .mutateAsync({ id: t.id, assigneeId: newAssignee, note: note || undefined })
-              .then(() => {
-                addToast(`Reassigned to ${newName}`, 'success');
-                if (onDone) onDone();
-              })
-              .catch(() => false);
-          },
-        },
-      ],
-    });
-  };
+  let trend = { text: '', dir: '' };
+  if (onTime === null) trend.text = `No completed stages in the last ${PERIOD_DAYS} days`;
+  else if (onTimeBefore === null) trend.text = `No results the ${PERIOD_DAYS} days before`;
+  else if (onTime === onTimeBefore) trend.text = `Same as the ${PERIOD_DAYS} days before`;
+  else
+    trend = {
+      text: `${onTime > onTimeBefore ? '▲' : '▼'} from ${onTimeBefore}%`,
+      dir: onTime > onTimeBefore ? 'up' : 'down',
+    };
 
-  const handleRowClick = (m: WorkflowTeamStatusMember) => {
-    openDrawer({
-      title: `${m.memberName} — open items`,
-      body: (
-        <MemberDrawerBody
-          member={m}
-          onReassign={(t) => handleReassignModal(t, () => handleRowClick(m))}
-          onOpenDocument={(instanceId, taskId) => {
-            closeDrawer();
-            router.push(`/workflow-instances/${instanceId}?task=${taskId}`);
-          }}
-        />
-      ),
-    });
-  };
-
-  const cols: Column<WorkflowTeamStatusMember>[] = [
-    {
-      key: 'memberName',
-      label: 'Member',
-      render: (r) => (
-        <span className="flex items-center gap-2">
-          <Avatar user={{ name: r.memberName }} sm />
-          <span>
-            <div style={{ fontWeight: 700 }}>{r.memberName}</div>
-            <div className="caption">{r.departmentName || '—'}</div>
-          </span>
-        </span>
-      ),
+  const waiting = [
+    showApprovals && {
+      key: 'approvals',
+      label: 'Approvals',
+      href: '/supervisor/approvals',
+      query: approvalsQuery,
+      count: approvalsQuery.data?.pagination?.total ?? 0,
+      urgent: false,
     },
-    { key: 'pending', label: 'Pending', num: true, sortable: true },
-    { key: 'inProgress', label: 'In Prog.', num: true, sortable: true },
-    {
+    showOverdue && {
       key: 'overdue',
-      label: 'Overdue',
-      num: true,
-      sortable: true,
-      render: (r) => (
-        <span style={r.overdue ? { color: 'var(--status-overdue)', fontWeight: 800 } : undefined}>
-          {r.overdue}
-        </span>
-      ),
+      label: 'Overdue tasks',
+      href: '/staff/workflows?status=overdue',
+      query: overdueQuery,
+      count: overdueQuery.data?.pagination?.total ?? 0,
+      urgent: true,
     },
-    { key: 'closed', label: 'Closed', num: true, sortable: true },
-  ];
+    showAccess && {
+      key: 'access',
+      label: 'Access requests',
+      href: '/admin/access-requests',
+      query: accessQuery,
+      count: accessQuery.data?.pagination?.total ?? 0,
+      urgent: false,
+    },
+  ].filter((w): w is Exclude<typeof w, false> => !!w);
+
+  const kpiCount = (showTeam ? 2 : 0) + (showOnTime ? 1 : 0);
+  const healthLoading =
+    (showTeam && ageingQuery.isLoading) || (showOnTime && onTimeQuery.isLoading);
+  const department = currentUser?.departmentId
+    ? departmentName(currentUser.departmentId)
+    : undefined;
 
   return (
     <div>
@@ -186,161 +140,139 @@ export default function SupervisorDashboard() {
         <div>
           <div className="page-title">Team Overview</div>
           <div className="page-sub">
-            Live status across your team and cabinets. Click through to detail.
+            {department ? `${department} · ` : ''}What needs you, and where your team is slipping.
           </div>
-        </div>
-        <div className="actions">
-          <button className="btn btn-primary" onClick={() => router.push('/supervisor/approvals')}>
-            <Icon name="approve" size={15} /> Approvals queue
-          </button>
         </div>
       </div>
 
-      <div className="grid cols-4 mb-4">
-        {tiles.map((t, i) => (
-          <div
-            key={i}
-            className={`tile ${t.cls}`}
-            role="button"
-            tabIndex={0}
-            onClick={() =>
-              router.push(
-                t.label.startsWith('Overdue') ? '/supervisor/bottlenecks' : '/supervisor/workload',
-              )
-            }
-          >
-            <div className="cnt">{t.val}</div>
-            <div className="lbl">
-              <Icon name={t.ico} size={13} /> {t.label}
-            </div>
+      {kpiCount > 0 &&
+        (healthLoading ? (
+          <SkeletonKpis count={kpiCount} />
+        ) : (
+          <div className={`grid cols-${kpiCount} mb-4`}>
+            {showTeam && (
+              <div className="card kpi">
+                <div className="kl">Past SLA</div>
+                {ageingQuery.isError ? (
+                  <div className="kv">—</div>
+                ) : (
+                  <div
+                    className="kv"
+                    style={summary?.breachedItems ? { color: 'var(--status-overdue)' } : undefined}
+                  >
+                    {summary?.breachedItems ?? 0}{' '}
+                    <span className="kv-of">of {summary?.totalOpenItems ?? 0} open</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {showOnTime && (
+              <div className="card kpi">
+                <div className="kl">On time, last {PERIOD_DAYS} days</div>
+                <div
+                  className="kv"
+                  title={
+                    outcomes ? `${outcomes.onTime} of ${outcomes.total} stages on time` : undefined
+                  }
+                >
+                  {onTime === null ? '—' : `${onTime}%`}
+                </div>
+                <div className={`kd ${trend.dir}`}>
+                  {onTimeQuery.isError ? 'Failed to load' : trend.text}
+                </div>
+              </div>
+            )}
+            {showTeam && (
+              <div className="card kpi">
+                <div className="kl">Oldest item</div>
+                <div className="kv">
+                  {oldest[0]
+                    ? `${oldest[0].ageDays} day${oldest[0].ageDays === 1 ? '' : 's'}`
+                    : '—'}
+                </div>
+                {!ageingQuery.isError && !oldest[0] && <div className="kd">Nothing open</div>}
+              </div>
+            )}
           </div>
         ))}
-      </div>
 
-      <div className="dash-body">
-        <div className="card">
-          <div className="card-head">
-            <span className="h3">Member × status matrix</span>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => exportCsv('Team_Overview_Matrix', team)}
-            >
-              Export
-            </button>
-          </div>
-          <Table cols={cols} rows={team} onRow={handleRowClick} />
-        </div>
-
-        <div className="card">
-          <div className="card-head">
-            <span className="h3">Open items by cabinet</span>
-          </div>
-          <div className="card-body">
-            <HBarChart items={byCab} />
-          </div>
-        </div>
-      </div>
-      <div className="mt-4">
-        <QuickAccessCard showActions={false} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * The matrix only carries counts, so a member's open items are fetched here
- * on demand when their drawer opens — a standalone component (not a closure
- * inside the page) so it keeps rendering itself as the query resolves,
- * independent of whatever else re-renders the dashboard.
- */
-function MemberDrawerBody({
-  member,
-  onReassign,
-  onOpenDocument,
-}: {
-  member: WorkflowTeamStatusMember;
-  onReassign: (task: Task) => void;
-  /** Opens the task on its workflow page. */
-  onOpenDocument: (workflowInstanceId: string, taskId: string) => void;
-}) {
-  const { can } = usePermissions();
-  const canReassign = can('task', 'reassign');
-  const { data, isLoading } = useTasks({
-    assigneeId: member.memberId,
-    status: 'pending',
-    scope: 'all',
-    limit: 100,
-  });
-  const tasks = data?.data || [];
-
-  return (
-    <div>
-      <div className="flex items-center gap-3 mb-4">
-        <Avatar user={{ name: member.memberName }} />
-        <div>
-          <b style={{ fontSize: '14px', color: 'var(--ink)' }}>{member.memberName}</b>
-          <div className="caption">
-            {member.memberEmail} · {member.departmentName || 'No department'}
-          </div>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <SkeletonTaskRows rows={4} />
-      ) : tasks.length > 0 ? (
-        <div className="rowlist">
-          {tasks.map((t) => {
-            const overdue = isOverdue(t);
-            return (
-              <div
-                key={t.id}
-                className="task-row"
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: '9px',
-                  marginBottom: '8px',
-                  padding: '12px 14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  cursor: 'pointer',
-                }}
-                onClick={() => onOpenDocument(t.workflowInstanceId, t.id)}
-              >
-                <div className="task-main">
-                  <div
-                    className="task-title"
-                    style={{ fontWeight: 600, fontSize: '13px', marginBottom: '6px' }}
-                  >
-                    {taskTitle(t)}
-                  </div>
-                  <div className="task-meta flex items-center gap-2">
-                    <StatusBadge status={overdue ? 'Overdue' : 'Pending'} />
-                  </div>
-                </div>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  style={{ marginLeft: '12px', flexShrink: 0 }}
-                  disabled={!canReassign}
-                  title={!canReassign ? "You don't have permission to reassign tasks" : undefined}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onReassign(t);
-                  }}
+      <div className={waiting.length && showTeam ? 'overview-body' : 'grid'}>
+        {waiting.length > 0 && (
+          <div className="card">
+            <div className="card-head">
+              <span className="h3">Waiting on you</span>
+            </div>
+            <div className="rowlist">
+              {waiting.map((w) => (
+                <Link
+                  key={w.key}
+                  href={w.href}
+                  className={`wait-row${w.urgent && w.count > 0 ? ' urgent' : ''}`}
+                  aria-label={`${w.query.isLoading ? '' : `${w.count} `}${w.label}`}
                 >
-                  Reassign
-                </button>
+                  <span className="wait-stack">
+                    <span className="wn">
+                      {w.query.isLoading ? '…' : w.query.isError ? '—' : w.count}
+                    </span>
+                    <span className="wl">{w.label}</span>
+                  </span>
+                  <Icon name="chevR" size={16} />
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showTeam && (
+          <div className="card">
+            <div className="card-head">
+              <span className="h3">Oldest open items</span>
+              <Link href="/supervisor/bottlenecks" className="btn btn-secondary btn-sm">
+                See all
+              </Link>
+            </div>
+            {ageingQuery.isLoading ? (
+              <SkeletonTaskRows rows={OLDEST_COUNT} />
+            ) : ageingQuery.isError ? (
+              <div style={{ padding: '32px' }}>
+                <ErrorMessage
+                  message="Failed to load open items"
+                  retry={() => ageingQuery.refetch()}
+                />
               </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="empty" style={{ padding: '32px 16px' }}>
-          <Icon name="approve" size={32} />
-          <div className="h3 mt-4 mb-2">No open items</div>
-          <p className="caption">This member’s queue is clear.</p>
-        </div>
-      )}
+            ) : oldest.length ? (
+              <div className="rowlist">
+                {oldest.map((item) => (
+                  <Link
+                    key={`${item.workflowInstanceId}:${item.documentId}`}
+                    href={`/workflow-instances/${item.workflowInstanceId}`}
+                    className="task-row"
+                  >
+                    <div className="task-main">
+                      <div className="task-title">{item.documentTitle}</div>
+                      <div className="task-meta">
+                        {item.currentStageName} · {holderLabel(item)}
+                      </div>
+                    </div>
+                    <span
+                      className={`badge ${AGE_BADGE[item.slaStatus] ?? 'b-status-not-started'}`}
+                      title={`${item.ageDays} days old`}
+                    >
+                      {item.ageDays} d
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon="approve"
+                title="Nothing open"
+                message="Your team has no workflow items in progress."
+              />
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

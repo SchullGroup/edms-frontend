@@ -833,6 +833,18 @@ lifecycle.
       designer's **Manager** option and routing's **Submitted for**. Request shapes checked
       against live and clicked through by the product owner 2026-11-03. A submitter with no manager leaves a
       stuck `pending` workflow (backend ask, doc 01 §7)
+- [x] Assign a stage to a user group — edms-backend PR #75 (`b9c2d6c`, live 2026-11-20):
+      `/user-groups` (create, add and remove members; `client_admin`, `schulltech_admin`) and a
+      stage's `group_id`; every active member can act on the task, nobody can delegate it.
+      Frontend since 2026-11-20 (not verified live): group members can act on the workflow page,
+      Delegate is disabled there, and group stages show the group's name (since 2026-11-23,
+      from `assignedGroup`; membership comes from `canAction`). Since 2026-11-23 (on PR #76):
+      **Admin → User Groups** creates, renames, deactivates and reactivates groups and adds
+      and removes members, and the designer's **Group** tab assigns a stage to one.
+      Verified live 2026-11-23: members added to "Reviewers" from its page, Finance Invoice
+      Workflow v2 gives Staff Review to it, and an invoice went through end to end (both
+      members saw the task, one reviewed, the supervisor approved). Create, rename, remove and
+      deactivate are checked only against mocked responses
 - [x] Published definitions are immutable; edits require a new version. Since 2026-10-26
       (edms-backend PR #59, verified live) that is a real version: ⋮ → **New version** copies
       the published workflow into draft v+1 of the same family, and publishing it archives
@@ -1118,11 +1130,17 @@ directly instead of walking every page of `/tasks` and rolling counts up in the 
 aggregation stopgap; a member's row still lazily fetches their actual task list (capped at
 100) only once expanded/clicked, for the reassign action.
 
+**2026-11-23:** Team Overview no longer shows per-person counts. It answers "what needs me,
+and where is the team slipping" from `bottlenecks-ageing`, the on-time trend and the
+supervisor's own queues; `/supervisor/workload` is where load is compared and rebalanced.
+
 **Acceptance criteria**
 - [x] `/supervisor/workload` renders per-person counts from a server-side aggregate
       (`GET /tasks/workload`), not a client-side walk of every task
-- [x] `/supervisor` (Team Overview) renders the member × status matrix and open-items-by-
-      cabinet from their own dedicated endpoints
+- [x] `/supervisor` (Team Overview) shows team health, what's waiting on the supervisor and
+      the oldest open items, from server-side endpoints *(rebuilt 2026-11-23: the member ×
+      status matrix counted uploads, not work held, so per-person load now lives on
+      `/supervisor/workload` only; see BE-33)*
 - [x] Reassignment via `PATCH /tasks/:id/reassign`, gated by `task:reassign` (was `TASK_REASSIGN_ROLES`)
 - [x] Supervisor omits `departmentId`; the backend resolves it — no department picker in
       the UI (per the API guide's §4 rule)
@@ -1160,8 +1178,8 @@ resolved 2026-09-21.)*
       (summary + ageing/stage distributions + paginated detail rows) rather than computing
       ageing from `SEED` documents. `slaStatus` (`healthy | due_soon | breached | paused |
       not_started`) and `workflowStatus` render as two separate badges, per the API guide's
-      explicit "don't merge these" rule. The staff dashboard's Overdue/SLA tile and the
-      bottleneck banner now also draw on the persisted `GET /sla/breaches` event feed, not
+      explicit "don't merge these" rule. The bottleneck banner (and the staff dashboard's
+      Overdue tile until 2026-11-20, when it switched to `GET /tasks?overdue=true`) draws on the persisted `GET /sla/breaches` event feed, not
       ad-hoc `dueAt < now` math — though the guide itself notes the two totals
       (`bottlenecks-ageing.summary.breachedItems` vs `sla/breaches.pagination.total`) aren't
       guaranteed to agree, since one is a live calculation and the other a persisted event log
@@ -1472,6 +1490,9 @@ whole flow." — and the first three "missing" bullets below.
 - [x] First-login password set — `/set-password?token=…`
 - [x] Password reset — `POST /auth/forgot-password` + `POST /auth/reset-password`
 - [ ] Login rate limiting
+- [ ] Invite many at once — edms-backend PR #77 (`34a98d6`, live 2026-11-23): `POST /users/import`
+      takes a CSV or `.xlsx` (dry run, per-row results, same rules as `POST /users`) and
+      `GET /users/import/template` gives the blank file. No upload page yet
 
 ---
 

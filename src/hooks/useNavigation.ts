@@ -424,6 +424,13 @@ export const useNavigation = () => {
               anyPermissions: ['workflow:edit'],
             },
             {
+              route: '/admin/user-groups',
+              label: 'User Groups',
+              icon: 'users',
+              // Managing groups needs `workflow:create`, the same key their routes check.
+              anyPermissions: ['workflow:create'],
+            },
+            {
               route: '/admin/workflows/instances',
               label: 'Workflow Monitor',
               icon: 'pulse',
