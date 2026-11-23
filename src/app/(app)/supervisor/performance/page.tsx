@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useUIStore } from '@/store/useUIStore';
 import { exportCsv } from '@/utils/exportCsv';
@@ -8,7 +8,7 @@ import { LineChart, Sparkline } from '@/components/ui/Charts';
 import { Table, Column } from '@/components/ui/Table';
 import { SkeletonKpis, SkeletonTable } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
-import { lastDaysRange, useSlaOutcomeSummary } from '@/apis/hooks/useSla';
+import { lastDaysRange, priorDaysRange, useSlaOutcomeSummary } from '@/apis/hooks/useSla';
 import { taskKeys, useTaskWorkload } from '@/apis/hooks/useTasks';
 import { tasksService } from '@/apis/services/tasks.service';
 import { fetchAllPages } from '@/apis/utils/fetchAllPages';
@@ -51,11 +51,7 @@ export default function TeamPerformancePage() {
   }, [setPageTitle]);
 
   const period = lastDaysRange(PERIOD_DAYS);
-  const previous = useMemo(() => {
-    const to = new Date(Date.parse(period.from) - DAY_MS);
-    const from = new Date(to.getTime() - (PERIOD_DAYS - 1) * DAY_MS);
-    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
-  }, [period.from]);
+  const previous = priorDaysRange(PERIOD_DAYS);
 
   const outcomesQuery = useSlaOutcomeSummary({ ...period, groupBy: 'user' });
   const previousOutcomesQuery = useSlaOutcomeSummary(previous);

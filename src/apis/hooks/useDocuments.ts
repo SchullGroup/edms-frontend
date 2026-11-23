@@ -322,11 +322,15 @@ export function useDocumentAccessRequests(id?: string) {
   });
 }
 
-/** client_admin-only admin inbox across every document. */
-export function useAccessRequestsInbox(filters: AccessRequestInboxFilters = {}) {
+/** Access-request inbox across every document; needs `document_access_request:view`. */
+export function useAccessRequestsInbox(
+  filters: AccessRequestInboxFilters = {},
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: accessRequestInboxKeys.list(filters),
     queryFn: () => documentsService.getAccessRequestsInbox(filters),
+    enabled: options?.enabled ?? true,
   });
 }
 

@@ -497,7 +497,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in, land on Team Overview | `/supervisor` | ✅ all data from the API; loaded live 2026-11-16 (the no-op audit hook that kept it 🟨 was deleted) |
+| 1 | Log in, land on Team Overview | `/supervisor` | ✅ all data from the API. **Rebuilt 2026-11-23, loaded live:** what's waiting on the supervisor (approvals, their overdue tasks, access requests, each opening its list), team health from `bottlenecks-ageing` and the on-time trend, and the oldest open items with who holds them. *(Was upload-count tiles and a member matrix that disagreed with Bottlenecks; BE-33.)* |
 | 2 | Open the approvals queue | `/supervisor/approvals` | ✅ |
 | 3 | Open a document, review | `/doc/[id]` | ✅ download via signed `fileUrl`, gated and audited; comments go on the workflow action. *(Was "⛔ no download, ⛔ comments 404".)* |
 | 4 | Approve with a note | `POST /tasks/:id/action` | ✅ |

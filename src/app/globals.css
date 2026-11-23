@@ -259,6 +259,20 @@ a:hover { text-decoration: underline; }
 .kpi .kl { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .09em; order: 1; margin-bottom: 9px; }
 .kpi .kd { font-size: 11.5px; font-weight: 700; margin-top: 7px; display: inline-flex; align-items: center; gap: 4px; order: 3; }
 .kpi .kd.up { color: var(--status-closed); } .kpi .kd.down { color: var(--status-overdue); }
+.kpi .kv-of { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+
+/* Supervisor Team Overview: "Waiting on you" beside the oldest open items */
+.overview-body { display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px; align-items: start; }
+@media (max-width: 1023px) { .overview-body { grid-template-columns: 1fr; } }
+.wait-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); color: var(--ink); text-decoration: none; transition: background .1s; }
+.wait-row:last-child { border-bottom: 0; }
+.wait-row:hover { background: color-mix(in srgb, var(--ink) 6%, var(--panel)); }
+.wait-row svg { color: var(--muted); flex-shrink: 0; }
+.wait-stack { display: flex; flex-direction: column; gap: 2px; }
+.wait-row .wn { font-size: 26px; font-weight: 800; line-height: 1.1; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.wait-row .wl { font-size: 13px; color: var(--muted); }
+.wait-row.urgent .wn { color: var(--status-overdue); }
+a.task-row { color: var(--ink); text-decoration: none; }
 
 /* ---------- Badges / chips ---------- */
 .badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 99px; padding: 2.5px 9px; font-size: 10.5px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; border: 1px solid transparent; }

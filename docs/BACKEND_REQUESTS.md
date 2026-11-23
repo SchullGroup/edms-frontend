@@ -4,7 +4,7 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-11-20 (BE-31 and BE-32 added) · 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29, BE-30 and two questions added)
+**Raised:** 2026-08-29 · **Updated:** 2026-11-23 (BE-33 and BE-34 added) · 2026-11-20 (BE-31 and BE-32 added) · 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29, BE-30 and two questions added)
 **Frontend:** `edms-frontend` @ `dev`
 **Backend checked against:** `edms-backend` @ `origin/dev` (`e033b58`, re-checked 2026-11-16)
 
@@ -430,6 +430,36 @@ groups and add or remove members, but:
 `assignedGroup: { id, name }` on task payloads; a `canAction` flag (or the caller's group ids
 on `/auth/me`); `PATCH /user-groups/:groupId` (`name`, `description`, `isActive`). The frontend
 then builds the groups page and the designer's group option, and drops the extra request.
+
+---
+
+## 🟡 BE-33 · `team-status-matrix` counts uploads, not work held — **new, 2026-11-23**
+
+Checked against `edms-backend` `dev` at `b9c2d6c`. `GET /workflow-instances/team-status-matrix`
+counts each member's **uploaded** documents by document status, inner-joined on documents. So:
+
+1. A reviewer who never uploads doesn't appear, however much work they hold (the Finance
+   supervisor's matrix left out a Workload member with 0 uploads).
+2. "Closed" has no date window, so it counts every closed upload ever.
+3. Its totals disagree with `bottlenecks-ageing` (open 10 against 12, overdue 6 against 11 on
+   2026-11-23).
+
+Since 2026-11-23 Team Overview (`/supervisor`) no longer calls it. Management Reports still does
+(`workflowInstancesService.getTeamStatusMatrix`, the per-member report).
+
+**Ask:** either retire it once Reports moves off it, or count by **current holder** (open
+tasks per assignee, role pools separately) and take a real `from`/`to` for closed items.
+
+---
+
+## 🟡 BE-34 · Stage names in `GET /sla/outcomes/summary?groupBy=stage` — **new, 2026-11-23**
+
+Checked against `b9c2d6c`: with `groupBy=stage`, `label` is the raw stage id (`o.stage` in
+`tasks.repository.ts`), e.g. `stage_1789748379694`, not the stage name from the definition.
+No page groups by stage yet, so nothing shows it today.
+
+**Ask:** return the stage name from the workflow definition as `label` (keeping the id as
+`key`), as `bottlenecks-ageing` does with `stageName`.
 
 ---
 

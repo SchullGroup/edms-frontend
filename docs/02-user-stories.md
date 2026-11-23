@@ -1124,11 +1124,17 @@ directly instead of walking every page of `/tasks` and rolling counts up in the 
 aggregation stopgap; a member's row still lazily fetches their actual task list (capped at
 100) only once expanded/clicked, for the reassign action.
 
+**2026-11-23:** Team Overview no longer shows per-person counts. It answers "what needs me,
+and where is the team slipping" from `bottlenecks-ageing`, the on-time trend and the
+supervisor's own queues; `/supervisor/workload` is where load is compared and rebalanced.
+
 **Acceptance criteria**
 - [x] `/supervisor/workload` renders per-person counts from a server-side aggregate
       (`GET /tasks/workload`), not a client-side walk of every task
-- [x] `/supervisor` (Team Overview) renders the member × status matrix and open-items-by-
-      cabinet from their own dedicated endpoints
+- [x] `/supervisor` (Team Overview) shows team health, what's waiting on the supervisor and
+      the oldest open items, from server-side endpoints *(rebuilt 2026-11-23: the member ×
+      status matrix counted uploads, not work held, so per-person load now lives on
+      `/supervisor/workload` only; see BE-33)*
 - [x] Reassignment via `PATCH /tasks/:id/reassign`, gated by `task:reassign` (was `TASK_REASSIGN_ROLES`)
 - [x] Supervisor omits `departmentId`; the backend resolves it — no department picker in
       the UI (per the API guide's §4 rule)

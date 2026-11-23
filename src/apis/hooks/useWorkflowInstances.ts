@@ -58,19 +58,7 @@ export const useWorkflowInstanceStatusCounts = (
   });
 };
 
-/** Supervisor Team Overview, by member. Omit `departmentId` for a supervisor. */
-export const useTeamStatusMatrix = (
-  params?: DepartmentScopedParams,
-  options?: { enabled?: boolean },
-) => {
-  return useQuery({
-    queryKey: ['workflowInstances', 'teamStatusMatrix', params],
-    queryFn: () => workflowInstancesService.getTeamStatusMatrix(params),
-    enabled: options?.enabled ?? true,
-  });
-};
-
-/** Supervisor Team Overview, by cabinet. */
+/** Open items by cabinet (Management Overview). */
 export const useOpenItemsByCabinet = (
   params?: DepartmentScopedParams,
   options?: { enabled?: boolean },
