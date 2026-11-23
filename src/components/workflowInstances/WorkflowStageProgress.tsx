@@ -64,6 +64,9 @@ export function WorkflowStageProgress({
       .map((t) => taskHolderLabel(t, departmentName));
     return names.length ? [...new Set(names)].join(', ') : tasks ? null : currentActorName;
   };
+  // A stage definition has only `group_id`; any task raised there names the group.
+  const groupNameAt = (stageId: string) =>
+    tasks?.find((t) => t.stage === stageId && t.assignedGroup?.name)?.assignedGroup?.name;
   const multiDoc = positions.length > 1;
   const onHold = status === 'on_hold';
 
@@ -104,7 +107,7 @@ export function WorkflowStageProgress({
                     : s.dynamic_assignee
                       ? "Submitter's manager"
                       : s.group_id
-                        ? 'User group'
+                        ? groupNameAt(s.id) || 'User group'
                         : s.role || ''}
                   {state === 'current' && due && (
                     <span
