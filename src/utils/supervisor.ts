@@ -14,21 +14,20 @@ import { taskDueAt, taskUrgency } from '@/utils/workflowDocuments';
  */
 
 /** Whether a task is the user's, as `buildTaskParticipantFilter` decides. Group membership
- *  isn't exposed, so a group task counts only if `myTaskIds` (from `GET /tasks`) has it. */
+ *  isn't exposed, so a group task relies on the backend's `canAction`. */
 export function isTaskForUser(
   task: Pick<
     Task,
-    | 'id'
     | 'assigneeId'
     | 'assignedRoleId'
     | 'assignedRole'
     | 'assignedDepartmentId'
     | 'assignedGroupId'
+    | 'canAction'
   >,
   user: { id: string; roles?: string[]; departmentId?: string | null },
-  myTaskIds?: ReadonlySet<string>,
 ): boolean {
-  if (task.assignedGroupId) return !!myTaskIds?.has(task.id);
+  if (task.assignedGroupId) return !!task.canAction;
   const department = task.assignedDepartmentId ?? null;
   const inDepartment = !department || department === user.departmentId;
   return (
@@ -38,15 +37,18 @@ export function isTaskForUser(
   );
 }
 
-/** Who holds a task: person, role, "Role · Department", department, or "User group"
- *  (tasks carry no group name). `departmentName` resolves an id (`useDepartmentNames`). */
+/** Who holds a task: person, role, "Role · Department", department, or the group's name.
+ *  `departmentName` resolves an id (`useDepartmentNames`). */
 export function taskHolderLabel(
-  task: Pick<Task, 'assignee' | 'assignedRole' | 'assignedDepartmentId' | 'assignedGroupId'>,
+  task: Pick<
+    Task,
+    'assignee' | 'assignedRole' | 'assignedDepartmentId' | 'assignedGroupId' | 'assignedGroup'
+  >,
   departmentName: (id: string) => string | undefined,
   fallback = 'Unassigned',
 ): string {
   if (task.assignee?.name) return task.assignee.name;
-  if (task.assignedGroupId) return 'User group';
+  if (task.assignedGroupId) return task.assignedGroup?.name || 'User group';
   const department = task.assignedDepartmentId
     ? departmentName(task.assignedDepartmentId) || 'a department'
     : null;

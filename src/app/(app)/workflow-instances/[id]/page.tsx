@@ -9,7 +9,7 @@ import { useUIStore } from '@/store/useUIStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useConfidentialityClearance } from '@/hooks/useConfidentialityClearance';
 import { useRequestAccessPrompt } from '@/hooks/useRequestAccessPrompt';
-import { useTask, useTasks } from '@/apis/hooks/useTasks';
+import { useTask } from '@/apis/hooks/useTasks';
 import { useDocument } from '@/apis/hooks/useDocuments';
 import { useWorkflowInstance } from '@/apis/hooks/useWorkflowInstances';
 import { useWorkflowTaskActions } from '@/components/workflowInstances/useWorkflowTaskActions';
@@ -123,17 +123,9 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
 
   const { data: instance, isLoading, isError, refetch } = useWorkflowInstance(id);
 
-  // Group membership isn't exposed: a group task is ours if `GET /tasks` (scope mine) lists it.
-  const hasGroupTask = !!instance?.tasks?.some((t) => t.assignedGroupId);
-  const { data: myInstanceTasks } = useTasks(
-    { workflowInstanceId: id, limit: 100 },
-    { enabled: hasGroupTask },
-  );
-  const myTaskIds = new Set(myInstanceTasks?.data?.map((t) => t.id));
-
   // Person, role (within the task's department, if it has one), a department-only
-  // task for someone in that department, or a group task listed above.
-  const isMineTask = (t: Task) => !!me && isTaskForUser(t, me, myTaskIds);
+  // task for someone in that department, or a group task the backend says we can action.
+  const isMineTask = (t: Task) => !!me && isTaskForUser(t, me);
   const departmentName = useDepartmentNames();
   // A workflow has no single current stage any more (edms-backend `919d0ef`):
   // its documents move on their own, so several tasks — at different stages, or

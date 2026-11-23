@@ -10,27 +10,33 @@ import { TaskRow } from '@/components/ui/TaskRow';
 import { Pagination } from '@/components/ui/Pagination';
 import { SkeletonTaskRows } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
-import { stageLabel } from '@/utils/supervisor';
-import { taskTitle, taskUrgency } from '@/utils/workflowDocuments';
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { taskUrgency } from '@/utils/workflowDocuments';
 import type { Task } from '@/types/models';
 
-/** `GET /tasks` caps `limit` at 100; search and urgency filter within that. */
+/** `GET /tasks` caps `limit` at 100; the urgency filter works within that. */
 const FETCH_LIMIT = 100;
 const PAGE_SIZE = 10;
 
 type StatusFilter = 'pending' | 'escalated' | 'overdue' | 'completed' | 'all';
 type SortFilter = 'dueAt' | 'oldest' | 'newest';
 
-/** Server-side: status and sort. `GET /tasks` has no search, so text and urgency apply here. */
+/** Status, sort, search and paging run on the server. `GET /tasks` has no urgency filter,
+ *  so with one set the card fetches the first 100 matches and filters and pages those. */
 export function MyTasksCard() {
   const router = useRouter();
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('pending');
   const [urgency, setUrgency] = useState('');
   const [sort, setSort] = useState<SortFilter>('dueAt');
   const [page, setPage] = useState(1);
 
-  const filters: TaskFilters = { scope: 'mine', limit: FETCH_LIMIT };
+  const serverPaged = !urgency;
+  const filters: TaskFilters = serverPaged
+    ? { scope: 'mine', page, limit: PAGE_SIZE }
+    : { scope: 'mine', limit: FETCH_LIMIT };
+  if (search) filters.search = search;
   if (status === 'overdue') filters.overdue = true;
   else if (status !== 'all') filters.status = status;
   if (sort === 'dueAt') filters.sort = 'dueAt';
@@ -39,30 +45,24 @@ export function MyTasksCard() {
     filters.order = sort === 'newest' ? 'desc' : 'asc';
   }
 
-  const { data, isLoading, isError, refetch } = useTasks(filters);
+  const { data, isLoading, isError, refetch } = useTasks(filters, { keepPrevious: true });
   const total = data?.pagination?.total ?? 0;
 
-  const matches = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (data?.data ?? []).filter((t: Task) => {
-      if (urgency && taskUrgency(t)?.toLowerCase() !== urgency) return false;
-      if (!q) return true;
-      const haystack = [
-        taskTitle(t),
-        t.workflowInstance?.workflowDefinition?.name,
-        stageLabel(t.stage),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [data, search, urgency]);
+  const matches = useMemo(
+    () =>
+      serverPaged
+        ? (data?.data ?? [])
+        : (data?.data ?? []).filter((t: Task) => taskUrgency(t)?.toLowerCase() === urgency),
+    [data, serverPaged, urgency],
+  );
 
-  const filtered = !!search.trim() || !!urgency;
-  const pageCount = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
+  const filtered = !!search || !!urgency;
+  const listed = serverPaged ? total : matches.length;
+  const pageCount = Math.max(1, Math.ceil(listed / PAGE_SIZE));
   const current = Math.min(page, pageCount);
-  const rows = matches.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const rows = serverPaged
+    ? matches
+    : matches.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
   // Any filter change starts again from page 1.
   const reset =
@@ -71,6 +71,7 @@ export function MyTasksCard() {
       set(v);
       setPage(1);
     };
+  const applySearch = useDebouncedCallback((value: string) => reset(setSearch)(value.trim()), 300);
 
   return (
     <div className="card">
@@ -91,10 +92,13 @@ export function MyTasksCard() {
           className="input"
           style={{ flex: '1 1 220px', height: '32px' }}
           type="search"
-          placeholder="Search document, workflow or stage…"
+          placeholder="Search document or workflow…"
           aria-label="Search my tasks"
-          value={search}
-          onChange={(e) => reset(setSearch)(e.target.value)}
+          value={searchInput}
+          onChange={(e) => {
+            setSearchInput(e.target.value);
+            applySearch(e.target.value);
+          }}
         />
         <select
           className="input"
@@ -151,14 +155,14 @@ export function MyTasksCard() {
           <Pagination
             page={current}
             totalPages={pageCount}
-            total={matches.length}
+            total={listed}
             limit={PAGE_SIZE}
             onPageChange={setPage}
           />
-          {total > FETCH_LIMIT && (
+          {!serverPaged && total > FETCH_LIMIT && (
             <p className="caption" style={{ padding: '0 20px 12px' }}>
-              Only the first {FETCH_LIMIT} of {total} tasks are listed here. Open View all for the
-              rest.
+              Urgency is checked on the first {FETCH_LIMIT} of {total} tasks only. Open View all for
+              the rest.
             </p>
           )}
         </>

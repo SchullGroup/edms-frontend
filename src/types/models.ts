@@ -804,13 +804,15 @@ export interface WorkflowBottleneckItem {
   currentStageName: string;
   workflowStatus: 'pending' | 'in_progress' | 'on_hold';
   currentTaskId: string | null;
-  assignmentType: 'user' | 'role' | 'unassigned';
+  assignmentType: 'user' | 'role' | 'group' | 'unassigned';
   assigneeId: string | null;
-  /** User name, role name, or `Unassigned`. */
+  /** User name, role name, group name, or `Unassigned`. */
   assigneeName: string;
   assigneeEmail: string | null;
   assignedRoleId: string | null;
   assignedRoleName: string | null;
+  assignedGroupId: string | null;
+  assignedGroupName: string | null;
   stageEnteredAt: string;
   ageDays: number;
   slaDueAt: string | null;
@@ -914,6 +916,11 @@ export interface Task {
   /** Set for a user-group stage (edms-backend PR #75); the task then has no
    *  assignee, role or department, and can't be delegated (409). */
   assignedGroupId?: string | null;
+  /** The group behind `assignedGroupId` (edms-backend PR #76). */
+  assignedGroup?: { id: string; name: string } | null;
+  /** Whether the caller may act on it now: theirs, open, workflow in progress and
+   *  `task:action` held (PR #76). Document access is checked by the action itself. */
+  canAction?: boolean;
   action?: string | null;
   status: TaskStatus;
   completedAt?: string | null;

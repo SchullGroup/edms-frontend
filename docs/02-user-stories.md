@@ -837,7 +837,8 @@ lifecycle.
       `/user-groups` (create, add and remove members; `client_admin`, `schulltech_admin`) and a
       stage's `group_id`; every active member can act on the task, nobody can delegate it.
       Frontend since 2026-11-20 (not verified live): group members can act on the workflow page,
-      Delegate is disabled there, and group stages read "User group". No groups page and no
+      Delegate is disabled there, and group stages show the group's name (since 2026-11-23,
+      from `assignedGroup`; membership comes from `canAction`). No groups page and no
       designer option yet. Since PR #76 (`34a98d6`, live 2026-11-23, BE-32) the backend
       returns a group's members, renames and deactivates groups, and names the group and
       `canAction` on tasks, so both can be built
