@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   tasksService,
   ApprovalTaskFilters,
@@ -15,11 +15,16 @@ export const taskKeys = {
   detail: (id: string) => [...taskKeys.all, 'detail', id] as const,
 };
 
-export const useTasks = (params?: TaskFilters, options?: { enabled?: boolean }) => {
+/** `keepPrevious` shows the last page while the next loads (paged or searched lists). */
+export const useTasks = (
+  params?: TaskFilters,
+  options?: { enabled?: boolean; keepPrevious?: boolean },
+) => {
   return useQuery({
     queryKey: taskKeys.list(params),
     queryFn: () => tasksService.getAll(params),
     enabled: options?.enabled ?? true,
+    placeholderData: options?.keepPrevious ? keepPreviousData : undefined,
   });
 };
 

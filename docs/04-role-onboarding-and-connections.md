@@ -287,6 +287,7 @@ This must be done in order; each step produces the input for the next.
 | 6a | Restrict sensitive folders: set a tier, stop inheriting the cabinet's access, grant the roles or users who keep it | `/staff/cabinets` → open folder → **Permissions** (the admin's **Cabinet** link lists only their own department's cabinets since 2026-11-05; a link from Cabinet Designer or a document opens any other) | `PATCH /folders/:id/confidentiality`, `PATCH /folders/:id/inheritance`, `POST /folders/:id/access` | ✅ new 2026-11-04 (edms-backend PR #65), verified live. Tier and inheritance are client_admin only; the cabinet's manager can manage grants with folder `edit` |
 | 7 | **Create users, assign dept + roles** | `/admin/users` | `POST /users`, `POST /users/:id/roles`, `POST /users/:id/invitation` | ✅ "Invite user" emails a set-password link; the user is **Pending** until they use it, then Active (PR #49). Resend invite is offered for pending users and for active users who never signed in |
 | 8 | **Design and publish workflows** | `/admin/workflows` → `/admin/workflows/[id]` | `POST /workflows`, `/publish` | ✅ authorized since 2026-09-04 (DRIFT-05). ⚠️ On a freshly seeded tenant only admins can *list* them — DRIFT-14 (the live tenant's roles hold the grant, re-tested 2026-10-16) |
+| 8a | Optional: set up user groups for stages that any of several people can pick up | `/admin/user-groups` → New group → add members; then the designer's **Group** tab | `GET`/`POST /user-groups`, `GET`/`PATCH /user-groups/:groupId`, `POST`/`DELETE /user-groups/:groupId/members` | ✅ (product owner's call 2026-11-23) adding members and a group stage verified live 2026-11-23 ("Reviewers" on Finance Invoice Workflow v2, one invoice reviewed and approved); create, rename, remove and deactivate checked only against mocked responses. Only active members whose role can act on tasks receive the work; an inactive or empty group makes routing to that stage fail (422) |
 | 9 | Set retention and confidentiality policy | `/admin/policies` | `GET`/`PATCH /sla/configuration`, `/sla/holidays` (SLA tab only) | 🟨 SLA tab real since 2026-10-08; retention and confidentiality tabs still `SEED.policies` |
 | 10 | Apply branding | `/admin/branding` | — | 🟥 saved in this browser only (since 2026-10-12); other users don't see it |
 | 11 | Publish a welcome circular | `/circulars/manage` (`/admin/circulars` redirects) | `POST /circulars`, `POST /circulars/:id/publish` | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
@@ -332,7 +333,7 @@ once the Access card shipped.
 | Configure branding | ❌ | 🟥 |
 | Publish circulars | ✅ `circular:*` at `global` scope | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | View the audit trail | ✅ | ✅ wired 2026-09-18 |
-| Two-step sign-in: require it per user, and reset it for someone who lost their device | ✅ | ✅ *(2026-11-13, `backend-dev-2026-11-12/03`, verified live)* `/admin/users`: a **Two-step** column (On · method / Not set up / Off, and Required); **Require two-step** / **Stop requiring two-step** (department or global `user:edit`, not on your own row); **Require two-step sign-in** on the invite form. The user sets it up at their next sign-in. **Reset two-step** (global `user:edit`) only for users who have it on: a still-required user sets it up again, otherwise the password alone signs them in. Their own status is under account menu → **Security** |
+| Two-step sign-in: require it per user, and reset it for someone who lost their device | ✅ | ✅ *(2026-11-13, `backend-dev-2026-11-12/03`, verified live)* `/admin/users`: a **Two-step** column (On · method / Not set up / Off, and Required; a line under Status since 2026-11-23); **Require two-step** / **Stop requiring two-step** (department or global `user:edit`, not on your own row); **Require two-step sign-in** on the invite form. The user sets it up at their next sign-in. **Reset two-step** (global `user:edit`) only for users who have it on: a still-required user sets it up again, otherwise the password alone signs them in. Their own status is under account menu → **Security** |
 
 ### Where it breaks, ranked
 
@@ -399,7 +400,7 @@ last is why the routing picker couldn't list workflows for a freshly seeded staf
 | # | Step | Screen | Status |
 |---|---|---|---|
 | 1 | Accept the emailed invitation and set a password, then log in | `/set-password` → `/` | ✅ *(was "Log in with the password the admin gave them"; invitations since 2026-09-18)* |
-| 2 | Land on the Staff Dashboard | `/staff` | ✅ tasks, workflow tiles and notifications from the API *(corrected 2026-10-12: notifications were listed ⛔ 404)* |
+| 2 | Land on the Staff Dashboard | `/staff` | ✅ workflow tiles, quick access and their tasks (search and filters since 2026-11-20) from the API; since 2026-11-20 each tile opens its list on `/staff/workflows`, and the notifications and performance cards are gone (bell and `/staff/performance` instead) *(corrected 2026-10-12: notifications were listed ⛔ 404)* |
 | 3 | Browse the cabinets they can see | `/staff/cabinets` | ✅ — and, in a cabinet delegated to them, manage folders, move documents, the metadata schema and access grants (added 2026-10-06, ✅ tested by the user 2026-10-08), and since 2026-11-04 a folder's own grants via **Permissions** when they hold folder `edit` (✅ verified live; each action needs the role permission **and** the cabinet level — see doc 05) |
 | 4 | Upload their first document | `/upload` | ✅ |
 | 5 | Watch it appear in the cabinet | `/staff/cabinets` | ✅ |
@@ -497,7 +498,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 
 | # | Step | Screen | Status |
 |---|---|---|---|
-| 1 | Log in, land on Team Overview | `/supervisor` | ✅ all data from the API; loaded live 2026-11-16 (the no-op audit hook that kept it 🟨 was deleted) |
+| 1 | Log in, land on Team Overview | `/supervisor` | ✅ all data from the API. **Rebuilt 2026-11-23, loaded live:** what's waiting on the supervisor (approvals, their overdue tasks, access requests, each opening its list), team health from `bottlenecks-ageing` and the on-time trend, and the oldest open items with who holds them. *(Was upload-count tiles and a member matrix that disagreed with Bottlenecks; BE-33.)* |
 | 2 | Open the approvals queue | `/supervisor/approvals` | ✅ |
 | 3 | Open a document, review | `/doc/[id]` | ✅ download via signed `fileUrl`, gated and audited; comments go on the workflow action. *(Was "⛔ no download, ⛔ comments 404".)* |
 | 4 | Approve with a note | `POST /tasks/:id/action` | ✅ |
@@ -515,7 +516,7 @@ circular `create`/`publish`/`withdraw` — but **not `workflow:view`** in the se
 | Approve / reject / request changes | ✅ | On the workflow page (`/workflow-instances/[id]`, 2026-10-02). Request changes asks which of the task's documents need changes — DRIFT-18 fixed. All three *(confirmed by the product owner’s testing, 2026-10-09)* |
 | Release a team member's overdue checkout | 🟨 | Notified via `checkout.overdue` when a same-department holder misses `expectedReturnAt`; "Force check in" on `/doc/[id]` if they hold `document_lock:delete` at department scope for that cabinet's department (2026-10-02, not yet verified e2e) |
 | Follow a notification to its item | 🟨 | Task and workflow links (`/tasks/:id`, `/workflow-instances/:id`) open the workflow page; `/documents/:id` opens the document page (DRIFT-17); previously 404'd |
-| Spot ageing work | ✅ | `/supervisor/bottlenecks` reads server-side ageing and breach counts; the staff dashboard reads `GET /sla/breaches`. *(Was 🟨: "breach count is permanently zero … `effStatus()` …" — `effStatus()` was deleted 2026-09-21, DRIFT-13.)* |
+| Spot ageing work | ✅ | `/supervisor/bottlenecks` reads server-side ageing and breach counts; `/staff/performance` reads `GET /sla/breaches`; the staff dashboard's Overdue tile counts overdue tasks since 2026-11-20. *(Was 🟨: "breach count is permanently zero … `effStatus()` …" — `effStatus()` was deleted 2026-09-21, DRIFT-13.)* |
 | Rebalance workload | ✅ | |
 | Delegate while on leave | ✅ | `/delegations` (create, list, end) since 2026-09-04; confirmed by the product owner's testing, 2026-11-16. *(Was ⛔ "No UI", then 🟨 not re-verified.)* |
 | Get warned before a breach | 🟨 | `sla.breach` is sent to the supervisor role, `sla.warning` to the assignee (DRIFT-10); not clicked through. *(Was ⛔ "tells nobody".)* |

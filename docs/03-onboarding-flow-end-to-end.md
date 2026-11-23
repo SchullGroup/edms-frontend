@@ -486,6 +486,7 @@ fix.
 | # | Action | API | Status |
 |---|---|---|---|
 | 5.1 | Invite the user | `POST /users` `{email, name, departmentId, roleIds}` (no password) | ✅ emails a set-password link; the user is `pending` until they use it, then `active` (PR #49). Department and roles validated; `schulltech_admin` can't be given |
+| 5.1b | Invite many users from a file | `POST /users/import` (CSV or `.xlsx`, `?dryRun=true`), template from `GET /users/import/template` | ⚠️ backend only (PR #77, live 2026-11-23); no upload page yet, so `/admin/users` invites one at a time |
 | 5.2 | Assign additional roles | `POST /users/:id/roles` `{roleIds}` | ✅ |
 | 5.3 | Remove a role | `DELETE /users/:id/roles/:roleId` | ✅ |
 | 5.4 | Deactivate | `PATCH /users/:id` `{status:'inactive'}` | ✅ — login then returns 403 `ACCOUNT_INACTIVE` |
@@ -996,7 +997,7 @@ npm run dev                # Web   :3000
 | 7 | Design and publish workflows | `/admin/workflows` | Only `client_admin`/`schulltech_admin` can publish or archive (DRIFT-05, fixed 09-04). **On a freshly seeded tenant only they can list them, too** — staff and supervisors can't route until DRIFT-14's seed rows are added. The live tenant's roles hold the grant (re-tested 2026-10-16). |
 | 8 | Set branding | `/admin/branding` | 🟥 **Saved in this browser only** — survives a reload since 2026-10-12, but other users and the login page don't see it. |
 | 9 | ~~Set retention policy~~ | ⛔ | Mock. No enforcement job exists. |
-| 10 | Require two-step sign-in for the users who need it | **Require two-step sign-in** on the invite form, or **Require two-step** on `/admin/users` (since 2026-11-13) | Per user; there is no tenant-wide switch. Each required user sets it up at their next sign-in (a new user at their first), choosing an authenticator app or email codes, and saves recovery codes shown once; nobody can set it up, switch method or turn it off themselves (backend PRs #71/#72). The **Two-step** column shows who has it on and who hasn't set it up yet. Someone who loses device and codes needs **Reset two-step** (global `user:edit`); a still-required user then sets it up again. The button isn't offered on your own row. The authenticator app shows the backend's `MFA_ISSUER` (default `SchullTech EDMS`) |
+| 10 | Require two-step sign-in for the users who need it | **Require two-step sign-in** on the invite form, or **Require two-step** on `/admin/users` (since 2026-11-13) | Per user; there is no tenant-wide switch. Each required user sets it up at their next sign-in (a new user at their first), choosing an authenticator app or email codes, and saves recovery codes shown once; nobody can set it up, switch method or turn it off themselves (backend PRs #71/#72). The Status column's two-step line shows who has it on and who hasn't set it up yet. Someone who loses device and codes needs **Reset two-step** (global `user:edit`); a still-required user then sets it up again. The button isn't offered on your own row. The authenticator app shows the backend's `MFA_ISSUER` (default `SchullTech EDMS`) |
 
 **Then hand over to staff — with these caveats stated up front:**
 

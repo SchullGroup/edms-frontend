@@ -60,6 +60,12 @@ export const routeConfig: RouteRule[] = [
     anyPermissions: ['task:view'],
   },
   {
+    // Dashboard tile drill-down: workflows by status, plus overdue tasks.
+    path: '/staff/workflows',
+    matchType: 'prefix',
+    anyPermissions: ['workflow_instance:view', 'task:view'],
+  },
+  {
     path: '/staff/cabinets',
     matchType: 'prefix',
     // Sidebar requires department-or-global scope; route rules aren't scope-aware.
@@ -169,6 +175,18 @@ export const routeConfig: RouteRule[] = [
     path: '/admin/access-rules',
     matchType: 'prefix',
     anyPermissions: ['access_rule:view'],
+  },
+  // User groups: read with `workflow:view`, created with `workflow:create`. The edit
+  // page checks creator-or-global itself (the path has an id in the middle).
+  {
+    path: '/admin/user-groups/new',
+    matchType: 'prefix',
+    anyPermissions: ['workflow:create'],
+  },
+  {
+    path: '/admin/user-groups',
+    matchType: 'prefix',
+    anyPermissions: ['workflow:view'],
   },
   // Role-gated, not permission-gated — per an explicit call: stays scoped to the
   // role it was built for (client_admin) rather than opening up to any custom

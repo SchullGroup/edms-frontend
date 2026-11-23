@@ -123,12 +123,9 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
 
   const { data: instance, isLoading, isError, refetch } = useWorkflowInstance(id);
 
-  // Person, role (within the task's department, if it has one), or a
-  // department-only task for someone in that department — the backend's rule.
-  // The department comes from `/auth/me`.
-  const isMineTask = (
-    t: Pick<Task, 'assigneeId' | 'assignedRoleId' | 'assignedRole' | 'assignedDepartmentId'>,
-  ) => !!me && isTaskForUser(t, me);
+  // Person, role (within the task's department, if it has one), a department-only
+  // task for someone in that department, or a group task the backend says we can action.
+  const isMineTask = (t: Task) => !!me && isTaskForUser(t, me);
   const departmentName = useDepartmentNames();
   // A workflow has no single current stage any more (edms-backend `919d0ef`):
   // its documents move on their own, so several tasks — at different stages, or
@@ -383,9 +380,11 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
               ? disabledReason
               : actionableDocuments.length === 0
                 ? accessReason
-                : b.wholeTask && heldBack > 0
-                  ? `${b.label} covers every document in this task, and ${heldBack === 1 ? 'one needs' : `${heldBack} need`} ${needed} first`
-                  : null;
+                : b.action === 'delegate' && focusTask?.assignedGroupId
+                  ? "Group tasks can't be delegated. A supervisor can reassign it to one person."
+                  : b.wholeTask && heldBack > 0
+                    ? `${b.label} covers every document in this task, and ${heldBack === 1 ? 'one needs' : `${heldBack} need`} ${needed} first`
+                    : null;
             return (
               <button
                 key={b.action}

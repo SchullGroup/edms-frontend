@@ -503,6 +503,8 @@ export interface WorkflowStage {
   sub_department_id?: string;
   /** The routed document's submitter's manager (PR #62); excludes every field above. */
   dynamic_assignee?: 'submitter_manager';
+  /** A user group (PR #75); excludes every other assignment field. */
+  group_id?: string;
   sla_hours: number;
   /** `'all'`: where parallel branches meet. Each branch of a document waits
    *  here until every one has arrived, then one task opens (edms-backend PR
@@ -802,13 +804,15 @@ export interface WorkflowBottleneckItem {
   currentStageName: string;
   workflowStatus: 'pending' | 'in_progress' | 'on_hold';
   currentTaskId: string | null;
-  assignmentType: 'user' | 'role' | 'unassigned';
+  assignmentType: 'user' | 'role' | 'group' | 'unassigned';
   assigneeId: string | null;
-  /** User name, role name, or `Unassigned`. */
+  /** User name, role name, group name, or `Unassigned`. */
   assigneeName: string;
   assigneeEmail: string | null;
   assignedRoleId: string | null;
   assignedRoleName: string | null;
+  assignedGroupId: string | null;
+  assignedGroupName: string | null;
   stageEnteredAt: string;
   ageDays: number;
   slaDueAt: string | null;
@@ -909,6 +913,14 @@ export interface Task {
    *  `3014b89`): the stage's sub-department when it names one (PR #52), else
    *  its department. Matched exactly against the user's department. */
   assignedDepartmentId?: string | null;
+  /** Set for a user-group stage (edms-backend PR #75); the task then has no
+   *  assignee, role or department, and can't be delegated (409). */
+  assignedGroupId?: string | null;
+  /** The group behind `assignedGroupId` (edms-backend PR #76). */
+  assignedGroup?: { id: string; name: string } | null;
+  /** Whether the caller may act on it now: theirs, open, workflow in progress and
+   *  `task:action` held (PR #76). Document access is checked by the action itself. */
+  canAction?: boolean;
   action?: string | null;
   status: TaskStatus;
   completedAt?: string | null;
@@ -1785,4 +1797,37 @@ export interface AccessRuleInput {
   value: string;
   /** ≤ 255 characters. */
   description?: string;
+}
+
+// --- User groups (edms-backend PRs #75, #76) ---
+
+/** `GET /user-groups` row: up to 100, newest first. `assignedTasks` counts every task ever. */
+export interface UserGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  _count: { members: number; assignedTasks: number };
+}
+
+export interface UserGroupMember {
+  id: string;
+  name: string;
+  email: string;
+  status: 'pending' | 'active' | 'inactive' | 'suspended';
+}
+
+/** `GET /user-groups/:groupId`: members oldest first. */
+export interface UserGroupDetail extends UserGroup {
+  members: UserGroupMember[];
+}
+
+export interface UserGroupInput {
+  /** 1–120 characters, unique ignoring case. */
+  name: string;
+  /** ≤ 1000 characters; `null` clears it on update. */
+  description?: string | null;
 }

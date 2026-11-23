@@ -4,9 +4,16 @@
 > [`docs/specs/backend-api-spec-2026-10-08.md`](specs/backend-api-spec-2026-10-08.md)**, checked
 > against `edms-backend` `dev` at `2db7e19`.
 
-**Raised:** 2026-08-29 · **Updated:** 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29, BE-30 and two questions added)
+**Raised:** 2026-08-29 · **Updated:** 2026-11-23 (BE-31 and BE-32 done; BE-35 added) · 2026-11-23 (BE-33 and BE-34 added) · 2026-11-20 (BE-31 and BE-32 added) · 2026-11-16 (BE-24, BE-26 and BE-27 done; BE-29, BE-30 and two questions added)
 **Frontend:** `edms-frontend` @ `dev`
-**Backend checked against:** `edms-backend` @ `origin/dev` (`e033b58`, re-checked 2026-11-16)
+**Backend checked against:** `edms-backend` @ `origin/dev` (`34a98d6`, re-checked 2026-11-23)
+
+> **2026-11-23: BE-31 and BE-32 done and removed.** Both live 2026-11-23 (`34a98d6`). BE-31:
+> `GET /tasks?search=` (PR #77) matches stage, workflow name and document title, Restricted
+> documents only by that label. BE-32 (PR #76): `GET /user-groups/:groupId` with `members`,
+> `PATCH /user-groups/:groupId` (`name`, `description`, `isActive`), `assignedGroup { id, name }`
+> and `canAction` on task payloads, and group items in `bottlenecks-ageing`. There is still no
+> delete, which BE-32 didn't ask for. Raised: BE-35. Write-ups of the done items are in git history.
 
 > **2026-11-16: BE-24 and BE-26 done and removed.** Both shipped in PR #71 (`142be0b`), live
 > 2026-11-12, and the frontend uses both since 2026-11-13. BE-24: admins set `mfaRequired` per
@@ -62,6 +69,9 @@ summaries) and costs a Gemini call per upload until it ships.
 | **BE-25** | Task notifications name the stage, not its id               | Small fix       | 🟡 Low   | No                                         |
 | **BE-29** | Own error codes for the mid-session MFA responses           | Small fix       | 🟡 Low   | No — the frontend matches message text     |
 | **BE-30** | Document count on paged folder rows                         | Small fix       | 🟡 Low   | No — folder cards show no count meanwhile  |
+| **BE-33** | `team-status-matrix` counts uploads, not work held          | Behaviour fix   | 🟡 Low   | No — Team Overview no longer calls it      |
+| **BE-34** | Stage names, not ids, in stage-grouped SLA and task search  | Small fix       | 🟡 Low   | No                                         |
+| **BE-35** | Semantic search returns nothing on live                     | Ops / data      | 🟡 Low   | Yes — for any semantic-search UI           |
 
 **Questions, not asks:** Q-1 (was removing MFA method change intended?) and Q-2 (storage bucket
 versioning and who owns unique keys), after BE-29.
@@ -390,6 +400,56 @@ all. The cost: the cabinet browser no longer shows how many documents each folde
 
 **Ask:** add `_count: { documents }` to the paged rows, the same count the unpaged list returns.
 The frontend then shows it on folder cards again.
+
+---
+
+## 🟡 BE-33 · `team-status-matrix` counts uploads, not work held — **new, 2026-11-23**
+
+Checked against `edms-backend` `dev` at `b9c2d6c`. `GET /workflow-instances/team-status-matrix`
+counts each member's **uploaded** documents by document status, inner-joined on documents. So:
+
+1. A reviewer who never uploads doesn't appear, however much work they hold (the Finance
+   supervisor's matrix left out a Workload member with 0 uploads).
+2. "Closed" has no date window, so it counts every closed upload ever.
+3. Its totals disagree with `bottlenecks-ageing` (open 10 against 12, overdue 6 against 11 on
+   2026-11-23).
+
+Since 2026-11-23 Team Overview (`/supervisor`) no longer calls it. Management Reports still does
+(`workflowInstancesService.getTeamStatusMatrix`, the per-member report).
+
+**Ask:** either retire it once Reports moves off it, or count by **current holder** (open
+tasks per assignee, role pools separately) and take a real `from`/`to` for closed items.
+
+---
+
+## 🟡 BE-34 · Stage names in `GET /sla/outcomes/summary?groupBy=stage` — **new, 2026-11-23**
+
+Checked against `b9c2d6c`: with `groupBy=stage`, `label` is the raw stage id (`o.stage` in
+`tasks.repository.ts`), e.g. `stage_1789748379694`, not the stage name from the definition.
+No page groups by stage yet, so nothing shows it today.
+
+**Ask:** return the stage name from the workflow definition as `label` (keeping the id as
+`key`), as `bottlenecks-ageing` does with `stageName`.
+
+**Same root, added 2026-11-23:** `GET /tasks?search=` (PR #77) matches `Task.stage`, which is
+the stage id too, so searching for a stage's name ("Finance review") finds nothing, while
+`stage_` matched 16 tasks on live. Matching the definition's stage names would need the same
+lookup.
+
+---
+
+## 🟡 BE-35 · Semantic search returns nothing on live — **new, 2026-11-23**
+
+Checked on live against `34a98d6` (PR #77), as `client_admin`. `GET /documents/search?q=invoice`
+returns 14 documents with `mode=keyword`, **0** with `mode=semantic` and the same 14 with
+`mode=hybrid`. A meaning-style query ("money owed to a supplier") returns 0 in every mode.
+`semantic` didn't error, so the embedder answers, but no stored chunk matches: documents
+uploaded before PR #77 have no `document_chunks` rows unless `scripts/backfill-embeddings.ts`
+has been run, and `SEMANTIC_SEARCH_MIN_SCORE` (0.6) may also be too strict.
+
+**Ask:** run the backfill on live (and confirm pgvector and `GEMINI_API_KEY` there), then tell us
+a query that should match semantically. The frontend adds a search-mode option on `/search` once
+`semantic` returns results.
 
 ---
 

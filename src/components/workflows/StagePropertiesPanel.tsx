@@ -4,10 +4,11 @@ import { STAGE_ACTIONS } from './constants';
 import { StageDepartmentPicker } from './StageDepartmentPicker';
 import { UserPicker } from '@/components/common/UserPicker';
 import type { MoveDirection } from './workflowGraph';
-import type { Department, WorkflowStageAction } from '@/types/models';
+import type { Department, UserGroup, WorkflowStageAction } from '@/types/models';
 
-/** `manager`: the submitter's manager, resolved per document (edms-backend PR #62). */
-export type AssigneeMode = 'role' | 'person' | 'department' | 'manager';
+/** `manager`: the submitter's manager, resolved per document (edms-backend PR #62).
+ *  `group`: every active member of a user group (PR #75). */
+export type AssigneeMode = 'role' | 'person' | 'department' | 'manager' | 'group';
 
 export interface StagePropertiesPanelProps {
   selectedStage: any | null;
@@ -31,6 +32,10 @@ export interface StagePropertiesPanelProps {
   onDepartmentChange: (departmentId: string, subDepartmentId: string) => void;
   userDraft: string;
   onUserChange: (userId: string) => void;
+  /** `GET /user-groups`; undefined while loading or when the caller can't list them. */
+  groups?: UserGroup[];
+  groupDraft: string;
+  onGroupChange: (groupId: string) => void;
   slaDraft: number;
   onSlaChange: (hours: number) => void;
   onSave: () => void;
@@ -69,6 +74,9 @@ export function StagePropertiesPanel({
   onDepartmentChange,
   userDraft,
   onUserChange,
+  groups,
+  groupDraft,
+  onGroupChange,
   slaDraft,
   onSlaChange,
   onSave,
@@ -84,6 +92,9 @@ export function StagePropertiesPanel({
   const parent = departments.find((d) => d.id === departmentDraft);
   const sub = parent?.children?.find((c) => c.id === subDepartmentDraft);
   const departmentLabel = parent ? (sub ? `${parent.name} › ${sub.name}` : parent.name) : null;
+  const group = groups?.find((g) => g.id === groupDraft);
+  // Inactive groups can't be routed to; offered only when the stage already uses one.
+  const groupOptions = (groups ?? []).filter((g) => g.isActive || g.id === groupDraft);
   const departmentPicker = (allowAny: boolean) => (
     <StageDepartmentPicker
       departments={departments}
@@ -156,9 +167,9 @@ export function StagePropertiesPanel({
 
           <div className="field">
             <label>Assign to</label>
-            <div className="seg" role="group" aria-label="Assign by role, person, department or manager" style={{ marginBottom: '8px' }}>
-              <button type="button" className={assigneeMode === 'role' ? 'active' : ''} onClick={() => onAssigneeModeChange('role')}>
-                Role
+            <div className="seg" role="group" aria-label="Assign by group, person, department, manager or role" style={{ marginBottom: '8px' }}>
+              <button type="button" className={assigneeMode === 'group' ? 'active' : ''} onClick={() => onAssigneeModeChange('group')}>
+                Group
               </button>
               <button type="button" className={assigneeMode === 'person' ? 'active' : ''} onClick={() => onAssigneeModeChange('person')}>
                 Person
@@ -169,8 +180,44 @@ export function StagePropertiesPanel({
               <button type="button" className={assigneeMode === 'manager' ? 'active' : ''} onClick={() => onAssigneeModeChange('manager')}>
                 Manager
               </button>
+              <button type="button" className={assigneeMode === 'role' ? 'active' : ''} onClick={() => onAssigneeModeChange('role')}>
+                Role
+              </button>
             </div>
-            {assigneeMode === 'manager' ? (
+            {assigneeMode === 'group' ? (
+              <>
+                <select
+                  className="input"
+                  aria-label="User group"
+                  value={groupDraft}
+                  onChange={(e) => onGroupChange(e.target.value)}
+                  disabled={!groupOptions.length && !groupDraft}
+                >
+                  {!groupDraft && (
+                    <option value="">{groupOptions.length ? 'Pick a group…' : 'No active groups'}</option>
+                  )}
+                  {groupDraft && !group && <option value={groupDraft}>Unknown group</option>}
+                  {groupOptions.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                      {g.isActive
+                        ? ` (${g._count.members} member${g._count.members === 1 ? '' : 's'})`
+                        : ' (inactive)'}
+                    </option>
+                  ))}
+                </select>
+                <div className="help">
+                  {group && !group.isActive
+                    ? 'This group is inactive, so documents can’t be routed through this stage. Reactivate it or pick another.'
+                    : group && group._count.members === 0
+                      ? 'This group has no members yet, so documents can’t be routed through this stage until someone is added.'
+                      : 'Every active member gets the task and whoever acts first handles it. It can’t be delegated.'}{' '}
+                  <a href="/admin/user-groups" target="_blank" rel="noreferrer">
+                    Manage groups
+                  </a>
+                </div>
+              </>
+            ) : assigneeMode === 'manager' ? (
               <div className="help">
                 Goes to the manager of whoever the document is submitted for, as set in Admin → Users.
                 Routing asks who that is. Someone with no manager set can&apos;t be routed through

@@ -27,10 +27,15 @@ export interface TaskFilters {
   assigneeId?: string;
   assignedRoleId?: string;
   stage?: string;
+  /** Stage id, workflow name or document title (≤ 120 chars); a document the caller
+   *  can't view matches only as "Restricted document" (PR #77). */
+  search?: string;
   scope?: 'mine' | 'all';
   /** `dueAt`: earliest document deadline first, tasks without one last.
    *  Omitted (or `createdAt`): oldest first. */
   sort?: 'createdAt' | 'dueAt';
+  /** With `sort=createdAt` only; defaults to `asc` (oldest first). */
+  order?: 'asc' | 'desc';
   /** `true`: active tasks holding a document past its stage deadline;
    *  `false`: everything else. */
   overdue?: boolean;

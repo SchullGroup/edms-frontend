@@ -89,18 +89,8 @@ export const TaskRow = ({
           <i style={{ width: `${agePct}%` }}></i>
         </div>
       </div>
-      <div className="task-actions">
-        {extraActions}
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            router.push(href);
-          }}
-        >
-          Open
-        </button>
-      </div>
+      {/* The whole row opens the task; hover darkens it (globals.css). */}
+      {extraActions && <div className="task-actions">{extraActions}</div>}
     </div>
   );
 };
