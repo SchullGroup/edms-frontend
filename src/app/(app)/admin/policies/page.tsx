@@ -6,9 +6,11 @@ import { useUIStore } from '@/store/useUIStore';
 import { Table, Column } from '@/components/ui/Table';
 import { ConfBadge } from '@/components/ui/Badges';
 import { SlaSettingsPanel } from '@/components/policies/SlaSettingsPanel';
+import { WatermarkSettingsPanel } from '@/components/policies/WatermarkSettingsPanel';
 import { SkeletonPage } from '@/components/common/Skeleton';
 import { ErrorMessage } from '@/components/common/ErrorMessage';
 import { getBrandPreset } from '@/lib/brand';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   usePolicies,
   useUpdatePolicyConfidentiality,
@@ -18,13 +20,16 @@ import {
 export default function PoliciesPage() {
   const { auditAction } = useStore();
   const { setPageTitle, addToast } = useUIStore();
+  const { scopeFor } = usePermissions();
   const showExtendedPolicyTabs = getBrandPreset().features.extendedPolicyTabs;
+  // The page opens to `workflow:view`, but the API refuses even the read without this.
+  const canSetWatermark = scopeFor('workflow', 'edit') === 'global';
 
   const { data: policiesData, isLoading, isError, refetch } = usePolicies();
   const updatePolicyConfidentiality = useUpdatePolicyConfidentiality();
   const updatePolicyControl = useUpdatePolicyControl();
 
-  const [tab, setTab] = useState<'conf' | 'urg' | 'ret' | 'ctl'>(() =>
+  const [tab, setTab] = useState<'conf' | 'urg' | 'wm' | 'ret' | 'ctl'>(() =>
     showExtendedPolicyTabs ? 'conf' : 'urg',
   );
 
@@ -35,7 +40,7 @@ export default function PoliciesPage() {
   }, [setPageTitle]);
 
   if (isLoading) {
-    return <SkeletonPage columns={['Level', 'Behaviour', 'Watermark', 'Download', 'Print']} rows={4} />;
+    return <SkeletonPage columns={['Level', 'Behaviour', 'Download', 'Print']} rows={4} />;
   }
 
   if (isError) {
@@ -75,20 +80,6 @@ export default function PoliciesPage() {
       key: 'desc',
       label: 'Behaviour',
       render: (r) => <span style={{ fontSize: '12px', lineHeight: 1.5 }}>{r.desc}</span>,
-    },
-    {
-      key: 'watermark',
-      label: 'Watermark',
-      render: (r) => (
-        <label className="switch">
-          <input
-            type="checkbox"
-            checked={r.watermark || false}
-            onChange={(e) => handleConfToggle(r.level, 'watermark', e.target.checked)}
-          />
-          <i></i>
-        </label>
-      ),
     },
     {
       key: 'download',
@@ -161,8 +152,8 @@ export default function PoliciesPage() {
           <div className="page-title">Policies</div>
           <div className="page-sub">
             {showExtendedPolicyTabs
-              ? 'Confidentiality behaviour, urgency SLAs, retention schedules and control rules.'
-              : 'Urgency levels, service targets, working hours and breach actions.'}
+              ? 'Confidentiality behaviour, urgency SLAs, the document watermark, retention schedules and control rules.'
+              : 'Urgency levels, service targets, working hours, breach actions and the document watermark.'}
           </div>
         </div>
       </div>
@@ -176,6 +167,11 @@ export default function PoliciesPage() {
         <button className={`tab ${tab === 'urg' ? 'active' : ''}`} onClick={() => setTab('urg')}>
           Urgency & SLA
         </button>
+        {canSetWatermark && (
+          <button className={`tab ${tab === 'wm' ? 'active' : ''}`} onClick={() => setTab('wm')}>
+            Watermark
+          </button>
+        )}
         {showExtendedPolicyTabs && (
           <>
             <button className={`tab ${tab === 'ret' ? 'active' : ''}`} onClick={() => setTab('ret')}>
@@ -194,9 +190,11 @@ export default function PoliciesPage() {
         </div>
       )}
 
-      {/* The one tab backed by the API (`/sla/configuration`, `/sla/holidays`);
-          the others still read the mock policies service. */}
+      {/* Urgency & SLA and Watermark are backed by the API; the other tabs
+          still read the mock policies service. */}
       {tab === 'urg' && <SlaSettingsPanel />}
+
+      {tab === 'wm' && canSetWatermark && <WatermarkSettingsPanel />}
 
       {tab === 'ret' && (
         <div className="card">

@@ -172,9 +172,9 @@ const TOPICS: Topic[] = [
           permissions.
         </p>
         <p>
-          PDFs and images carry a watermark with your name, the time and your network address: on
-          screen, on anything you print, and in copies you download. Only some roles can download
-          the unmarked original.
+          PDFs and images carry a watermark on screen, on anything you print, and in copies you
+          download. It shows your name, the time and your network address, or whichever of those
+          your administrator has chosen. Only some roles can download the unmarked original.
         </p>
         <p>
           If you can’t open a document, choose <b>Request access</b>. Your request goes for
