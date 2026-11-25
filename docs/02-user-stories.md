@@ -649,6 +649,8 @@ images carrying the server's watermark; Export (document page) goes through
 - [x] Downloads use the per-viewer `downloadUrl` the backend issues (PR #67), watermarked for
       PDFs and images alike, and are audited when the file is fetched (2026-11-11, verified live
       in Edge as `staff_finance`)
+- [x] Administrators choose what the watermark shows (name, IP, time) on `/admin/policies`
+      (backend PR #78; 2026-11-25, verified live in Edge as `client_admin`)
 - [x] **Download original** (the unmarked file, `originalUrl`) for holders of
       `document:download_original`: verified live in Edge as `client_admin` (2026-11-11, after the re-seed),
       audited with `original: true`

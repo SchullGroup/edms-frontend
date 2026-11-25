@@ -458,6 +458,8 @@ input[type="checkbox"] { accent-color: var(--focus); }
 .switch i::before { content: ""; position: absolute; width: 15px; height: 15px; border-radius: 50%; background: #fff; top: 3px; left: 3px; transition: .16s; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
 .switch input:checked + i { background: var(--status-closed); }
 .switch input:checked + i::before { left: 20px; }
+.switch input:focus-visible + i { outline: 2px solid var(--focus); outline-offset: 2px; }
+.switch input:disabled + i { opacity: .55; cursor: not-allowed; }
 [data-theme="dark"] .switch input:checked + i { background: var(--focus); }
 
 /* ---------- Tabs ---------- */

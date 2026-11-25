@@ -49,6 +49,8 @@ export const AUDIT_ACTIONS = [
   'department.created',
   'department.updated',
   'department.deleted',
+  'watermark.settings_updated',
+  'watermark.settings_reset',
 
   // Filing structure
   'cabinet.created',
@@ -184,6 +186,7 @@ export const CONFIG_RECORD_TYPES: AuditRecordType[] = [
   },
   { value: 'user', label: 'Users, roles & MFA', actions: byPrefix('user.') },
   { value: 'user_group', label: 'User groups', actions: byPrefix('user_group.') },
+  { value: 'watermark_setting', label: 'Watermark', actions: byPrefix('watermark.') },
   { value: 'access_rule', label: 'IP & country rules', actions: byPrefix('access_rule.') },
 ];
 

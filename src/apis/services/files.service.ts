@@ -41,7 +41,7 @@ export class FileFetchError extends Error {
 }
 
 /** The API's JSON error arrives as a Blob when `responseType` is blob. */
-async function toFileFetchError(err: any): Promise<FileFetchError> {
+export async function toFileFetchError(err: any): Promise<FileFetchError> {
   const status: number | undefined = err?.response?.status;
   let message = '';
   const data = err?.response?.data;

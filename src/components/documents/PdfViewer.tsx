@@ -14,36 +14,8 @@ import {
   type PageText,
 } from '@/utils/pdfSearch';
 import { printPdf } from '@/utils/printPdf';
+import { loadPdfJs, PDFJS_ASSETS, type PdfJs } from '@/lib/pdfjs';
 import { filesService } from '@/apis/services/files.service';
-
-type PdfJs = typeof import('pdfjs-dist');
-
-let pdfjsPromise: Promise<PdfJs> | null = null;
-
-/** pdf.js touches browser globals when imported, so it loads on the client, once. */
-function loadPdfJs(): Promise<PdfJs> {
-  pdfjsPromise ??= import('pdfjs-dist')
-    .then((pdfjs) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
-      return pdfjs;
-    })
-    .catch((err) => {
-      pdfjsPromise = null;
-      throw err;
-    });
-  return pdfjsPromise;
-}
-
-// Served from the app's own origin; copied out of node_modules by
-// scripts/copy-pdfjs-assets.mjs. The WebAssembly decoders handle the JBIG2 and
-// JPEG 2000 images common in scanned documents.
-const PDFJS_ASSETS = {
-  cMapUrl: '/pdfjs/cmaps/',
-  cMapPacked: true,
-  standardFontDataUrl: '/pdfjs/standard_fonts/',
-  wasmUrl: '/pdfjs/wasm/',
-  iccUrl: '/pdfjs/iccs/',
-};
 
 // Widest a page is drawn at 100% zoom: the viewer's width, up to this.
 const MAX_FIT_WIDTH = 900;
