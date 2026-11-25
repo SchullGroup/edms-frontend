@@ -571,8 +571,6 @@ input[type="checkbox"] { accent-color: var(--focus); }
    instead of the fixed 480px column this was left at from an earlier fixture
    mockup, which squeezed real documents into a narrow strip. */
 .doc-page { background: #fff; width: 100%; max-width: 900px; min-height: 500px; box-shadow: 0 6px 24px rgba(0,0,0,.4); border-radius: 4px; position: relative; overflow: hidden; flex-shrink: 0; }
-.doc-page .watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: hidden; }
-.doc-page .watermark span { transform: rotate(-32deg); font-size: 42px; font-weight: 800; color: rgba(222,91,109,.12); letter-spacing: .1em; white-space: nowrap; text-transform: uppercase; font-family: Inter, Arial, sans-serif; }
 .sig-field { position: absolute; border: 2px dashed var(--status-progress); background: rgba(59,111,212,.07); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-family: Inter, Arial, sans-serif; font-size: 10px; color: var(--status-progress); font-weight: 700; }
 .sig-field.signed { border-style: solid; border-color: var(--status-closed); background: rgba(33,154,111,.06); color: var(--status-closed); font-family: "Segoe Script", cursive; font-size: 16px; }
 
@@ -593,8 +591,6 @@ input[type="checkbox"] { accent-color: var(--focus); }
 .pdf-pages { width: max-content; min-width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .pdf-page { position: relative; background: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.4); border-radius: 2px; overflow: hidden; flex-shrink: 0; --scale-round-x: 1px; --scale-round-y: 1px; }
 .pdf-page canvas { display: block; }
-.pdf-page .watermark { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; pointer-events: none; overflow: hidden; }
-.pdf-page .watermark span { transform: rotate(-32deg); font-weight: 800; color: rgba(222,91,109,.14); letter-spacing: .1em; white-space: nowrap; text-transform: uppercase; font-family: Inter, Arial, sans-serif; }
 .pdf-view-toggle { height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,.18); background: transparent; color: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .pdf-view-toggle:hover, .pdf-view-toggle[aria-pressed="true"] { background: rgba(255,255,255,.12); }
 .pdf-view-toggle:focus-visible { outline: 2px solid #8FB3FF; outline-offset: 1px; }

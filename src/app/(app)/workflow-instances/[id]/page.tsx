@@ -505,7 +505,6 @@ function WorkflowInstanceView({ params }: { params: Promise<{ id: string }> }) {
                   : selected.requestable.filter((k) => k === 'view')
               }
               viewerId={me.id}
-              viewerName={me.name}
             />
           )}
           {selected && selectedDoc && (

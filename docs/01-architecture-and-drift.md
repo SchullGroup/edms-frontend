@@ -1134,8 +1134,12 @@ excludes `/pdfjs/`, and static assets generally by file extension (images, fonts
 so those requests don't trigger a backend session check — the login page's brand logo
 (`/gbb-logo.jpg`) has to load before any session exists.
 
-Printing renders each page to an image with the watermark drawn in and prints those from a
-hidden frame, after `GET /documents/:id/print` succeeds. Images still render as a plain
+Printing renders each page to an image and prints those from a hidden frame, after
+`GET /documents/:id/print` succeeds. **Since 2026-11-25 the server's watermark is the only one**
+(product decision): the frontend's own "level · viewer's name" overlay is gone from the viewer,
+the print images and the scanned-text view. Verified live in Edge as `client_admin`: a
+Confidential PDF, its print image and Scan_20261021 (PNG) each show only the server's mark. The
+confidentiality level is no longer on the page or on paper. Images still render as a plain
 `<img>`; other types show "can't be previewed yet" with Download.
 
 ---
@@ -1883,7 +1887,7 @@ its values have changed. A `custom` copy is the `/admin/branding` page's publish
 | Variable | Default | Used by |
 |---|---|---|
 | `GEO_COUNTRY_HEADER` | unset | Access rules: the request header carrying the caller's country code, set by the CDN (`CF-IPCountry`, `CloudFront-Viewer-Country`). Country rules are refused without it (422 `GEO_NOT_CONFIGURED`) — **not set on live** (2026-11-11). Set it only when every request passes through that proxy, or callers can send the header themselves |
-| `WATERMARK_ENABLED` | `true` | `GET /files/:token` — stamps the viewer's name, time and IP on every page of a `preview` / `download` |
+| `WATERMARK_ENABLED` | `true` | `GET /files/:token` — stamps the viewer's name, time and IP on every page of a `preview` / `download`. ⚠️ On live the IP is Render's internal address, not the viewer's (seen 2026-11-25: `10.28.82.168` and `10.24.228.141` in one session whose public address was neither): `trust proxy` is 1 and `req.ip` is used |
 | `WATERMARK_MAX_FILE_MB` | `50` | Larger files are refused rather than served unmarked |
 | `MFA_ENCRYPTION_KEY` | derived from `JWT_SECRET` | Encrypts stored TOTP secrets. Changing it makes existing enrolments unreadable |
 | `MFA_ISSUER` | `SchullTech EDMS` | The name shown next to the account in the authenticator app |

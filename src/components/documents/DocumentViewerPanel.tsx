@@ -17,7 +17,6 @@ export interface DocumentViewerPanelProps {
    *  "file location isn't a real URL" in the empty state. */
   rawFileKey?: string;
   fileMimeType: string;
-  watermarkText: string;
   zoom: number;
   onZoomChange: (zoom: number) => void;
   signatures: DocumentSignatureFieldUI[];
@@ -118,7 +117,6 @@ export function DocumentViewerPanel({
   fileUrl,
   rawFileKey,
   fileMimeType,
-  watermarkText,
   zoom,
   onZoomChange,
   signatures,
@@ -150,7 +148,6 @@ export function DocumentViewerPanel({
           title={documentTitle}
           zoom={zoom}
           onZoomChange={onZoomChange}
-          watermarkText={watermarkText}
           allowCopy={canDownload}
           canPrint={canPrint}
           onBeforePrint={onBeforePrint}
@@ -206,10 +203,6 @@ export function DocumentViewerPanel({
             position: 'relative',
           }}
         >
-          <div className="watermark" style={{ pointerEvents: 'none' }}>
-            <span>{watermarkText}</span>
-          </div>
-
           {!fileUrl ? (
             <div className="empty" style={{ padding: '48px 16px' }}>
               <Icon name="doc" size={32} />

@@ -355,7 +355,7 @@ function ClassificationEditor({
           ))}
         </select>
         <div className="help">
-          Drives watermarking, download and print, and who can open the document.
+          Drives download and print, and who can open the document.
         </div>
       </div>
       <div className="field" style={{ marginBottom: 0 }}>
