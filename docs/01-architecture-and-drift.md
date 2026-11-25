@@ -1887,7 +1887,7 @@ its values have changed. A `custom` copy is the `/admin/branding` page's publish
 | Variable | Default | Used by |
 |---|---|---|
 | `GEO_COUNTRY_HEADER` | unset | Access rules: the request header carrying the caller's country code, set by the CDN (`CF-IPCountry`, `CloudFront-Viewer-Country`). Country rules are refused without it (422 `GEO_NOT_CONFIGURED`) — **not set on live** (2026-11-11). Set it only when every request passes through that proxy, or callers can send the header themselves |
-| `WATERMARK_ENABLED` | `true` | `GET /files/:token` — stamps the viewer's name, time and IP on every page of a `preview` / `download`. ⚠️ On live the IP is Render's internal address, not the viewer's (seen 2026-11-25: `10.28.82.168` and `10.24.228.141` in one session whose public address was neither): `trust proxy` is 1 and `req.ip` is used |
+| `WATERMARK_ENABLED` | `true` | `GET /files/:token` — stamps the viewer's name, time and IP on every page of a `preview` / `download`. ⚠️ On live the IP is Render's internal address, not the viewer's (seen 2026-11-25: `10.28.82.168` and `10.24.228.141` in one session whose public address was neither): `trust proxy` is 1 and `req.ip` is used. Audit entries show `10.x` addresses too |
 | `WATERMARK_MAX_FILE_MB` | `50` | Larger files are refused rather than served unmarked |
 | `MFA_ENCRYPTION_KEY` | derived from `JWT_SECRET` | Encrypts stored TOTP secrets. Changing it makes existing enrolments unreadable |
 | `MFA_ISSUER` | `SchullTech EDMS` | The name shown next to the account in the authenticator app |

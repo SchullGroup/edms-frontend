@@ -1251,7 +1251,7 @@ Items whose backend already exists (or needs none). Worked through one at a time
 - [x] Configuration history: audit log filtered to config actions (18.7). **Built 2026-10-08**
       on `/admin/audit` (and `/auditor/trail`): a record-type dropdown whose Configuration group
       is roles, departments, cabinets (incl. access and metadata fields), folders, workflow
-      designs and users, and an action dropdown narrowed to that type. Only one type at a time,
+      designs, users and user groups, and an action dropdown narrowed to that type. Only one type at a time,
       since `GET /audit` takes a single `objectType`. SLA settings aren't audited server-side.
       To test: rename a role, then pick Roles & permissions — the rename is listed; Export
       gives the same rows
