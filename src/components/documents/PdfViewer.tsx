@@ -10,39 +10,12 @@ import {
   buildPlainText,
   findMatches,
   itemRanges,
+  withoutServerMark,
   type PageText,
 } from '@/utils/pdfSearch';
 import { printPdf } from '@/utils/printPdf';
+import { loadPdfJs, PDFJS_ASSETS, type PdfJs } from '@/lib/pdfjs';
 import { filesService } from '@/apis/services/files.service';
-
-type PdfJs = typeof import('pdfjs-dist');
-
-let pdfjsPromise: Promise<PdfJs> | null = null;
-
-/** pdf.js touches browser globals when imported, so it loads on the client, once. */
-function loadPdfJs(): Promise<PdfJs> {
-  pdfjsPromise ??= import('pdfjs-dist')
-    .then((pdfjs) => {
-      pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
-      return pdfjs;
-    })
-    .catch((err) => {
-      pdfjsPromise = null;
-      throw err;
-    });
-  return pdfjsPromise;
-}
-
-// Served from the app's own origin; copied out of node_modules by
-// scripts/copy-pdfjs-assets.mjs. The WebAssembly decoders handle the JBIG2 and
-// JPEG 2000 images common in scanned documents.
-const PDFJS_ASSETS = {
-  cMapUrl: '/pdfjs/cmaps/',
-  cMapPacked: true,
-  standardFontDataUrl: '/pdfjs/standard_fonts/',
-  wasmUrl: '/pdfjs/wasm/',
-  iccUrl: '/pdfjs/iccs/',
-};
 
 // Widest a page is drawn at 100% zoom: the viewer's width, up to this.
 const MAX_FIT_WIDTH = 900;
@@ -65,7 +38,6 @@ export interface PdfViewerProps {
   title: string;
   zoom: number;
   onZoomChange: (zoom: number) => void;
-  watermarkText: string;
   /** Text can be selected and copied only by someone who could download the file anyway. */
   allowCopy: boolean;
   canPrint: boolean;
@@ -90,7 +62,6 @@ export function PdfViewer({
   title,
   zoom,
   onZoomChange,
-  watermarkText,
   allowCopy,
   canPrint,
   onBeforePrint,
@@ -175,10 +146,12 @@ export function PdfViewer({
         entry = doc
           .getPage(n)
           .then((page) => page.getTextContent())
-          .then((content) => ({
-            content,
-            text: buildPageText(content.items.filter((item): item is TextItem => 'str' in item)),
-          }));
+          .then((content) => {
+            const items = withoutServerMark(
+              content.items.filter((item): item is TextItem => 'str' in item),
+            );
+            return { content: { ...content, items }, text: buildPageText(items) };
+          });
         textCache.current.set(n, entry);
       }
       return entry;
@@ -356,7 +329,6 @@ export function PdfViewer({
       if (onBeforePrint && !(await onBeforePrint())) return;
       await printPdf(doc, {
         title,
-        watermarkText: watermarkText,
         onProgress: (done, total) => setPrinting({ done, total }),
       });
     } catch {
@@ -374,7 +346,7 @@ export function PdfViewer({
       searchRef.current?.focus();
       searchRef.current?.select();
     } else if (key === 'p') {
-      // The browser would print the whole app page, without the watermark.
+      // The browser would print the whole app page.
       e.preventDefault();
       if (canPrint) void print();
     }
@@ -541,7 +513,6 @@ export function PdfViewer({
             active={active}
             zoom={zoom}
             allowCopy={allowCopy}
-            watermarkText={watermarkText}
             onActiveHighlight={onActiveHighlight}
           />
         ) : (
@@ -561,7 +532,6 @@ export function PdfViewer({
                 onActiveHighlight={onActiveHighlight}
                 registerPage={registerPage}
                 allowCopy={allowCopy}
-                watermarkText={watermarkText}
               />
             ))}
           </div>
@@ -581,7 +551,6 @@ function OcrTextView({
   active,
   zoom,
   allowCopy,
-  watermarkText,
   onActiveHighlight,
 }: {
   text: string;
@@ -589,7 +558,6 @@ function OcrTextView({
   active: number;
   zoom: number;
   allowCopy: boolean;
-  watermarkText?: string;
   onActiveHighlight: (el: HTMLElement) => void;
 }) {
   const activeRef = useRef<HTMLElement>(null);
@@ -615,10 +583,7 @@ function OcrTextView({
   if (pos < text.length) parts.push(text.slice(pos));
 
   return (
-    <div
-      className="ocr-sheet"
-      style={watermarkText ? { backgroundImage: watermarkTile(watermarkText) } : undefined}
-    >
+    <div className="ocr-sheet">
       <p className="ocr-note">
         This is a scanned document. Below is the text read from it by OCR, which can contain
         mistakes. Matches can&rsquo;t be highlighted on the page images.
@@ -631,26 +596,6 @@ function OcrTextView({
       </div>
     </div>
   );
-}
-
-/** The diagonal watermark as a repeating tile, so it covers a sheet of any length.
- *  The tile is sized to the label (about 20px per character at 22px with its
- *  letter spacing), so a long name isn't cut off at the tile's edges. */
-function watermarkTile(text: string): string {
-  const esc = text.toUpperCase().replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-  const angle = (32 * Math.PI) / 180;
-  const length = Math.max(text.length, 10) * 20;
-  const w = Math.round(length * Math.cos(angle) + 140);
-  const h = Math.round(length * Math.sin(angle) + 180);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><text x="${w / 2}" y="${h / 2}" transform="rotate(-32 ${w / 2} ${h / 2})" text-anchor="middle" dominant-baseline="middle" font-family="Inter, Arial, sans-serif" font-weight="800" font-size="22" letter-spacing="2" fill="rgba(222,91,109,0.14)">${esc}</text></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-}
-
-/** 42px at 100%, shrunk so the diagonal label fits across the page. Each
- *  upper-case character with the watermark's letter spacing is about 0.8em wide. */
-function watermarkFontSize(text: string, pageWidth: number, scale: number): number {
-  const fit = (0.9 * pageWidth) / (Math.max(text.length, 8) * 0.8 * Math.cos((32 * Math.PI) / 180));
-  return Math.min(42 * scale, fit);
 }
 
 interface PdfPageProps {
@@ -667,7 +612,6 @@ interface PdfPageProps {
   onActiveHighlight: (el: HTMLElement) => void;
   registerPage: (n: number, el: HTMLDivElement | null) => void;
   allowCopy: boolean;
-  watermarkText?: string;
 }
 
 /** One page: drawn only once it nears the visible area, redrawn when the zoom changes. */
@@ -684,7 +628,6 @@ const PdfPage = memo(function PdfPage({
   onActiveHighlight,
   registerPage,
   allowCopy,
-  watermarkText,
 }: PdfPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const canvasHost = useRef<HTMLDivElement>(null);
@@ -830,13 +773,6 @@ const PdfPage = memo(function PdfPage({
     >
       <div ref={canvasHost} />
       <div ref={textHost} />
-      {watermarkText && (
-        <div className="watermark" aria-hidden="true">
-          <span style={{ fontSize: watermarkFontSize(watermarkText, w, size?.total ?? scale) }}>
-            {watermarkText}
-          </span>
-        </div>
-      )}
     </div>
   );
 });

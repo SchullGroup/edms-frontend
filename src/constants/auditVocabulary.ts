@@ -28,6 +28,13 @@ export const AUDIT_ACTIONS = [
   'user.mfa_required',
   'user.mfa_requirement_removed',
 
+  // User groups
+  'user_group.created',
+  'user_group.updated',
+  'user_group.deleted',
+  'user_group.members_added',
+  'user_group.members_removed',
+
   // Identity & configuration
   'user.created',
   'user.updated',
@@ -42,6 +49,8 @@ export const AUDIT_ACTIONS = [
   'department.created',
   'department.updated',
   'department.deleted',
+  'watermark.settings_updated',
+  'watermark.settings_reset',
 
   // Filing structure
   'cabinet.created',
@@ -176,11 +185,21 @@ export const CONFIG_RECORD_TYPES: AuditRecordType[] = [
     actions: (a) => WORKFLOW_DESIGN_ACTIONS.includes(a),
   },
   { value: 'user', label: 'Users, roles & MFA', actions: byPrefix('user.') },
+  { value: 'user_group', label: 'User groups', actions: byPrefix('user_group.') },
+  { value: 'watermark_setting', label: 'Watermark', actions: byPrefix('watermark.') },
   { value: 'access_rule', label: 'IP & country rules', actions: byPrefix('access_rule.') },
 ];
 
 export const ACTIVITY_RECORD_TYPES: AuditRecordType[] = [
-  { value: 'document', label: 'Documents', actions: byPrefix('document.', 'checkout.') },
+  {
+    value: 'document',
+    label: 'Documents',
+    // Comments and signatures are written against their own record types.
+    actions: (a) =>
+      byPrefix('document.', 'checkout.')(a) && !byPrefix('document.comment', 'document.signature')(a),
+  },
+  { value: 'document_comment', label: 'Comments', actions: byPrefix('document.comment') },
+  { value: 'document_signature', label: 'Signatures', actions: byPrefix('document.signature') },
   { value: 'document_version', label: 'Document versions', actions: byPrefix('document.version') },
   {
     value: 'document_access_request',

@@ -330,6 +330,7 @@ once the Access card shipped.
 | Read `top_secret` documents | ❌ **nobody can** | — |
 | Configure retention | ❌ | 🟥 |
 | Configure SLA settings | ✅ | ✅ `/admin/policies` SLA tab |
+| Choose what the watermark shows | ✅ PR #78 | ✅ `/admin/policies` Watermark tab (verified live 2026-11-25) |
 | Configure branding | ❌ | 🟥 |
 | Publish circulars | ✅ `circular:*` at `global` scope | ✅ wired 2026-10-05 *(confirmed by the product owner’s testing, 2026-10-09)* |
 | View the audit trail | ✅ | ✅ wired 2026-09-18 |

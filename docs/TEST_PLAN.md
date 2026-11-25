@@ -1251,7 +1251,7 @@ Items whose backend already exists (or needs none). Worked through one at a time
 - [x] Configuration history: audit log filtered to config actions (18.7). **Built 2026-10-08**
       on `/admin/audit` (and `/auditor/trail`): a record-type dropdown whose Configuration group
       is roles, departments, cabinets (incl. access and metadata fields), folders, workflow
-      designs and users, and an action dropdown narrowed to that type. Only one type at a time,
+      designs, users and user groups, and an action dropdown narrowed to that type. Only one type at a time,
       since `GET /audit` takes a single `objectType`. SLA settings aren't audited server-side.
       To test: rename a role, then pick Roles & permissions — the rename is listed; Export
       gives the same rows
@@ -1260,13 +1260,13 @@ Items whose backend already exists (or needs none). Worked through one at a time
       documents can't be previewed yet" + the audited Download, hidden without download
       permission). To test: open a DOCX on `/doc/[id]` and on its workflow page.
       **In-PDF search done 2026-10-08** with the pdf.js viewer (`PdfViewer`): find with
-      highlights and match count, page box, zoom, Print (audited, watermark burned in) and
+      highlights and match count, page box, zoom, Print (audited, server's watermark) and
       Download in the viewer's toolbar, Export on `/doc/[id]`. Scanned PDFs: find searches the
       OCR text and shows it as a "Scanned text" view with highlights (2026-10-08) — test on
       "DN 2026 0921 delivery note scanned", search "Ridgeline". To test: open a PDF, type a
       word into "Find in document", press Enter to step through matches; Ctrl+F inside the
       viewer focuses the box; Print on a Confidential document — the printout carries the
-      watermark. Left: Office/email previews (backend)
+      server's watermark (name, time, IP). Left: Office/email previews (backend)
 - [ ] Responsive, accessibility, i18n setup, help (28.1–28.4); frontend test setup (29.3).
       **Help done 2026-10-08:** `/help` (topics for your role, search, a topic per area), the
       Topbar's "?" opens the topic for the page you're on, the sidebar's Help & support goes

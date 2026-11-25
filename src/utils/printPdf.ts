@@ -4,28 +4,6 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 // making long documents heavy.
 const PRINT_SCALE = 2;
 
-/** Burns the watermark into the page image, the same diagonal text the viewer shows. */
-function drawWatermark(canvas: HTMLCanvasElement, text: string) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  const label = text.toUpperCase();
-  ctx.save();
-  ctx.translate(canvas.width / 2, canvas.height / 2);
-  ctx.rotate((-32 * Math.PI) / 180);
-  let size = canvas.width / 12;
-  ctx.font = `800 ${size}px Inter, Arial, sans-serif`;
-  // Shrink a long label until it fits across the page.
-  while (size > 12 && ctx.measureText(label).width > canvas.width * 0.9) {
-    size *= 0.9;
-    ctx.font = `800 ${size}px Inter, Arial, sans-serif`;
-  }
-  ctx.fillStyle = 'rgba(222, 91, 109, 0.18)';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, 0, 0);
-  ctx.restore();
-}
-
 /** Prints page images from a hidden frame; resolves once the print dialog has opened. */
 function printImages(urls: string[], title: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -69,16 +47,15 @@ function printImages(urls: string[], title: string): Promise<void> {
 }
 
 /**
- * Prints a loaded PDF with the watermark on every page. Pages are printed as
- * images so the watermark can't be dropped, including from "Save as PDF".
+ * Prints a loaded PDF. Pages go out as images, so the watermark the server put
+ * in the file can't be lifted off as text, including from "Save as PDF".
  */
 export async function printPdf(
   doc: PDFDocumentProxy,
   {
     title,
-    watermarkText,
     onProgress,
-  }: { title: string; watermarkText?: string; onProgress?: (done: number, total: number) => void },
+  }: { title: string; onProgress?: (done: number, total: number) => void },
 ): Promise<void> {
   const urls: string[] = [];
   try {
@@ -89,7 +66,6 @@ export async function printPdf(
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
       await page.render({ canvas, viewport, intent: 'print' }).promise;
-      if (watermarkText) drawWatermark(canvas, watermarkText);
       const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.92));
       canvas.width = canvas.height = 0;
       if (!blob) throw new Error(`Could not render page ${n}`);

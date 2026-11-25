@@ -1159,6 +1159,20 @@ export interface SlaConfiguration {
 
 export type SlaConfigurationUpdate = Partial<Omit<SlaConfiguration, 'id'>>;
 
+/** What the server's watermark shows; at least one is on. */
+export interface WatermarkFields {
+  includeName: boolean;
+  includeIpAddress: boolean;
+  includeTimestamp: boolean;
+}
+
+/** `GET /settings/watermark`. `updatedBy` is null until an administrator changes it. */
+export interface WatermarkSettings extends WatermarkFields {
+  id: number;
+  updatedBy: string | null;
+  updatedAt: string;
+}
+
 /** One row of `GET /sla/holidays`. `date` is a date-only value sent as an ISO
  *  timestamp at UTC midnight — read its first 10 characters. */
 export interface SlaHoliday {

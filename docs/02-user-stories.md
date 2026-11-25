@@ -630,7 +630,7 @@ downloads, and `GET /documents/:id/export` and `/print` are new. Seeded: `staff`
 The frontend's Download (document page, workflow viewer, each version's Open) now checks
 the same rule and fetches through the version endpoint, so each download is audited.
 Print (in the PDF viewer's toolbar) calls `GET /documents/:id/print` first and prints page
-images with the watermark burned in; Export (document page) goes through
+images carrying the server's watermark; Export (document page) goes through
 `GET /documents/:id/export`. Both shown only with the permission (2026-10-08).
 
 **Acceptance criteria**
@@ -649,6 +649,8 @@ images with the watermark burned in; Export (document page) goes through
 - [x] Downloads use the per-viewer `downloadUrl` the backend issues (PR #67), watermarked for
       PDFs and images alike, and are audited when the file is fetched (2026-11-11, verified live
       in Edge as `staff_finance`)
+- [x] Administrators choose what the watermark shows (name, IP, time) on `/admin/policies`
+      (backend PR #78; 2026-11-25, verified live in Edge as `client_admin`)
 - [x] **Download original** (the unmarked file, `originalUrl`) for holders of
       `document:download_original`: verified live in Edge as `client_admin` (2026-11-11, after the re-seed),
       audited with `original: true`

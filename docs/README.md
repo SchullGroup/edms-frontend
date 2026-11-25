@@ -78,11 +78,12 @@ setting up an environment.
 
 ## The short version
 
-**73 frontend pages · 184 backend routes · 6 roles · 0 tests.**
+**73 frontend pages · 189 backend routes · 6 roles · 0 tests.**
 *(Pages re-derived 2026-11-10: +1, `/search/mass-index` (ticket 08); then +1,
 `/account/security` (ticket 09). 69 until 2026-11-16, when the mock `/supervisor/exceptions` was removed: 68. 2026-11-20: +1,
 `/staff/workflows`, the Staff Dashboard tiles' drill-down: 69. 2026-11-23: +4, the user-group pages
 (`/admin/user-groups`, `/new`, `/[groupId]`, `/[groupId]/edit`): 73.)*
+*(Routes re-derived 2026-11-25 at `d184dd7` (PR #78): 184 → 189, the five `/settings/watermark` routes.)*
 *(Routes re-derived 2026-11-23 at `34a98d6` (PRs #76, #77): 180 → 184, `GET`/`PATCH /user-groups/:groupId` and `POST /users/import` + `GET /users/import/template`.)*
 *(Routes re-derived 2026-11-20 at `b9c2d6c` (PR #75): 176 → 180, the four `/user-groups` routes.)*
 *(Routes re-checked 2026-11-20 at `bf6bf46` (PR #74): still 176. PR #74 only reworked workflow
@@ -636,6 +637,12 @@ pagination caps, the OCR stuck-job sweep, `Finding`, branding, SoD, tests, and t
 pages.
 
 ---
+
+**Corrected 2026-11-25:** doc 05 still listed find in a scanned PDF as ✅ from 2026-10-08. It has
+not worked since the server began watermarking PDFs (PR #64, 2026-11-04), because the mark is text.
+Fixed the same day.
+Doc 05 also said downloads and exports are unmarked (they have been marked since that PR), and
+doc 01 §9 said the mark carries the viewer's IP (on live it is Render's internal address).
 
 ## Relationship to the older docs
 
