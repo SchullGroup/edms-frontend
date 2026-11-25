@@ -10,6 +10,7 @@ import {
   buildPlainText,
   findMatches,
   itemRanges,
+  withoutServerMark,
   type PageText,
 } from '@/utils/pdfSearch';
 import { printPdf } from '@/utils/printPdf';
@@ -173,10 +174,12 @@ export function PdfViewer({
         entry = doc
           .getPage(n)
           .then((page) => page.getTextContent())
-          .then((content) => ({
-            content,
-            text: buildPageText(content.items.filter((item): item is TextItem => 'str' in item)),
-          }));
+          .then((content) => {
+            const items = withoutServerMark(
+              content.items.filter((item): item is TextItem => 'str' in item),
+            );
+            return { content: { ...content, items }, text: buildPageText(items) };
+          });
         textCache.current.set(n, entry);
       }
       return entry;
