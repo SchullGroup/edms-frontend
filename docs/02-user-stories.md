@@ -630,7 +630,7 @@ downloads, and `GET /documents/:id/export` and `/print` are new. Seeded: `staff`
 The frontend's Download (document page, workflow viewer, each version's Open) now checks
 the same rule and fetches through the version endpoint, so each download is audited.
 Print (in the PDF viewer's toolbar) calls `GET /documents/:id/print` first and prints page
-images with the watermark burned in; Export (document page) goes through
+images carrying the server's watermark; Export (document page) goes through
 `GET /documents/:id/export`. Both shown only with the permission (2026-10-08).
 
 **Acceptance criteria**

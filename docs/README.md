@@ -637,6 +637,12 @@ pages.
 
 ---
 
+**Corrected 2026-11-25:** doc 05 still listed find in a scanned PDF as ✅ from 2026-10-08. It has
+not worked since the server began watermarking PDFs (PR #64, 2026-11-04), because the mark is text.
+Fixed the same day.
+Doc 05 also said downloads and exports are unmarked (they have been marked since that PR), and
+doc 01 §9 said the mark carries the viewer's IP (on live it is Render's internal address).
+
 ## Relationship to the older docs
 
 These supersede two files in `../../out/`:

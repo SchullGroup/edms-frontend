@@ -42,6 +42,31 @@ export function buildPageText(items: { str: string; hasEOL?: boolean }[]): PageT
   return { items: strs, starts, text };
 }
 
+/** Text the server's watermark drew: at 35°, or its footer line at (12, 8) on the page. */
+function isServerMark({ str, transform: [a, b, , , x, y] }: PositionedText): boolean {
+  if (!str.trim()) return false;
+  const angle = (Math.atan2(b, a) * 180) / Math.PI;
+  return (
+    Math.abs(angle - 35) < 0.5 || (angle === 0 && Math.abs(x - 12) < 0.5 && Math.abs(y - 8) < 0.5)
+  );
+}
+
+interface PositionedText {
+  str: string;
+  transform: number[];
+}
+
+/** A page's text items without the server's watermark, which it draws after everything
+ *  else. Left in, it makes a scan look like it has text, and find matches the mark. */
+export function withoutServerMark<T extends PositionedText>(items: T[]): T[] {
+  let end = items.length;
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (isServerMark(items[i])) end = i;
+    else if (items[i].str.trim()) break;
+  }
+  return items.slice(0, end);
+}
+
 /** A block of plain text (a scan's OCR output) as one searchable item. Every
  *  whitespace character, line breaks included, matches a space, one for one,
  *  so offsets still point into the original text. */

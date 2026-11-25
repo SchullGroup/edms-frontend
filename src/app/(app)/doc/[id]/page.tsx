@@ -541,7 +541,6 @@ export default function DocumentDetail({ params }: { params: Promise<{ id: strin
           fileUrl={fileUrl}
           rawFileKey={rawFileKey}
           fileMimeType={fileMimeType}
-          watermarkText={`${doc.confidentiality} · ${me.name}`}
           zoom={zoom}
           onZoomChange={setZoom}
           signatures={doc.signatures}

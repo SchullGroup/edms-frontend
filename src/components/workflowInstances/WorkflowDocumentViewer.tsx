@@ -30,7 +30,6 @@ export interface WorkflowDocumentViewerProps {
   requestKinds?: DocumentAccessKind[];
   requestChecked?: DocumentAccessKind[];
   viewerId: string;
-  viewerName: string;
 }
 
 /**
@@ -51,7 +50,6 @@ export function WorkflowDocumentViewer({
   requestKinds = ['view'],
   requestChecked,
   viewerId,
-  viewerName,
 }: WorkflowDocumentViewerProps) {
   const [zoom, setZoom] = useState(1);
   // An empty id disables the query: a Restricted document is never fetched.
@@ -139,7 +137,6 @@ export function WorkflowDocumentViewer({
       fileUrl={fileUrl}
       rawFileKey={rawFileKey}
       fileMimeType={fileMimeType}
-      watermarkText={`${doc.confidentiality} · ${viewerName}`}
       zoom={zoom}
       onZoomChange={setZoom}
       signatures={[]}

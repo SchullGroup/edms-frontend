@@ -745,7 +745,7 @@ function IDUCard({
                 </option>
               ))}
             </select>
-            <div className="help">Drives watermarking, download and print behaviour.</div>
+            <div className="help">Drives download and print behaviour.</div>
           </div>
           <div className="field">
             <label>
